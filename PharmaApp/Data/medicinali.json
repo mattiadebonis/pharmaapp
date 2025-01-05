@@ -1,0 +1,1005 @@
+[
+  {
+    "id": "062b8fa6-efdc-4d82-af4f-2f54cbdf7ed6",
+    "nome": "Formoterolo",
+    "principio_attivo": "Cetirizina dicloridrato",
+    "confezioni": [
+      {
+        "id": "eda42fb1-6762-4668-95ec-b465790af2fd",
+        "numero": 57,
+        "tipologia": "compresse",
+        "dosaggio": {
+          "valore": 200,
+          "unita": "mg",
+          "volume": "250 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "42033fd4-042b-4645-8b4c-b4f3600fde93",
+    "nome": "Diazepam",
+    "principio_attivo": "Omeprazolo",
+    "confezioni": [
+      {
+        "id": "4810a4c3-2069-4252-9338-b5b24b74bbf9",
+        "numero": 23,
+        "tipologia": "penne preriempite SC",
+        "dosaggio": {
+          "valore": 200,
+          "unita": "g",
+          "volume": "150 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "4dddc782-3a85-43a1-8881-02facf4deadc",
+        "numero": 48,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 50,
+          "unita": "ml",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "099bce25-434d-40bc-9e3c-9517c2cd8164",
+    "nome": "Digossina",
+    "principio_attivo": "Metformina",
+    "confezioni": [
+      {
+        "id": "1857fc01-6b69-4bd2-8a53-e9c0fd920324",
+        "numero": 7,
+        "tipologia": "fiale",
+        "dosaggio": {
+          "valore": 50,
+          "unita": "g",
+          "volume": null,
+          "numero" : 7
+        }
+      },
+      {
+        "id": "6975a5c0-0abb-437a-ab02-ca28eb9b1019",
+        "numero": 74,
+        "tipologia": "fiale",
+        "dosaggio": {
+          "valore": 10,
+          "unita": "ml",
+          "volume": null,
+          "numero" : 7
+        }
+      },
+      {
+        "id": "4cb3ed56-36ea-406c-bcc5-f289e249c022",
+        "numero": 18,
+        "tipologia": "penne preriempite SC",
+        "dosaggio": {
+          "valore": 200,
+          "unita": "mg",
+          "volume": "250 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "177e8d68-0b7a-4ae5-9c3e-78568f15e9c4",
+    "nome": "Risperidone",
+    "principio_attivo": "Furosemide",
+    "confezioni": [
+      {
+        "id": "b170a250-b72c-43cb-8af1-568b4f743478",
+        "numero": 30,
+        "tipologia": "capsule",
+        "dosaggio": {
+          "valore": 1,
+          "unita": "mg",
+          "volume": null,
+          "numero" : 7
+        }
+      },
+      {
+        "id": "5b7b52eb-869f-4982-8db3-a0a56de740c4",
+        "numero": 90,
+        "tipologia": "fiale",
+        "dosaggio": {
+          "valore": 50,
+          "unita": "ml",
+          "volume": "3 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "0a98356b-7cf7-4746-a578-a1d30ab8d3ae",
+        "numero": 22,
+        "tipologia": "compresse",
+        "dosaggio": {
+          "valore": 100,
+          "unita": "mg",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "8d553558-e84e-4e96-861e-96edf94ba7cb",
+    "nome": "Levotiroxina",
+    "principio_attivo": "Eparina calcica",
+    "confezioni": [
+      {
+        "id": "852c1183-007d-48f7-9787-435020ab2eaa",
+        "numero": 75,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 100,
+          "unita": "U/ml",
+          "volume": "5 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "a36b983d-8740-4260-8259-45e2982f8af4",
+        "numero": 79,
+        "tipologia": "cartucce SC",
+        "dosaggio": {
+          "valore": 100,
+          "unita": "mcg",
+          "volume": "1 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "4f7912e6-c789-4d7b-87b8-ce279809afb3",
+    "nome": "Enalapril",
+    "principio_attivo": "Eparina calcica",
+    "confezioni": [
+      {
+        "id": "3bea379f-87ba-4f10-b65f-7a4e033dad21",
+        "numero": 22,
+        "tipologia": "penne preriempite SC",
+        "dosaggio": {
+          "valore": 50,
+          "unita": "g",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "f18d8d93-5da8-41b0-ba49-dee8cc3c7774",
+    "nome": "Gabapentin",
+    "principio_attivo": "Metformina",
+    "confezioni": [
+      {
+        "id": "b75212cb-8b67-46f7-9ab7-04d101b778ca",
+        "numero": 3,
+        "tipologia": "penne preriempite SC",
+        "dosaggio": {
+          "valore": 5,
+          "unita": "mg",
+          "volume": null,
+          "numero" : 7
+        }
+      },
+      {
+        "id": "68537085-bf1e-4e12-a55f-049e5ce8d423",
+        "numero": 93,
+        "tipologia": "penne preriempite SC",
+        "dosaggio": {
+          "valore": 200,
+          "unita": "U/ml",
+          "volume": "10 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "16b85020-fee3-48ef-9b66-16069a87262a",
+    "nome": "Duloxetina",
+    "principio_attivo": "Simeticone",
+    "confezioni": [
+      {
+        "id": "190ff183-023a-4bcf-a9f5-47640ed68681",
+        "numero": 48,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 1,
+          "unita": "mg",
+          "volume": null,
+          "numero" : 7
+        }
+      },
+      {
+        "id": "96ed1e0e-6363-40bb-bbf9-77d5465f60cb",
+        "numero": 58,
+        "tipologia": "capsule",
+        "dosaggio": {
+          "valore": 5,
+          "unita": "mg",
+          "volume": "3 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "b9d23117-5d58-4daf-9eef-a166975ca21a",
+        "numero": 32,
+        "tipologia": "fiale",
+        "dosaggio": {
+          "valore": 5,
+          "unita": "ml",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "045989b0-bfc6-4cfb-b3c3-bf80eb15135b",
+    "nome": "Amoxicillina",
+    "principio_attivo": "Amoxicillina",
+    "confezioni": [
+      {
+        "id": "8909e0a1-aee3-4c4b-a990-78ed671e1fa8",
+        "numero": 35,
+        "tipologia": "cartucce SC",
+        "dosaggio": {
+          "valore": 100,
+          "unita": "mg",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "bcfbd78f-a523-463f-b216-78864a91ae13",
+    "nome": "Furosemide",
+    "principio_attivo": "Amoxicillina",
+    "confezioni": [
+      {
+        "id": "d8946134-7777-4906-bd17-ff5dbe7b4113",
+        "numero": 6,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 100,
+          "unita": "ml",
+          "volume": "10 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "bbc1fe67-0b23-4b08-b3ca-88699a9ba00e",
+        "numero": 22,
+        "tipologia": "cartucce SC",
+        "dosaggio": {
+          "valore": 1,
+          "unita": "mcg",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "63227b90-fb3e-4c1c-99dc-69acd6a1dfc8",
+    "nome": "Indometacina",
+    "principio_attivo": "Acido Acetilsalicilico",
+    "confezioni": [
+      {
+        "id": "c3ad73de-1f07-4520-843c-23f2107daeb8",
+        "numero": 33,
+        "tipologia": "compresse",
+        "dosaggio": {
+          "valore": 100,
+          "unita": "mcg",
+          "volume": "3 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "deec1725-ad9f-490a-a4f9-0f75d0b67571",
+    "nome": "Eparina",
+    "principio_attivo": "Duloxetina cloridrato",
+    "confezioni": [
+      {
+        "id": "c85014a6-7f45-497a-952c-afcc2675670f",
+        "numero": 100,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 10,
+          "unita": "g",
+          "volume": "250 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "ac7575c4-afb1-4ff8-9dd7-f55e2c235250",
+        "numero": 63,
+        "tipologia": "penne preriempite SC",
+        "dosaggio": {
+          "valore": 400,
+          "unita": "mcg",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "b9bd7459-e2d9-4562-af3a-d9230e719c0f",
+    "nome": "Omeprazolo",
+    "principio_attivo": "Levotiroxina sodica",
+    "confezioni": [
+      {
+        "id": "6457a144-cf8d-4761-9a92-16d37ca49aec",
+        "numero": 33,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 50,
+          "unita": "g",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "9068282f-56ab-4868-8b57-33e032cb4ad6",
+    "nome": "Alprazolam",
+    "principio_attivo": "Insulina glargine",
+    "confezioni": [
+      {
+        "id": "f819a30e-12db-43af-81d9-6538c253d5a4",
+        "numero": 82,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 400,
+          "unita": "ml",
+          "volume": "3 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "921b0851-0072-4028-90ef-0612240c5a31",
+        "numero": 54,
+        "tipologia": "cartucce SC",
+        "dosaggio": {
+          "valore": 10,
+          "unita": "mg",
+          "volume": "10 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "fcbf822e-a1ef-4bc3-9981-67624a825e0b",
+    "nome": "Salbutamolo",
+    "principio_attivo": "Prednisone",
+    "confezioni": [
+      {
+        "id": "cf19f114-e343-4974-abeb-27f5ade51931",
+        "numero": 65,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 1,
+          "unita": "g",
+          "volume": "1 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "f496557e-9ba7-49d3-b52e-a2d916ebfd9d",
+        "numero": 69,
+        "tipologia": "compresse",
+        "dosaggio": {
+          "valore": 1,
+          "unita": "g",
+          "volume": "1 ml"
+        }
+      },
+      {
+        "id": "8811ae59-6421-4c67-a248-b0c9a0de0010",
+        "numero": 48,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 400,
+          "unita": "U/ml",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "ed2763cf-b47c-498a-a76c-53b0493bd03f",
+    "nome": "Fluoxetina",
+    "principio_attivo": "Metformina",
+    "confezioni": [
+      {
+        "id": "9e0cea39-7465-42a5-ac5e-9564d2531219",
+        "numero": 50,
+        "tipologia": "gocce",
+        "dosaggio": {
+          "valore": 100,
+          "unita": "g",
+          "volume": "10 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "304379cf-3ffd-42c3-9268-611a12b3d2fb",
+    "nome": "Insulina",
+    "principio_attivo": "Claritromicina",
+    "confezioni": [
+      {
+        "id": "ddf4045a-164c-484a-8671-02ebf3493a5b",
+        "numero": 17,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 400,
+          "unita": "ml",
+          "volume": null,
+          "numero" : 7
+        }
+      },
+      {
+        "id": "eb620226-8302-46a8-b976-bc03876c52ee",
+        "numero": 10,
+        "tipologia": "capsule",
+        "dosaggio": {
+          "valore": 100,
+          "unita": "g",
+          "volume": "150 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "56d598f4-f259-4edf-b9c3-56f701100b29",
+        "numero": 62,
+        "tipologia": "penne preriempite SC",
+        "dosaggio": {
+          "valore": 100,
+          "unita": "mcg",
+          "volume": "10 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "65e42075-e058-4700-8d65-5f74db8b4afa",
+    "nome": "Losartan",
+    "principio_attivo": "Eparina calcica",
+    "confezioni": [
+      {
+        "id": "a38d9593-0317-4453-9c12-c28b4b51f724",
+        "numero": 64,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 400,
+          "unita": "U/ml",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "424d9da0-eb22-458b-9ebd-dad796d4d9e6",
+    "nome": "Aspirina",
+    "principio_attivo": "Ranitidina cloridrato",
+    "confezioni": [
+      {
+        "id": "13b5c0af-eab7-4714-a448-ae2b05f72880",
+        "numero": 76,
+        "tipologia": "compresse",
+        "dosaggio": {
+          "valore": 10,
+          "unita": "g",
+          "volume": "250 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "78f78bfc-a680-4c04-a67b-8e16196feee0",
+        "numero": 47,
+        "tipologia": "capsule",
+        "dosaggio": {
+          "valore": 1,
+          "unita": "mg",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "4abb8021-89de-48d0-a6b2-f8d40fb48986",
+    "nome": "Quetiapina",
+    "principio_attivo": "Acido Acetilsalicilico",
+    "confezioni": [
+      {
+        "id": "d2bc2840-e3a0-4826-99a3-8f7a63ab8071",
+        "numero": 94,
+        "tipologia": "penne preriempite SC",
+        "dosaggio": {
+          "valore": 50,
+          "unita": "mg",
+          "volume": null,
+          "numero" : 7
+        }
+      },
+      {
+        "id": "985d3e5a-2eea-4528-802c-2a0e06f7a360",
+        "numero": 57,
+        "tipologia": "gocce",
+        "dosaggio": {
+          "valore": 50,
+          "unita": "g",
+          "volume": null,
+          "numero" : 7
+        }
+      },
+      {
+        "id": "77dcb8e2-620a-434c-8385-211b7b0e7b31",
+        "numero": 83,
+        "tipologia": "fiale",
+        "dosaggio": {
+          "valore": 400,
+          "unita": "g",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "c1a50658-10ca-4a01-90f2-7051e0f3d806",
+    "nome": "Ketoprofene",
+    "principio_attivo": "Prednisone",
+    "confezioni": [
+      {
+        "id": "76b5c941-723d-4abb-9ead-027d71d94d13",
+        "numero": 19,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 200,
+          "unita": "mcg",
+          "volume": null,
+          "numero" : 7
+        }
+      },
+      {
+        "id": "5dc4492a-94bb-442a-818c-b16e60642117",
+        "numero": 26,
+        "tipologia": "compresse",
+        "dosaggio": {
+          "valore": 100,
+          "unita": "g",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "162cb4ff-aa72-4e23-8e5e-add7c1e44b7b",
+    "nome": "Metformina",
+    "principio_attivo": "Cetirizina dicloridrato",
+    "confezioni": [
+      {
+        "id": "4c4def9f-29ff-4a82-a0b3-4638c704dcf5",
+        "numero": 46,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 400,
+          "unita": "mg",
+          "volume": null,
+          "numero" : 7
+        }
+      },
+      {
+        "id": "c3422f91-fc63-4c29-8eee-98cb91767c34",
+        "numero": 8,
+        "tipologia": "fiale",
+        "dosaggio": {
+          "valore": 200,
+          "unita": "mcg",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "0154ab39-a744-4fe8-bf11-66b478b9b82b",
+    "nome": "Clopidogrel",
+    "principio_attivo": "Levotiroxina sodica",
+    "confezioni": [
+      {
+        "id": "f23457f0-dfe8-4122-97f2-c2878c4dd510",
+        "numero": 41,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 400,
+          "unita": "g",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "44df6456-f34f-4ac4-9b45-8f31cf4c5616",
+    "nome": "Clorfenamina",
+    "principio_attivo": "Levotiroxina sodica",
+    "confezioni": [
+      {
+        "id": "37b06ebd-c490-4b39-918c-89905fb76f8d",
+        "numero": 70,
+        "tipologia": "cartucce SC",
+        "dosaggio": {
+          "valore": 10,
+          "unita": "g",
+          "volume": "250 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "85691b96-2f6b-43d9-85fc-cc0c8cbdcabd",
+        "numero": 4,
+        "tipologia": "fiale",
+        "dosaggio": {
+          "valore": 100,
+          "unita": "U/ml",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "64d468e1-6fb8-4696-94bf-431cda20179d",
+    "nome": "Ranitidina",
+    "principio_attivo": "Prednisone",
+    "confezioni": [
+      {
+        "id": "0ea1a121-b4ac-4572-9004-b4dfa154c375",
+        "numero": 82,
+        "tipologia": "cartucce SC",
+        "dosaggio": {
+          "valore": 50,
+          "unita": "mg",
+          "volume": "250 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "c29a4914-a9d2-4673-9b77-97c1a75aee2e",
+    "nome": "Paracetamolo",
+    "principio_attivo": "Furosemide",
+    "confezioni": [
+      {
+        "id": "b03cb1ac-2d61-4810-9d29-235437d73c52",
+        "numero": 69,
+        "tipologia": "capsule",
+        "dosaggio": {
+          "valore": 5,
+          "unita": "mg",
+          "volume": "150 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "1a023816-738b-4ea9-9553-5a9c4124a914",
+        "numero": 64,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 10,
+          "unita": "g",
+          "volume": "250 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "525f3ee0-7d44-45f3-ac8e-90a33a2a87c9",
+    "nome": "Amlodipina",
+    "principio_attivo": "Ibuprofene",
+    "confezioni": [
+      {
+        "id": "747c746c-c056-4610-af26-14e571df6c7f",
+        "numero": 59,
+        "tipologia": "gocce",
+        "dosaggio": {
+          "valore": 400,
+          "unita": "ml",
+          "volume": "250 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "3115b6b5-0c63-42f8-93db-d5850bb2139e",
+        "numero": 96,
+        "tipologia": "gocce",
+        "dosaggio": {
+          "valore": 200,
+          "unita": "ml",
+          "volume": "250 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "a37879bc-4931-4635-95a6-415693eac6a0",
+        "numero": 60,
+        "tipologia": "cartucce SC",
+        "dosaggio": {
+          "valore": 50,
+          "unita": "g",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "1941fe80-1fee-46d9-8661-c111f86ae2b4",
+    "nome": "Brufen",
+    "principio_attivo": "Prednisone",
+    "confezioni": [
+      {
+        "id": "ab3e79c9-32ba-4aef-b6b0-6fe332eab41e",
+        "numero": 42,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 200,
+          "unita": "mg",
+          "volume": null,
+          "numero" : 7
+        }
+      },
+      {
+        "id": "95acb5d6-a805-4940-8179-86f84766335a",
+        "numero": 54,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 1,
+          "unita": "U/ml",
+          "volume": "5 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "7b2eb53f-512f-4cea-8a7d-dfaabc1b5257",
+        "numero": 43,
+        "tipologia": "fiale",
+        "dosaggio": {
+          "valore": 50,
+          "unita": "ml",
+          "volume": "1 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "aa688b07-f6d3-4a92-aec3-30da9d103e17",
+    "nome": "Codeina",
+    "principio_attivo": "Levotiroxina sodica",
+    "confezioni": [
+      {
+        "id": "7e682022-fae6-45de-9e9e-c949c534d869",
+        "numero": 47,
+        "tipologia": "penne preriempite SC",
+        "dosaggio": {
+          "valore": 400,
+          "unita": "mcg",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "9db78f25-02b1-4dbf-bbc5-78033dd9240e",
+    "nome": "Simeticone",
+    "principio_attivo": "Prednisone",
+    "confezioni": [
+      {
+        "id": "e15c5fee-b652-440e-84d1-b53fa7662ced",
+        "numero": 16,
+        "tipologia": "compresse",
+        "dosaggio": {
+          "valore": 50,
+          "unita": "g",
+          "volume": "250 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "1206724c-e8e4-45db-bdf8-d8280d5c5c55",
+    "nome": "Citalopram",
+    "principio_attivo": "Insulina glargine",
+    "confezioni": [
+      {
+        "id": "4bcdd3ae-e605-4771-8778-ad8d03cc0ec9",
+        "numero": 31,
+        "tipologia": "gocce",
+        "dosaggio": {
+          "valore": 100,
+          "unita": "mg",
+          "volume": "1 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "aede936e-bd8b-4433-875b-e62c8bf46158",
+        "numero": 68,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 50,
+          "unita": "U/ml",
+          "volume": "1 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "308deae5-96a9-4675-9b26-4c19bb1c9722",
+        "numero": 65,
+        "tipologia": "gocce",
+        "dosaggio": {
+          "valore": 5,
+          "unita": "g",
+          "volume": "150 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "e4e3725c-3ef6-4824-8b6c-e9a7d1ef0e87",
+    "nome": "Atorvastatina",
+    "principio_attivo": "Metotrexato sodico",
+    "confezioni": [
+      {
+        "id": "a259ccbc-035c-44a0-9e3c-3142b0a581dd",
+        "numero": 71,
+        "tipologia": "penne preriempite SC",
+        "dosaggio": {
+          "valore": 1,
+          "unita": "mcg",
+          "volume": null,
+          "numero" : 7
+        }
+      },
+      {
+        "id": "9c370b92-19f1-4ffd-9e7a-17219bffdcbb",
+        "numero": 4,
+        "tipologia": "fiale",
+        "dosaggio": {
+          "valore": 200,
+          "unita": "mg",
+          "volume": "250 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "8bfef610-f1d0-4b43-b345-6001c9a60851",
+    "nome": "Zolpidem",
+    "principio_attivo": "Duloxetina cloridrato",
+    "confezioni": [
+      {
+        "id": "49e6eba1-f1b8-4e61-b0f4-45edc78fb800",
+        "numero": 15,
+        "tipologia": "penne preriempite SC",
+        "dosaggio": {
+          "valore": 200,
+          "unita": "mg",
+          "volume": "10 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "757f1a84-ecd0-430f-ae6b-f9a00d872f87",
+        "numero": 38,
+        "tipologia": "soluzione orale",
+        "dosaggio": {
+          "valore": 10,
+          "unita": "g",
+          "volume": "5 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "c7843327-aa2d-41a3-8fe9-3573a5eb6179",
+    "nome": "Naproxene",
+    "principio_attivo": "Cetirizina dicloridrato",
+    "confezioni": [
+      {
+        "id": "4164bed4-0d18-46bb-b0d5-44276a9b024e",
+        "numero": 76,
+        "tipologia": "capsule",
+        "dosaggio": {
+          "valore": 100,
+          "unita": "mcg",
+          "volume": null,
+          "numero" : 7
+        }
+      },
+      {
+        "id": "5f475e62-f29c-4766-947b-5295928efd5e",
+        "numero": 81,
+        "tipologia": "gocce",
+        "dosaggio": {
+          "valore": 5,
+          "unita": "ml",
+          "volume": "10 ml",
+          "numero" : 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "49a91b9e-f28c-48ee-a294-aca98cb80236",
+    "nome": "Venlafaxina",
+    "principio_attivo": "Ranitidina cloridrato",
+    "confezioni": [
+      {
+        "id": "2fbb9fe8-91e7-4da8-aa4c-251390dd4577",
+        "numero": 13,
+        "tipologia": "capsule",
+        "dosaggio": {
+          "valore": 50,
+          "unita": "g",
+          "volume": "5 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "1881cd0f-f624-4f2c-bf51-1c40c37ffdf8",
+        "numero": 48,
+        "tipologia": "compresse",
+        "dosaggio": {
+          "valore": 100,
+          "unita": "U/ml",
+          "volume": "1 ml",
+          "numero" : 7
+        }
+      },
+      {
+        "id": "590a75ff-f225-41ed-8db4-3275aba760b5",
+        "numero": 30,
+        "tipologia": "capsule",
+        "dosaggio": {
+          "valore": 50,
+          "unita": "mg",
+          "volume": null,
+          "numero" : 7
+        }
+      }
+    ]
+  }
+]
