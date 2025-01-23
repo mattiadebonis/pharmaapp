@@ -15,7 +15,9 @@ public class Therapy : NSManagedObject , Identifiable{
     @NSManaged public var medicine: Medicine
     @NSManaged public var start_date: Date?
     @NSManaged public var rrule: String?
-
+    @NSManaged public var doses: Set<Dose>?
+    @NSManaged public var package: Package
+    
 }
 
 

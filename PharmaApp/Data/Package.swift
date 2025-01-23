@@ -16,6 +16,7 @@ public class Package: NSManagedObject {
     @NSManaged public var unita: String
     @NSManaged public var volume: String
     @NSManaged public var medicine: Medicine
+    @NSManaged public var therapies: Set<Therapy>?
 }
 
 extension Package{

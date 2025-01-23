@@ -1,5 +1,5 @@
 //
-//  MedicineFormViewModel.swift
+//  TherapyFormViewModel.swift
 //  PharmaApp
 //
 //  Created by Mattia De bonis on 27/12/24.
@@ -9,7 +9,7 @@ import Foundation
 import CoreData
 import SwiftUI
 
-class MedicineFormViewModel: ObservableObject {
+class TherapyFormViewModel: ObservableObject {
     
     @Published var isDataUpdated: Bool = false
     @Published var errorMessage: String?
@@ -60,11 +60,13 @@ class MedicineFormViewModel: ObservableObject {
     func saveTherapy(
         medicine: Medicine,
         freq: String?,
-        interval: Int?,
+        interval: Int?,    
         until: Date?,
         count: Int?,
         byDay: [String],
-        startDate: Date
+        startDate: Date,
+        times: [Date],
+        package: Package
     ) {
         let fetchRequest = Therapy.fetchRequest() as! NSFetchRequest<Therapy>
         fetchRequest.predicate = NSPredicate(format: "medicine == %@", medicine)
@@ -73,12 +75,14 @@ class MedicineFormViewModel: ObservableObject {
         do {
             let results = try context.fetch(fetchRequest)
             let therapy: Therapy
+            
             if let existingTherapy = results.first {
                 therapy = existingTherapy
             } else {
                 therapy = Therapy(context: context)
                 therapy.id = UUID()
                 therapy.medicine = medicine
+                therapy.package = package
             }
             
             var rule = RecurrenceRule(freq: freq ?? "DAILY")
@@ -89,13 +93,25 @@ class MedicineFormViewModel: ObservableObject {
             
             let icsString = RecurrenceManager(context: context)
                 .buildRecurrenceString(from: rule)
-            
             therapy.rrule = icsString
             therapy.setValue(startDate, forKey: "start_date")
+
+            if let oldDoses = therapy.doses as? Set<Dose> {
+                for dose in oldDoses {
+                    context.delete(dose)
+                }
+            }
             
+            for time in times {
+                let dose = Dose(context: context)
+                dose.id = UUID()
+                dose.time = time
+                dose.therapy = therapy  
+            }
+
             try context.save()
             successMessage = "Salvataggio riuscito!"
-
+            
             DispatchQueue.main.async {
                 self.isDataUpdated = true
             }
@@ -105,6 +121,4 @@ class MedicineFormViewModel: ObservableObject {
             print("Errore nel salvataggio di Therapy: \(error.localizedDescription)")
         }
     }
-
-    
 }

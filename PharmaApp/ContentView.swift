@@ -28,18 +28,30 @@ struct ContentView: View {
     let pastelPink = Color(red: 248/255, green: 200/255, blue: 220/255, opacity: 1.0)
     
     @State private var isSearchIndexPresented = false
-    
+    @State private var isSettingsPresented = false
+
     init() {
         DataManager.shared.initializeMedicinesDataIfNeeded()
         DataManager.shared.initializePharmaciesDataIfNeeded()
+        DataManager.shared.initializeOptionsIfEmpty()
     }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {  
             ScrollView (){
                 VStack(alignment: .leading ) {
-                    //PharmaciesIndex()
+                    HStack {
+                        Spacer()
+                        Button(action: { isSettingsPresented = true}) {
+                            Image(systemName: "gearshape.fill")
+                                .foregroundColor(pastelBlue)
+                                .padding()
+                        }
+                    }
+                    .padding()
+                        
                     FeedView()
+                    PharmaciesIndex()
                 }.padding()
             }
             Spacer()
@@ -64,7 +76,11 @@ struct ContentView: View {
                 .padding()
             }
         }
-        
+        .sheet(isPresented: $isSettingsPresented) {
+            
+            OptionsView()
+                .environment(\.managedObjectContext, managedObjectContext)
+        }
         .sheet(isPresented: $appViewModel.isSearchIndexPresented) {
             SearchIndex()
         }

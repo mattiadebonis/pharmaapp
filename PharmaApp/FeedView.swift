@@ -40,12 +40,7 @@ struct FeedView: View {
                 Button {
                     selectedMedicine = medicine
                 } label: {
-                    if medicine.therapies!.count > 0 {
-                        TherapyRowView(medicine: medicine)
-                    } else {
-                        StockRowView(stockRowViewModel: StockRowViewModel(context: managedObjectContext, medicine: medicine), medicine: medicine)
-
-                    }
+                    MedicineRowView(medicine: medicine)
                 }
             }
         }
@@ -54,10 +49,11 @@ struct FeedView: View {
         }
         .id(dataUpdated)
         .sheet(item: $selectedMedicine) { medicine in
-            MedicineFormView(
+            /* TherapyFormView(
                 medicine: medicine,
                 context: managedObjectContext
-            )
+                package:
+            ) */
         }
     }
 }

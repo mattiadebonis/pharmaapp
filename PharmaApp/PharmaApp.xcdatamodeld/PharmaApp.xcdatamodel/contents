@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23605" systemVersion="23H222" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+    <entity name="Dose" representedClassName=".Dose" syncable="YES">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="time" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="therapy" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Therapy" inverseName="doses" inverseEntity="Therapy"/>
+    </entity>
     <entity name="Log" representedClassName=".Log" syncable="YES">
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
@@ -22,6 +27,10 @@
         <attribute name="turno" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
         <relationship name="pharmacie" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Pharmacie" inverseName="openingtimes" inverseEntity="Pharmacie"/>
     </entity>
+    <entity name="Option" representedClassName=".Option" syncable="YES">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="manual_intake_registration" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+    </entity>
     <entity name="Package" representedClassName=".Package" syncable="YES">
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="numero" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
@@ -31,6 +40,7 @@
         <attribute name="valore" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="volume" optional="YES" attributeType="String"/>
         <relationship name="medicine" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="packages" inverseEntity="Medicine"/>
+        <relationship name="therapies" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Therapy" inverseName="package" inverseEntity="Therapy"/>
     </entity>
     <entity name="Pharmacie" representedClassName=".Pharmacie" syncable="YES">
         <attribute name="address" optional="YES" attributeType="String"/>
@@ -43,6 +53,8 @@
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="rrule" optional="YES" attributeType="String"/>
         <attribute name="start_date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="doses" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Dose" inverseName="therapy" inverseEntity="Dose"/>
         <relationship name="medicine" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="therapies" inverseEntity="Medicine"/>
+        <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package" inverseName="therapies" inverseEntity="Package"/>
     </entity>
 </model>

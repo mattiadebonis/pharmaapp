@@ -46,9 +46,6 @@ class StockRowViewModel: ObservableObject {
             let totalNumberOfUnitsPurchased = Int(package.numero) * purchaseLogs
             let totalIntakes = intakeLogs
             
-            totalNumberOfUnitsPurchasedPubli = totalNumberOfUnitsPurchased
-            totalIntakesPubli = 
-
             self.remainingUnits = totalNumberOfUnitsPurchased - totalIntakes
             self.isAvailable = remainingUnits > 0
         }

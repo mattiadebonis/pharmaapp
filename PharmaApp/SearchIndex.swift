@@ -29,7 +29,7 @@ struct SearchIndex: View {
     @State private var isShowElementPresented = false
     @State private var isMedicineSelected: Bool = false
     @State private var selectedMedicine: Medicine = Medicine()
-
+    @State private var selectedPackage: Package = Package()
     var body: some View {
         NavigationView {
             ScrollView {
@@ -39,22 +39,32 @@ struct SearchIndex: View {
                     
 
                 ForEach(filteredMedicines, id: \.self) { medicine in
-                    Button(action: {
-                        self.selectedMedicine = medicine
-                        self.isMedicineSelected = true
-                    }) {
-                        HStack {
-                            Image(systemName: "pill")
-                                .foregroundColor(isMedicineSelected ? pastelBlue : textColor)
-                            Text(medicine.nome)
-                                .font(.headline)
-                                .foregroundColor(isMedicineSelected ? pastelBlue : textColor)
-                            Spacer()
+                    
+                        ForEach(Array(medicine.packages ?? []), id: \.self) { package in
+                            Button(action: {
+                                self.selectedMedicine = medicine
+                                self.isMedicineSelected = true
+                                self.selectedPackage = package
+                            }) {
+                                HStack {
+                                    Image(systemName: "pill")
+                                        .foregroundColor(isMedicineSelected ? pastelBlue : textColor)
+                                    Text("\(medicine.nome)")
+                                        .foregroundColor(isMedicineSelected ? pastelBlue : textColor)
+
+                                        .font(.headline)
+                                    Text("\(package.tipologia) - \(package.valore) \(package.unita) - \(package.volume)")
+                                        .font(.subheadline)
+                                    .foregroundColor(.gray)
+                                    .foregroundColor(isMedicineSelected ? pastelBlue : textColor)
+                                    Spacer()
+                                }
+                                .padding(.leading, 20)
+                                .background(NavigationLink("", destination: TherapyFormView(medicine: selectedMedicine, package: selectedPackage, context: managedObjectContext), isActive: $isMedicineSelected))
+                            }
+                            Divider()
+
                         }
-                        .padding()
-                    }
-                    .background(NavigationLink("", destination: MedicineFormView(medicine: selectedMedicine, context: managedObjectContext), isActive: $isMedicineSelected))
-                    Divider()
                 }
             }
             .padding()

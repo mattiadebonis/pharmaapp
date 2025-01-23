@@ -176,4 +176,22 @@ class DataManager {
             savePharmaciesToCoreData()
         }
     }
+    
+    func initializeOptionsIfEmpty() {
+        let fetchRequest: NSFetchRequest<Option> = Option.fetchRequest()
+
+        do {
+            let options = try context.fetch(fetchRequest)
+            if options.isEmpty {
+                let newOption = Option(context: context)
+                newOption.id = UUID()
+                newOption.manual_intake_registration = false
+
+                try context.save()
+            }
+        } catch {
+            fatalError("Errore durante il controllo o l'inizializzazione delle opzioni: \(error.localizedDescription)")
+        }
+    }
+
 }
