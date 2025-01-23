@@ -37,24 +37,14 @@ struct FeedView: View {
 
         VStack {
             ForEach(sortedByWeight) { medicine in
-                Button {
-                    selectedMedicine = medicine
-                } label: {
-                    MedicineRowView(medicine: medicine)
-                }
+                MedicineRowView(medicine: medicine)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("dataDidChange"))) { _ in
             dataUpdated = UUID()
         }
         .id(dataUpdated)
-        .sheet(item: $selectedMedicine) { medicine in
-            /* TherapyFormView(
-                medicine: medicine,
-                context: managedObjectContext
-                package:
-            ) */
-        }
+        
     }
 }
 

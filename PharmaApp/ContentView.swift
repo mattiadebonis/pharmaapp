@@ -51,7 +51,7 @@ struct ContentView: View {
                     .padding()
                         
                     FeedView()
-                    PharmaciesIndex()
+                    //PharmaciesIndex()
                 }.padding()
             }
             Spacer()

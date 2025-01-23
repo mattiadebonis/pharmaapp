@@ -36,26 +36,6 @@ class TherapyFormViewModel: ObservableObject {
         }
     }
 
-    func saveForniture(medicine: Medicine){  
-        do{
-            let log = Log(context: context)
-            log.id = UUID()
-            log.timestamp = Date()
-            log.medicine = medicine
-            log.type = "purchase"
-            
-            try context.save()
-            successMessage = "Salvataggio scorte riuscito!"
-
-            DispatchQueue.main.async {
-                self.isDataUpdated = true
-            }
-
-        } catch {
-            print("Errore nel salvataggio di Furniture: \(error.localizedDescription)")
-        }
-        
-    }
 
     func saveTherapy(
         medicine: Medicine,

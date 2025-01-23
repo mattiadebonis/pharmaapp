@@ -60,8 +60,6 @@ struct TherapyFormView: View {
     
     // Sezione Orari: con pulsante + per aggiungere e - per rimuovere
     @State private var times: [Date] = [Date()]
-    
-    // Per aprire la schermata di selezione frequenza come sheet
     @State private var isShowingFrequencySheet = false
     
     // MARK: - Init
@@ -77,17 +75,14 @@ struct TherapyFormView: View {
         )
     }
     
-    // MARK: - Body
     var body: some View {
         NavigationView {
             VStack {
                 Form {
-                    // Sezione Frequenza
                     Section {
                         Button {
                             isShowingFrequencySheet = true
                         } label: {
-                            // Mostra la frequenza selezionata (giornaliera o in giorni specifici)
                             HStack {
                                 Text("Frequenza")
                                 Spacer()
@@ -97,28 +92,15 @@ struct TherapyFormView: View {
                         }
                     } header: {
                         Text("Frequenza")
-                    } footer: {
-                        Text("Se programmi un orario, Salute ti invierà una notifica per ricordarti di assumere i farmaci.")
                     }
                     
-                    // Sezione Orari
                     Section("Orari") {
                         ForEach(times.indices, id: \.self) { index in
                             HStack {
-                                DatePicker("",
-                                           selection: $times[index],
-                                           displayedComponents: .hourAndMinute)
-                                    .labelsHidden()
-                                Text("1 compressa") // o personalizza dose
-                                    .foregroundColor(.secondary)
-                                
+                                DatePicker("", selection: $times[index], displayedComponents: .hourAndMinute).labelsHidden()
+                                Text("1 compressa").foregroundColor(.secondary)
                                 Spacer()
-                                
-                                // Bottone per rimuovere l’orario
-                                Button {
-                                    // Elimina l’orario dall’array
-                                    times.remove(at: index)
-                                } label: {
+                                Button { times.remove(at: index) } label: {
                                     Image(systemName: "minus.circle.fill")
                                         .foregroundColor(.red)
                                 }
@@ -131,7 +113,7 @@ struct TherapyFormView: View {
                         }
                     }
                 }
-                
+            
                 Button(action: {
                     saveTherapy()
                 }) {
@@ -141,6 +123,7 @@ struct TherapyFormView: View {
                 .buttonStyle(.borderedProminent)
                 .padding()
             }
+            
             .navigationTitle("\(medicine.nome) - \(package.tipologia) \(package.valore) \(package.unita) \(package.volume)")
             .onAppear {
                 populateIfExisting()

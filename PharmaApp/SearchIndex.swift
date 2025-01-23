@@ -60,7 +60,7 @@ struct SearchIndex: View {
                                     Spacer()
                                 }
                                 .padding(.leading, 20)
-                                .background(NavigationLink("", destination: TherapyFormView(medicine: selectedMedicine, package: selectedPackage, context: managedObjectContext), isActive: $isMedicineSelected))
+                                .background(NavigationLink("", destination: MedicineFormView(medicine: selectedMedicine, package: selectedPackage, context: managedObjectContext), isActive: $isMedicineSelected))
                             }
                             Divider()
 
