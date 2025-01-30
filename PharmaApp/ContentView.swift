@@ -49,9 +49,12 @@ struct ContentView: View {
                         }
                     }
                     .padding()
-                        
+                    if appViewModel.suggestNearestPharmacies {
+                        PharmaciesIndex()
+                    }  
                     FeedView()
-                    //PharmaciesIndex()
+                    
+                    
                 }.padding()
             }
             Spacer()

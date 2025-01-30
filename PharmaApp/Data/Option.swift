@@ -13,6 +13,7 @@ public class Option: NSManagedObject, Identifiable {
 
     @NSManaged public var id: UUID
     @NSManaged public var manual_intake_registration: Bool
+    @NSManaged public var day_threeshold_stocks_alarm: Int32
 
 }
 

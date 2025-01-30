@@ -186,9 +186,18 @@ class DataManager {
                 let newOption = Option(context: context)
                 newOption.id = UUID()
                 newOption.manual_intake_registration = false
-
-                try context.save()
+                newOption.day_threeshold_stocks_alarm = 7
+            }else if options.count > 0 {
+                if !options.first!.manual_intake_registration {
+                    options.first!.manual_intake_registration = false
+                }
+                if (options.first!.day_threeshold_stocks_alarm == 0) {
+                    options.first!.day_threeshold_stocks_alarm = 7
+                }
             }
+
+            try context.save()
+            
         } catch {
             fatalError("Errore durante il controllo o l'inizializzazione delle opzioni: \(error.localizedDescription)")
         }

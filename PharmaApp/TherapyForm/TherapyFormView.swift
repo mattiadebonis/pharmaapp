@@ -62,6 +62,8 @@ struct TherapyFormView: View {
     @State private var times: [Date] = [Date()]
     @State private var isShowingFrequencySheet = false
     
+    @State private var selectedImportance: String = Therapy.importanceValues.first ?? "standard"
+
     // MARK: - Init
     init(
         medicine: Medicine,
@@ -112,6 +114,16 @@ struct TherapyFormView: View {
                             Label("Aggiungi un orario", systemImage: "plus.circle")
                         }
                     }
+                }
+
+                Section(header: Text("Importanza")) {
+                    Picker("Importanza", selection: $selectedImportance) {
+                        ForEach(Therapy.importanceValues, id: \.self) { importance in
+                            Text(importance.capitalized).tag(importance)
+                        }
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    
                 }
             
                 Button(action: {
@@ -193,7 +205,8 @@ extension TherapyFormView {
                     byDay: [],
                     startDate: startDate,
                     times: times,
-                    package: package         
+                    package: package,
+                    importance: selectedImportance
                 )
                 
             case .specificDays:
@@ -206,7 +219,9 @@ extension TherapyFormView {
                     byDay: byDay,
                     startDate: startDate,
                     times: times,
-                    package: package
+                    package: package,
+                    importance: selectedImportance
+
                 )
             }
         
@@ -274,6 +289,14 @@ extension TherapyFormView {
             self.times = sortedDoses.map { $0.time }
         } else {
             self.times = []
+        }
+    }
+
+    private func saveContext() {
+        do {
+            try context.save()
+        } catch {
+            print("Errore durante il salvataggio del contesto: \(error.localizedDescription)")
         }
     }
 }
@@ -409,5 +432,7 @@ struct FrequencySelectionView: View {
             byDay.append(day)
         }
     }
+
+    
     
 }

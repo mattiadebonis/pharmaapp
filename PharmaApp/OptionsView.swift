@@ -36,8 +36,20 @@ struct OptionsView: View {
 
                         }
                     }
-
-                    
+                    Picker("Soglia giorni allarme scorte", selection: Binding(
+                        get: {
+                            Int(option.day_threeshold_stocks_alarm)
+                        },
+                        set: { newValue in
+                            option.day_threeshold_stocks_alarm = Int32(newValue)
+                            saveContext()
+                        }
+                    )) {
+                        ForEach(1..<31) { day in
+                            Text("\(day) giorni").tag(day)
+                        }
+                    }.pickerStyle(WheelPickerStyle()) 
+                    Text("Soglia attuale: \(option.day_threeshold_stocks_alarm) giorni")
                 }
             }
             .navigationTitle("Impostazioni")

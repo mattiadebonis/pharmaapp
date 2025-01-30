@@ -55,7 +55,6 @@ struct MedicineFormView: View {
                                         medicine: medicine,
                                         package: package,
                                         context: context
-
                                     )
                                 ) {
 
@@ -63,7 +62,7 @@ struct MedicineFormView: View {
                                         HStack(alignment: .top) {
                                             let frequency = therapy.rrule.map { _ in recurrenceDescription(therapy: therapy) } ?? ""
                                             let startDate = therapy.start_date.map { dateFormatter.string(from: $0) } ?? ""
-                                            
+                                            Text(therapy.importance ?? "")
                                             Text(frequency)
                                             
                                             Spacer()
@@ -94,6 +93,7 @@ struct MedicineFormView: View {
                     }) {
                         Text("Aggiungi scorte")
                     }
+                    
                 }
 
                 

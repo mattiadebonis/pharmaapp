@@ -23,9 +23,11 @@ class MedicineFormViewModel: ObservableObject {
             log.id = UUID()
             log.timestamp = Date()
             log.medicine = medicine
+            log.package = package
             log.type = "purchase"
 
             if medicine.therapies?.isEmpty ?? true {
+                // se non ci sono terapie ne aggiungo una al bisogno
                 let therapy = Therapy(context: context)
                 therapy.id = UUID()
                 therapy.medicine = medicine

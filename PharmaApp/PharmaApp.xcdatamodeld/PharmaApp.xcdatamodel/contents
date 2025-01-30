@@ -28,6 +28,7 @@
         <relationship name="pharmacie" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Pharmacie" inverseName="openingtimes" inverseEntity="Pharmacie"/>
     </entity>
     <entity name="Option" representedClassName=".Option" syncable="YES">
+        <attribute name="day_threeshold_stocks_alarm" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="manual_intake_registration" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
     </entity>
@@ -51,6 +52,7 @@
     </entity>
     <entity name="Therapy" representedClassName=".Therapy" syncable="YES">
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="importance" optional="YES" attributeType="String"/>
         <attribute name="rrule" optional="YES" attributeType="String"/>
         <attribute name="start_date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="doses" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Dose" inverseName="therapy" inverseEntity="Dose"/>

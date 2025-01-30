@@ -46,7 +46,8 @@ class TherapyFormViewModel: ObservableObject {
         byDay: [String],
         startDate: Date,
         times: [Date],
-        package: Package
+        package: Package,
+        importance: String
     ) {
         let fetchRequest = Therapy.fetchRequest() as! NSFetchRequest<Therapy>
         fetchRequest.predicate = NSPredicate(format: "medicine == %@", medicine)
@@ -58,11 +59,14 @@ class TherapyFormViewModel: ObservableObject {
             
             if let existingTherapy = results.first {
                 therapy = existingTherapy
+                therapy.importance = importance
+
             } else {
                 therapy = Therapy(context: context)
                 therapy.id = UUID()
                 therapy.medicine = medicine
                 therapy.package = package
+                therapy.importance = importance
             }
             
             var rule = RecurrenceRule(freq: freq ?? "DAILY")

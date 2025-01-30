@@ -9,4 +9,5 @@ import SwiftUI
 
 class AppViewModel: ObservableObject {
     @Published var isSearchIndexPresented: Bool = false
+    @Published var suggestNearestPharmacies: Bool = false
 }
