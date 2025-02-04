@@ -37,55 +37,51 @@ struct ContentView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {  
-            ScrollView (){
-                VStack(alignment: .leading ) {
-                    HStack {
-                        Spacer()
-                        Button(action: { isSettingsPresented = true}) {
-                            Image(systemName: "gearshape.fill")
-                                .foregroundColor(pastelBlue)
-                                .padding()
-                        }
+        ScrollView (){
+            VStack(alignment: .leading ) {
+                HStack {
+                    Spacer()
+                    Button(action: { isSettingsPresented = true}) {
+                        Image(systemName: "gearshape.fill")
+                            .foregroundColor(pastelBlue)
+                            .padding()
                     }
-                    .padding()
-                    if appViewModel.suggestNearestPharmacies {
-                        PharmaciesIndex()
-                    }  
-                    FeedView()
-                    
-                    
-                }.padding()
-            }
-            Spacer()
-            HStack {
-                Spacer()
-                Button(action: {
-                    appViewModel.isSearchIndexPresented = true
-                }) {
-                    Image(systemName: "magnifyingglass")
-                    Text("Cerca")
                 }
-                .bold()
-                .foregroundColor(pastelBlue)
                 .padding()
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 30))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 30)
-                        .stroke(pastelBlue, lineWidth: 2) 
-                )
-                .cornerRadius(30)
-                .padding()
-            }
-        }
+                if appViewModel.suggestNearestPharmacies {
+                    Button(action: {
+                        appViewModel.isStocksIndexPresented = true
+                    }) {
+                        Image(systemName: "cross")
+                        Text("Rifornisci i farmaci in esaurimento")
+                        Spacer()
+                    }
+                    .bold()
+                    .foregroundColor(Color.white)
+                    .padding(20)
+                    .background(Color.blue)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color(red: 220/255, green: 220/255, blue: 220/255), lineWidth: 1)
+                    )
+                    .cornerRadius(8)
+                }
+                TextField("Cerca", text: $appViewModel.query)
+                    .padding()
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                if appViewModel.query == "" {
+                    FeedView()
+                }else{
+                    SearchIndex()
+                }
+            }.padding()
+        }   
         .sheet(isPresented: $isSettingsPresented) {
-            
             OptionsView()
                 .environment(\.managedObjectContext, managedObjectContext)
         }
-        .sheet(isPresented: $appViewModel.isSearchIndexPresented) {
-            SearchIndex()
+        .sheet(isPresented: $appViewModel.isStocksIndexPresented) {
+            PharmaciesIndex()
         }
         
     }

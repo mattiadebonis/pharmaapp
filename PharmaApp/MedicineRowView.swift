@@ -26,6 +26,7 @@ struct MedicineRowView: View {
     }()
 
     @State private var selectedTherapy: Therapy?
+    @State private var showPharmacieIndexView = false
 
     var body: some View {
         VStack {
@@ -45,6 +46,7 @@ struct MedicineRowView: View {
                         ForEach(Array(therapies), id: \.self) { therapy in
                             VStack(alignment: .leading, spacing: 5) {
                                 HStack(alignment: .top) {
+                                    
                                     let frequency = therapy.rrule.map { _ in recurrenceDescription(therapy: therapy) } ?? ""
                                     let startDate = therapy.start_date.map { dateFormatter.string(from: $0) } ?? ""
                                     let package = "\(therapy.package.tipologia) - \(therapy.package.valore) \(therapy.package.unita) - \(therapy.package.volume)"
@@ -67,15 +69,20 @@ struct MedicineRowView: View {
                                     recurrenceManager: recurrenceManager
                                 )
                                 HStack{
-                                    
-                                    /* Text("Scorte in esaurimento: \(inEsaurimento)")
-                                        .foregroundColor(textColor) */
                                     if inEsaurimento {
-                                        HStack {
-                                            Image(systemName: "cross")
-                                            Text("Scorte in esaurimento")
-                                                .foregroundColor(textColor)
-                                        }.foregroundColor(.red)
+                                        Button(action: {
+                                            showPharmacieIndexView.toggle()
+                                        }) {
+                                            HStack {
+                                                Image(systemName: "cross")
+                                                Text("Rifornisci scorte")
+                                                    .foregroundColor(textColor)
+                                            }
+                                            .foregroundColor(.red)
+                                        }
+                                        .sheet(isPresented: $showPharmacieIndexView) {
+                                            PharmaciesIndex()
+                                        }
                                         .onAppear{
                                             appViewModel.suggestNearestPharmacies = true
                                         }
@@ -117,7 +124,7 @@ struct MedicineRowView: View {
                 Spacer()
             }
         }
-         .padding(20)
+        .padding(20)
         .background(Color.white)
         .overlay(
             RoundedRectangle(cornerRadius: 8)

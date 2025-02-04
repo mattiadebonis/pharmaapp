@@ -13,19 +13,23 @@ struct SearchIndex: View {
     @FetchRequest(fetchRequest: Therapy.extractTherapies()) var therapies: FetchedResults<Therapy>
     @FetchRequest(fetchRequest: Medicine.extractMedicines()) var medicines: FetchedResults<Medicine>
 
+    @EnvironmentObject var appViewModel: AppViewModel
+
     let pastelBlue = Color(red: 110/255, green: 153/255, blue: 184/255, opacity: 1.0)
     let pastelGreen = Color(red: 179/255, green: 207/255, blue: 190/255, opacity: 1.0)
     let textColor = Color(red: 47/255, green: 47/255, blue: 47/255, opacity: 1.0)
     let pastelPink = Color(red: 248/255, green: 200/255, blue: 220/255, opacity: 1.0)
 
     var filteredMedicines: [Medicine] {
-        guard !searchItem.isEmpty else { return Array(medicines) }
-        return medicines.filter { medicine in
-            medicine.nome.lowercased().contains(searchItem.lowercased())
+        if appViewModel.query.isEmpty {
+            return Array(medicines)
+        } else {
+            return medicines.filter { medicine in
+                medicine.nome.lowercased().contains(appViewModel.query.lowercased()) ?? false
+            }
         }
     }
 
-    @State private var searchItem = ""
     @State private var isShowElementPresented = false
     @State private var isMedicineSelected: Bool = false
     @State private var selectedMedicine: Medicine = Medicine()
@@ -33,11 +37,6 @@ struct SearchIndex: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                TextField("Cerca", text: $searchItem)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding()
-                    
-
                 ForEach(filteredMedicines, id: \.self) { medicine in
                     
                         ForEach(Array(medicine.packages ?? []), id: \.self) { package in
