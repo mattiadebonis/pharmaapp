@@ -13,6 +13,7 @@ public class Medicine: NSManagedObject, Identifiable {
     @NSManaged public var id: UUID
     @NSManaged public var nome: String
     @NSManaged public var principio_attivo: String
+    @NSManaged public var obbligo_ricetta: Bool
     @NSManaged public var therapies: Set<Therapy>?
     @NSManaged public var packages: Set<Package>
     @NSManaged public var logs: Set<Log>?
@@ -83,6 +84,60 @@ extension Medicine {
         let coverageDays = totaleScorte / consumoGiornalieroTotale
         return coverageDays < Double(option.day_threeshold_stocks_alarm)
     }
+
+    /// Restituisce `true` se esiste almeno un log di tipo "new_prescription"
+    /// non seguito (cioè avvenuto dopo) da un log di tipo "purchase".
+    func hasPendingNewPrescription() -> Bool {
+        // Se non ci sono log, ritorna false
+        guard let logs = self.logs, !logs.isEmpty else { return false }
+        
+        // Filtra i log di tipo "new_prescription"
+        let newPrescriptionLogs = logs.filter { $0.type == "new_prescription" }
+        if newPrescriptionLogs.isEmpty {
+            return false
+        }
+        
+        // Filtra i log di tipo "purchase"
+        let purchaseLogs = logs.filter { $0.type == "purchase" }
+        
+        // Trova l'ultimo log di "new_prescription" (in base al timestamp)
+        guard let lastNewPrescription = newPrescriptionLogs.max(by: { $0.timestamp < $1.timestamp }) else {
+            return false
+        }
+        
+        // Trova l'ultimo log di "purchase", se esiste
+        if let lastPurchase = purchaseLogs.max(by: { $0.timestamp < $1.timestamp }) {
+            // Se l'ultimo log di new_prescription è più recente dell'ultimo purchase, allora c'è una prescrizione non seguita
+            return lastNewPrescription.timestamp > lastPurchase.timestamp
+        } else {
+            // Se non esistono log di purchase, allora c'è almeno una new_prescription pendente
+            return true
+        }
+    }
+
+    func hasNewPrescritpionRequest() -> Bool {
+        // Verifica che esistano log associati alla medicina
+        guard let logs = self.logs, !logs.isEmpty else { return false }
+        
+        // Filtra i log di tipo "new_prescription_request"
+        let requestLogs = logs.filter { $0.type == "new_prescription_request" }
+        guard !requestLogs.isEmpty else { return false }
+        
+        // Trova l'ultimo log di "new_prescription_request" in base al timestamp
+        guard let lastRequestLog = requestLogs.max(by: { $0.timestamp < $1.timestamp }) else {
+            return false
+        }
+        
+        // Filtra i log di tipo "new_prescription" che sono successivi all'ultimo "new_prescription_request"
+        let prescriptionLogsAfterRequest = logs.filter {
+            $0.type == "new_prescription" && $0.timestamp > lastRequestLog.timestamp
+        }
+        
+        // Se non ci sono log di "new_prescription" dopo l'ultimo "new_prescription_request",
+        // allora la richiesta non è stata seguita da una prescrizione e il metodo restituisce true.
+        return prescriptionLogsAfterRequest.isEmpty
+    }
+
 
     /// Calcolo di un punteggio complessivo ("weight") che deriva da:
     /// - Scorte rimanenti (coverage)

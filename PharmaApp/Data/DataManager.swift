@@ -30,7 +30,8 @@ class DataManager {
             guard let idString = medicineData["id"] as? String,
                   let id = UUID(uuidString: idString),
                   let nome = medicineData["nome"] as? String,
-                  let principioAttivo = medicineData["principio_attivo"] as? String
+                  let principioAttivo = medicineData["principio_attivo"] as? String,
+                  let obbligoRicetta = medicineData["obbligo_ricetta"] as? Bool
             else {
                 print("Errore: dati incompleti per un medicinale, saltato.")
                 continue
@@ -40,6 +41,7 @@ class DataManager {
             medicine.id = id
             medicine.nome = nome
             medicine.principio_attivo = principioAttivo
+            medicine.obbligo_ricetta = obbligoRicetta
             if let confezioni = medicineData["confezioni"] as? [[String: Any]] {
                 for conf in confezioni {
                     guard let confIdString = conf["id"] as? String,
