@@ -60,14 +60,8 @@ struct PharmaciesIndex: View {
                     }
                 }
             }
-            .padding(30)
+            
         }
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color(red: 220/255, green: 220/255, blue: 220/255), lineWidth: 1)
-        )
-        .cornerRadius(16)
-        .shadow(color: .gray.opacity(0.1), radius: 3, x: 0, y: 2)
     }
 
     // Funzione per aprire la posizione in Apple Maps

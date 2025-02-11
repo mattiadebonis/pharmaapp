@@ -17,35 +17,27 @@ public class Log : NSManagedObject , Identifiable{
     @NSManaged public var package: Package?
 }
 
-
 extension Log{
     static func extractLogs() -> NSFetchRequest<Log> {
-    
         let request:NSFetchRequest<Log> = Log.fetchRequest() as! NSFetchRequest <Log>
         let sortDescriptor = NSSortDescriptor(key: "id", ascending: true)
-        
         request.sortDescriptors = [sortDescriptor]
-        
         return request
     }
 
     static func extractIntakeLogs() -> NSFetchRequest<Log> {
         let request:NSFetchRequest<Log> = Log.fetchRequest() as! NSFetchRequest <Log>
         let sortDescriptor = NSSortDescriptor(key: "id", ascending: true)
-        
         request.sortDescriptors = [sortDescriptor]
         request.predicate = NSPredicate(format: "type == 'intake'")
-        
         return request
     }
 
     static func extractPurchaseLogs() -> NSFetchRequest<Log> {
         let request:NSFetchRequest<Log> = Log.fetchRequest() as! NSFetchRequest <Log>
         let sortDescriptor = NSSortDescriptor(key: "id", ascending: true)
-        
         request.sortDescriptors = [sortDescriptor]
         request.predicate = NSPredicate(format: "type == 'purchase'")
-        
         return request
     }
 

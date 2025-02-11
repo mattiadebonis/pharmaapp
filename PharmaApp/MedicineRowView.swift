@@ -44,26 +44,11 @@ struct MedicineRowView: View {
                     }
                     if let therapies = medicine.therapies {
                         ForEach(Array(therapies), id: \.self) { therapy in
-                            VStack(alignment: .leading, spacing: 5) {
-                                HStack(alignment: .top) {
-                                    
-                                    let frequency = therapy.rrule.map { _ in recurrenceDescription(therapy: therapy) } ?? ""
-                                    let startDate = therapy.start_date.map { dateFormatter.string(from: $0) } ?? ""
-                                    let package = "\(therapy.package.tipologia) - \(therapy.package.valore) \(therapy.package.unita) - \(therapy.package.volume)"
-                                    //Text(therapy.importance ?? "")
-                                    //Text(frequency)
-                                    //Text(package)
-                                    
-                                    Spacer()
-                                }
-                                .foregroundColor(.gray)
+                            VStack(alignment: .leading, spacing: 5) {    
+                                let frequency = therapy.rrule.map { _ in recurrenceDescription(therapy: therapy) } ?? ""
+                                let startDate = therapy.start_date.map { dateFormatter.string(from: $0) } ?? ""
+                                let package = "\(therapy.package.tipologia) - \(therapy.package.valore) \(therapy.package.unita) - \(therapy.package.volume)"
                                 
-                                /* if let doses = therapy.doses {
-                                    ForEach(Array(doses), id: \.self) { dose in
-                                        Text("\(dateFormatter.string(from: dose.time ?? Date()))")
-                                            .foregroundColor(.gray)
-                                    }
-                                } */
                                 let inEsaurimento = medicine.isInEsaurimento(
                                     option: options.first!,
                                     recurrenceManager: recurrenceManager
