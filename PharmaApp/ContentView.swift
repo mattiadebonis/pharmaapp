@@ -5,13 +5,6 @@
 //  Created by Mattia De bonis on 09/12/24.
 //
 
-//
-//  ContentView.swift
-//  PharmaApp
-//
-//  Created by Mattia De bonis on 09/12/24.
-//
-
 import SwiftUI
 
 struct ContentView: View {

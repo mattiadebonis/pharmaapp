@@ -33,20 +33,16 @@ struct FeedView: View {
             dataUpdated = UUID()
         }
         .id(dataUpdated)
-        // Presenta la modale per la MedicineFormView quando viene selezionata una medicine
         .sheet(item: $selectedMedicine) { medicine in
             MedicineFormView(
                 medicine: medicine,
                 package: getPackage(for: medicine)
             )
-            .presentationDetents([.medium]) // La modale occupa metà schermo
-            .presentationDragIndicator(.visible) // Mostra l'indicatore di drag (opzionale)
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible) 
         }
     }
-    
-    /// Determina il package da passare a MedicineFormView:
-    /// - Se la medicine ha almeno una therapy, restituisce il package della prima.
-    /// - Altrimenti, cerca nei log di tipo "purchase" il package più recente.
+
     func getPackage(for medicine: Medicine) -> Package {
         if let therapies = medicine.therapies, let therapy = therapies.first {
             return therapy.package
