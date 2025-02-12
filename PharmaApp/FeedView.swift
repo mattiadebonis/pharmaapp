@@ -11,43 +11,52 @@ import CoreData
 struct FeedView: View {
     @Environment(\.managedObjectContext) var managedObjectContext
     @FetchRequest(fetchRequest: Medicine.extractMedicinesWithTherapiesOrPurchaseLogs())
-
     var medicines: FetchedResults<Medicine>
-
-    @State private var selectedMedicine: Medicine?
-    @State private var dataUpdated = UUID()  // Usato per forzare l'aggiornamento della vista
-
-    init() {
-        // Impostazione dell'observer nel contesto di un inizializzatore statico o in un'estensione di ambiente
-        _ = Self.setupObserver
-    }
-
-    static let setupObserver: () = {
-        NotificationCenter.default.addObserver(forName: .NSManagedObjectContextDidSave, object: nil, queue: .main) { _ in
-            // Usare un approccio di aggiornamento che non cattura direttamente `self`
-            // Postare una notifica che possa essere ascoltata da SwiftUI per aggiornare la vista
-            NotificationCenter.default.post(name: NSNotification.Name("dataDidChange"), object: nil)
-        }
-    }()
+    
+    @State private var dataUpdated = UUID()  
+    @State private var selectedMedicine: Medicine? = nil  // Variabile per tenere traccia della medicine selezionata
 
     var body: some View {
-
         let medicineArray = Array(medicines)
-        let sortedByWeight = medicineArray.sorted { $0.weight > $1.weight } 
-
+        let sortedByWeight = medicineArray.sorted { $0.weight > $1.weight }
+        
         VStack {
             ForEach(sortedByWeight) { medicine in
                 MedicineRowView(medicine: medicine)
+                    .contentShape(Rectangle()) // Assicura che l'intera area della riga sia tappabile
+                    .onTapGesture {
+                        selectedMedicine = medicine
+                    }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("dataDidChange"))) { _ in
             dataUpdated = UUID()
         }
         .id(dataUpdated)
-        
+        // Presenta la modale per la MedicineFormView quando viene selezionata una medicine
+        .sheet(item: $selectedMedicine) { medicine in
+            MedicineFormView(
+                medicine: medicine,
+                package: getPackage(for: medicine)
+            )
+            .presentationDetents([.medium]) // La modale occupa metà schermo
+            .presentationDragIndicator(.visible) // Mostra l'indicatore di drag (opzionale)
+        }
     }
-}
-
-#Preview {
-    FeedView()
+    
+    /// Determina il package da passare a MedicineFormView:
+    /// - Se la medicine ha almeno una therapy, restituisce il package della prima.
+    /// - Altrimenti, cerca nei log di tipo "purchase" il package più recente.
+    func getPackage(for medicine: Medicine) -> Package {
+        if let therapies = medicine.therapies, let therapy = therapies.first {
+            return therapy.package
+        } else if let logs = medicine.logs {
+            let purchaseLogs = logs.filter { $0.type == "purchase" }
+            let sortedLogs = purchaseLogs.sorted { $0.timestamp > $1.timestamp }
+            if let package = sortedLogs.first?.package {
+                return package
+            }
+        }
+        fatalError("Nessun package disponibile per \(medicine.nome ?? "medicine senza nome")")
+    }
 }

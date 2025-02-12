@@ -34,6 +34,7 @@ struct SearchIndex: View {
     @State private var isMedicineSelected: Bool = false
     @State private var selectedMedicine: Medicine = Medicine()
     @State private var selectedPackage: Package = Package()
+    
     var body: some View {
         NavigationView {
             ScrollView {
@@ -59,7 +60,7 @@ struct SearchIndex: View {
                                     Spacer()
                                 }
                                 .padding(.leading, 20)
-                                .background(NavigationLink("", destination: MedicineFormView(medicine: selectedMedicine, package: selectedPackage, context: managedObjectContext), isActive: $isMedicineSelected))
+                                .background(NavigationLink("", destination: MedicineFormView(medicine: selectedMedicine, package: selectedPackage)))
                             }
                             Divider()
 

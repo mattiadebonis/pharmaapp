@@ -37,11 +37,11 @@ struct PharmaciesIndex: View {
                             .font(.caption)
                             .padding(4)
                             .background(Color.white.opacity(0.7))
-                            .cornerRadius(8)
+             
                     }
                 }
             }
-            .frame(height: 200)
+            .frame(height: 600)
             
 
             VStack(spacing:10) {                
@@ -59,7 +59,9 @@ struct PharmaciesIndex: View {
                         }
                     }
                 }
-            }
+            }.padding()
+            //SuppliesView()
+            Spacer()
             
         }
     }
