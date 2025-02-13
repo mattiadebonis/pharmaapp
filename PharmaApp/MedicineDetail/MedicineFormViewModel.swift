@@ -39,6 +39,7 @@ class MedicineFormViewModel: ObservableObject {
             DispatchQueue.main.async {
                 self.isDataUpdated = true
             }
+
         } catch {
             print("Errore nel salvataggio di scorte: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
@@ -47,32 +48,34 @@ class MedicineFormViewModel: ObservableObject {
     
     // MARK: - Funzioni per la gestione della prescrizione
     
-    func addNewPrescriptionRequest(for medicine: Medicine) {
-        addLog(for: medicine, type: "new_prescription_request")
+    func addNewPrescriptionRequest(for medicine: Medicine, for package: Package) {
+        addLog(for: medicine, for: package, type: "new_prescription_request")
     }
     
-    func addNewPrescription(for medicine: Medicine) {
-        addLog(for: medicine, type: "new_prescription")
+    func addNewPrescription(for medicine: Medicine, for package: Package) {
+        addLog(for: medicine, for: package, type: "new_prescription")
     }
     
-    func addPurchase(for medicine: Medicine) {
-        addLog(for: medicine, type: "purchase")
+    func addPurchase(for medicine: Medicine, for package: Package) {
+        addLog(for: medicine, for: package, type: "purchase")
     }
 
-    func addIntake(for medicine: Medicine) {
-        addLog(for: medicine, type: "intake")
+    func addIntake(for medicine: Medicine, for package: Package) {
+        addLog(for: medicine, for: package, type: "intake")
     }
     
-    private func addLog(for medicine: Medicine, type: String) {
+    private func addLog(for medicine: Medicine, for package: Package, type: String) {
         let newLog = Log(context: context)
         newLog.id = UUID()
         newLog.type = type
         newLog.timestamp = Date()
         newLog.medicine = medicine
-        // Se necessario, puoi associare anche il package qui
+        newLog.package = package
         do {
             try context.save()
             successMessage = "Log salvato: \(type)"
+                    print("salvato")
+
         } catch {
             errorMessage = "Errore nel salvataggio del log: \(error.localizedDescription)"
         }

@@ -218,4 +218,158 @@ struct RecurrenceManager {
         formatter.timeZone = TimeZone(identifier: "UTC")
         return formatter.date(from: dateString)
     }
+    // In RecurrenceManager.swift
+
+    func nextOccurrence(
+        rule: RecurrenceRule,
+        startDate: Date,
+        after now: Date,
+        doses: NSSet?
+    ) -> Date? {
+        // Se non ci sono orari (Dose), non sappiamo a che ora assumere
+        guard let doseSet = doses as? Set<Dose>, !doseSet.isEmpty else {
+            return nil
+        }
+        
+        // Ordiniamo i "Dose" per orario
+        let sortedDoses = doseSet.sorted { ($0.time ?? Date()) < ($1.time ?? Date()) }
+        
+        // Se la freq è "DAILY" o "WEEKLY", ci comportiamo in maniera semplificata.
+        // Altrimenti, potresti aggiungere ulteriori casi come MONTHLY, YEARLY, etc.
+        let freq = rule.freq.uppercased()
+        
+        // Limitiamoci, per esempio, a generare le prossime 30 occorrenze massime
+        // (o i prossimi 30 giorni, se "DAILY") e vediamo quale cade dopo "now".
+        
+        // Ci aiuta un piccolo enumeratore di date
+        let maxOccurrences = 30
+        var candidateDates: [Date] = []
+        
+        var currentDate = startDate
+        
+        // Se la data di inizio è già nel passato, spostiamoci a "oggi" per non generare date passate
+        if currentDate < now {
+            currentDate = Calendar.current.startOfDay(for: now)
+        }
+        
+        // Creiamo un calendario per i calcoli
+        let calendar = Calendar.current
+        
+        switch freq {
+            
+        case "DAILY":
+            // Esempio: per i prossimi 30 giorni a partire da currentDate
+            for _ in 1...maxOccurrences {
+                // Per ogni giorno, aggiungiamo i possibili orari della day
+                // Supponendo che 'time' sia NON opzionale: Date (non Date?)
+                for dose in sortedDoses {
+                    // dose.time è un Date (non faccio if let, non è optional)
+                    if let combinedDate = combine(day: currentDate, withTime: dose.time),
+                       combinedDate > now {
+                        candidateDates.append(combinedDate)
+                    }
+                }
+                // Passiamo al giorno successivo in base all'intervallo
+                // Se rule.interval è 2, significa "ogni 2 giorni", etc.
+                currentDate = calendar.date(byAdding: .day, value: rule.interval, to: currentDate) ?? currentDate
+            }
+            
+        case "WEEKLY":
+            // Esempio semplificato: consideriamo i prossimi 30 "ripetizioni settimanali"
+            // Tenendo conto di rule.byDay se vuoi gestire i giorni della settimana
+            // (MO, TU, WE, ecc.).
+            
+            // Se NON hai byDay, assumiamo "tutti i giorni" della settimana,
+            // altrimenti usiamo i giorni in byDay.
+            let byDays = rule.byDay.isEmpty ? ["MO","TU","WE","TH","FR","SA","SU"] : rule.byDay
+            
+            for _ in 1...maxOccurrences {
+                
+                // Cerchiamo la prossima settimana.  
+                // Esempio: enumeriamo i 7 giorni della settimana a partire da currentDate
+                var tempDate = currentDate
+                
+                for _ in 1...7 {
+                    let weekdayCode = weekdayToICS(tempDate)
+                    // Se questo giorno è incluso in byDays
+                    if byDays.contains(weekdayCode) {
+                        // Aggiungiamo i possibili orari "Dose"
+                        // Supponendo che 'time' sia NON opzionale: Date (non Date?)
+                        for dose in sortedDoses {
+                            // dose.time è un Date (non faccio if let, non è optional)
+                            if let combinedDate = combine(day: currentDate, withTime: dose.time),
+                               combinedDate > now {
+                                candidateDates.append(combinedDate)
+                            }
+                        }
+                    }
+                    tempDate = calendar.date(byAdding: .day, value: 1, to: tempDate) ?? tempDate
+                }
+                
+                // Avanziamo di "rule.interval" settimane
+                currentDate = calendar.date(byAdding: .day, value: 7 * rule.interval, to: currentDate) ?? currentDate
+            }
+            
+        default:
+            // Se non gestiamo la freq, restituiamo nil
+            print("nextOccurrence - freq \(freq) non gestita")
+            return nil
+        }
+        
+        // Se non ci sono date candidate, return nil
+        guard !candidateDates.isEmpty else { return nil }
+        
+        // Ordiniamo le candidate e prendiamo la più vicina
+        let nextDate = candidateDates.sorted().first
+        
+        // Verifichiamo eventuale until (se la regola lo prevede)
+        if let until = rule.until, let unwrappedNext = nextDate {
+            if unwrappedNext > until {
+                return nil
+            }
+        }
+        
+        // Verifichiamo eventuale count (se la regola lo prevede),
+        // in un'implementazione più completa dovremmo capire quante occorrenze
+        // sono già state generate (o consumate) e fermarci se superiamo "count".
+        // Per semplicità, non lo implementiamo qui.
+        
+        return nextDate
+    }
+
+    // MARK: - Funzioni di supporto
+
+    /// Combina la parte "giorno" di 'day' con la parte "ora e minuti" di 'time'
+    private func combine(day: Date, withTime time: Date) -> Date? {
+        let calendar = Calendar.current
+        let dayComponents = calendar.dateComponents([.year, .month, .day], from: day)
+        let timeComponents = calendar.dateComponents([.hour, .minute, .second], from: time)
+        
+        var mergedComponents = DateComponents()
+        mergedComponents.year = dayComponents.year
+        mergedComponents.month = dayComponents.month
+        mergedComponents.day = dayComponents.day
+        mergedComponents.hour = timeComponents.hour
+        mergedComponents.minute = timeComponents.minute
+        mergedComponents.second = timeComponents.second
+        
+        return calendar.date(from: mergedComponents)
+    }
+
+    /// Converte un Date in un codice weekday ICS (es: "MO", "TU", ...).
+    private func weekdayToICS(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: date)
+        // Domenica=1, Lunedì=2, etc. (dipende dal locale, ma in Swift di default Domenica=1)
+        switch weekday {
+        case 1: return "SU"
+        case 2: return "MO"
+        case 3: return "TU"
+        case 4: return "WE"
+        case 5: return "TH"
+        case 6: return "FR"
+        case 7: return "SA"
+        default: return "MO"
+        }
+    }
 }

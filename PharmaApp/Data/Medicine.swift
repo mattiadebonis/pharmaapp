@@ -119,23 +119,20 @@ extension Medicine {
         // Verifica che esistano log associati alla medicina
         guard let logs = self.logs, !logs.isEmpty else { return false }
         
-        // Filtra i log di tipo "new_prescription_request"
-        let requestLogs = logs.filter { $0.type == "new_prescription_request" }
-        guard !requestLogs.isEmpty else { return false }
+        // Filtra i log di tipo "new_prescription"
+        let prescriptionLogs = logs.filter { $0.type == "new_prescription_request" }
+        guard !prescriptionLogs.isEmpty else { return false }
         
-        // Trova l'ultimo log di "new_prescription_request" in base al timestamp
-        guard let lastRequestLog = requestLogs.max(by: { $0.timestamp < $1.timestamp }) else {
+        // Trova l'ultimo log di "new_prescription" in base al timestamp
+        guard let lastPrescription = prescriptionLogs.max(by: { $0.timestamp < $1.timestamp }) else {
             return false
         }
         
-        // Filtra i log di tipo "new_prescription" che sono successivi all'ultimo "new_prescription_request"
-        let prescriptionLogsAfterRequest = logs.filter {
-            $0.type == "new_prescription" && $0.timestamp > lastRequestLog.timestamp
-        }
+        // Filtra i log di tipo "purchase" che sono avvenuti dopo l'ultimo "new_prescription"
+        let purchaseLogsAfterPrescription = logs.filter { $0.type == "purchase" && $0.timestamp > lastPrescription.timestamp }
         
-        // Se non ci sono log di "new_prescription" dopo l'ultimo "new_prescription_request",
-        // allora la richiesta non è stata seguita da una prescrizione e il metodo restituisce true.
-        return prescriptionLogsAfterRequest.isEmpty
+        // Restituisce true solo se non sono stati trovati log di "purchase" successivi all'ultima "new_prescription"
+        return purchaseLogsAfterPrescription.isEmpty
     }
 
 
@@ -241,6 +238,24 @@ extension Medicine {
         // Filtra le date future
         let futureDoses = dSet.compactMap({ $0.time }).filter({ $0 > now })
         return futureDoses.min()
+    }
+
+    func isPrescriptionNotFollowedByPurchase() -> Bool {
+        // Se non esistono log, restituisce false
+        guard let logs = self.logs, !logs.isEmpty else { return false }
+        
+        // Filtra i log di tipo "new_prescription"
+        let prescriptionLogs = logs.filter { $0.type == "new_prescription" }
+        // Se non ci sono ricette, non ha senso controllare gli acquisti
+        guard let lastPrescription = prescriptionLogs.max(by: { $0.timestamp < $1.timestamp }) else {
+            return false
+        }
+        
+        // Filtra i log di tipo "purchase" che sono avvenuti dopo l'ultima ricetta
+        let purchaseLogsAfterPrescription = logs.filter { $0.type == "purchase" && $0.timestamp > lastPrescription.timestamp }
+        
+        // Se non esistono acquisti dopo l'ultima ricetta, restituisce true
+        return purchaseLogsAfterPrescription.isEmpty
     }
 }
 

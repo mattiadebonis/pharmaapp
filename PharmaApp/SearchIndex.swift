@@ -25,54 +25,56 @@ struct SearchIndex: View {
             return Array(medicines)
         } else {
             return medicines.filter { medicine in
-                medicine.nome.lowercased().contains(appViewModel.query.lowercased()) ?? false
+                medicine.nome.lowercased().contains(appViewModel.query.lowercased())
             }
         }
     }
 
-    @State private var isShowElementPresented = false
-    @State private var isMedicineSelected: Bool = false
-    @State private var selectedMedicine: Medicine = Medicine()
-    @State private var selectedPackage: Package = Package()
+    // Variabili di stato per la gestione della sheet, ora opzionali
+    @State private var isMedicineSheetPresented: Bool = false
+    @State private var selectedMedicine: Medicine? = nil
+    @State private var selectedPackage: Package? = nil
     
     var body: some View {
-        NavigationView {
-            ScrollView {
-                ForEach(filteredMedicines, id: \.self) { medicine in
-                    
-                        ForEach(Array(medicine.packages ?? []), id: \.self) { package in
-                            Button(action: {
-                                self.selectedMedicine = medicine
-                                self.isMedicineSelected = true
-                                self.selectedPackage = package
-                            }) {
-                                HStack {
-                                    Image(systemName: "pill")
-                                        .foregroundColor(isMedicineSelected ? pastelBlue : textColor)
-                                    Text("\(medicine.nome)")
-                                        .foregroundColor(isMedicineSelected ? pastelBlue : textColor)
-
-                                        .font(.headline)
-                                    Text("\(package.tipologia) - \(package.valore) \(package.unita) - \(package.volume)")
-                                        .font(.subheadline)
-                                    .foregroundColor(.gray)
-                                    .foregroundColor(isMedicineSelected ? pastelBlue : textColor)
-                                    Spacer()
-                                }
-                                .padding(.leading, 20)
-                                .background(NavigationLink("", destination: MedicineFormView(medicine: selectedMedicine, package: selectedPackage)))
-                            }
-                            Divider()
-
+        VStack {
+            ForEach(filteredMedicines, id: \.self) { medicine in
+                ForEach(Array(medicine.packages ?? []), id: \.self) { package in
+                    Button(action: {
+                        // Assegniamo le istanze recuperate dal fetch, non creiamo oggetti "vuoti"
+                        self.selectedMedicine = medicine
+                        self.selectedPackage = package
+                        self.isMedicineSheetPresented = true
+                    }) {
+                        HStack {
+                            Image(systemName: "pill")
+                                .foregroundColor(textColor)
+                            Text("\(medicine.nome)")
+                                .foregroundColor(textColor)
+                                .font(.headline)
+                            Text("\(package.tipologia) - \(package.valore) \(package.unita) - \(package.volume)")
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                            Spacer()
                         }
+                        .padding(.leading, 20)
+                    }
+                    Divider()
                 }
             }
-            .padding()
+        }
+        .padding()
+        // Presentazione della sheet con altezza a metà (detent medium)
+        .sheet(isPresented: $isMedicineSheetPresented) {
+            if let selectedMedicine = selectedMedicine, let selectedPackage = selectedPackage {
+                MedicineDetailView(medicine: selectedMedicine, package: selectedPackage)
+                    .presentationDetents([.medium])
+            } else {
+                // In caso di problema, mostriamo un messaggio di fallback
+                Text("Seleziona un medicinale valido")
+            }
         }
     }
 }
-
-
 
 struct SearchIndex_Previews: PreviewProvider {
     static var previews: some View {

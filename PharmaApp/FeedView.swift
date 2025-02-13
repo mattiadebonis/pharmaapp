@@ -34,7 +34,7 @@ struct FeedView: View {
         }
         .id(dataUpdated)
         .sheet(item: $selectedMedicine) { medicine in
-            MedicineFormView(
+            MedicineDetailView(
                 medicine: medicine,
                 package: getPackage(for: medicine)
             )
