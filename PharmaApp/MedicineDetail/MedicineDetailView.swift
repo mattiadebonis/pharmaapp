@@ -1,10 +1,3 @@
-//
-//  MedicineDetailView.swift
-//  PharmaApp
-//
-//  Created by Mattia De bonis on 23/01/25.
-//
-
 import SwiftUI
 import CoreData
 
@@ -14,10 +7,9 @@ struct MedicineDetailView: View {
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
     
-    // Se stai usando un appViewModel globale
     @EnvironmentObject var appViewModel: AppViewModel
     
-    // MARK: - ViewModel dedicato (ex MedicineFormViewModel)
+    // MARK: - ViewModel dedicato
     @StateObject private var viewModel = MedicineFormViewModel(
         context: PersistenceController.shared.container.viewContext
     )
@@ -49,9 +41,8 @@ struct MedicineDetailView: View {
         options.first
     }
     
-    /// Esempio di status in base a logiche di ricetta e scorte
-    private var prescriptionStatus: String? {
-        guard let option = currentOption, medicine.obbligo_ricetta else { return nil }
+    private var prescriptionStatus: String {
+        guard let option = currentOption, medicine.obbligo_ricetta else { return "" }
         let inEsaurimento = medicine.isInEsaurimento(option: option, recurrenceManager: recurrenceManager)
         if inEsaurimento {
             if medicine.hasPendingNewPrescription() {
@@ -61,12 +52,10 @@ struct MedicineDetailView: View {
             } else {
                 return "Ricetta da chiedere"
             }
-        } else {
-            return nil
         }
+        return ""
     }
     
-    /// Calcolo scorte totali, se esiste la logica in `Therapy`
     private var totalLeftover: Int {
         guard let therapies = medicine.therapies else { return 0 }
         return Int(therapies.reduce(0) { total, therapy in
@@ -74,94 +63,90 @@ struct MedicineDetailView: View {
         })
     }
     
-    // MARK: - Body
     var body: some View {
         NavigationView {
             VStack(alignment: .leading, spacing: 16) {
                 
                 // Titolo
-                Text("Dettaglio Farmaco: \(medicine.nome ?? "")")
-                    .font(.title3)
+                Text("\(medicine.nome ?? "") - \(package.volume)")
+                    .font(.title2)
                     .bold()
                     .padding(.top)
                 
-                // Info base
-                Text("Dosaggio: \(package.tipologia) \(package.valore) \(package.unita) \(package.volume)")
-                    .foregroundColor(.gray)
-                
-                // Se il farmaco ha ricetta e c’è uno status da mostrare (es: "Ricetta richiesta")
-                if let status = prescriptionStatus {
+                Button(action: {
+                    showTherapySheet.toggle()
+                }) {
                     HStack {
-                        Text(status)
-                            .foregroundColor(.blue)
+                        Image(systemName: "calendar")
+                        Text("Prossima dose: \(nextDoseDescription(for: medicine))")
                     }
                 }
-                
+                Divider()
+
                 // Quantità residua
                 Text("Scorte rimanenti: \(totalLeftover)")
                     .font(.headline)
                     .foregroundColor(.green)
                 
-                // Data ultima assunzione
-                if let lastIntakeDate = fetchLastIntakeDate(for: medicine) {
-                    Text("Ultima assunzione: \(dateFormatter.string(from: lastIntakeDate))")
-                } else {
-                    Text("Ultima assunzione: -")
-                }
-                
-                // Prossima dose (se gestisci un calcolo interno)
-                Text("Prossima dose: \(nextDoseDescription(for: medicine))")
-                    .foregroundColor(.gray)
-                
                 Divider()
-                
-                // Se vuoi modificare le terapie (frequenza, orari...) apri la TherapyFormView
-                Button(action: {
-                    showTherapySheet.toggle()
-                }) {
-                    Label("Gestione Terapie", systemImage: "calendar.badge.plus")
+                ScrollView(.horizontal){
+                    
                 }
-                .buttonStyle(.bordered)
-                
-                // MARK: - Azioni principali
-
-                // 1) Registra Acquisto
-                Button(action: {
-                    viewModel.saveForniture(medicine: medicine, package: package)
-                }) {
-                    Label("Registra Acquisto", systemImage: "cart")
-                }
-                .buttonStyle(.borderedProminent)
-                
-                // 2) Registra Assunzione
-                if let option = currentOption, option.manual_intake_registration {
+                Spacer()
+                VStack(spacing: 10){
+                    // Bottone gestione ricetta
+                    if medicine.obbligo_ricetta {
+                        Button(action: {
+                            showPrescriptionSheet.toggle()
+                        }) {
+                            HStack {
+                                Image(systemName: "doc.text")
+                                Text("Richiedi ricetta")
+                                
+                            }.frame(maxWidth: .infinity, minHeight: 40)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .bold()
+                    }
+                    
+                    // Pulsante Acquisto
                     Button(action: {
-                        viewModel.addIntake(for: medicine, for: package)
+                        viewModel.saveForniture(medicine: medicine, package: package)
                     }) {
-                        Label("Registra Assunzione", systemImage: "pills")
+                        HStack{
+                            Image(systemName: "cart")
+                            Text("Acquistato")
+                        }.frame(maxWidth: .infinity, minHeight: 40)
                     }
                     .buttonStyle(.borderedProminent)
-                }
-                
-                // Se hai un flusso dedicato alla ricetta
-                if medicine.obbligo_ricetta {
-                    Button(action: {
-                        showPrescriptionSheet.toggle()
-                    }) {
-                        Label("Gestione Ricetta", systemImage: "doc.badge.plus")
+                    .bold()
+
+                    // Pulsante Assunzione
+                    if let option = currentOption, option.manual_intake_registration {
+                        Button(action: {
+                            viewModel.addIntake(for: medicine, for: package)
+                        }) {
+                            HStack{
+                                Image(systemName: "pills")
+                                Text("Assunto")
+                            }.frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .bold()
+                        .font(.system(size: 18))
                     }
-                    .buttonStyle(.bordered)
                 }
                 
-                Spacer()
+                
+                
             }
             .padding(.horizontal)
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
         }
-        .presentationDetents([.medium, .large]) // Modale a metà schermo
+        .presentationDetents([.medium, .large])
         
-        // MARK: - Sheet per la gestione Terapie (la tua TherapyFormView)
+        // Sheet per gestione Terapie
         .sheet(isPresented: $showTherapySheet) {
             TherapyFormView(
                 medicine: medicine,
@@ -171,7 +156,7 @@ struct MedicineDetailView: View {
             .presentationDetents([.medium, .large])
         }
         
-        // MARK: - Sheet per la gestione Ricetta
+        // Sheet per gestione Ricetta
         .sheet(isPresented: $showPrescriptionSheet) {
             PrescriptionManagementView(
                 medicine: medicine,
@@ -181,28 +166,6 @@ struct MedicineDetailView: View {
         }
     }
     
-    // MARK: - Funzioni di utilità
-    
-    /// 1) Recupera la data di ultima assunzione (es. da tabella Log di tipo "intake")
-    private func fetchLastIntakeDate(for medicine: Medicine) -> Date? {
-        let fetchRequest: NSFetchRequest<Log> = NSFetchRequest(entityName: "Log")
-        // Cerchiamo i Log di tipo "intake" associati a questo farmaco
-        fetchRequest.predicate = NSPredicate(format: "medicine == %@ AND type == %@", medicine, "intake")
-        // Ordine discendente per prendere il più recente
-        fetchRequest.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: false)]
-        fetchRequest.fetchLimit = 1
-        
-        do {
-            let results = try context.fetch(fetchRequest)
-            return results.first?.timestamp
-        } catch {
-            print("Errore nel fetch di lastIntakeDate: \(error.localizedDescription)")
-            return nil
-        }
-    }
-    
-    /// 2) Descrizione della prossima dose, basandoci sulle Therapy e le `rrule`.
-    /// Esempio di integrazione con `RecurrenceManager`: cerchiamo la prossima ricorrenza futura.
     private func nextDoseDescription(for medicine: Medicine) -> String {
         guard let therapies = medicine.therapies as? Set<Therapy>, !therapies.isEmpty else {
             return "Nessuna terapia in corso"
@@ -212,15 +175,8 @@ struct MedicineDetailView: View {
         var nextDates: [Date] = []
         
         for therapy in therapies {
-            // Se therapy ha una rrule, calcoliamo la prossima occorrenza
             guard let rruleString = therapy.rrule, !rruleString.isEmpty else { continue }
-            
-            // 1. Parsiamo la rrule
             let rule = recurrenceManager.parseRecurrenceString(rruleString)
-            
-            // 2. Calcoliamo la prossima data utile (funzione ipotetica: nextOccurrence)
-            //    Dovresti implementarla in RecurrenceManager, facendo un calcolo basato su
-            //    start_date, freq, interval, byDay, etc. e sugli orari (Dose).
             if let nextOccurrence = recurrenceManager.nextOccurrence(
                 rule: rule,
                 startDate: therapy.start_date ?? now,
@@ -231,7 +187,6 @@ struct MedicineDetailView: View {
             }
         }
         
-        // Se non troviamo alcuna prossima data
         guard let nearestDate = nextDates.sorted().first else {
             return "Nessun promemoria impostato"
         }

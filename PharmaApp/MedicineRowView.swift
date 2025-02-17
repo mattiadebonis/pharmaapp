@@ -75,58 +75,43 @@ struct MedicineRowView: View {
     @State private var showMedicineForm: Bool = false
 
     var body: some View {
-        VStack {
-            HStack(alignment: .top) {
-                
-                // Sezione sinistra: Nome farmaco e indicatore esaurimento
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(medicine.nome)
-                            .font(.title3)
-                            .bold()
-                        
-                        // Indicatore di esaurimento
-                        if inEsaurimento {
-                            Image(systemName: "x.circle")
-                                .foregroundColor(.red)
-                                .onAppear {
-                                    appViewModel.suggestNearestPharmacies = true
-                                }
-                        } else {
-                            Image(systemName: "checkmark.circle")
-                                .foregroundColor(.green)
+        VStack(alignment: .leading) {
+            
+            Text(medicine.nome)
+                .font(.title3)
+                .bold()
+            
+            HStack(spacing: 12){
+                if inEsaurimento {
+                    HStack{
+                        Text("X")
+                        Text("Esaurimento")    
+                        if medicine.obbligo_ricetta {
+                            Text("(Obbligo di ricetta)")
                         }
-                        Spacer()
                     }
-                }
+                    .foregroundColor(.red)
+                    .onAppear {
+                        appViewModel.suggestNearestPharmacies = true
+                    }
                 
-                Spacer()
-                
-                // Sezione destra: varie icone informative
-                HStack(spacing: 12) {
-                    // 1) Pillole rimanenti
+                } else {
+                    
                     HStack(spacing: 2) {
-                        Image(systemName: "pills.fill")
-                            .foregroundColor(.blue)
-                        Text("\(totalPillsLeft)")
-                    }
-                    
-                    // 2) Icona della ricetta: se obbligatoria, verde se è stata chiesta, altrimenti grigia
-                    if medicine.obbligo_ricetta {
-                        Image(systemName: "doc.text.fill")
-                            .foregroundColor(medicine.hasNewPrescritpionRequest() ? .green : .gray)
-                    }
-                    
-                    // 3) Prossima dose (icona orologio + testo)
-                    if let nextDoseString = nextDoseString {
-                        HStack(spacing: 2) {
-                            Image(systemName: "alarm")
-                                .foregroundColor(.red)
-                            Text(nextDoseString)
-                        }
-                    }
+                        Image(systemName: "checkmark").foregroundColor(.green)
+                        
+                        Text("Al completo")
+                    }.foregroundColor(.green)
                 }
-            }
+
+                if let nextDoseString = nextDoseString {
+                    HStack(spacing: 2) {
+                        Image(systemName: "calendar")
+                        Text(nextDoseString)
+                    }.foregroundColor(.purple)
+                }   
+                Spacer()
+            }.font(.system(size: 14))
         }
         .padding(16)
         .background(Color.white)

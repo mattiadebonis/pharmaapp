@@ -53,6 +53,11 @@
         <relationship name="medicine" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="packages" inverseEntity="Medicine"/>
         <relationship name="therapies" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Therapy" inverseName="package" inverseEntity="Therapy"/>
     </entity>
+    <entity name="Person" representedClassName=".Person" syncable="YES">
+        <attribute name="cognome" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="nome" optional="YES" attributeType="String"/>
+    </entity>
     <entity name="Pharmacie" representedClassName=".Pharmacie" syncable="YES">
         <attribute name="address" optional="YES" attributeType="String"/>
         <attribute name="id" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
