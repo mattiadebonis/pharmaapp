@@ -13,15 +13,10 @@ struct ContentView: View {
 
     @Environment(\.managedObjectContext) private var managedObjectContext
     @EnvironmentObject var appViewModel: AppViewModel
+    @StateObject private var feedViewModel = FeedViewModel() 
 
     @FetchRequest(fetchRequest: Pharmacie.extractPharmacies(), animation: .default) var pharmacies: FetchedResults<Pharmacie>
 
-    // Colorazioni personalizzate
-    let pastelBlue = Color(red: 110/255, green: 153/255, blue: 184/255, opacity: 1.0)
-    let pastelGreen = Color(red: 179/255, green: 207/255, blue: 190/255, opacity: 1.0)
-    let textColor = Color(red: 47/255, green: 47/255, blue: 47/255, opacity: 1.0)
-    let pastelPink = Color(red: 248/255, green: 200/255, blue: 220/255, opacity: 1.0)
-    
     @State private var isSearchIndexPresented = false
     @State private var isSettingsPresented = false
     @State private var isShowingCamera = false
@@ -34,65 +29,77 @@ struct ContentView: View {
     }
 
     var body: some View {
-        ScrollView {
+        ZStack {
             VStack(alignment: .leading) {
-                // Barra impostazioni in alto a destra
-                HStack {
-                    Spacer()
-                    Button(action: { isSettingsPresented = true }) {
-                        Image(systemName: "gearshape.fill")
-                            .foregroundColor(pastelBlue)
-                            .padding()
+                ScrollView {
+                    VStack {
+                        // Top settings button
+                        HStack {
+                            Spacer()
+                            Button(action: { isSettingsPresented = true }) {
+                                Image(systemName: "gearshape.fill")
+                                    .foregroundColor(Color.blue)
+                                    .padding()
+                            }
+                        }
+                        .padding()
+
+                        if appViewModel.suggestNearestPharmacies {
+                            Button(action: {
+                                appViewModel.isStocksIndexPresented = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "cross")
+                                    Text("Rifornisci i farmaci in esaurimento")
+                                    Spacer()
+                                }
+                            }
+                            .bold()
+                            .foregroundColor(.white)
+                            .padding(20)
+                            .background(Color.blue)
+                            .cornerRadius(8)
+                        }
+
+                        // Search bar with camera button
+                        HStack {
+                            TextField("Cerca", text: $appViewModel.query)
+                                .padding(10)
+                                .frame(maxWidth: .infinity)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
+                            Button(action: {
+                                isShowingCamera = true
+                            }) {
+                                Image(systemName: "camera.fill")
+                                    .foregroundColor(Color.blue)
+                                    .padding(10)
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.vertical, 5)
+
+                        // Show FeedView or SearchIndex based on query
+                        if appViewModel.query.isEmpty {
+                            FeedView(viewModel: feedViewModel) // Pass ViewModel
+                        } else {
+                            SearchIndex()
+                        }
                     }
-                }
-                .padding()
-                
-                if appViewModel.suggestNearestPharmacies {
-                    Button(action: {
-                        appViewModel.isStocksIndexPresented = true
-                    }) {
-                        Image(systemName: "cross")
-                        Text("Rifornisci i farmaci in esaurimento")
-                        Spacer()
-                    }
-                    .bold()
-                    .foregroundColor(.white)
-                    .padding(20)
-                    .background(Color.blue)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(red: 220/255, green: 220/255, blue: 220/255), lineWidth: 1)
-                    )
-                    .cornerRadius(8)
-                }
-                
-                // TextField personalizzato con bottone fotocamera
-                HStack {
-                    TextField("Cerca", text: $appViewModel.query)
-                        .padding(10)
-                        .frame(maxWidth: .infinity)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(8)
-                    Button(action: {
-                        isShowingCamera = true
-                    }) {
-                        Image(systemName: "camera.fill")
-                            .foregroundColor(pastelBlue)
-                            .padding(10)
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 5)
-                
-                // Mostra la Feed o l'indice di ricerca in base al contenuto della query
-                if appViewModel.query.isEmpty {
-                    FeedView()
-                } else {
-                    SearchIndex()
+                    
+                }.padding()
+                Spacer()
+                if feedViewModel.isSelecting {
+                    floatingActionBar()
+                        .transition(.move(edge: .bottom))
+                        .animation(.easeInOut, value: feedViewModel.isSelecting)
+                        .zIndex(2) // Ensures it's above everything
                 }
             }
-            .padding()
+
+            
         }
+        .ignoresSafeArea(.keyboard, edges: .bottom) // Ensures it stays above the keyboard
         .sheet(isPresented: $isSettingsPresented) {
             OptionsView()
                 .environment(\.managedObjectContext, managedObjectContext)
@@ -100,10 +107,47 @@ struct ContentView: View {
         .sheet(isPresented: $appViewModel.isStocksIndexPresented) {
             PharmaciesIndex()
         }
-        // Apertura della fotocamera con sheet
         .sheet(isPresented: $isShowingCamera, onDismiss: processCapturedImage) {
             ImagePicker(sourceType: .camera, selectedImage: $capturedImage)
         }
+    }
+
+    @ViewBuilder
+    private func floatingActionBar() -> some View {
+        VStack {
+            Spacer()
+            HStack {
+                if feedViewModel.allRequirePrescription {
+                    Button("Richiedi Ricetta") {
+                        feedViewModel.requestPrescription()
+                    }
+                }
+                Button("Acquistato") {
+                    feedViewModel.markAsPurchased()
+                }
+                Button("Assunto") {
+                    feedViewModel.markAsTaken()
+                }
+                Spacer()
+                Button("Annulla") {
+                    feedViewModel.cancelSelection()
+                }
+            }
+            .padding()
+            .background(.ultraThinMaterial)
+            .cornerRadius(16)
+            .shadow(radius: 10)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 10)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 80)
+        .background(Color.white.opacity(0.9))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(white: 0.8), lineWidth: 1)
+        )
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
     
     func processCapturedImage() {
