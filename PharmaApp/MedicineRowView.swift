@@ -55,7 +55,7 @@ struct MedicineRowView: View {
                     .foregroundColor(isSelected ? .gray : .primary)
                 Spacer()
             }
-            
+            TherapiesIndex(medicine: medicine)     
             
             HStack(spacing: 12){
                 if inEsaurimento {
