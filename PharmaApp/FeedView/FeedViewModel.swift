@@ -57,7 +57,7 @@ class FeedViewModel: ObservableObject {
         clearSelection()
     }
 
-    private func clearSelection() {
+    func clearSelection() {
         DispatchQueue.main.async {
             self.selectedMedicines.removeAll()
             self.isSelecting = false
