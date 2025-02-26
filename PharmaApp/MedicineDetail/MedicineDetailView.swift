@@ -25,6 +25,9 @@ struct MedicineDetailView: View {
     @State private var showTherapySheet = false
     @State private var showPrescriptionSheet = false
     
+    // Aggiunta per selezionare la terapia da modificare (nil => nuova terapia)
+    @State private var selectedTherapy: Therapy? = nil
+    
     // MARK: - Supporto per ricorrenza/prescrizione
     private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
     
@@ -73,15 +76,47 @@ struct MedicineDetailView: View {
                     .bold()
                     .padding(.top)
                 
-                Button(action: {
-                    showTherapySheet.toggle()
-                }) {
-                    HStack {
-                        Image(systemName: "calendar")
-                        Text("Prossima dose: \(nextDoseDescription(for: medicine))")
+                // Elenco delle Terapie
+                Text("Terapie")
+                    .font(.headline)
+                if let therapies = medicine.therapies as? Set<Therapy>, !therapies.isEmpty {
+                    ForEach(therapies.sorted { ($0.start_date ?? Date()) < ($1.start_date ?? Date()) }, id: \.objectID) { therapy in
+                        Button {
+                            selectedTherapy = therapy
+                            showTherapySheet = true
+                        } label: {
+                            HStack {
+                                Text("Terapia: \(therapy.rrule ?? "N/D")")
+                                Spacer()
+                                if let start = therapy.start_date {
+                                    Text(start, style: .date)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 4)
                     }
+                } else {
+                    Text("Nessuna terapia in corso")
+                        .foregroundColor(.secondary)
                 }
-                Divider()
+                
+                // Pulsante per aggiungere una nuova terapia
+                Button {
+                    // Nuova terapia: nessuna da modificare
+                    selectedTherapy = nil
+                    showTherapySheet = true
+                } label: {
+                    HStack {
+                        Image(systemName: "plus.circle")
+                        Text("Aggiungi terapia")
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .bold()
+                
+                
 
                 // Quantità residua
                 Text("Scorte rimanenti: \(totalLeftover)")
@@ -151,7 +186,8 @@ struct MedicineDetailView: View {
             TherapyFormView(
                 medicine: medicine,
                 package: package,
-                context: context
+                context: context,
+                editingTherapy: selectedTherapy
             )
             .presentationDetents([.medium, .large])
         }

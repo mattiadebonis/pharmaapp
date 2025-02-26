@@ -35,6 +35,9 @@ struct TherapyFormView: View {
     var medicine: Medicine
     var package: Package
     
+    // Aggiunta per supportare la modifica: se valorizzata, la vista si popola con questa terapia
+    var editingTherapy: Therapy?
+    
     // MARK: - ViewModel
     @StateObject var therapyFormViewModel: TherapyFormViewModel
     
@@ -68,10 +71,12 @@ struct TherapyFormView: View {
     init(
         medicine: Medicine,
         package: Package,
-        context: NSManagedObjectContext
+        context: NSManagedObjectContext,
+        editingTherapy: Therapy? = nil
     ) {
         self.medicine = medicine
         self.package = package
+        self.editingTherapy = editingTherapy
         _therapyFormViewModel = StateObject(
             wrappedValue: TherapyFormViewModel(context: context)
         )
@@ -79,28 +84,32 @@ struct TherapyFormView: View {
     
     var body: some View {
         NavigationView {
-            VStack {
-                Form {
-                    Section {
-                        Button {
-                            isShowingFrequencySheet = true
-                        } label: {
-                            HStack {
-                                Text("Frequenza")
-                                Spacer()
-                                Text(frequencyDescription())
-                                    .foregroundColor(.blue)
-                            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Sezione Frequenza
+                    Text("Frequenza")
+                        .font(.headline)
+                    Button {
+                        isShowingFrequencySheet = true
+                    } label: {
+                        HStack {
+                            Text("Frequenza")
+                            Spacer()
+                            Text(frequencyDescription())
+                                .foregroundColor(.blue)
                         }
-                    } header: {
-                        Text("Frequenza")
                     }
                     
-                    Section("Orari") {
+                    // Sezione Orari
+                    Text("Orari")
+                        .font(.headline)
+                    VStack {
                         ForEach(times.indices, id: \.self) { index in
                             HStack {
-                                DatePicker("", selection: $times[index], displayedComponents: .hourAndMinute).labelsHidden()
-                                Text("1 compressa").foregroundColor(.secondary)
+                                DatePicker("", selection: $times[index], displayedComponents: .hourAndMinute)
+                                    .labelsHidden()
+                                Text("1 compressa")
+                                    .foregroundColor(.secondary)
                                 Spacer()
                                 Button { times.remove(at: index) } label: {
                                     Image(systemName: "minus.circle.fill")
@@ -114,33 +123,30 @@ struct TherapyFormView: View {
                             Label("Aggiungi un orario", systemImage: "plus.circle")
                         }
                     }
-                }
-
-                Section(header: Text("Importanza")) {
+                    
+                    // Sezione Importanza
+                    Text("Importanza")
+                        .font(.headline)
                     Picker("Importanza", selection: $selectedImportance) {
                         ForEach(Therapy.importanceValues, id: \.self) { importance in
                             Text(importance.capitalized).tag(importance)
                         }
                     }
                     .pickerStyle(SegmentedPickerStyle())
-                    
                 }
-            
-                Button(action: {
-                    saveTherapy()
-                }) {
-                    Text("Avanti")
-                        .font(.headline)
-                }
-                .buttonStyle(.borderedProminent)
                 .padding()
             }
-            
             .navigationTitle("\(medicine.nome) - \(package.tipologia) \(package.valore) \(package.unita) \(package.volume)")
             .onAppear {
-                populateIfExisting()
+                // Se si modifica una terapia esistente, popola i dati da editingTherapy
+                if let therapy = editingTherapy {
+                    populateFromTherapy(therapy)
+                }
             }
-            // Sheet per la selezione della frequenza
+            .onDisappear {
+                // Salva la terapia al dismiss della vista
+                saveTherapy()
+            }
             .sheet(isPresented: $isShowingFrequencySheet) {
                 NavigationView {
                     FrequencySelectionView(
@@ -194,8 +200,38 @@ struct TherapyFormView: View {
 extension TherapyFormView {
     
     private func saveTherapy() {
-        switch selectedFrequencyType {
-            case .daily:
+        if let therapyToUpdate = editingTherapy {
+            // Aggiorna la terapia esistente
+            if selectedFrequencyType == .daily {
+                therapyFormViewModel.updateTherapy(
+                    therapy: therapyToUpdate,
+                    freq: "DAILY",
+                    interval: interval,
+                    until: useUntil ? untilDate : nil,
+                    count: useCount ? countNumber : nil,
+                    byDay: [],
+                    startDate: startDate,
+                    times: times,
+                    package: package,
+                    importance: selectedImportance
+                )
+            } else {
+                therapyFormViewModel.updateTherapy(
+                    therapy: therapyToUpdate,
+                    freq: "WEEKLY",
+                    interval: interval,
+                    until: useUntil ? untilDate : nil,
+                    count: useCount ? countNumber : nil,
+                    byDay: byDay,
+                    startDate: startDate,
+                    times: times,
+                    package: package,
+                    importance: selectedImportance
+                )
+            }
+        } else {
+            // Crea una nuova terapia
+            if selectedFrequencyType == .daily {
                 therapyFormViewModel.saveTherapy(
                     medicine: medicine,
                     freq: "DAILY",
@@ -208,8 +244,7 @@ extension TherapyFormView {
                     package: package,
                     importance: selectedImportance
                 )
-                
-            case .specificDays:
+            } else {
                 therapyFormViewModel.saveTherapy(
                     medicine: medicine,
                     freq: "WEEKLY",
@@ -221,14 +256,13 @@ extension TherapyFormView {
                     times: times,
                     package: package,
                     importance: selectedImportance
-
                 )
             }
+        }
         
         appViewModel.isSearchIndexPresented = false
         dismiss()
         
-        // Debug
         if let success = therapyFormViewModel.successMessage {
             print("Success: \(success)")
         }
