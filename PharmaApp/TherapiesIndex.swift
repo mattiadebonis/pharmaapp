@@ -40,13 +40,11 @@ struct TherapiesIndex: View {
     }
     
     var body: some View {
-        // Creiamo un RecurrenceManager usando il context
         let recurrenceManager = RecurrenceManager(context: managedObjectContext)
         
         VStack {
             ForEach(therapyArray) { therapy in
-                VStack {
-                    // Calcola la prossima data con rrule e start_date
+                HStack {
                     if let startDate = therapy.start_date,
                        let rrule = therapy.rrule,
                        let nextDate = recurrenceManager.nextOccurrence(
@@ -55,9 +53,19 @@ struct TherapiesIndex: View {
                                         after: Date(),
                                         doses: therapy.doses as NSSet?) {
                         Text("\(formattedAssumptionDate(nextDate))")
-                    } else {
-                        Text("Nessuna data di assunzione")
+                    }else if let startDate = therapy.start_date {
+                        Text("\(formattedAssumptionDate(startDate))")
+                        
                     }
+                    if let nome = therapy.person.nome, let cognome = therapy.person.cognome,
+                       !(nome.isEmpty && cognome.isEmpty) {
+                        HStack {
+                            Image(systemName: "person")
+                            Text("\(nome) \(cognome)")
+                        }
+                        .foregroundColor(.secondary)
+                    }
+                    Spacer()
                 }
             }
         }

@@ -14,6 +14,9 @@ public class Person: NSManagedObject, Identifiable {
     @NSManaged public var id: UUID?
     @NSManaged public var nome: String?
     @NSManaged public var cognome: String?
+    
+    // Aggiunta relazione: una Persona può avere più Therapy
+    @NSManaged public var therapies: Set<Therapy>?
   
 }
 

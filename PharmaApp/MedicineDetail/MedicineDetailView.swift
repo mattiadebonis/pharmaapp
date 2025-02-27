@@ -76,7 +76,7 @@ struct MedicineDetailView: View {
                     .bold()
                     .padding(.top)
                 
-                // Elenco delle Terapie
+                // Elenco delle Terapie con la persona associata
                 Text("Terapie")
                     .font(.headline)
                 if let therapies = medicine.therapies as? Set<Therapy>, !therapies.isEmpty {
@@ -86,7 +86,14 @@ struct MedicineDetailView: View {
                             showTherapySheet = true
                         } label: {
                             HStack {
-                                Text("Terapia: \(therapy.rrule ?? "N/D")")
+                                VStack(alignment: .leading) {
+                                    if let nome = therapy.person.nome, let cognome = therapy.person.cognome,
+                                       !(nome.isEmpty && cognome.isEmpty) {
+                                        Text("\(nome) \(cognome)")
+                                            .font(.subheadline)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
                                 Spacer()
                                 if let start = therapy.start_date {
                                     Text(start, style: .date)

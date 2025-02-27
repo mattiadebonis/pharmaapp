@@ -5,13 +5,6 @@
 //  Created by Mattia De Bonis on 28/12/24.
 //
 
-//
-//  MedicineRowView.swift
-//  PharmaApp
-//
-//  Created by Mattia De Bonis on 28/12/24.
-//
-
 import SwiftUI
 import CoreData
 

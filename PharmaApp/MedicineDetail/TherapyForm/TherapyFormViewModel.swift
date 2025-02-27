@@ -47,7 +47,8 @@ class TherapyFormViewModel: ObservableObject {
         startDate: Date,
         times: [Date],
         package: Package,
-        importance: String
+        importance: String,
+        person: Person    // nuovo parametro
     ) {
         // Creazione di una nuova Therapy senza effettuare il fetch di una già esistente
         let therapy = Therapy(context: context)
@@ -55,6 +56,7 @@ class TherapyFormViewModel: ObservableObject {
         therapy.medicine = medicine
         therapy.package = package
         therapy.importance = importance
+        therapy.person = person  // associa la persona
 
         var rule = RecurrenceRule(freq: freq ?? "DAILY")
         rule.interval = interval ?? 1
@@ -104,10 +106,12 @@ class TherapyFormViewModel: ObservableObject {
         startDate: Date,
         times: [Date],
         package: Package,
-        importance: String
+        importance: String,
+        person: Person    // nuovo parametro
     ) {
         therapy.importance = importance
         therapy.package = package
+        therapy.person = person  // aggiorna la persona
         
         var rule = RecurrenceRule(freq: freq ?? "DAILY")
         rule.interval = interval ?? 1

@@ -18,6 +18,9 @@ public class Therapy : NSManagedObject , Identifiable{
     @NSManaged public var doses: Set<Dose>?
     @NSManaged public var package: Package
     @NSManaged public var importance: String?
+    
+    // Aggiunta relazione: ogni Therapy appartiene a una Person
+    @NSManaged public var person: Person
 }
 
 

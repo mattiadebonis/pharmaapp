@@ -30,6 +30,13 @@ struct TherapyFormView: View {
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var appViewModel: AppViewModel
+    @FetchRequest(
+        entity: Person.entity(),
+        sortDescriptors: [NSSortDescriptor(key: "nome", ascending: true)]
+    ) private var persons: FetchedResults<Person>
+    
+    // Nuovo state per la persona selezionata
+    @State private var selectedPerson: Person?
     
     // MARK: - Modello
     var medicine: Medicine
@@ -86,6 +93,19 @@ struct TherapyFormView: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    
+                    // Nuova sezione per associare una persona
+                    Section {
+                        Text("Persona")
+                            .font(.headline)
+                        Picker("Seleziona Persona", selection: $selectedPerson) {
+                            ForEach(persons, id: \.self) { person in
+                                Text("\(person.nome ?? "") \(person.cognome ?? "")").tag(person as Person?)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                    }
+                    
                     // Sezione Frequenza
                     Text("Frequenza")
                         .font(.headline)
@@ -141,6 +161,11 @@ struct TherapyFormView: View {
                 // Se si modifica una terapia esistente, popola i dati da editingTherapy
                 if let therapy = editingTherapy {
                     populateFromTherapy(therapy)
+                    selectedPerson = therapy.person
+                } else {
+                    if selectedPerson == nil {
+                        selectedPerson = persons.first
+                    }
                 }
             }
             .onDisappear {
@@ -200,6 +225,7 @@ struct TherapyFormView: View {
 extension TherapyFormView {
     
     private func saveTherapy() {
+        guard let person = selectedPerson else { return }
         if let therapyToUpdate = editingTherapy {
             // Aggiorna la terapia esistente
             if selectedFrequencyType == .daily {
@@ -213,7 +239,8 @@ extension TherapyFormView {
                     startDate: startDate,
                     times: times,
                     package: package,
-                    importance: selectedImportance
+                    importance: selectedImportance,
+                    person: person
                 )
             } else {
                 therapyFormViewModel.updateTherapy(
@@ -226,7 +253,8 @@ extension TherapyFormView {
                     startDate: startDate,
                     times: times,
                     package: package,
-                    importance: selectedImportance
+                    importance: selectedImportance,
+                    person: person
                 )
             }
         } else {
@@ -242,7 +270,8 @@ extension TherapyFormView {
                     startDate: startDate,
                     times: times,
                     package: package,
-                    importance: selectedImportance
+                    importance: selectedImportance,
+                    person: person
                 )
             } else {
                 therapyFormViewModel.saveTherapy(
@@ -255,7 +284,8 @@ extension TherapyFormView {
                     startDate: startDate,
                     times: times,
                     package: package,
-                    importance: selectedImportance
+                    importance: selectedImportance,
+                    person: person
                 )
             }
         }
