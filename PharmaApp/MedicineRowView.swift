@@ -47,36 +47,38 @@ struct MedicineRowView: View {
                     .bold()
                     .foregroundColor(isSelected ? .gray : .primary)
                 Spacer()
-            }
-            TherapiesIndex(medicine: medicine)     
-            
-            HStack(spacing: 12){
-                if inEsaurimento {
-                    HStack {
-                        Text("X")
-                        Text("Esaurimento")    
-                        if medicine.obbligo_ricetta {
-                            Text("(Obbligo di ricetta)")
+
+                HStack(spacing: 12){
+                    if inEsaurimento {
+                        HStack {
+                            Text("X")
+                            Text("Esaurimento")    
+                            if medicine.obbligo_ricetta {
+                                Text("(Obbligo di ricetta)")
+                            }
                         }
+                        .foregroundColor(.red)
+                        .onAppear {
+                            appViewModel.suggestNearestPharmacies = true
+                        }
+                    
+                    } else {
+                        HStack(spacing: 2) {
+                            Image(systemName: "checkmark").foregroundColor(.green)
+                        }.foregroundColor(.green)
                     }
-                    .foregroundColor(.red)
-                    .onAppear {
-                        appViewModel.suggestNearestPharmacies = true
-                    }
-                
-                } else {
-                    HStack(spacing: 2) {
-                        Image(systemName: "checkmark").foregroundColor(.green)
-                        Text("Al completo")
-                    }.foregroundColor(.green)
                 }
-            }.font(.system(size: 14))
+            }
+            
+            
+            TherapiesIndex(medicine: medicine).padding(.top)
+
         }
         .padding(16)
         .background(isSelected ? Color.gray.opacity(0.3) : Color.white)
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(Color(white: 0.86), lineWidth: 1)
+                .stroke(Color.gray, lineWidth: 1)
         )
         .cornerRadius(8)
         .contentShape(Rectangle())

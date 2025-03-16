@@ -18,7 +18,7 @@ struct FeedView: View {
 
     var body: some View {
         let medicineArray = Array(medicines)
-        let sortedByWeight = medicineArray.sorted { $0.weight > $1.weight }
+        let sortedByWeight = Medicine.fetchAndSortByWeightThenNextDose()
 
         VStack {
             ScrollView {

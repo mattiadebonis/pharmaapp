@@ -33,16 +33,7 @@ struct ContentView: View {
             VStack(alignment: .leading) {
                 ScrollView {
                     VStack {
-                        // Top settings button
-                        HStack {
-                            Spacer()
-                            Button(action: { isSettingsPresented = true }) {
-                                Image(systemName: "gearshape.fill")
-                                    .foregroundColor(Color.blue)
-                                    .padding()
-                            }
-                        }
-                        .padding()
+                        
 
                         if appViewModel.suggestNearestPharmacies {
                             Button(action: {
@@ -61,29 +52,40 @@ struct ContentView: View {
                             .cornerRadius(8)
                         }
 
-                        // Search bar with camera button
-                        HStack {
-                            TextField("Cerca", text: $appViewModel.query)
-                                .padding(10)
-                                .frame(maxWidth: .infinity)
-                                .background(Color(.systemGray6))
-                                .cornerRadius(8)
+                        
+                        HStack (spacing: 20) {
+                            Spacer()
                             Button(action: {
                                 isShowingCamera = true
                             }) {
                                 Image(systemName: "camera.fill")
+                                    .font(.title3)
                                     .foregroundColor(Color.blue)
-                                    .padding(10)
+                                    
                             }
-                        }
-                        .padding(.horizontal)
-                        .padding(.vertical, 5)
-
+                             Button(action: { isSettingsPresented = true }) {
+                                Image(systemName: "gearshape.fill")
+                                    .font(.title3)
+                                    .foregroundColor(Color.blue)
+                                    
+                            }
+                        }.padding()
+                        
+                            // Modifica del TextField per un bordo spesso personalizzato
+                        TextField("Cerca", text: $appViewModel.query)
+                            // Rimosso .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .padding(10)
+                            .frame(maxWidth: .infinity)
+                            .font(.title3)
+                            .cornerRadius(8)
+                            .overlay(RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.gray, lineWidth: 1))
+                            .padding()
                         // Show FeedView or SearchIndex based on query
                         if appViewModel.query.isEmpty {
-                            FeedView(viewModel: feedViewModel) // Pass ViewModel
+                            FeedView(viewModel: feedViewModel).padding()
                         } else {
-                            SearchIndex()
+                            SearchIndex().padding()
                         }
                     }
                     

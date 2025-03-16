@@ -168,10 +168,6 @@ struct TherapyFormView: View {
                     }
                 }
             }
-            .onDisappear {
-                // Salva la terapia al dismiss della vista
-                saveTherapy()
-            }
             .sheet(isPresented: $isShowingFrequencySheet) {
                 NavigationView {
                     FrequencySelectionView(
@@ -186,6 +182,18 @@ struct TherapyFormView: View {
                         interval: $interval
                     ) {
                         isShowingFrequencySheet = false
+                    }
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annulla") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Salva") {
+                        saveTherapy()
                     }
                 }
             }

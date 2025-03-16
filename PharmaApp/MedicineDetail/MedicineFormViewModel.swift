@@ -49,28 +49,29 @@ class MedicineFormViewModel: ObservableObject {
     // MARK: - Funzioni per la gestione della prescrizione
     
     func addNewPrescriptionRequest(for medicine: Medicine, for package: Package) {
-        addLog(for: medicine, for: package, type: "new_prescription_request")
+        addLog(for: medicine, for: package, for: nil, type: "new_prescription_request")
     }
     
     func addNewPrescription(for medicine: Medicine, for package: Package) {
-        addLog(for: medicine, for: package, type: "new_prescription")
+        addLog(for: medicine, for: package, for: nil, type: "new_prescription")
     }
     
     func addPurchase(for medicine: Medicine, for package: Package) {
-        addLog(for: medicine, for: package, type: "purchase")
+        addLog(for: medicine, for: package, for: nil, type: "purchase")
     }
 
-    func addIntake(for medicine: Medicine, for package: Package) {
-        addLog(for: medicine, for: package, type: "intake")
+    func addIntake(for medicine: Medicine, for package: Package, for therapy: Therapy) {
+        addLog(for: medicine, for: package, for: therapy ,type: "intake")
     }
     
-    private func addLog(for medicine: Medicine, for package: Package, type: String) {
+    private func addLog(for medicine: Medicine, for package: Package, for therapy: Therapy?, type: String) {
         let newLog = Log(context: context)
         newLog.id = UUID()
         newLog.type = type
         newLog.timestamp = Date()
         newLog.medicine = medicine
         newLog.package = package
+        newLog.therapy = therapy
         do {
             try context.save()
             successMessage = "Log salvato: \(type)"

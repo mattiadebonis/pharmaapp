@@ -20,6 +20,7 @@
         <attribute name="type" optional="YES" attributeType="String"/>
         <relationship name="medicine" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="logs" inverseEntity="Medicine"/>
         <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package"/>
+        <relationship name="therapy" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Therapy" inverseName="logs" inverseEntity="Therapy"/>
     </entity>
     <entity name="Medicine" representedClassName=".Medicine" syncable="YES">
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
@@ -72,6 +73,7 @@
         <attribute name="rrule" optional="YES" attributeType="String"/>
         <attribute name="start_date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="doses" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Dose" inverseName="therapy" inverseEntity="Dose"/>
+        <relationship name="logs" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Log" inverseName="therapy" inverseEntity="Log"/>
         <relationship name="medicine" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="therapies" inverseEntity="Medicine"/>
         <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package" inverseName="therapies" inverseEntity="Package"/>
         <relationship name="person" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Person" inverseName="therapies" inverseEntity="Person"/>

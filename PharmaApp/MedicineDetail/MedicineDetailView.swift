@@ -66,6 +66,32 @@ struct MedicineDetailView: View {
         })
     }
     
+    // Aggiungi la funzione helper per formattare la data
+    private func formattedAssumptionDate(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) {
+            let hour = calendar.component(.hour, from: date)
+            let minute = calendar.component(.minute, from: date)
+            if hour == 0 && minute == 0 {
+                return "oggi"
+            } else {
+                let timeFormatter = DateFormatter()
+                timeFormatter.dateStyle = .none
+                timeFormatter.timeStyle = .short
+                return timeFormatter.string(from: date)
+            }
+        } else if calendar.isDateInTomorrow(date) {
+            return "Domani"
+        } else if let dayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: Date()),
+                  calendar.isDate(date, inSameDayAs: dayAfterTomorrow) {
+            return "Dopodomani"
+        }
+        let defaultFormatter = DateFormatter()
+        defaultFormatter.dateStyle = .short
+        defaultFormatter.timeStyle = .short
+        return defaultFormatter.string(from: date)
+    }
+    
     var body: some View {
         NavigationView {
             VStack(alignment: .leading, spacing: 16) {
@@ -75,8 +101,10 @@ struct MedicineDetailView: View {
                     .font(.title2)
                     .bold()
                     .padding(.top)
-                
-                // Elenco delle Terapie con la persona associata
+                Text("Scorte rimanenti: \(totalLeftover)")
+                    .font(.headline)
+                    .foregroundColor(.green)
+                // Sezione Terapie: aggiornata per mostrare le terapie come in TherapiesIndex
                 Text("Terapie")
                     .font(.headline)
                 if let therapies = medicine.therapies as? Set<Therapy>, !therapies.isEmpty {
@@ -86,18 +114,41 @@ struct MedicineDetailView: View {
                             showTherapySheet = true
                         } label: {
                             HStack {
-                                VStack(alignment: .leading) {
-                                    if let nome = therapy.person.nome, let cognome = therapy.person.cognome,
-                                       !(nome.isEmpty && cognome.isEmpty) {
+                                if let startDate = therapy.start_date,
+                                   let rrule = therapy.rrule,
+                                   let nextDate = recurrenceManager.nextOccurrence(
+                                        rule: recurrenceManager.parseRecurrenceString(rrule),
+                                        startDate: startDate,
+                                        after: Date(),
+                                        doses: therapy.doses as NSSet?) {
+                                    Text("\(formattedAssumptionDate(nextDate))")
+                                } else if let startDate = therapy.start_date {
+                                    Text("\(formattedAssumptionDate(startDate))")
+                                }
+                                if let nome = therapy.person.nome,
+                                   let cognome = therapy.person.cognome,
+                                   !(nome.isEmpty && cognome.isEmpty) {
+                                    HStack {
+                                        Image(systemName: "person")
                                         Text("\(nome) \(cognome)")
-                                            .font(.subheadline)
-                                            .foregroundColor(.secondary)
                                     }
+                                    .foregroundColor(.secondary)
                                 }
                                 Spacer()
-                                if let start = therapy.start_date {
-                                    Text(start, style: .date)
-                                        .foregroundColor(.secondary)
+
+
+                                if let option = currentOption, option.manual_intake_registration {
+                                    Button(action: {
+                                        viewModel.addIntake(for: medicine, for: package, for: therapy)
+                                    }) {
+                                        HStack{
+                                            Image(systemName: "pills")
+                                            Text("Assunto")
+                                        }
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .bold()
+                                    
                                 }
                             }
                         }
@@ -124,17 +175,6 @@ struct MedicineDetailView: View {
                 .bold()
                 
                 
-
-                // Quantità residua
-                Text("Scorte rimanenti: \(totalLeftover)")
-                    .font(.headline)
-                    .foregroundColor(.green)
-                
-                Divider()
-                ScrollView(.horizontal){
-                    
-                }
-                Spacer()
                 VStack(spacing: 10){
                     // Bottone gestione ricetta
                     if medicine.obbligo_ricetta {
@@ -163,20 +203,7 @@ struct MedicineDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .bold()
 
-                    // Pulsante Assunzione
-                    if let option = currentOption, option.manual_intake_registration {
-                        Button(action: {
-                            viewModel.addIntake(for: medicine, for: package)
-                        }) {
-                            HStack{
-                                Image(systemName: "pills")
-                                Text("Assunto")
-                            }.frame(maxWidth: .infinity, minHeight: 44)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .bold()
-                        .font(.system(size: 18))
-                    }
+                    
                 }
                 
                 
@@ -196,6 +223,7 @@ struct MedicineDetailView: View {
                 context: context,
                 editingTherapy: selectedTherapy
             )
+            .id(selectedTherapy?.id ?? UUID())
             .presentationDetents([.medium, .large])
         }
         

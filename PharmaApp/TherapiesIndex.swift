@@ -1,18 +1,12 @@
-//
-//  TherapiesIndex.swift
-//  PharmaApp
-//
-//  Created by Mattia De bonis on 21/02/25.
-//
-
 import SwiftUI
 
 struct TherapiesIndex: View {
-
+    
     @Environment(\.managedObjectContext) var managedObjectContext
-    var medicine: Medicine = Medicine()
+    
+    var medicine: Medicine
     @State private var therapyArray: [Therapy] = []
-
+    
     // Aggiunta funzione helper per formattare la data della dose
     func formattedAssumptionDate(_ date: Date) -> String {
         let calendar = Calendar.current
@@ -42,46 +36,57 @@ struct TherapiesIndex: View {
     var body: some View {
         let recurrenceManager = RecurrenceManager(context: managedObjectContext)
         
-        VStack {
-            ForEach(therapyArray) { therapy in
-                HStack {
-                    if let startDate = therapy.start_date,
-                       let rrule = therapy.rrule,
-                       let nextDate = recurrenceManager.nextOccurrence(
-                                        rule: recurrenceManager.parseRecurrenceString(rrule),
-                                        startDate: startDate,
-                                        after: Date(),
-                                        doses: therapy.doses as NSSet?) {
-                        Text("\(formattedAssumptionDate(nextDate))")
-                    }else if let startDate = therapy.start_date {
-                        Text("\(formattedAssumptionDate(startDate))")
-                        
-                    }
-                    if let nome = therapy.person.nome, let cognome = therapy.person.cognome,
-                       !(nome.isEmpty && cognome.isEmpty) {
-                        HStack {
-                            Image(systemName: "person")
-                            Text("\(nome) \(cognome)")
-                        }
-                        .foregroundColor(.secondary)
-                    }
-                    Spacer()
+        VStack(alignment: .leading, spacing: 4) {
+            
+            // Riga 1: Nome del Farmaco + Badge
+            
+            // Riga 2: Numero terapie attive + Prossima dose
+            HStack{
+                let activeTherapiesCount = therapyArray.count
+                //Text("\(activeTherapiesCount) terapie attive")
+                
+                // Trova la prossima dose “minima” tra tutte le therapy di questo farmaco
+                // (la più vicina al momento attuale)
+                if let earliestDose = findEarliestNextDose(in: therapyArray, using: recurrenceManager) {
+                    Text("\(formattedAssumptionDate(earliestDose))")
                 }
             }
+            .font(.subheadline)
+            .foregroundColor(.secondary)
         }
         .onAppear {
+            // Carico le therapy associate al Medicine
             self.therapyArray = Array(medicine.therapies as? Set<Therapy> ?? [])
         }
     }
+    
+    /// Trova la prima dose futura disponibile tra tutte le therapy.
+    /// Restituisce la data più vicina (se esiste).
+    private func findEarliestNextDose(in therapies: [Therapy],
+                                      using manager: RecurrenceManager) -> Date? {
+        var nextDates: [Date] = []
+        
+        for therapy in therapies {
+            if let startDate = therapy.start_date,
+               let rrule = therapy.rrule {
+                let rule = manager.parseRecurrenceString(rrule)
+                
+                if let nextDate = manager.nextOccurrence(
+                    rule: rule,
+                    startDate: startDate,
+                    after: Date(),
+                    doses: therapy.doses as NSSet?
+                ) {
+                    nextDates.append(nextDate)
+                }
+            }
+        }
+        
+        // Ritorna la minima (più vicina a oggi) se ce n’è almeno una
+        return nextDates.min()
+    }
 }
 
-private let dateFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .short
-    return formatter
-}()
-
 #Preview {
-    TherapiesIndex()
+    TherapiesIndex(medicine: Medicine())
 }

@@ -1,5 +1,5 @@
 //
-//  Therapy.swift
+//  Medicine.swift
 //  PharmaApp
 //
 //  Created by Mattia De bonis on 10/12/24.
@@ -171,6 +171,7 @@ extension Medicine {
         let leftover = Double(therapy.leftover())
         let dailyUsage = therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
         
+        // A) Scorte / Coverage
         if leftover <= 0 {
             score += 60
         } else if dailyUsage > 0 {
@@ -198,23 +199,23 @@ extension Medicine {
             switch hoursToDose {
             case ..<0:
                 // dose scaduta
-                score += 60
+                score += 70
             case 0..<1:
-                score += 50
+                score += 60
             case 1..<3:
-                score += 40
+                score += 50
             case 3..<6:
-                score += 30
+                score += 40
             case 6..<12:
-                score += 20
+                score += 30
             case 12..<24:
-                score += 10
+                score += 20
             default:
                 break
             }
         }
         
-        // C) Importanza clinica (sulla Therapy stessa)
+        // C) Importanza clinica
         if let importance = therapy.importance {
             switch importance {
             case "vital":
@@ -259,3 +260,75 @@ extension Medicine {
     }
 }
 
+// MARK: - NUOVE PROPRIETÀ E FUNZIONI PER IL “SECONDO LAYER” DI ORDINAMENTO
+extension Medicine {
+    
+    /// Data futura più vicina tra TUTTE le terapie di questa Medicine (se esiste).
+    var earliestNextDoseDate: Date? {
+        guard let allTherapies = therapies, !allTherapies.isEmpty else {
+            return nil
+        }
+        
+        var earliest: Date? = nil
+        for therapy in allTherapies {
+            if let nextDose = findNextDoseDate(for: therapy) {
+                if earliest == nil || nextDose < earliest! {
+                    earliest = nextDose
+                }
+            }
+        }
+        return earliest
+    }
+    
+    /// Tempo (in secondi) da adesso alla dose futura più vicina.
+    /// Se non c’è una prossima dose futura, restituisce un valore molto grande
+    /// (in modo da finire “in fondo” all’ordinamento secondario).
+    var earliestNextDoseInterval: TimeInterval {
+        guard let nextDate = earliestNextDoseDate else {
+            return TimeInterval.greatestFiniteMagnitude
+        }
+        return nextDate.timeIntervalSinceNow
+    }
+    
+    /// Ritorna SOLO le medicine che hanno terapie o acquisti (purchase),
+    /// ordinate dapprima per `weight` DESC, e a parità di `weight` per `earliestNextDoseDate` ASC.
+    static func fetchAndSortByWeightThenNextDose() -> [Medicine] {
+        let context = PersistenceController.shared.container.viewContext
+
+        // 1) Costruiamo la fetchRequest di base
+        let request: NSFetchRequest<Medicine> = Medicine.fetchRequest() as! NSFetchRequest<Medicine>
+
+        // 2) Impostiamo il predicate per filtrare: (therapies.@count > 0) OR (ANY logs.type == 'purchase')
+        let therapiesPredicate  = NSPredicate(format: "therapies.@count > 0")
+        let purchasePredicate   = NSPredicate(format: "ANY logs.type == %@", "purchase")
+        let compoundPredicate   = NSCompoundPredicate(orPredicateWithSubpredicates: [
+            therapiesPredicate,
+            purchasePredicate
+        ])
+        request.predicate = compoundPredicate
+
+        // 3) Eseguiamo la fetch
+        do {
+            let results = try context.fetch(request)
+            
+            // 4) Ora ordiniamo localmente con un doppio criterio:
+            //    - weight DESC
+            //    - a parità di weight, earliestNextDoseDate ASC
+            let sorted = results.sorted { m1, m2 in
+                if m1.weight == m2.weight {
+                    // Se i pesi sono uguali, confrontiamo la prossima dose
+                    return (m1.earliestNextDoseDate ?? .distantFuture)
+                        < (m2.earliestNextDoseDate ?? .distantFuture)
+                } else {
+                    // Altrimenti, medicine con weight più alto prima
+                    return m1.weight > m2.weight
+                }
+            }
+            
+            return sorted
+        } catch {
+            // In caso di errore, restituiamo un array vuoto
+            return []
+        }
+}
+}

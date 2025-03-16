@@ -14,6 +14,7 @@ public class Log : NSManagedObject , Identifiable{
     @NSManaged public var type : String
     @NSManaged public var timestamp : Date
     @NSManaged public var medicine: Medicine
+    @NSManaged public var therapy: Therapy?
     @NSManaged public var package: Package?
 }
 
