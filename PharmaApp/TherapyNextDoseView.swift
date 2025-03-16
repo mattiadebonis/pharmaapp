@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct TherapiesIndex: View {
+struct TherapyNextDoseView: View {
     
     @Environment(\.managedObjectContext) var managedObjectContext
     
@@ -88,5 +88,5 @@ struct TherapiesIndex: View {
 }
 
 #Preview {
-    TherapiesIndex(medicine: Medicine())
+    TherapyNextDoseView(medicine: Medicine())
 }

@@ -71,7 +71,7 @@ struct MedicineRowView: View {
             }
             
             
-            TherapiesIndex(medicine: medicine).padding(.top)
+            TherapyNextDoseView(medicine: medicine).padding(.top)
 
         }
         .padding(16)

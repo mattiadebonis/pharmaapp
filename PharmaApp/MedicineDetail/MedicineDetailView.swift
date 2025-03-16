@@ -3,35 +3,25 @@ import CoreData
 
 struct MedicineDetailView: View {
     
-    // MARK: - Environment
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
     
     @EnvironmentObject var appViewModel: AppViewModel
     
-    // MARK: - ViewModel dedicato
     @StateObject private var viewModel = MedicineFormViewModel(
         context: PersistenceController.shared.container.viewContext
     )
     
-    // MARK: - Dati passati
     let medicine: Medicine
     let package: Package
     
-    // MARK: - Fetch delle opzioni
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
     
-    // MARK: - Stato per modali
     @State private var showTherapySheet = false
     @State private var showPrescriptionSheet = false
-    
-    // Aggiunta per selezionare la terapia da modificare (nil => nuova terapia)
     @State private var selectedTherapy: Therapy? = nil
-    
-    // MARK: - Supporto per ricorrenza/prescrizione
     private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
     
-    // MARK: - DateFormatter
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
@@ -94,9 +84,7 @@ struct MedicineDetailView: View {
     
     var body: some View {
         NavigationView {
-            VStack(alignment: .leading, spacing: 16) {
-                
-                // Titolo
+            VStack(alignment: .leading) {
                 Text("\(medicine.nome ?? "") - \(package.volume)")
                     .font(.title2)
                     .bold()
@@ -137,7 +125,7 @@ struct MedicineDetailView: View {
                                 Spacer()
 
 
-                                if let option = currentOption, option.manual_intake_registration {
+                                /* if let option = currentOption, option.manual_intake_registration {
                                     Button(action: {
                                         viewModel.addIntake(for: medicine, for: package, for: therapy)
                                     }) {
@@ -149,32 +137,25 @@ struct MedicineDetailView: View {
                                     .buttonStyle(.borderedProminent)
                                     .bold()
                                     
-                                }
+                                } */
                             }
                         }
-                        .padding(.vertical, 4)
+                        Divider()
                     }
-                } else {
-                    Text("Nessuna terapia in corso")
-                        .foregroundColor(.secondary)
-                }
-                
-                // Pulsante per aggiungere una nuova terapia
+                } 
+                 
                 Button {
-                    // Nuova terapia: nessuna da modificare
+                 
                     selectedTherapy = nil
                     showTherapySheet = true
                 } label: {
                     HStack {
                         Image(systemName: "plus.circle")
-                        Text("Aggiungi terapia")
+                        Text("Programma una nuova terapia")
                     }
-                    .frame(maxWidth: .infinity, minHeight: 44)
+                    
                 }
-                .buttonStyle(.borderedProminent)
-                .bold()
-                
-                
+                 
                 VStack(spacing: 10){
                     // Bottone gestione ricetta
                     if medicine.obbligo_ricetta {
