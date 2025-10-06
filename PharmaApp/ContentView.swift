@@ -1,146 +1,125 @@
-//
 //  ContentView.swift
-//  PharmaApp
+//  PharmaApp – Liquid Glass layout 2025
 //
-//  Created by Mattia De bonis on 09/12/24.
+//  Created by Mattia De Bonis on 09/12/24.
+//  Redesigned on 16/07/25 to match new UX blueprint
 //
+//  NOTE: alcuni tipi (FeedViewModel, FeedView, SearchIndex, etc.)
+//  sono riutilizzati dal tuo progetto. Questa bozza si focalizza
+//  esclusivamente sull’impostazione visuale; collega i view model
+//  dove necessario.
 
 import SwiftUI
 import CoreData
 import Vision
 
 struct ContentView: View {
+    // MARK: – Dependencies
+    @Environment(\.managedObjectContext) private var moc
+    @EnvironmentObject private var appVM: AppViewModel
+    @StateObject private var feedVM = FeedViewModel()
 
-    @Environment(\.managedObjectContext) private var managedObjectContext
-    @EnvironmentObject var appViewModel: AppViewModel
-    @StateObject private var feedViewModel = FeedViewModel() 
-
-    @FetchRequest(fetchRequest: Pharmacie.extractPharmacies(), animation: .default) var pharmacies: FetchedResults<Pharmacie>
-
-    @State private var isSearchIndexPresented = false
     @State private var isSettingsPresented = false
-    @State private var isShowingCamera = false
-    @State private var capturedImage: UIImage? = nil
+    @State private var isNewMedicinePresented = false
+    @State private var isShowingCamera  = false
+    @State private var capturedImage: UIImage?
 
+    // Init fake data once
     init() {
-        DataManager.shared.initializeMedicinesDataIfNeeded()
+        // Medicines are now entered manually by users; no JSON preload
         DataManager.shared.initializePharmaciesDataIfNeeded()
         DataManager.shared.initializeOptionsIfEmpty()
     }
 
+    // MARK: – UI
     var body: some View {
-        ZStack {
-            VStack(alignment: .leading) {
-                ScrollView {
-                    VStack {
-                        
-
-                        if appViewModel.suggestNearestPharmacies {
-                            Button(action: {
-                                appViewModel.isStocksIndexPresented = true
-                            }) {
-                                HStack {
-                                    Image(systemName: "cross")
-                                    Text("Rifornisci i farmaci in esaurimento")
-                                    Spacer()
-                                }
-                            }
-                            .bold()
-                            .foregroundColor(.white)
-                            .padding(20)
-                            .background(Color.blue)
-                            .cornerRadius(8)
+        NavigationStack {
+            ZStack(alignment: .bottom) {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 12) {
+                            smartBanner
+                            searchField
+                            // OPTIONAL segmented picker → comment if not used
+//                            filterSegment
+                            contentList
                         }
-
-                        
-                        HStack (spacing: 20) {
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                    }
+                }
+                // Restore bulk action bar from original implementation
+                if feedVM.isSelecting { floatingActionBar() }
+                
+                // Floating Add button (visible when not selecting)
+                if !feedVM.isSelecting {
+                    VStack { 
+                        Spacer()
+                        HStack {
                             Spacer()
-                            Button(action: {
-                                isShowingCamera = true
-                            }) {
-                                Image(systemName: "camera.fill")
-                                    .font(.title3)
-                                    .foregroundColor(Color.blue)
-                                    
+                            Button(action: { isNewMedicinePresented = true }) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 22, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .frame(width: 56, height: 56)
+                                    .background(Circle().fill(Color.accentColor))
+                                    .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
                             }
-                             Button(action: { isSettingsPresented = true }) {
-                                Image(systemName: "gearshape.fill")
-                                    .font(.title3)
-                                    .foregroundColor(Color.blue)
-                                    
-                            }
-                        }.padding()
-                        
-                            // Modifica del TextField per un bordo spesso personalizzato
-                        TextField("Cerca", text: $appViewModel.query)
-                            // Rimosso .textFieldStyle(RoundedBorderTextFieldStyle())
-                            .padding(10)
-                            .frame(maxWidth: .infinity)
-                            .font(.title3)
-                            .cornerRadius(8)
-                            .overlay(RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.gray, lineWidth: 1))
-                            .padding()
-                        // Show FeedView or SearchIndex based on query
-                        if appViewModel.query.isEmpty {
-                            FeedView(viewModel: feedViewModel).padding()
-                        } else {
-                            SearchIndex().padding()
+                            .accessibilityLabel("Aggiungi medicinale")
+                            .padding(.trailing, 20)
+                            .padding(.bottom, 20)
                         }
                     }
-                    
-                }.padding()
-                Spacer()
-                if feedViewModel.isSelecting {
-                    floatingActionBar()
-                        .transition(.move(edge: .bottom))
-                        .animation(.easeInOut, value: feedViewModel.isSelecting)
-                        .zIndex(2) // Ensures it's above everything
                 }
             }
-
-            
+            .navigationTitle("Le mie medicine")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: addMedicine) {
+                        Image(systemName: "gearshape")
+                            .frame(width: 44, height: 44)
+                            .background(Circle().fill(Color.accentColor.opacity(0.1)))
+                    }
+                    .accessibilityLabel("Impostazioni")
+                }
+            }
+            .background(
+                    Rectangle()
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            LinearGradient(colors: [Color.white.opacity(0.25), Color.blue.opacity(0.060)],
+                                        startPoint: .bottomLeading,
+                                        endPoint: .topTrailing)
+                        )
+                        .ignoresSafeArea()
+                )
         }
-        .ignoresSafeArea(.keyboard, edges: .bottom) // Ensures it stays above the keyboard
-        .sheet(isPresented: $isSettingsPresented) {
-            OptionsView()
-                .environment(\.managedObjectContext, managedObjectContext)
-        }
-        .sheet(isPresented: $appViewModel.isStocksIndexPresented) {
-            PharmaciesIndex()
-        }
-        .sheet(isPresented: $isShowingCamera, onDismiss: processCapturedImage) {
-            ImagePicker(sourceType: .camera, selectedImage: $capturedImage)
-        }
+        .sheet(isPresented: $isSettingsPresented) { OptionsView() }
+        .sheet(isPresented: $isNewMedicinePresented) { NewMedicineView() }
+        // ↓ evita che la floating bar venga coperta dalla tastiera
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
-
+    
     @ViewBuilder
     private func floatingActionBar() -> some View {
         VStack {
             Spacer()
             HStack {
-                if feedViewModel.allRequirePrescription {
-                    Button("Richiedi Ricetta") {
-                        feedViewModel.requestPrescription()
-                    }
+                if feedVM.allRequirePrescription {
+                    Button("Richiedi Ricetta") { feedVM.requestPrescription() }
                 }
-                Button("Acquistato") {
-                    feedViewModel.markAsPurchased()
-                }
-                Button("Assunto") {
-                    feedViewModel.markAsTaken()
-                }
+                Button("Acquistato") { feedVM.markAsPurchased() }
+                Button("Assunto") { feedVM.markAsTaken() }
                 Spacer()
-                Button("Annulla") {
-                    feedViewModel.cancelSelection()
-                }
+                Button("Annulla") { feedVM.cancelSelection() }
             }
             .padding()
             .background(.ultraThinMaterial)
-            .cornerRadius(16)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .shadow(radius: 10)
             .padding(.horizontal, 16)
-            .padding(.bottom, 10)
+            .padding(.bottom, 12)
         }
         .frame(maxWidth: .infinity)
         .frame(height: 80)
@@ -151,76 +130,123 @@ struct ContentView: View {
         )
         .ignoresSafeArea(.keyboard, edges: .bottom)
     }
-    
-    func processCapturedImage() {
-        if let image = capturedImage {
-            extractText(from: image)
+
+    // MARK: – Sub‑views
+    /// Banner rifornimento (appare solo quando necessario)
+    private var smartBanner: some View {
+        Group {
+            if appVM.suggestNearestPharmacies {
+                Button {
+                    appVM.isStocksIndexPresented = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title2)
+                        Text("Rifornisci i farmaci in esaurimento")
+                            .font(.body.bold())
+                        Spacer()
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.white)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.accentColor))
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
     }
+
+    /// Campo di ricerca con icona fotocamera embedded
+    private var searchField: some View {
+        HStack(spacing: 0) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Cerca", text: $appVM.query)
+                .textInputAutocapitalization(.none)
+                .disableAutocorrection(true)
+                .font(.body)
+            Spacer()
+            Button { isShowingCamera = true } label: {
+                Image(systemName: "camera.fill")
+                    .font(.body)
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Apri fotocamera")
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 44)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.white)))
+        .padding(.horizontal, 24)
+
+    }
+
+    /// Segment "Oggi / Tutti" (commentato se non serve)
     
-    func extractText(from image: UIImage) {
+
+    /// Lista card o indice ricerca
+    private var contentList: some View {
+        Group {
+            if appVM.query.isEmpty {
+                FeedView(viewModel: feedVM)
+            } else {
+                SearchIndex()
+            }
+        }
+    }
+
+    // MARK: Floating bar (selezione multipla)
+//    private var floatingActionBar: some View {
+//        VStack(spacing: 0) {
+//            Divider().opacity(0)
+//            HStack {
+//                if feedVM.allRequirePrescription {
+//                    Button("Richiedi Ricetta") { feedVM.requestPrescription() }
+//                }
+//                Button("Acquistato") { feedVM.markAsPurchased() }
+//                Button("Assunto") { feedVM.markAsTaken() }
+//                Spacer()
+//                Button("Annulla") { feedVM.cancelSelection() }
+//            }
+//            .font(.body)
+//            .padding()
+//            .frame(maxWidth: .infinity)
+//            .background(.thinMaterial)
+//            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+//            .shadow(radius: 10)
+//            .padding(.horizontal, 16)
+//            .padding(.bottom, 12)
+//        }
+//        .transition(.move(edge: .bottom))
+//        .animation(.easeInOut, value: feedVM.isSelecting)
+//    }
+
+    // MARK: – Helpers
+    private func addMedicine() {
+        isSettingsPresented = true
+    }
+
+    private func processCapturedImage() {
+        guard let image = capturedImage else { return }
+        extractText(from: image)
+    }
+
+    private func extractText(from image: UIImage) {
         guard let cgImage = image.cgImage else { return }
-        
-        let requestHandler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-        let request = VNRecognizeTextRequest { (request, error) in
-            guard error == nil else {
-                print("Errore OCR: \(error!.localizedDescription)")
-                return
-            }
-            guard let observations = request.results as? [VNRecognizedTextObservation] else { return }
-            let recognizedStrings = observations.compactMap { observation in
-                observation.topCandidates(1).first?.string
-            }
-            let fullText = recognizedStrings.joined(separator: " ")
-            DispatchQueue.main.async {
-                appViewModel.query = fullText
-            }
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        let request  = VNRecognizeTextRequest { req, err in
+            guard err == nil, let obs = req.results as? [VNRecognizedTextObservation] else { return }
+            let text = obs.compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+            DispatchQueue.main.async { appVM.query = text }
         }
         request.recognitionLevel = .accurate
-        
-        do {
-            try requestHandler.perform([request])
-        } catch {
-            print("Errore durante l'esecuzione dell'OCR: \(error.localizedDescription)")
-        }
+        try? handler.perform([request])
     }
 }
 
-struct ImagePicker: UIViewControllerRepresentable {
-    var sourceType: UIImagePickerController.SourceType = .camera
-    @Binding var selectedImage: UIImage?
-    @Environment(\.presentationMode) private var presentationMode
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-         let picker = UIImagePickerController()
-         picker.sourceType = sourceType
-         picker.delegate = context.coordinator
-         return picker
-    }
-
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-
-    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
-         let parent: ImagePicker
-         init(_ parent: ImagePicker) {
-             self.parent = parent
-         }
-         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-             if let image = info[.originalImage] as? UIImage {
-                  parent.selectedImage = image
-             }
-             parent.presentationMode.wrappedValue.dismiss()
-         }
-         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-             parent.presentationMode.wrappedValue.dismiss()
-         }
-    }
-}
-
+// MARK: – Preview
 #Preview {
     ContentView()
+        .environmentObject(AppViewModel())
+        .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
 }

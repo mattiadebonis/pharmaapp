@@ -91,24 +91,19 @@ struct TherapyFormView: View {
     
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    
-                    // Nuova sezione per associare una persona
-                    Section {
-                        Text("Persona")
-                            .font(.headline)
-                        Picker("Seleziona Persona", selection: $selectedPerson) {
-                            ForEach(persons, id: \.self) { person in
-                                Text("\(person.nome ?? "") \(person.cognome ?? "")").tag(person as Person?)
-                            }
+            Form {
+                Section(header: Text("Persona")) {
+                    Picker("Seleziona Persona", selection: $selectedPerson) {
+                        ForEach(persons, id: \.self) { person in
+                            Text("\(person.nome ?? "") \(person.cognome ?? "")")
+                                .tag(person as Person?)
                         }
-                        .pickerStyle(MenuPickerStyle())
                     }
-                    
-                    // Sezione Frequenza
-                    Text("Frequenza")
-                        .font(.headline)
+                    .accessibilityIdentifier("PersonPicker")
+                }
+                
+                // Sezione Frequenza
+                Section(header: Text("Frequenza")) {
                     Button {
                         isShowingFrequencySheet = true
                     } label: {
@@ -119,10 +114,11 @@ struct TherapyFormView: View {
                                 .foregroundColor(.blue)
                         }
                     }
-                    
-                    // Sezione Orari
-                    Text("Orari")
-                        .font(.headline)
+                    .accessibilityLabel("Seleziona frequenza")
+                }
+                
+                // Sezione Orari
+                Section(header: Text("Orari")) {
                     VStack {
                         ForEach(times.indices, id: \.self) { index in
                             HStack {
@@ -143,10 +139,10 @@ struct TherapyFormView: View {
                             Label("Aggiungi un orario", systemImage: "plus.circle")
                         }
                     }
-                    
-                    // Sezione Importanza
-                    Text("Importanza")
-                        .font(.headline)
+                }
+                
+                // Sezione Importanza
+                Section(header: Text("Importanza")) {
                     Picker("Importanza", selection: $selectedImportance) {
                         ForEach(Therapy.importanceValues, id: \.self) { importance in
                             Text(importance.capitalized).tag(importance)
@@ -154,7 +150,6 @@ struct TherapyFormView: View {
                     }
                     .pickerStyle(SegmentedPickerStyle())
                 }
-                .padding()
             }
             .navigationTitle("\(medicine.nome) - \(package.tipologia) \(package.valore) \(package.unita) \(package.volume)")
             .onAppear {
@@ -195,11 +190,30 @@ struct TherapyFormView: View {
                     Button("Salva") {
                         saveTherapy()
                     }
+                    .disabled(!canSave)
                 }
             }
         }
     }
 
+    private var canSave: Bool {
+        guard let selected = selectedPerson, let selectedID = selected.id else { return false }
+        // Allow saving in edit mode (editing the same therapy)
+        if editingTherapy != nil { return true }
+        // For a new therapy, disallow if a therapy already exists for the selected person (by comparing IDs)
+        if let therapiesSet = medicine.therapies as? Set<Therapy> {
+            if therapiesSet.contains(where: { therapy in
+                if let personID = therapy.person.id {
+                    return personID == selectedID
+                }
+                return false
+            }) {
+                return false
+            }
+        }
+        return true
+    }
+    
     private func frequencyDescription() -> String {
         switch selectedFrequencyType {
         case .daily:
@@ -208,6 +222,7 @@ struct TherapyFormView: View {
             let dayNames = byDay.map { dayName(for: $0) }
             if dayNames.isEmpty {
                 return "Nessun giorno"
+                
             } else {
                 return dayNames.joined(separator: ", ")
             }
@@ -233,70 +248,83 @@ struct TherapyFormView: View {
 extension TherapyFormView {
     
     private func saveTherapy() {
-        guard let person = selectedPerson else { return }
-        if let therapyToUpdate = editingTherapy {
-            // Aggiorna la terapia esistente
-            if selectedFrequencyType == .daily {
-                therapyFormViewModel.updateTherapy(
-                    therapy: therapyToUpdate,
-                    freq: "DAILY",
-                    interval: interval,
-                    until: useUntil ? untilDate : nil,
-                    count: useCount ? countNumber : nil,
-                    byDay: [],
-                    startDate: startDate,
-                    times: times,
-                    package: package,
-                    importance: selectedImportance,
-                    person: person
-                )
+        // Determine person to associate: selected, first available, or new blank
+        let person: Person = {
+            if let sel = selectedPerson {
+                return sel
+            } else if let first = persons.first {
+                return first
             } else {
-                therapyFormViewModel.updateTherapy(
-                    therapy: therapyToUpdate,
-                    freq: "WEEKLY",
-                    interval: interval,
-                    until: useUntil ? untilDate : nil,
-                    count: useCount ? countNumber : nil,
-                    byDay: byDay,
-                    startDate: startDate,
-                    times: times,
-                    package: package,
-                    importance: selectedImportance,
-                    person: person
-                )
+                let newPerson = Person(context: context)
+                newPerson.id = UUID()
+                newPerson.nome = ""
+                newPerson.cognome = ""
+                return newPerson
             }
-        } else {
-            // Crea una nuova terapia
-            if selectedFrequencyType == .daily {
-                therapyFormViewModel.saveTherapy(
-                    medicine: medicine,
-                    freq: "DAILY",
-                    interval: interval,
-                    until: useUntil ? untilDate : nil,
-                    count: useCount ? countNumber : nil,
-                    byDay: [],
-                    startDate: startDate,
-                    times: times,
-                    package: package,
-                    importance: selectedImportance,
-                    person: person
-                )
-            } else {
-                therapyFormViewModel.saveTherapy(
-                    medicine: medicine,
-                    freq: "WEEKLY",
-                    interval: interval,              
-                    until: useUntil ? untilDate : nil,
-                    count: useCount ? countNumber : nil,
-                    byDay: byDay,
-                    startDate: startDate,
-                    times: times,
-                    package: package,
-                    importance: selectedImportance,
-                    person: person
-                )
-            }
-        }
+        }()
+         if let therapyToUpdate = editingTherapy {
+             // Aggiorna la terapia esistente
+             if selectedFrequencyType == .daily {
+                 therapyFormViewModel.updateTherapy(
+                     therapy: therapyToUpdate,
+                     freq: "DAILY",
+                     interval: interval,
+                     until: useUntil ? untilDate : nil,
+                     count: useCount ? countNumber : nil,
+                     byDay: [],
+                     startDate: startDate,
+                     times: times,
+                     package: package,
+                     importance: selectedImportance,
+                     person: person
+                 )
+             } else {
+                 therapyFormViewModel.updateTherapy(
+                     therapy: therapyToUpdate,
+                     freq: "WEEKLY",
+                     interval: interval,
+                     until: useUntil ? untilDate : nil,
+                     count: useCount ? countNumber : nil,
+                     byDay: byDay,
+                     startDate: startDate,
+                     times: times,
+                     package: package,
+                     importance: selectedImportance,
+                     person: person
+                 )
+             }
+         } else {
+             // Crea una nuova terapia
+             if selectedFrequencyType == .daily {
+                 therapyFormViewModel.saveTherapy(
+                     medicine: medicine,
+                     freq: "DAILY",
+                     interval: interval,
+                     until: useUntil ? untilDate : nil,
+                     count: useCount ? countNumber : nil,
+                     byDay: [],
+                     startDate: startDate,
+                     times: times,
+                     package: package,
+                     importance: selectedImportance,
+                     person: person
+                 )
+             } else {
+                 therapyFormViewModel.saveTherapy(
+                     medicine: medicine,
+                     freq: "WEEKLY",
+                     interval: interval,              
+                     until: useUntil ? untilDate : nil,
+                     count: useCount ? countNumber : nil,
+                     byDay: byDay,
+                     startDate: startDate,
+                     times: times,
+                     package: package,
+                     importance: selectedImportance,
+                     person: person
+                 )
+             }
+         }
         
         appViewModel.isSearchIndexPresented = false
         dismiss()

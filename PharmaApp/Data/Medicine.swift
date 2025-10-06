@@ -179,15 +179,15 @@ extension Medicine {
             
             switch coverageDays {
             case ..<0:
-                score += 60
+                score += 500
             case 0..<2:
-                score += 50
+                score += 60
             case 2..<4:
-                score += 40
+                score += 50
             case 4..<7:
-                score += 30
+                score += 40
             case 7..<14:
-                score += 20
+                score += 30
             default:
                 break
             }
@@ -199,7 +199,7 @@ extension Medicine {
             switch hoursToDose {
             case ..<0:
                 // dose scaduta
-                score += 70
+                score += 500
             case 0..<1:
                 score += 60
             case 1..<3:
@@ -298,27 +298,22 @@ extension Medicine {
         // 1) Costruiamo la fetchRequest di base
         let request: NSFetchRequest<Medicine> = Medicine.fetchRequest() as! NSFetchRequest<Medicine>
 
-        // 2) Impostiamo il predicate per filtrare: (therapies.@count > 0) OR (ANY logs.type == 'purchase')
-        let therapiesPredicate  = NSPredicate(format: "therapies.@count > 0")
-        let purchasePredicate   = NSPredicate(format: "ANY logs.type == %@", "purchase")
-        let compoundPredicate   = NSCompoundPredicate(orPredicateWithSubpredicates: [
-            therapiesPredicate,
-            purchasePredicate
-        ])
-        request.predicate = compoundPredicate
-
-        // 3) Eseguiamo la fetch
+        // 2) Eseguiamo la fetch senza filtrare: accogliamo anche medicine appena create
         do {
             let results = try context.fetch(request)
             
-            // 4) Ora ordiniamo localmente con un doppio criterio:
+            // 3) Ordiniamo localmente con criteri multipli:
             //    - weight DESC
-            //    - a parità di weight, earliestNextDoseDate ASC
+            //    - prossima dose ASC (nil in fondo)
+            //    - nome ASC come fallback
             let sorted = results.sorted { m1, m2 in
                 if m1.weight == m2.weight {
-                    // Se i pesi sono uguali, confrontiamo la prossima dose
-                    return (m1.earliestNextDoseDate ?? .distantFuture)
-                        < (m2.earliestNextDoseDate ?? .distantFuture)
+                    let next1 = m1.earliestNextDoseDate ?? .distantFuture
+                    let next2 = m2.earliestNextDoseDate ?? .distantFuture
+                    if next1 == next2 {
+                        return m1.nome.localizedCaseInsensitiveCompare(m2.nome) == .orderedAscending
+                    }
+                    return next1 < next2
                 } else {
                     // Altrimenti, medicine con weight più alto prima
                     return m1.weight > m2.weight

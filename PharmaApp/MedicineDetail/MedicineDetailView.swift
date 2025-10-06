@@ -16,6 +16,7 @@ struct MedicineDetailView: View {
     let package: Package
     
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
+    @FetchRequest private var therapies: FetchedResults<Therapy>
     
     @State private var showTherapySheet = false
     @State private var showPrescriptionSheet = false
@@ -82,117 +83,82 @@ struct MedicineDetailView: View {
         return defaultFormatter.string(from: date)
     }
     
+    init(medicine: Medicine, package: Package) {
+        self.medicine = medicine
+        self.package = package
+        _therapies = FetchRequest(
+            entity: Therapy.entity(),
+            sortDescriptors: [NSSortDescriptor(keyPath: \Therapy.start_date, ascending: true)],
+            predicate: NSPredicate(format: "medicine == %@", medicine)
+        )
+    }
+    
     var body: some View {
         NavigationView {
-            VStack(alignment: .leading) {
-                Text("\(medicine.nome ?? "") - \(package.volume)")
-                    .font(.title2)
-                    .bold()
-                    .padding(.top)
-                Text("Scorte rimanenti: \(totalLeftover)")
-                    .font(.headline)
-                    .foregroundColor(.green)
-                // Sezione Terapie: aggiornata per mostrare le terapie come in TherapiesIndex
-                Text("Terapie")
-                    .font(.headline)
-                if let therapies = medicine.therapies as? Set<Therapy>, !therapies.isEmpty {
-                    ForEach(therapies.sorted { ($0.start_date ?? Date()) < ($1.start_date ?? Date()) }, id: \.objectID) { therapy in
-                        Button {
-                            selectedTherapy = therapy
-                            showTherapySheet = true
-                        } label: {
-                            HStack {
-                                if let startDate = therapy.start_date,
-                                   let rrule = therapy.rrule,
-                                   let nextDate = recurrenceManager.nextOccurrence(
-                                        rule: recurrenceManager.parseRecurrenceString(rrule),
-                                        startDate: startDate,
-                                        after: Date(),
-                                        doses: therapy.doses as NSSet?) {
-                                    Text("\(formattedAssumptionDate(nextDate))")
-                                } else if let startDate = therapy.start_date {
-                                    Text("\(formattedAssumptionDate(startDate))")
-                                }
-                                if let nome = therapy.person.nome,
-                                   let cognome = therapy.person.cognome,
-                                   !(nome.isEmpty && cognome.isEmpty) {
+            Form {
+                Section(header: Text("Dettagli")) {
+                    HStack { Text("Nome"); Spacer(); Text("\(medicine.nome ?? "") - \(package.volume)") }
+                    HStack { Text("Scorte rimanenti"); Spacer(); Text("\(totalLeftover)").foregroundColor(.green) }
+                }
+                Section(header: Text("Terapie")) {
+                    if !therapies.isEmpty {
+                        ForEach(therapies, id: \.objectID) { therapy in
+                            Button { 
+                                selectedTherapy = therapy; 
+                                showTherapySheet = true 
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Image(systemName: "person")
-                                        Text("\(nome) \(cognome)")
-                                    }
-                                    .foregroundColor(.secondary)
-                                }
-                                Spacer()
-
-
-                                /* if let option = currentOption, option.manual_intake_registration {
-                                    Button(action: {
-                                        viewModel.addIntake(for: medicine, for: package, for: therapy)
-                                    }) {
-                                        HStack{
-                                            Image(systemName: "pills")
-                                            Text("Assunto")
+                                        let rule = recurrenceManager.parseRecurrenceString(
+                                        therapy.rrule ?? "")
+                                        Text("\(recurrenceManager.describeRecurrence(rule: rule))")
+                                            
+                                        Text(formattedAssumptionDate(
+                                            recurrenceManager.nextOccurrence(
+                                                rule: recurrenceManager.parseRecurrenceString(therapy.rrule ?? ""),
+                                                startDate: therapy.start_date ?? Date(),
+                                                after: Date(),
+                                                doses: therapy.doses as NSSet?
+                                            ) ?? (therapy.start_date ?? Date())
+                                        ))
+                                        Spacer()
+                                        let person = therapy.person
+                                        if let name = person.nome {
+                                            Text("\(name) \(person.cognome ?? "")")
+                                                .foregroundColor(.secondary)
                                         }
                                     }
-                                    .buttonStyle(.borderedProminent)
-                                    .bold()
                                     
-                                } */
+                                    
+                                }
                             }
+                            .accessibilityLabel("Visualizza dettagli terapia")
                         }
-                        Divider()
                     }
-                } 
-                 
-                Button {
-                 
-                    selectedTherapy = nil
-                    showTherapySheet = true
-                } label: {
-                    HStack {
-                        Image(systemName: "plus.circle")
-                        Text("Programma una nuova terapia")
+                    Button { 
+                        selectedTherapy = nil; 
+                        showTherapySheet = true 
+                    } label: {
+                        Label("Programma una nuova terapia", systemImage: "plus.circle")
                     }
-                    
+                    .accessibilityLabel("Programma nuova terapia")
                 }
-                 
-                VStack(spacing: 10){
-                    // Bottone gestione ricetta
+                Section(header: Text("Azioni")) {
                     if medicine.obbligo_ricetta {
-                        Button(action: {
-                            showPrescriptionSheet.toggle()
-                        }) {
-                            HStack {
-                                Image(systemName: "doc.text")
-                                Text("Richiedi ricetta")
-                                
-                            }.frame(maxWidth: .infinity, minHeight: 40)
+                        Button { showPrescriptionSheet.toggle() } label: {
+                            Label("Richiedi ricetta", systemImage: "doc.text")
                         }
                         .buttonStyle(.borderedProminent)
-                        .bold()
+                        .accessibilityLabel("Richiedi ricetta")
                     }
-                    
-                    // Pulsante Acquisto
-                    Button(action: {
-                        viewModel.saveForniture(medicine: medicine, package: package)
-                    }) {
-                        HStack{
-                            Image(systemName: "cart")
-                            Text("Acquistato")
-                        }.frame(maxWidth: .infinity, minHeight: 40)
+                    Button { viewModel.saveForniture(medicine: medicine, package: package) } label: {
+                        Label("Acquistato", systemImage: "cart")
                     }
                     .buttonStyle(.borderedProminent)
-                    .bold()
-
-                    
+                    .accessibilityLabel("Segna come acquistato")
                 }
-                
-                
-                
             }
-            .padding(.horizontal)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(medicine.nome ?? "Dettaglio")
         }
         .presentationDetents([.medium, .large])
         
@@ -215,6 +181,44 @@ struct MedicineDetailView: View {
                 package: package
             )
             .presentationDetents([.medium, .large])
+        }
+    }
+    
+    // NEW: Helper to convert a RecurrenceRule to natural language
+    private func naturalLanguageDescription(for rule: RecurrenceRule) -> String {
+        var desc = ""
+        if rule.freq.uppercased() == "DAILY" {
+            desc = rule.interval > 1 ? "Ogni \(rule.interval) giorni" : "Ogni giorno"
+        } else if rule.freq.uppercased() == "WEEKLY" {
+            desc = rule.interval > 1 ? "Ogni \(rule.interval) settimane" : "Ogni settimana"
+            if !rule.byDay.isEmpty {
+                let days = rule.byDay.map { dayName(for: $0) }.joined(separator: ", ")
+                desc += " (\(days))"
+            }
+        } else {
+            desc = "Ricorrente"
+        }
+        if let until = rule.until {
+            let df = DateFormatter()
+            df.dateStyle = .medium
+            desc += " fino al \(df.string(from: until))"
+        }
+        if let count = rule.count {
+            desc += ", \(count) volte"
+        }
+        return desc
+    }
+    
+    private func dayName(for icsDay: String) -> String {
+        switch icsDay {
+        case "MO": return "Lunedì"
+        case "TU": return "Martedì"
+        case "WE": return "Mercoledì"
+        case "TH": return "Giovedì"
+        case "FR": return "Venerdì"
+        case "SA": return "Sabato"
+        case "SU": return "Domenica"
+        default:   return icsDay  
         }
     }
     

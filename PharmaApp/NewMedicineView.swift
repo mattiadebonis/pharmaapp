@@ -1,74 +1,71 @@
-//
-//  SearchIndex.swift
-//  PharmaApp
-//
-//  Created by Mattia De bonis on 16/12/24.
-//
-
 import SwiftUI
 import CoreData
 
-struct SearchIndex: View {
+struct NewMedicineView: View {
     @Environment(\.managedObjectContext) private var context
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appViewModel: AppViewModel
 
-    // Stato form inserimento manuale
+    // Medicine fields
     @State private var nome: String = ""
     @State private var principioAttivo: String = ""
     @State private var obbligoRicetta: Bool = false
+
+    // Package fields
     @State private var tipologia: String = ""
     @State private var valoreStr: String = ""
     @State private var unita: String = ""
     @State private var volume: String = ""
     @State private var numeroStr: String = ""
 
-    // Presentazione dettaglio dopo creazione
-    @State private var isMedicineSheetPresented: Bool = false
+    // After creation open details
+    @State private var showDetail: Bool = false
     @State private var createdMedicine: Medicine?
     @State private var createdPackage: Package?
 
     var body: some View {
-        Form {
-            Section(header: Text("Nuovo medicinale")) {
-                TextField("Nome", text: $nome)
-                    .onAppear { if nome.isEmpty { nome = appViewModel.query } }
-                TextField("Principio attivo (opzionale)", text: $principioAttivo)
-                Toggle("Obbligo ricetta", isOn: $obbligoRicetta)
-            }
-
-            Section(header: Text("Confezione")) {
-                TextField("Tipologia (es. Compresse)", text: $tipologia)
-                TextField("Dosaggio (valore)", text: $valoreStr)
-                    .keyboardType(.numberPad)
-                TextField("Unità (es. mg)", text: $unita)
-                TextField("Volume (es. 20 compresse)", text: $volume)
-                TextField("Numero confezione (opz.)", text: $numeroStr)
-                    .keyboardType(.numberPad)
-            }
-
-            Section {
-                Button(action: createMedicine) {
-                    Label("Crea e apri dettagli", systemImage: "plus.circle.fill")
+        NavigationView {
+            Form {
+                Section(header: Text("Nuovo medicinale")) {
+                    TextField("Nome", text: $nome)
+                    TextField("Principio attivo (opzionale)", text: $principioAttivo)
+                    Toggle("Obbligo ricetta", isOn: $obbligoRicetta)
                 }
-                .disabled(!canCreate)
+
+                Section(header: Text("Confezione")) {
+                    TextField("Tipologia (es. Compresse)", text: $tipologia)
+                    TextField("Dosaggio (valore)", text: $valoreStr)
+                        .keyboardType(.numberPad)
+                    TextField("Unità (es. mg)", text: $unita)
+                    TextField("Volume (es. 20 compresse)", text: $volume)
+                    TextField("Numero confezione (opz.)", text: $numeroStr)
+                        .keyboardType(.numberPad)
+                }
+            }
+            .navigationTitle("Nuovo medicinale")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annulla") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Crea") { createMedicine() }
+                        .disabled(!canCreate)
+                }
+            }
+            .onAppear {
+                if nome.isEmpty { nome = appViewModel.query }
             }
         }
-        .onAppear {
-            // Precompila il nome con la query, se presente
-            if nome.isEmpty { nome = appViewModel.query }
-        }
-        .sheet(isPresented: $isMedicineSheetPresented) {
+        .presentationDetents([.medium, .large])
+        .sheet(isPresented: $showDetail) {
             if let m = createdMedicine, let p = createdPackage {
                 MedicineDetailView(medicine: m, package: p)
                     .presentationDetents([.medium, .large])
-            } else {
-                Text("Errore creazione medicinale")
             }
         }
     }
 
     private var canCreate: Bool {
-        // Nome, tipologia, unità e valore numerico obbligatori
         guard !nome.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
         guard !tipologia.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
         guard !unita.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
@@ -97,18 +94,10 @@ struct SearchIndex: View {
             try context.save()
             createdMedicine = medicine
             createdPackage = package
-            isMedicineSheetPresented = true
+            showDetail = true
         } catch {
-            // In un'app reale: mostra un alert. Qui fallback silenzioso.
             print("Errore salvataggio medicinale: \(error)")
         }
     }
 }
 
-struct SearchIndex_Previews: PreviewProvider {
-    static var previews: some View {
-        SearchIndex()
-            .environmentObject(AppViewModel())
-            .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
-    }
-}
