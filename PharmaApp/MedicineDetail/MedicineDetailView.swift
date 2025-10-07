@@ -97,7 +97,8 @@ struct MedicineDetailView: View {
         NavigationView {
             Form {
                 Section(header: Text("Dettagli")) {
-                    HStack { Text("Nome"); Spacer(); Text("\(medicine.nome ?? "") - \(package.volume)") }
+                    HStack { Text("Nome"); Spacer(); Text(medicine.nome) }
+                    HStack { Text("Unità per confezione"); Spacer(); Text("\(package.numero)") }
                     HStack { Text("Scorte rimanenti"); Spacer(); Text("\(totalLeftover)").foregroundColor(.green) }
                 }
                 Section(header: Text("Terapie")) {

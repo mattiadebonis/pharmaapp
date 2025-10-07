@@ -6,16 +6,11 @@ struct NewMedicineView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appViewModel: AppViewModel
 
-    // Medicine fields
+    // Medicine fields (semplificati)
     @State private var nome: String = ""
-    @State private var principioAttivo: String = ""
     @State private var obbligoRicetta: Bool = false
 
-    // Package fields
-    @State private var tipologia: String = ""
-    @State private var valoreStr: String = ""
-    @State private var unita: String = ""
-    @State private var volume: String = ""
+    // Unico campo confezione richiesto: numero unità per confezione
     @State private var numeroStr: String = ""
 
     // After creation open details
@@ -28,17 +23,11 @@ struct NewMedicineView: View {
             Form {
                 Section(header: Text("Nuovo medicinale")) {
                     TextField("Nome", text: $nome)
-                    TextField("Principio attivo (opzionale)", text: $principioAttivo)
                     Toggle("Obbligo ricetta", isOn: $obbligoRicetta)
                 }
 
                 Section(header: Text("Confezione")) {
-                    TextField("Tipologia (es. Compresse)", text: $tipologia)
-                    TextField("Dosaggio (valore)", text: $valoreStr)
-                        .keyboardType(.numberPad)
-                    TextField("Unità (es. mg)", text: $unita)
-                    TextField("Volume (es. 20 compresse)", text: $volume)
-                    TextField("Numero confezione (opz.)", text: $numeroStr)
+                    TextField("Unità per confezione", text: $numeroStr)
                         .keyboardType(.numberPad)
                 }
             }
@@ -67,9 +56,7 @@ struct NewMedicineView: View {
 
     private var canCreate: Bool {
         guard !nome.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
-        guard !tipologia.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
-        guard !unita.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
-        guard Int32(valoreStr) != nil else { return false }
+        guard let numero = Int32(numeroStr), numero > 0 else { return false }
         return true
     }
 
@@ -77,15 +64,17 @@ struct NewMedicineView: View {
         let medicine = Medicine(context: context)
         medicine.id = UUID()
         medicine.nome = nome.trimmingCharacters(in: .whitespaces)
-        medicine.principio_attivo = principioAttivo
+        // Campi rimossi: salviamo valori neutri
+        medicine.principio_attivo = ""
         medicine.obbligo_ricetta = obbligoRicetta
 
         let package = Package(context: context)
         package.id = UUID()
-        package.tipologia = tipologia.trimmingCharacters(in: .whitespaces)
-        package.unita = unita.trimmingCharacters(in: .whitespaces)
-        package.volume = volume.trimmingCharacters(in: .whitespaces)
-        package.valore = Int32(valoreStr) ?? 0
+        // Campi rimossi: valori di default/"vuoti"
+        package.tipologia = ""
+        package.unita = ""
+        package.volume = ""
+        package.valore = 0
         package.numero = Int32(numeroStr) ?? 0
         package.medicine = medicine
         medicine.addToPackages(package)
@@ -100,4 +89,3 @@ struct NewMedicineView: View {
         }
     }
 }
-

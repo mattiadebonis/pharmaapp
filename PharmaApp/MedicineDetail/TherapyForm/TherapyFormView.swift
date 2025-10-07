@@ -151,7 +151,7 @@ struct TherapyFormView: View {
                     .pickerStyle(SegmentedPickerStyle())
                 }
             }
-            .navigationTitle("\(medicine.nome) - \(package.tipologia) \(package.valore) \(package.unita) \(package.volume)")
+            .navigationTitle("\(medicine.nome) • \(package.numero) unità/conf.")
             .onAppear {
                 // Se si modifica una terapia esistente, popola i dati da editingTherapy
                 if let therapy = editingTherapy {

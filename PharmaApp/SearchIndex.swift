@@ -12,14 +12,9 @@ struct SearchIndex: View {
     @Environment(\.managedObjectContext) private var context
     @EnvironmentObject private var appViewModel: AppViewModel
 
-    // Stato form inserimento manuale
+    // Stato form inserimento manuale (semplificato)
     @State private var nome: String = ""
-    @State private var principioAttivo: String = ""
     @State private var obbligoRicetta: Bool = false
-    @State private var tipologia: String = ""
-    @State private var valoreStr: String = ""
-    @State private var unita: String = ""
-    @State private var volume: String = ""
     @State private var numeroStr: String = ""
 
     // Presentazione dettaglio dopo creazione
@@ -32,17 +27,11 @@ struct SearchIndex: View {
             Section(header: Text("Nuovo medicinale")) {
                 TextField("Nome", text: $nome)
                     .onAppear { if nome.isEmpty { nome = appViewModel.query } }
-                TextField("Principio attivo (opzionale)", text: $principioAttivo)
                 Toggle("Obbligo ricetta", isOn: $obbligoRicetta)
             }
 
             Section(header: Text("Confezione")) {
-                TextField("Tipologia (es. Compresse)", text: $tipologia)
-                TextField("Dosaggio (valore)", text: $valoreStr)
-                    .keyboardType(.numberPad)
-                TextField("Unità (es. mg)", text: $unita)
-                TextField("Volume (es. 20 compresse)", text: $volume)
-                TextField("Numero confezione (opz.)", text: $numeroStr)
+                TextField("Unità per confezione", text: $numeroStr)
                     .keyboardType(.numberPad)
             }
 
@@ -68,11 +57,9 @@ struct SearchIndex: View {
     }
 
     private var canCreate: Bool {
-        // Nome, tipologia, unità e valore numerico obbligatori
+        // Nome e numero unità per confezione obbligatori (> 0)
         guard !nome.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
-        guard !tipologia.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
-        guard !unita.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
-        guard Int32(valoreStr) != nil else { return false }
+        guard let numero = Int32(numeroStr), numero > 0 else { return false }
         return true
     }
 
@@ -80,15 +67,15 @@ struct SearchIndex: View {
         let medicine = Medicine(context: context)
         medicine.id = UUID()
         medicine.nome = nome.trimmingCharacters(in: .whitespaces)
-        medicine.principio_attivo = principioAttivo
+        medicine.principio_attivo = ""
         medicine.obbligo_ricetta = obbligoRicetta
 
         let package = Package(context: context)
         package.id = UUID()
-        package.tipologia = tipologia.trimmingCharacters(in: .whitespaces)
-        package.unita = unita.trimmingCharacters(in: .whitespaces)
-        package.volume = volume.trimmingCharacters(in: .whitespaces)
-        package.valore = Int32(valoreStr) ?? 0
+        package.tipologia = ""
+        package.unita = ""
+        package.volume = ""
+        package.valore = 0
         package.numero = Int32(numeroStr) ?? 0
         package.medicine = medicine
         medicine.addToPackages(package)
