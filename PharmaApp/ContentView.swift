@@ -11,7 +11,7 @@
 
 import SwiftUI
 import CoreData
-import Vision
+// import Vision spostato nella schermata di creazione
 
 struct ContentView: View {
     // MARK: – Dependencies
@@ -21,8 +21,6 @@ struct ContentView: View {
 
     @State private var isSettingsPresented = false
     @State private var isNewMedicinePresented = false
-    @State private var isShowingCamera  = false
-    @State private var capturedImage: UIImage?
 
     // Init fake data once
     init() {
@@ -39,7 +37,6 @@ struct ContentView: View {
                     ScrollView {
                         VStack(spacing: 12) {
                             smartBanner
-                            searchField
                             // OPTIONAL segmented picker → comment if not used
 //                            filterSegment
                             contentList
@@ -72,8 +69,7 @@ struct ContentView: View {
                     }
                 }
             }
-            .navigationTitle("Le mie medicine")
-            .navigationBarTitleDisplayMode(.large)
+            // Titolo rimosso come richiesto
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: addMedicine) {
@@ -157,29 +153,7 @@ struct ContentView: View {
         }
     }
 
-    /// Campo di ricerca con icona fotocamera embedded
-    private var searchField: some View {
-        HStack(spacing: 0) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Cerca", text: $appVM.query)
-                .textInputAutocapitalization(.none)
-                .disableAutocorrection(true)
-                .font(.body)
-            Spacer()
-            Button { isShowingCamera = true } label: {
-                Image(systemName: "camera.fill")
-                    .font(.body)
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityLabel("Apri fotocamera")
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 44)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.white)))
-        .padding(.horizontal, 24)
-
-    }
+    // Barra di ricerca rimossa come richiesto
 
     /// Segment "Oggi / Tutti" (commentato se non serve)
     
@@ -226,22 +200,7 @@ struct ContentView: View {
         isSettingsPresented = true
     }
 
-    private func processCapturedImage() {
-        guard let image = capturedImage else { return }
-        extractText(from: image)
-    }
-
-    private func extractText(from image: UIImage) {
-        guard let cgImage = image.cgImage else { return }
-        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-        let request  = VNRecognizeTextRequest { req, err in
-            guard err == nil, let obs = req.results as? [VNRecognizedTextObservation] else { return }
-            let text = obs.compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
-            DispatchQueue.main.async { appVM.query = text }
-        }
-        request.recognitionLevel = .accurate
-        try? handler.perform([request])
-    }
+    // Funzionalità fotocamera spostata nel form di creazione
 }
 
 // MARK: – Preview

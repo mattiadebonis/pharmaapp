@@ -1,5 +1,7 @@
 import SwiftUI
 import CoreData
+import Vision
+import UIKit
 
 struct NewMedicineView: View {
     @Environment(\.managedObjectContext) private var context
@@ -17,12 +19,25 @@ struct NewMedicineView: View {
     @State private var showDetail: Bool = false
     @State private var createdMedicine: Medicine?
     @State private var createdPackage: Package?
+    
+    // Camera/Text recognition
+    @State private var isShowingCamera = false
+    @State private var capturedImage: UIImage?
 
     var body: some View {
         NavigationView {
             Form {
                 Section(header: Text("Nuovo medicinale")) {
-                    TextField("Nome", text: $nome)
+                    HStack(spacing: 8) {
+                        TextField("Nome", text: $nome)
+                        Button {
+                            isShowingCamera = true
+                        } label: {
+                            Image(systemName: "camera.fill")
+                                .foregroundColor(.accentColor)
+                        }
+                        .accessibilityLabel("Scatta foto per riconoscere il nome")
+                    }
                     Toggle("Obbligo ricetta", isOn: $obbligoRicetta)
                 }
 
@@ -46,6 +61,12 @@ struct NewMedicineView: View {
             }
         }
         .presentationDetents([.medium, .large])
+        // Camera sheet
+        .sheet(isPresented: $isShowingCamera, onDismiss: processCapturedImage) {
+            ImagePickerView(sourceType: .camera) { image in
+                capturedImage = image
+            }
+        }
         .sheet(isPresented: $showDetail) {
             if let m = createdMedicine, let p = createdPackage {
                 MedicineDetailView(medicine: m, package: p)
@@ -87,5 +108,23 @@ struct NewMedicineView: View {
         } catch {
             print("Errore salvataggio medicinale: \(error)")
         }
+    }
+    
+    private func processCapturedImage() {
+        guard let image = capturedImage else { return }
+        extractText(from: image)
+    }
+    private func extractText(from image: UIImage) {
+        guard let cgImage = image.cgImage else { return }
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        let request  = VNRecognizeTextRequest { req, err in
+            guard err == nil, let obs = req.results as? [VNRecognizedTextObservation] else { return }
+            let text = obs.compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+            DispatchQueue.main.async {
+                if self.nome.isEmpty { self.nome = text } else { self.nome += " " + text }
+            }
+        }
+        request.recognitionLevel = .accurate
+        try? handler.perform([request])
     }
 }
