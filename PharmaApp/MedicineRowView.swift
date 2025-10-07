@@ -65,56 +65,176 @@ struct MedicineRowView: View {
     private func time(_ d: Date) -> String {
         let f = DateFormatter(); f.timeStyle = .short; return f.string(from: d)
     }
+    private func combine(day: Date, withTime time: Date) -> Date? {
+        let cal = Calendar.current
+        var comps = DateComponents()
+        let dcDay = cal.dateComponents([.year, .month, .day], from: day)
+        let dcTime = cal.dateComponents([.hour, .minute, .second], from: time)
+        comps.year = dcDay.year
+        comps.month = dcDay.month
+        comps.day = dcDay.day
+        comps.hour = dcTime.hour
+        comps.minute = dcTime.minute
+        comps.second = dcTime.second
+        return cal.date(from: comps)
+    }
+    // Helper per verificare se una therapy ricorre oggi
+    private func icsCode(for date: Date) -> String {
+        let wd = Calendar.current.component(.weekday, from: date)
+        switch wd { case 1: return "SU"; case 2: return "MO"; case 3: return "TU"; case 4: return "WE"; case 5: return "TH"; case 6: return "FR"; case 7: return "SA"; default: return "MO" }
+    }
+    private func occursToday(_ t: Therapy) -> Bool {
+        let now = Date()
+        let cal = Calendar.current
+        let rule = recurrenceManager.parseRecurrenceString(t.rrule ?? "")
+        let start = t.start_date ?? now
+        let endOfDay = cal.date(byAdding: DateComponents(day: 1, second: -1), to: cal.startOfDay(for: now)) ?? now
+        if start > endOfDay { return false }
+        if let until = rule.until, cal.startOfDay(for: until) < cal.startOfDay(for: now) { return false }
+        let interval = rule.interval ?? 1
+        switch rule.freq.uppercased() {
+        case "DAILY":
+            let startSOD = cal.startOfDay(for: start)
+            let todaySOD = cal.startOfDay(for: now)
+            if let days = cal.dateComponents([.day], from: startSOD, to: todaySOD).day, days >= 0 {
+                return days % max(1, interval) == 0
+            }
+            return false
+        case "WEEKLY":
+            let byDays = rule.byDay
+            let allowed = byDays.isEmpty ? ["MO","TU","WE","TH","FR","SA","SU"] : byDays
+            guard allowed.contains(icsCode(for: now)) else { return false }
+            let startWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: start)) ?? start
+            let todayWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
+            if let weeks = cal.dateComponents([.weekOfYear], from: startWeek, to: todayWeek).weekOfYear, weeks >= 0 {
+                return weeks % max(1, interval) == 0
+            }
+            return false
+        default:
+            return false
+        }
+    }
     // MARK: - New computed helpers for UI
     private var nextDate: Date? { nextOcc?.date }
+    // Dosi odierne pianificate vs assunte
+    private var scheduledDosesToday: Int {
+        guard !therapies.isEmpty else { return 0 }
+        return therapies.reduce(0) { acc, t in
+            acc + (occursToday(t) ? max(1, t.doses?.count ?? 1) : 0)
+        }
+    }
+    private var intakeLogsToday: Int {
+        let now = Date()
+        let cal = Calendar.current
+        guard let logs = medicine.logs else { return 0 }
+        return logs.filter { $0.type == "intake" && cal.isDate($0.timestamp, inSameDayAs: now) }.count
+    }
+    private var scheduledTimesToday: [Date] {
+        let now = Date()
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: now)
+        guard !therapies.isEmpty else { return [] }
+        var times: [Date] = []
+        for t in therapies {
+            guard occursToday(t) else { continue }
+            if let doseSet = t.doses as? Set<Dose> {
+                for d in doseSet {
+                    if let dt = combine(day: today, withTime: d.time) {
+                        times.append(dt)
+                    }
+                }
+            }
+        }
+        return times.sorted()
+    }
+    private var earliestOverdueDoseTime: Date? {
+        let taken = intakeLogsToday
+        let times = scheduledTimesToday
+        guard !times.isEmpty else { return nil }
+        let pending = Array(times.dropFirst(min(taken, times.count)))
+        return pending.first(where: { $0 <= Date() })
+    }
+    private var hasRemainingDosesToday: Bool {
+        max(0, scheduledDosesToday - intakeLogsToday) > 0
+    }
     private var isDoseToday: Bool {
         guard let d = nextDate else { return false }
-        return Calendar.current.isDateInToday(d)
+        return Calendar.current.isDateInToday(d) && hasRemainingDosesToday
     }
     private var isLowStock: Bool {
         guard let opt = option else { return false }
         return medicine.isInEsaurimento(option: opt, recurrenceManager: recurrenceManager)
     }
-    private var rightPillText: String? {
-        guard let d = nextDate else { return nil }
-        if isDoseToday { return time(d) }
-        let fmt = DateFormatter(); fmt.locale = Locale(identifier: "it_IT"); fmt.setLocalizedDateFormatFromTemplate("EEE HH:mm")
-        return fmt.string(from: d)
+
+    private var coverageThreshold: Int {
+        Int(option?.day_threeshold_stocks_alarm ?? 7)
     }
-    private var nextDescription: String? {
-        guard let d = nextDate else { return nil }
-        let c = Calendar.current
-        if c.isDateInToday(d) {
-            return "Prossima: oggi alle \(time(d))"
+
+    // True se non ci sono terapie e le unità disponibili sono sotto 5
+    private var isLowUnitsNoTherapy: Bool {
+        guard therapies.isEmpty, let rem = remainingUnits else { return false }
+        return rem < 5
+    }
+
+    // Messaggio e stile per warning scorte (sotto soglia copertura o poche unità senza terapie)
+    private var stocksWarning: (text: String, color: Color, icon: String)? {
+        // Caso con terapie: sotto soglia di copertura
+        if !therapies.isEmpty {
+            if let days = autonomyDays {
+                if days <= 0 {
+                    return ("Scorte esaurite", .red, "exclamationmark.triangle.fill")
+                } else if days < coverageThreshold {
+                    return ("Copertura bassa: \(days) giorni", .orange, "exclamationmark.triangle.fill")
+                }
+            }
+            return nil
         }
-        if let w = c.date(byAdding: .day, value: 7, to: Date()), d <= w {
+        // Caso senza terapie: poche unità
+        if let rem = remainingUnits {
+            if rem <= 0 {
+                return ("Scorte esaurite", .red, "exclamationmark.triangle.fill")
+            } else if rem < 5 {
+                return ("Scorte basse: \(rem) unità", .orange, "exclamationmark.triangle.fill")
+            }
+        }
+        return nil
+    }
+    // Mostra l’ora in alto a destra solo se resta una dose oggi
+    private var rightPillText: String? {
+        guard let d = nextDate, isDoseToday else { return nil }
+        return time(d)
+    }
+    // Testo grigio sotto il nome, solo se NON è per oggi (o l'ultima dose di oggi è già stata assunta)
+    private var nextDescription: String? {
+        guard let d = nextDate, !isDoseToday else { return nil }
+        let c = Calendar.current
+        if let w = c.date(byAdding: .day, value: lookAheadDays, to: Date()), d <= w {
             let fmt = DateFormatter(); fmt.locale = Locale(identifier: "it_IT"); fmt.setLocalizedDateFormatFromTemplate("EEE HH:mm")
             return "Prossima: \(fmt.string(from: d))"
         }
         let rel = RelativeDateTimeFormatter(); rel.locale = Locale(identifier: "it_IT"); rel.unitsStyle = .full
         let relText = rel.localizedString(for: d, relativeTo: Date())
-        return "Prossimo: \(relText)"
+        return "Prossima: \(relText)"
     }
-    private var stockPercent: Int? {
-        guard let opt = option, let days = autonomyDays else { return nil }
-        let threshold = Int(opt.day_threeshold_stocks_alarm)
-        if threshold <= 0 { return nil }
-        return max(0, min(100, Int((Double(days) / Double(threshold)) * 100)))
+
+    // Calcolo unità rimanenti quando non ci sono terapie
+    private var remainingUnits: Int? {
+        guard therapies.isEmpty else { return nil }
+        guard let pkg = getPackage(for: medicine), let logs = medicine.logs else { return nil }
+        let purchases = logs.filter { $0.type == "purchase" && $0.package == pkg }.count
+        let intakes   = logs.filter { $0.type == "intake" && $0.package == pkg }.count
+        return purchases * Int(pkg.numero) - intakes
     }
-    private var isCriticalStock: Bool {
-        guard let p = stockPercent else { return false }
-        return p <= 25
-    }
-    private var stocksLineText: String? {
-        guard let p = stockPercent else { return nil }
-        var text = "Scorte ~\(p)%"
-        if isCriticalStock { text += " • in esaurimento" }
-        // Se non è per "oggi", aggiungo anche la prossima
-        if !isDoseToday, let d = nextDate {
-            let fmt = DateFormatter(); fmt.locale = Locale(identifier: "it_IT"); fmt.setLocalizedDateFormatFromTemplate("EEE HH:mm")
-            text += " • Prossima: \(fmt.string(from: d))"
+    // Stato scorte: testo neutro se non in warning
+    private var stocksStatusText: String? {
+        if stocksWarning != nil { return nil }
+        if !therapies.isEmpty {
+            if let days = autonomyDays { return "Copertura: \(days) giorni" }
+            return nil
+        } else {
+            if let rem = remainingUnits { return "Unità rimanenti: \(rem)" }
+            return nil
         }
-        return text
     }
 
     private func getPackage(for medicine: Medicine) -> Package? {
@@ -160,7 +280,19 @@ struct MedicineRowView: View {
                 .font(.headline)
                 .fontWeight(.semibold)
             Spacer(minLength: 8)
-            if let pill = rightPillText {
+            if let overdue = earliestOverdueDoseTime {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(.red)
+                    Text(time(overdue))
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.red)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.red.opacity(0.12)))
+                .accessibilityLabel("Assunzione in ritardo alle \(time(overdue))")
+            } else if let pill = rightPillText {
                 Text(pill)
                     .font(.subheadline.monospacedDigit())
                     .padding(.horizontal, 10)
@@ -172,7 +304,7 @@ struct MedicineRowView: View {
 
     private var subtitleRow: some View {
         Group {
-            if !isLowStock, let desc = nextDescription {
+            if let desc = nextDescription {
                 Text(desc)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -182,20 +314,26 @@ struct MedicineRowView: View {
 
     private var warningOrStocksRow: some View {
         Group {
-            if isLowStock, let stocksText = stocksLineText {
+            if let warn = stocksWarning {
                 HStack(spacing: 6) {
-                    if isCriticalStock { Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.red) }
-                    Text(stocksText)
+                    Image(systemName: warn.icon)
+                        .foregroundStyle(warn.color)
+                    Text(warn.text)
+                        .font(.footnote)
+                        .foregroundStyle(warn.color)
                 }
-                .font(.footnote)
-                .foregroundColor(isCriticalStock ? .red : .secondary)
+                .accessibilityLabel("Avviso scorte: \(warn.text)")
+            } else if let text = stocksStatusText {
+                Text(text)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
     }
 
     private var actionsRow: some View {
         Group {
-            if isDoseToday {
+            if hasRemainingDosesToday {
                 HStack(spacing: 8) {
                     Button {
                         let pkg = getPackage(for: medicine)
