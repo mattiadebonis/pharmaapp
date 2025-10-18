@@ -12,11 +12,14 @@ struct MedicineRowView: View {
     
     // MARK: - Costanti
     private let lookAheadDays = 7
-    
     // MARK: - Input
     var medicine: Medicine
     var isSelected: Bool
     var toggleSelection: () -> Void
+    var showCoverageInfo: Bool = false
+    enum InfoMode { case nextDose, frequency }
+    var infoMode: InfoMode = .frequency
+    var showPurchaseShortcut: Bool = false
     
     // MARK: - Computed
     private var option: Option? { options.first }

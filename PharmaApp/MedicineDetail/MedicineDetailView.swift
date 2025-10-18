@@ -23,6 +23,23 @@ struct MedicineDetailView: View {
     @State private var selectedTherapy: Therapy? = nil
     private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
     
+    // UI: espansioni per una schermata iniziale pulita
+    @State private var expandTherapies = false
+    @State private var expandParamName = false
+    @State private var expandParamPrincipio = false
+    @State private var expandParamObbligo = false
+    @State private var expandParamPackage = false
+    
+    // Campi di editing
+    @State private var editedName: String = ""
+    @State private var editedPrincipio: String = ""
+    @State private var editedObbligo: Bool = false
+    @State private var editedNumero: String = ""
+    @State private var editedTipologia: String = ""
+    @State private var editedValore: String = ""
+    @State private var editedUnita: String = ""
+    @State private var editedVolume: String = ""
+    
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
@@ -51,10 +68,16 @@ struct MedicineDetailView: View {
     }
     
     private var totalLeftover: Int {
-        guard let therapies = medicine.therapies else { return 0 }
-        return Int(therapies.reduce(0) { total, therapy in
-            total + therapy.leftover()
-        })
+        if let therapies = medicine.therapies, !therapies.isEmpty {
+            return therapies.reduce(0) { total, therapy in
+                total + Int(therapy.leftover())
+            }
+        }
+        return medicine.remainingUnitsWithoutTherapy() ?? 0
+    }
+    
+    private var leftoverColor: Color {
+        totalLeftover <= 0 ? .red : .green
     }
     
     // Aggiungi la funzione helper per formattare la data
@@ -91,72 +114,93 @@ struct MedicineDetailView: View {
             sortDescriptors: [NSSortDescriptor(keyPath: \Therapy.start_date, ascending: true)],
             predicate: NSPredicate(format: "medicine == %@", medicine)
         )
+        _editedName = State(initialValue: medicine.nome)
+        _editedPrincipio = State(initialValue: medicine.principio_attivo)
+        _editedObbligo = State(initialValue: medicine.obbligo_ricetta)
+        _editedNumero = State(initialValue: String(package.numero))
+        _editedTipologia = State(initialValue: package.tipologia)
+        _editedValore = State(initialValue: String(package.valore))
+        _editedUnita = State(initialValue: package.unita)
+        _editedVolume = State(initialValue: package.volume)
     }
     
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Dettagli")) {
-                    HStack { Text("Nome"); Spacer(); Text(medicine.nome) }
-                    HStack { Text("Unità per confezione"); Spacer(); Text("\(package.numero)") }
-                    HStack { Text("Scorte rimanenti"); Spacer(); Text("\(totalLeftover)").foregroundColor(.green) }
+                // Schermata iniziale pulita: riepilogo minimo
+                Section {
+                    HStack { Text("Nome"); Spacer(); Text(medicine.nome).foregroundStyle(.primary) }
+                    HStack { Text("Scorte rimanenti"); Spacer(); Text("\(totalLeftover)").foregroundColor(leftoverColor) }
                 }
-                Section(header: Text("Terapie")) {
-                    if !therapies.isEmpty {
-                        ForEach(therapies, id: \.objectID) { therapy in
-                            Button { 
-                                selectedTherapy = therapy; 
-                                showTherapySheet = true 
-                            } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack {
-                                        let rule = recurrenceManager.parseRecurrenceString(
-                                        therapy.rrule ?? "")
-                                        Text("\(recurrenceManager.describeRecurrence(rule: rule))")
-                                            
-                                        Text(formattedAssumptionDate(
-                                            recurrenceManager.nextOccurrence(
+
+                // Sezioni espandibili per terapie e parametri
+                Section {
+                    DisclosureGroup(isExpanded: $expandTherapies) {
+                        if !therapies.isEmpty {
+                            ForEach(therapies, id: \.objectID) { therapy in
+                                Button {
+                                    selectedTherapy = therapy
+                                    showTherapySheet = true
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            let rruleString = therapy.rrule ?? ""
+                                            let rule = recurrenceManager.parseRecurrenceString(rruleString)
+                                            let hasDoses = (therapy.doses as? Set<Dose>)?.isEmpty == false
+                                            if hasDoses && !rruleString.isEmpty {
+                                                Text("\(recurrenceManager.describeRecurrence(rule: rule))")
+                                            } else {
+                                                Text("Nessuna pianificazione").foregroundColor(.secondary)
+                                            }
+                                            if hasDoses, let next = recurrenceManager.nextOccurrence(
                                                 rule: recurrenceManager.parseRecurrenceString(therapy.rrule ?? ""),
                                                 startDate: therapy.start_date ?? Date(),
                                                 after: Date(),
                                                 doses: therapy.doses as NSSet?
-                                            ) ?? (therapy.start_date ?? Date())
-                                        ))
-                                        Spacer()
-                                        let person = therapy.person
-                                        if let name = person.nome {
-                                            Text("\(name) \(person.cognome ?? "")")
-                                                .foregroundColor(.secondary)
+                                            ) { Text(formattedAssumptionDate(next)) }
+                                            Spacer()
+                                            let person = therapy.person
+                                            if let name = person.nome { Text("\(name) \(person.cognome ?? "")").foregroundColor(.secondary) }
                                         }
                                     }
-                                    
-                                    
                                 }
+                                .accessibilityLabel("Visualizza dettagli terapia")
                             }
-                            .accessibilityLabel("Visualizza dettagli terapia")
                         }
-                    }
-                    Button { 
-                        selectedTherapy = nil; 
-                        showTherapySheet = true 
-                    } label: {
-                        Label("Programma una nuova terapia", systemImage: "plus.circle")
-                    }
-                    .accessibilityLabel("Programma nuova terapia")
+                        Button { selectedTherapy = nil; showTherapySheet = true } label: { Label("Programma una nuova terapia", systemImage: "plus.circle") }
+                    } label: { Label("Terapie", systemImage: "calendar") }
+
+                    DisclosureGroup(isExpanded: $expandParamName) {
+                        TextField("Nome", text: $editedName)
+                        HStack { Spacer(); Button("Salva") { saveName() } }
+                    } label: { Label("Nome medicinale", systemImage: "textformat") }
+
+                    DisclosureGroup(isExpanded: $expandParamPrincipio) {
+                        TextField("Principio attivo", text: $editedPrincipio)
+                        HStack { Spacer(); Button("Salva") { savePrincipio() } }
+                    } label: { Label("Principio attivo", systemImage: "leaf") }
+
+                    DisclosureGroup(isExpanded: $expandParamObbligo) {
+                        Toggle("Obbligo di ricetta", isOn: $editedObbligo)
+                        HStack { Spacer(); Button("Salva") { saveObbligo() } }
+                    } label: { Label("Obbligo ricetta", systemImage: "doc.text") }
+
+                    DisclosureGroup(isExpanded: $expandParamPackage) {
+                        TextField("Unità per confezione", text: $editedNumero).keyboardType(.numberPad)
+                        TextField("Tipologia", text: $editedTipologia)
+                        TextField("Valore", text: $editedValore).keyboardType(.numberPad)
+                        TextField("Unità", text: $editedUnita)
+                        TextField("Volume", text: $editedVolume)
+                        HStack { Spacer(); Button("Salva") { savePackage() } }
+                    } label: { Label("Confezione", systemImage: "cube.box") }
                 }
-                Section(header: Text("Azioni")) {
+
+                // Azioni snelle
+                Section {
                     if medicine.obbligo_ricetta {
-                        Button { showPrescriptionSheet.toggle() } label: {
-                            Label("Richiedi ricetta", systemImage: "doc.text")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityLabel("Richiedi ricetta")
+                        Button { showPrescriptionSheet.toggle() } label: { Label("Richiedi ricetta", systemImage: "doc.text") }
                     }
-                    Button { viewModel.saveForniture(medicine: medicine, package: package) } label: {
-                        Label("Acquistato", systemImage: "cart")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityLabel("Segna come acquistato")
+                    Button { viewModel.saveForniture(medicine: medicine, package: package) } label: { Label("Acquistato", systemImage: "cart") }
                 }
             }
             .navigationTitle(medicine.nome ?? "Dettaglio")
@@ -249,5 +293,29 @@ struct MedicineDetailView: View {
         }
         
         return dateFormatter.string(from: nearestDate)
+    }
+}
+
+// MARK: - Salvataggi parametri
+private extension MedicineDetailView {
+    func saveName() {
+        medicine.nome = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        try? context.save()
+    }
+    func savePrincipio() {
+        medicine.principio_attivo = editedPrincipio
+        try? context.save()
+    }
+    func saveObbligo() {
+        medicine.obbligo_ricetta = editedObbligo
+        try? context.save()
+    }
+    func savePackage() {
+        if let n = Int32(editedNumero) { package.numero = n }
+        if let v = Int32(editedValore) { package.valore = v }
+        package.tipologia = editedTipologia
+        package.unita = editedUnita
+        package.volume = editedVolume
+        try? context.save()
     }
 }

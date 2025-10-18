@@ -17,13 +17,14 @@ class MedicineRowViewModel: ObservableObject {
     }
     
     /// Funzione generica per salvare un log per una determinata medicina e tipo
-    func addLog(for medicine: Medicine, type: String, package: Package? = nil) {
+    func addLog(for medicine: Medicine, type: String, package: Package? = nil, therapy: Therapy? = nil) {
         let newLog = Log(context: managedObjectContext)
         newLog.id = UUID()
         newLog.type = type
         newLog.timestamp = Date()
         newLog.medicine = medicine
         if let pkg = package { newLog.package = pkg }
+        if let t = therapy { newLog.therapy = t }
         
         do {
             try managedObjectContext.save()
@@ -45,8 +46,8 @@ class MedicineRowViewModel: ObservableObject {
         addLog(for: medicine, type: "purchase", package: package)
     }
     
-    func addIntake(for medicine: Medicine, package: Package? = nil) {
-        addLog(for: medicine, type: "intake", package: package)
+    func addIntake(for medicine: Medicine, package: Package? = nil, therapy: Therapy? = nil) {
+        addLog(for: medicine, type: "intake", package: package, therapy: therapy)
     }
 
     func prescriptionStatus(medicine : Medicine, currentOption : Option) -> String? {
