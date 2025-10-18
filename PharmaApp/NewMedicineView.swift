@@ -1,6 +1,8 @@
 import SwiftUI
 import CoreData
 import Vision
+import Speech
+import AVFoundation
 import UIKit
 
 struct NewMedicineView: View {
@@ -24,50 +26,105 @@ struct NewMedicineView: View {
     @State private var isShowingCamera = false
     @State private var capturedImage: UIImage?
 
+    // Voice input (placeholder for future implementation)
+    @StateObject private var speech = SpeechRecognizer()
+    @State private var showVoiceAlert = false
+    @State private var micPermissionDenied = false
+    @State private var isPulsing = false
+
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Nuovo medicinale")) {
-                    HStack(spacing: 8) {
-                        TextField("Nome", text: $nome)
-                        Button {
-                            isShowingCamera = true
-                        } label: {
-                            Image(systemName: "camera.fill")
-                                .foregroundColor(.accentColor)
-                        }
-                        .accessibilityLabel("Scatta foto per riconoscere il nome")
-                    }
-                    Toggle("Obbligo ricetta", isOn: $obbligoRicetta)
-                }
+                // Campo nome senza icone aggiuntive
+                TextField("Nome", text: $nome)
 
+                // Campo confezione
                 Section(header: Text("Confezione")) {
                     TextField("Unità per confezione", text: $numeroStr)
                         .keyboardType(.numberPad)
-                }
-            }
-            .navigationTitle("Nuovo medicinale")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Annulla") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Crea") { createMedicine() }
-                        .disabled(!canCreate)
                 }
             }
             .onAppear {
                 if nome.isEmpty { nome = appViewModel.query }
             }
         }
+        // Nasconde la navigation bar e il suo titolo
+        .toolbar(.hidden, for: .navigationBar)
+        // Pulsanti flottanti in basso a destra (microfono/+, e scan)
+        .overlay(alignment: .bottomTrailing) {
+            HStack(spacing: 12) {
+                // Pulsante Scan (fotocamera)
+                Button {
+                    isShowingCamera = true
+                } label: {
+                    Image(systemName: "viewfinder")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(14)
+                        .background(Circle().fill(Color.accentColor))
+                }
+                .accessibilityLabel("Scansiona con fotocamera")
+
+                // Se sta registrando: mostra indicatore recording animato al posto del bottone
+                if speech.isRecording {
+                    ZStack {
+                        Circle()
+                            .stroke(Color.red.opacity(0.6), lineWidth: 6)
+                            .frame(width: 56, height: 56)
+                            .scaleEffect(isPulsing ? 1.2 : 0.9)
+                            .opacity(isPulsing ? 0.2 : 0.6)
+                            .animation(.easeOut(duration: 0.9).repeatForever(autoreverses: true), value: isPulsing)
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 56, height: 56)
+                            .background(Circle().fill(Color.red))
+                    }
+                    .onAppear { isPulsing = true }
+                    .onDisappear { isPulsing = false }
+                    .accessibilityLabel("Registrazione in corso")
+                } else {
+                    // Pulsante principale: microfono (se nome vuoto) o + (se nome presente)
+                    Button {
+                        if nome.trimmingCharacters(in: .whitespaces).isEmpty {
+                            startVoiceInput()
+                        } else {
+                            createMedicine()
+                        }
+                    } label: {
+                        Image(systemName: nome.trimmingCharacters(in: .whitespaces).isEmpty ? "mic.fill" : "plus")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(16)
+                            .background(Circle().fill(Color.accentColor))
+                    }
+                    .disabled(isPrimaryActionDisabled)
+                    .opacity(isPrimaryActionDisabled ? 0.45 : 1.0)
+                    .accessibilityLabel(nome.trimmingCharacters(in: .whitespaces).isEmpty ? "Detta nome medicinale" : "Crea medicinale")
+                }
+            }
+            .padding(.trailing, 20)
+            .padding(.bottom, 24)
+        }
         .presentationDetents([.medium, .large])
-        // Camera sheet
         .sheet(isPresented: $isShowingCamera, onDismiss: processCapturedImage) {
             ImagePickerView(sourceType: .camera) { image in
                 capturedImage = image
             }
         }
-        .sheet(isPresented: $showDetail) {
+        .onDisappear { speech.stop() }
+        // Alert solo per mancanza permessi
+        .alert("Dettatura nome medicinale", isPresented: $showVoiceAlert) {
+            Button("Apri Impostazioni") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button("Chiudi", role: .cancel) { }
+        } message: {
+            Text("Per usare la dettatura, consenti l'accesso al microfono e al riconoscimento vocale in Impostazioni.")
+        }
+        .sheet(isPresented: $showDetail, onDismiss: { dismiss() }) {
             if let m = createdMedicine, let p = createdPackage {
                 MedicineDetailView(medicine: m, package: p)
                     .presentationDetents([.medium, .large])
@@ -79,6 +136,11 @@ struct NewMedicineView: View {
         guard !nome.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
         guard let numero = Int32(numeroStr), numero > 0 else { return false }
         return true
+    }
+
+    private var isPrimaryActionDisabled: Bool {
+        let isNameEmpty = nome.trimmingCharacters(in: .whitespaces).isEmpty
+        return isNameEmpty ? false : !canCreate
     }
 
     private func createMedicine() {
@@ -104,7 +166,10 @@ struct NewMedicineView: View {
             try context.save()
             createdMedicine = medicine
             createdPackage = package
-            showDetail = true
+            
+            DispatchQueue.main.async {
+                showDetail = true
+            }
         } catch {
             print("Errore salvataggio medicinale: \(error)")
         }
@@ -126,5 +191,28 @@ struct NewMedicineView: View {
         }
         request.recognitionLevel = .accurate
         try? handler.perform([request])
+    }
+
+    private func startVoiceInput() {
+        // Richiedi autorizzazioni e avvia la dettatura; autopopola dopo 2s di silenzio
+        speech.onSilenceDetected = { text in
+            let spoken = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !spoken.isEmpty {
+                // Sostituisci il campo Nome con l'ultima trascrizione stabile
+                self.nome = spoken
+            }
+            // Default per abilitare il + se non specificato
+            if self.numeroStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                self.numeroStr = "1"
+            }
+        }
+        speech.requestAuthorization { granted in
+            micPermissionDenied = !granted
+            if granted {
+                speech.start()
+            } else {
+                showVoiceAlert = true
+            }
+        }
     }
 }

@@ -395,6 +395,10 @@
 				DEVELOPMENT_TEAM = P8V8X3MUBK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Necessario per scansionare etichette di medicinali";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Usiamo la tua posizione per suggerirti la farmacia più vicina quando le scorte sono basse.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Necessario per dettare il nome del medicinale";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Necessario per trascrivere la dettatura del nome del medicinale";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -433,6 +437,10 @@
 				DEVELOPMENT_TEAM = P8V8X3MUBK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Necessario per scansionare etichette di medicinali";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Usiamo la tua posizione per suggerirti la farmacia più vicina quando le scorte sono basse.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Necessario per dettare il nome del medicinale";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Necessario per trascrivere la dettatura del nome del medicinale";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
