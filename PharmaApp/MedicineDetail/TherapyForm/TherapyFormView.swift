@@ -153,13 +153,20 @@ struct TherapyFormView: View {
             }
             .navigationTitle("\(medicine.nome) • \(package.numero) unità/conf.")
             .onAppear {
-                // Se si modifica una terapia esistente, popola i dati da editingTherapy
+                // Edit: popola dai dati della therapy
                 if let therapy = editingTherapy {
                     populateFromTherapy(therapy)
                     selectedPerson = therapy.person
                 } else {
+                    // Edge case: se esiste una sola therapy per questa medicina, assumiamo modalità "edit" implicita
                     if selectedPerson == nil {
-                        selectedPerson = persons.first
+                        let set = medicine.therapies as? Set<Therapy> ?? []
+                        if set.count == 1, let only = set.first {
+                            populateFromTherapy(only)
+                            selectedPerson = only.person
+                        } else {
+                            selectedPerson = persons.first
+                        }
                     }
                 }
             }
@@ -197,20 +204,9 @@ struct TherapyFormView: View {
     }
 
     private var canSave: Bool {
-        guard let selected = selectedPerson, let selectedID = selected.id else { return false }
-        // Allow saving in edit mode (editing the same therapy)
-        if editingTherapy != nil { return true }
-        // For a new therapy, disallow if a therapy already exists for the selected person (by comparing IDs)
-        if let therapiesSet = medicine.therapies as? Set<Therapy> {
-            if therapiesSet.contains(where: { therapy in
-                if let personID = therapy.person.id {
-                    return personID == selectedID
-                }
-                return false
-            }) {
-                return false
-            }
-        }
+        // Persona obbligatoria
+        guard let _ = selectedPerson else { return false }
+        // In edit sempre abilitato; in creazione abilitiamo comunque perché la logica di save evita duplicati aggiornando.
         return true
     }
     
@@ -248,83 +244,115 @@ struct TherapyFormView: View {
 extension TherapyFormView {
     
     private func saveTherapy() {
-        // Determine person to associate: selected, first available, or new blank
-        let person: Person = {
-            if let sel = selectedPerson {
-                return sel
-            } else if let first = persons.first {
-                return first
-            } else {
-                let newPerson = Person(context: context)
-                newPerson.id = UUID()
-                newPerson.nome = ""
-                newPerson.cognome = ""
-                return newPerson
-            }
+        // Persona associata: in modifica usa quella della therapy; altrimenti usa selezione/first/crea
+        let effectivePerson: Person = {
+            if let t = editingTherapy { return t.person }
+            if let sel = selectedPerson { return sel }
+            if let first = persons.first { return first }
+            let newPerson = Person(context: context)
+            newPerson.id = UUID()
+            newPerson.nome = ""
+            newPerson.cognome = ""
+            return newPerson
         }()
-         if let therapyToUpdate = editingTherapy {
-             // Aggiorna la terapia esistente
-             if selectedFrequencyType == .daily {
-                 therapyFormViewModel.updateTherapy(
-                     therapy: therapyToUpdate,
-                     freq: "DAILY",
-                     interval: interval,
-                     until: useUntil ? untilDate : nil,
-                     count: useCount ? countNumber : nil,
-                     byDay: [],
-                     startDate: startDate,
-                     times: times,
-                     package: package,
-                     importance: selectedImportance,
-                     person: person
-                 )
-             } else {
-                 therapyFormViewModel.updateTherapy(
-                     therapy: therapyToUpdate,
-                     freq: "WEEKLY",
-                     interval: interval,
-                     until: useUntil ? untilDate : nil,
-                     count: useCount ? countNumber : nil,
-                     byDay: byDay,
-                     startDate: startDate,
-                     times: times,
-                     package: package,
-                     importance: selectedImportance,
-                     person: person
-                 )
-             }
-         } else {
-             // Crea una nuova terapia
-             if selectedFrequencyType == .daily {
-                 therapyFormViewModel.saveTherapy(
-                     medicine: medicine,
-                     freq: "DAILY",
-                     interval: interval,
-                     until: useUntil ? untilDate : nil,
-                     count: useCount ? countNumber : nil,
-                     byDay: [],
-                     startDate: startDate,
-                     times: times,
-                     package: package,
-                     importance: selectedImportance,
-                     person: person
-                 )
-             } else {
-                 therapyFormViewModel.saveTherapy(
-                     medicine: medicine,
-                     freq: "WEEKLY",
-                     interval: interval,              
-                     until: useUntil ? untilDate : nil,
-                     count: useCount ? countNumber : nil,
-                     byDay: byDay,
-                     startDate: startDate,
-                     times: times,
-                     package: package,
-                     importance: selectedImportance,
-                     person: person
-                 )
-             }
-         }
+
+        // Se stiamo modificando, aggiorna sempre quella therapy
+        if let therapyToUpdate = editingTherapy {
+            if selectedFrequencyType == .daily {
+                therapyFormViewModel.updateTherapy(
+                    therapy: therapyToUpdate,
+                    freq: "DAILY",
+                    interval: interval,
+                    until: useUntil ? untilDate : nil,
+                    count: useCount ? countNumber : nil,
+                    byDay: [],
+                    startDate: startDate,
+                    times: times,
+                    package: package,
+                    importance: selectedImportance,
+                    person: effectivePerson
+                )
+            } else {
+                therapyFormViewModel.updateTherapy(
+                    therapy: therapyToUpdate,
+                    freq: "WEEKLY",
+                    interval: interval,
+                    until: useUntil ? untilDate : nil,
+                    count: useCount ? countNumber : nil,
+                    byDay: byDay,
+                    startDate: startDate,
+                    times: times,
+                    package: package,
+                    importance: selectedImportance,
+                    person: effectivePerson
+                )
+            }
+        } else {
+            // In creazione: se esiste già una therapy per la stessa persona e medicina, aggiornala (niente duplicati)
+            let existingForPerson = (medicine.therapies as? Set<Therapy>)?.first(where: { $0.person == effectivePerson })
+            if let therapyToUpdate = existingForPerson {
+                if selectedFrequencyType == .daily {
+                    therapyFormViewModel.updateTherapy(
+                        therapy: therapyToUpdate,
+                        freq: "DAILY",
+                        interval: interval,
+                        until: useUntil ? untilDate : nil,
+                        count: useCount ? countNumber : nil,
+                        byDay: [],
+                        startDate: startDate,
+                        times: times,
+                        package: package,
+                        importance: selectedImportance,
+                        person: effectivePerson
+                    )
+                } else {
+                    therapyFormViewModel.updateTherapy(
+                        therapy: therapyToUpdate,
+                        freq: "WEEKLY",
+                        interval: interval,
+                        until: useUntil ? untilDate : nil,
+                        count: useCount ? countNumber : nil,
+                        byDay: byDay,
+                        startDate: startDate,
+                        times: times,
+                        package: package,
+                        importance: selectedImportance,
+                        person: effectivePerson
+                    )
+                }
+            } else {
+                // Crea una nuova therapy
+                if selectedFrequencyType == .daily {
+                    therapyFormViewModel.saveTherapy(
+                        medicine: medicine,
+                        freq: "DAILY",
+                        interval: interval,
+                        until: useUntil ? untilDate : nil,
+                        count: useCount ? countNumber : nil,
+                        byDay: [],
+                        startDate: startDate,
+                        times: times,
+                        package: package,
+                        importance: selectedImportance,
+                        person: effectivePerson
+                    )
+                } else {
+                    therapyFormViewModel.saveTherapy(
+                        medicine: medicine,
+                        freq: "WEEKLY",
+                        interval: interval,
+                        until: useUntil ? untilDate : nil,
+                        count: useCount ? countNumber : nil,
+                        byDay: byDay,
+                        startDate: startDate,
+                        times: times,
+                        package: package,
+                        importance: selectedImportance,
+                        person: effectivePerson
+                    )
+                }
+            }
+        }
         
         appViewModel.isSearchIndexPresented = false
         dismiss()

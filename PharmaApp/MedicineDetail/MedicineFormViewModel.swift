@@ -23,16 +23,7 @@ class MedicineFormViewModel: ObservableObject {
             log.medicine = medicine
             log.package = package
             log.type = "purchase"
-            
-            // Se la medicine non ha terapie, puoi crearne una (opzionale)
-            if medicine.therapies?.isEmpty ?? true {
-                let therapy = Therapy(context: context)
-                therapy.id = UUID()
-                therapy.medicine = medicine
-                therapy.rrule = nil
-                therapy.start_date = nil
-                therapy.package = package
-            }
+            // Non creare automaticamente una Therapy: l'acquisto scorte non implica una pianificazione
             
             try context.save()
             successMessage = "Salvataggio scorte riuscito!"
