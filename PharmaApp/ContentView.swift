@@ -19,8 +19,8 @@ struct ContentView: View {
     @EnvironmentObject private var appVM: AppViewModel
     @StateObject private var feedVM = FeedViewModel()
 
-    @State private var isSettingsPresented = false
     @State private var isNewMedicinePresented = false
+    @State private var selectedTab: Int = 0 // 0 = Medicine, 1 = Impostazioni
 
     // Init fake data once
     init() {
@@ -31,67 +31,57 @@ struct ContentView: View {
 
     // MARK: – UI
     var body: some View {
-        NavigationStack {
-            ZStack(alignment: .bottom) {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(spacing: 12) {
-                            smartBanner
-                            // OPTIONAL segmented picker → comment if not used
-//                            filterSegment
-                            contentList
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
-                    }
-                }
-                // Restore bulk action bar from original implementation
-                if feedVM.isSelecting { floatingActionBar() }
-                
-                // Floating Add button (visible when not selecting)
-                if !feedVM.isSelecting {
-                    VStack { 
-                        Spacer()
-                        HStack {
-                            Spacer()
-                            Button(action: { isNewMedicinePresented = true }) {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 22, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .frame(width: 56, height: 56)
-                                    .background(Circle().fill(Color.accentColor))
-                                    .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
+        TabView(selection: $selectedTab) {
+            NavigationStack {
+                ZStack(alignment: .bottom) {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(spacing: 12) {
+                                smartBanner
+                                contentList
                             }
-                            .accessibilityLabel("Aggiungi medicinale")
-                            .padding(.trailing, 20)
-                            .padding(.bottom, 20)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 8)
+                        }
+                    }
+                    if feedVM.isSelecting { floatingActionBar() }
+                    if !feedVM.isSelecting {
+                        VStack { 
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                Button(action: { isNewMedicinePresented = true }) {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 22, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .frame(width: 56, height: 56)
+                                        .background(Circle().fill(Color.accentColor))
+                                        .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
+                                }
+                                .accessibilityLabel("Aggiungi medicinale")
+                                .padding(.trailing, 20)
+                                .padding(.bottom, 20)
+                            }
                         }
                     }
                 }
+                // Nessuna lente nella toolbar: la ricerca è una tab dedicata
             }
-            // Titolo rimosso come richiesto
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: addMedicine) {
-                        Image(systemName: "gearshape")
-                            .frame(width: 44, height: 44)
-                            .background(Circle().fill(Color.accentColor.opacity(0.1)))
-                    }
-                    .accessibilityLabel("Impostazioni")
-                }
+            .tabItem {
+                Image(systemName: "pills")
+                Text("Medicine")
             }
-            .background(
-                    Rectangle()
-                        .fill(.ultraThinMaterial)
-                        .overlay(
-                            LinearGradient(colors: [Color.white.opacity(0.25), Color.blue.opacity(0.060)],
-                                        startPoint: .bottomLeading,
-                                        endPoint: .topTrailing)
-                        )
-                        .ignoresSafeArea()
-                )
+            .tag(0)
+
+            NavigationStack {
+                OptionsView()
+            }
+            .tabItem {
+                Image(systemName: "gearshape")
+                Text("Impostazioni")
+            }
+            .tag(1)
         }
-        .sheet(isPresented: $isSettingsPresented) { OptionsView() }
         .sheet(isPresented: $isNewMedicinePresented) { NewMedicineView() }
         // ↓ evita che la floating bar venga coperta dalla tastiera
         .ignoresSafeArea(.keyboard, edges: .bottom)
@@ -160,14 +150,11 @@ struct ContentView: View {
 
     /// Lista card o indice ricerca
     private var contentList: some View {
-        Group {
-            if appVM.query.isEmpty {
-                FeedView(viewModel: feedVM)
-            } else {
-                SearchIndex()
-            }
-        }
+        // La tab Medicine mostra sempre il feed; la ricerca è in una tab separata
+        FeedView(viewModel: feedVM)
     }
+
+    // ...existing code...
 
     // MARK: Floating bar (selezione multipla)
 //    private var floatingActionBar: some View {
@@ -196,9 +183,7 @@ struct ContentView: View {
 //    }
 
     // MARK: – Helpers
-    private func addMedicine() {
-        isSettingsPresented = true
-    }
+    // addMedicine sheet removed; settings now in tab
 
     // Funzionalità fotocamera spostata nel form di creazione
 }

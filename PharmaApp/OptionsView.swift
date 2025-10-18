@@ -14,37 +14,44 @@ struct OptionsView: View {
     @FetchRequest(fetchRequest: Doctor.extractDoctors()) private var doctors: FetchedResults<Doctor>
     @FetchRequest(fetchRequest: Person.extractPersons()) private var persons: FetchedResults<Person>
     
-    @Environment(\.dismiss) var dismiss
-    
     var body: some View {
-        NavigationView {
-            Form {
+        Form {
                 // SECTION 1: Impostazioni generali
                 Section(header: Text("Opzioni")) {
                     // Assumiamo che esista sempre almeno un Option
                     let option = options.first!
-                    
-                    Button(action: {
-                        option.manual_intake_registration.toggle()
-                        saveContext()
-                    }) {
-                        Text(option.manual_intake_registration ? "Registrazione manuale assunzioni" : "Registrazione automatica assunzioni")
-                    }
-                    
-                    Picker("Soglia giorni allarme scorte", selection: Binding(
-                        get: { Int(option.day_threeshold_stocks_alarm) },
+                    // Interruttore più chiaro in una vista non-modale
+                    Toggle(isOn: Binding(
+                        get: { option.manual_intake_registration },
                         set: { newValue in
-                            option.day_threeshold_stocks_alarm = Int32(newValue)
+                            option.manual_intake_registration = newValue
                             saveContext()
                         }
                     )) {
-                        ForEach(1..<31) { day in
-                            Text("\(day) giorni").tag(day)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Registrazione manuale assunzioni")
+                            Text("Se disattivo, le assunzioni vengono registrate automaticamente.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .pickerStyle(WheelPickerStyle())
-                    
-                    Text("Soglia attuale: \(option.day_threeshold_stocks_alarm) giorni")
+
+                    // Sostituisce il WheelPicker con uno stepper più ‘settings‑like’
+                    Stepper(value: Binding(
+                        get: { Int(option.day_threeshold_stocks_alarm) },
+                        set: { newValue in
+                            let clamped = min(max(newValue, 1), 30)
+                            option.day_threeshold_stocks_alarm = Int32(clamped)
+                            saveContext()
+                        }
+                    ), in: 1...30) {
+                        HStack {
+                            Text("Soglia allarme scorte")
+                            Spacer()
+                            Text("\(option.day_threeshold_stocks_alarm) giorni")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
                 
                 // SECTION 2: Gestione Dottori
@@ -84,16 +91,8 @@ struct OptionsView: View {
                         }
                     }
                 }
-            }
-            .navigationTitle("Impostazioni")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Chiudi") {
-                        dismiss()
-                    }
-                }
-            }
         }
+        .navigationTitle("Impostazioni")
     }
     
     private func saveContext() {
