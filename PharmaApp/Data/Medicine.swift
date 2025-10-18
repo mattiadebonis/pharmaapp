@@ -85,6 +85,30 @@ extension Medicine {
         return coverageDays < Double(option.day_threeshold_stocks_alarm)
     }
 
+    /// Calcola il numero totale di unità disponibili quando la medicina non è legata a terapie.
+    /// Somma tutte le confezioni acquistate (moltiplicando per `numero`) e sottrae le assunzioni.
+    /// Restituisce `0` se non ci sono log associati.
+    func remainingUnitsWithoutTherapy() -> Int? {
+        let logs = self.logs ?? []
+        if logs.isEmpty {
+            return 0
+        }
+        var total = 0
+        for log in logs {
+            switch log.type {
+            case "purchase":
+                if let pkg = log.package {
+                    total += Int(pkg.numero)
+                }
+            case "intake":
+                total -= 1
+            default:
+                continue
+            }
+        }
+        return total
+    }
+
     /// Restituisce `true` se esiste almeno un log di tipo "new_prescription"
     /// non seguito (cioè avvenuto dopo) da un log di tipo "purchase".
     func hasPendingNewPrescription() -> Bool {
