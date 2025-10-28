@@ -57,7 +57,7 @@ struct NewMedicineView: View {
                 Button {
                     isShowingCamera = true
                 } label: {
-                    Image(systemName: "viewfinder")
+                    Image(systemName: "vial.viewfinder")
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundColor(.white)
                         .padding(14)

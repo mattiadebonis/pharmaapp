@@ -29,43 +29,62 @@ struct FeedView: View {
         VStack(alignment: .leading, spacing: 16) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    if hasLowStock() {
-                        NearestPharmacyCard(viewModel: locationVM)
-                            .padding(.horizontal, 16)
-                    }
-                    if !sections.oggi.isEmpty {
-                        Text("Oggi (\(sections.oggi.count))")
-                            .font(.title2.bold())
-                            .padding(.horizontal, 16)
-                        
+                    // Sezione "Da acquistare": più discreta nel copy e nello stile
+                    Text("Da acquistare (\(sections.purchase.count))")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
+                    if sections.purchase.isEmpty {
+                        HStack(alignment: .center, spacing: 10) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .foregroundStyle(.green)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Tutto a posto: nessun acquisto necessario")
+                                    .font(.headline)
+                                    .foregroundStyle(.green)
+                                Text("Le scorte dei tuoi medicinali sono al sicuro.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color(.secondarySystemBackground))
+                        )
+                        .padding(.horizontal, 16)
+                    } else {
                         VStack(spacing: 0) {
-                            ForEach(sections.oggi) { medicine in
-                                row(for: medicine, showCoverageInfo: true, infoMode: MedicineRowView.InfoMode.nextDose)
+                            ForEach(sections.purchase) { medicine in
+                                let showToday = hasTherapyToday(medicine)
+                                row(for: medicine, showCoverageInfo: true, infoMode: showToday ? .nextDose : .frequency, showPurchaseShortcut: true, section: .purchase)
                             }
                         }
                     }
                 }
-                
-                if !sections.watch.isEmpty {
-                    Text("Da tenere d’occhio (\(sections.watch.count))")
-                        .font(.title2.bold())
-                        .padding(.horizontal, 16)
-                    
-                    VStack(spacing: 0) {
-                        ForEach(sections.watch) { medicine in
-                            row(for: medicine, showCoverageInfo: true, infoMode: MedicineRowView.InfoMode.frequency, showPurchaseShortcut: true)
-                        }
+
+                if !(sections.oggi.isEmpty && sections.ok.isEmpty) {
+                    let totalOk = sections.oggi.count + sections.ok.count
+                    HStack {
+
+                        Text("In ordine (\(totalOk))")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 16)
+                        Spacer()
                     }
-                }
-                
-                if !sections.ok.isEmpty {
-                    Text("Tutto ok (\(sections.ok.count))")
-                        .font(.title2.bold())
-                        .padding(.horizontal, 16)
-                    
                     VStack(spacing: 0) {
+                        // Prima quelli con terapia oggi (mostrano orario)
+                        ForEach(sections.oggi) { medicine in
+                            row(for: medicine, showCoverageInfo: false, infoMode: MedicineRowView.InfoMode.nextDose, section: .tuttoOk)
+                        }
+                        // Poi i restanti
                         ForEach(sections.ok) { medicine in
-                            row(for: medicine, showCoverageInfo: false, infoMode: MedicineRowView.InfoMode.frequency)
+                            row(for: medicine, showCoverageInfo: false, infoMode: MedicineRowView.InfoMode.frequency, section: .tuttoOk)
                         }
                     }
                 }
@@ -106,16 +125,20 @@ struct FeedView: View {
                 viewModel.clearSelection()
             }
         }
+        .onAppear {
+            // Avvia ricerca farmacia per mostrare nome e distanza
+            locationVM.ensureStarted()
+        }
     }
     
     // MARK: - Row builder (gestures + card)
-    private func row(for medicine: Medicine, showCoverageInfo: Bool, infoMode: MedicineRowView.InfoMode, showPurchaseShortcut: Bool = false) -> some View {
+    private func row(for medicine: Medicine, showCoverageInfo: Bool, infoMode: MedicineRowView.InfoMode, showPurchaseShortcut: Bool = false, section: MedicineRowView.RowSection = .tuttoOk) -> some View {
         MedicineRowView(
             medicine: medicine,
             isSelected: viewModel.isSelecting && viewModel.selectedMedicines.contains(medicine),
             toggleSelection: { viewModel.toggleSelection(for: medicine) },
             showCoverageInfo: showCoverageInfo,
-            infoMode: infoMode, showPurchaseShortcut: showPurchaseShortcut
+            infoMode: infoMode, showPurchaseShortcut: showPurchaseShortcut, section: section
         )
         .padding(8)
         .background(viewModel.isSelecting && viewModel.selectedMedicines.contains(medicine) ? Color.gray.opacity(0.3) : Color.clear)
@@ -140,7 +163,7 @@ struct FeedView: View {
     }
     
     // MARK: - New sorting algorithm (sections)
-    private func computeSections() -> (oggi: [Medicine], watch: [Medicine], ok: [Medicine]) {
+    private func computeSections() -> (purchase: [Medicine], oggi: [Medicine], ok: [Medicine]) {
         let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
         let now = Date()
         let cal = Calendar.current
@@ -291,23 +314,18 @@ struct FeedView: View {
             return .unknown
         }
         
+        var purchase: [Medicine] = []
         var oggi: [Medicine] = []
-        var watch: [Medicine] = []
         var ok: [Medicine] = []
         
         for m in medicines {
-            // Oggi: rimangono dosi programmate per oggi non ancora assunte
-            let scheduled = scheduledDosesTodayCount(for: m)
-            let takenToday = intakeLogsTodayCount(for: m)
             let status = stockStatus(for: m)
-            if max(0, scheduled - takenToday) > 0 {
-                // Has doses scheduled for today not yet taken
+            if status == .critical || status == .low {
+                purchase.append(m)
+                continue
+            }
+            if let therapies = m.therapies, !therapies.isEmpty, therapies.contains(where: { occursToday($0) }) {
                 oggi.append(m)
-            } else if status == .critical {
-                // Out of stock (0 o negativo): mettiamolo tra gli urgenti
-                oggi.append(m)
-            } else if status == .low {
-                watch.append(m)
             } else {
                 ok.append(m)
             }
@@ -328,18 +346,17 @@ struct FeedView: View {
             return d1 < d2
         }
         
-        watch.sort { (m1, m2) in
-            let d1 = nextOccurrence(for: m1) ?? Date.distantFuture
-            let d2 = nextOccurrence(for: m2) ?? Date.distantFuture
-            if d1 == d2 {
-                let r1 = remainingUnits(for: m1) ?? Int.max
-                let r2 = remainingUnits(for: m2) ?? Int.max
-                if r1 == r2 {
-                    return m1.nome.localizedCaseInsensitiveCompare(m2.nome) == .orderedAscending
-                }
-                return r1 < r2
+        // Ordina Da comprare: prima i critical, poi rimanenti ASC, poi nome
+        purchase.sort { (m1, m2) in
+            let s1 = stockStatus(for: m1)
+            let s2 = stockStatus(for: m2)
+            if s1 != s2 { return (s1 == .critical) && (s2 != .critical) }
+            let r1 = remainingUnits(for: m1) ?? Int.max
+            let r2 = remainingUnits(for: m2) ?? Int.max
+            if r1 == r2 {
+                return m1.nome.localizedCaseInsensitiveCompare(m2.nome) == .orderedAscending
             }
-            return d1 < d2
+            return r1 < r2
         }
         
         ok.sort { (m1, m2) in
@@ -356,7 +373,48 @@ struct FeedView: View {
             return d1 < d2
         }
         
-        return (oggi, watch, ok)
+        return (purchase, oggi, ok)
+    }
+
+    // Verifica se una medicina ha almeno una terapia che ricorre oggi
+    private func hasTherapyToday(_ m: Medicine) -> Bool {
+        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+        let now = Date()
+        let cal = Calendar.current
+        let endOfDay: Date = {
+            let start = cal.startOfDay(for: now)
+            return cal.date(byAdding: DateComponents(day: 1, second: -1), to: start) ?? now
+        }()
+        guard let therapies = m.therapies, !therapies.isEmpty else { return false }
+        for t in therapies {
+            let rule = rec.parseRecurrenceString(t.rrule ?? "")
+            let start = t.start_date ?? now
+            if start > endOfDay { continue }
+            if let until = rule.until, cal.startOfDay(for: until) < cal.startOfDay(for: now) { continue }
+            let interval = rule.interval ?? 1
+            switch rule.freq.uppercased() {
+            case "DAILY":
+                let startSOD = cal.startOfDay(for: start)
+                let todaySOD = cal.startOfDay(for: now)
+                if let days = cal.dateComponents([.day], from: startSOD, to: todaySOD).day, days >= 0 {
+                    if days % max(1, interval) == 0 { return true }
+                }
+            case "WEEKLY":
+                let weekday = cal.component(.weekday, from: now)
+                let code: String = { switch weekday { case 1: return "SU"; case 2: return "MO"; case 3: return "TU"; case 4: return "WE"; case 5: return "TH"; case 6: return "FR"; case 7: return "SA"; default: return "MO" } }()
+                let byDays = rule.byDay.isEmpty ? ["MO","TU","WE","TH","FR","SA","SU"] : rule.byDay
+                if byDays.contains(code) {
+                    let startWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: start)) ?? start
+                    let todayWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
+                    if let weeks = cal.dateComponents([.weekOfYear], from: startWeek, to: todayWeek).weekOfYear, weeks >= 0 {
+                        if weeks % max(1, interval) == 0 { return true }
+                    }
+                }
+            default:
+                break
+            }
+        }
+        return false
     }
     
     func getPackage(for medicine: Medicine) -> Package? {

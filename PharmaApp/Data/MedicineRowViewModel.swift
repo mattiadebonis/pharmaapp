@@ -50,6 +50,35 @@ class MedicineRowViewModel: ObservableObject {
         addLog(for: medicine, type: "intake", package: package, therapy: therapy)
     }
 
+    // Svuota tutte le scorte disponibili per la medicina, creando log di intake
+    func emptyStocks(for medicine: Medicine) {
+        // Caso con terapie: svuota per ogni therapy sulla base del suo package
+        if let therapies = medicine.therapies, !therapies.isEmpty {
+            for t in therapies {
+                let left = Int(max(0, t.leftover()))
+                guard left > 0 else { continue }
+                for _ in 0..<left {
+                    addIntake(for: medicine, package: t.package, therapy: t)
+                }
+            }
+            return
+        }
+        // Caso senza terapie: usa remainingUnitsWithoutTherapy
+        if let remaining = medicine.remainingUnitsWithoutTherapy(), remaining > 0 {
+            let pkg = (medicine.packages.first) ?? getLastPurchasedPackage(for: medicine)
+            for _ in 0..<remaining {
+                addIntake(for: medicine, package: pkg)
+            }
+        }
+    }
+
+    private func getLastPurchasedPackage(for medicine: Medicine) -> Package? {
+        guard let logs = medicine.logs else { return nil }
+        return logs.filter { $0.type == "purchase" }
+            .sorted(by: { $0.timestamp > $1.timestamp })
+            .first?.package
+    }
+
     func prescriptionStatus(medicine : Medicine, currentOption : Option) -> String? {
         guard medicine.obbligo_ricetta else { return nil }
         let inEsaurimento = medicine.isInEsaurimento(option: currentOption, recurrenceManager: recurrenceManager)

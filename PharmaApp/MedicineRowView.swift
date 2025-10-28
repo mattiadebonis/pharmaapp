@@ -20,6 +20,8 @@ struct MedicineRowView: View {
     enum InfoMode { case nextDose, frequency }
     var infoMode: InfoMode = .frequency
     var showPurchaseShortcut: Bool = false
+    enum RowSection { case purchase, tuttoOk }
+    var section: RowSection = .tuttoOk
     
     // MARK: - Computed
     private var option: Option? { options.first }
@@ -202,10 +204,13 @@ struct MedicineRowView: View {
         }
         return nil
     }
-    // Mostra l’ora in alto a destra solo se resta una dose oggi
+    // Orario di assunzione da mostrare in "Oggi":
+    // 1) se c'è una dose in ritardo, mostra quell'orario
+    // 2) altrimenti, se la prossima dose è oggi, mostra l'orario
     private var rightPillText: String? {
-        guard let d = nextDate, isDoseToday else { return nil }
-        return time(d)
+        if let overdue = earliestOverdueDoseTime { return time(overdue) }
+        if let d = nextDate, Calendar.current.isDateInToday(d) { return time(d) }
+        return nil
     }
     // Testo grigio sotto il nome, solo se NON è per oggi (o l'ultima dose di oggi è già stata assunta)
     private var nextDescription: String? {
@@ -223,16 +228,13 @@ struct MedicineRowView: View {
     // Calcolo unità rimanenti quando non ci sono terapie
     private var remainingUnits: Int? {
         guard therapies.isEmpty else { return nil }
-        guard let pkg = getPackage(for: medicine), let logs = medicine.logs else { return nil }
-        let purchases = logs.filter { $0.type == "purchase" && $0.package == pkg }.count
-        let intakes   = logs.filter { $0.type == "intake" && $0.package == pkg }.count
-        return purchases * Int(pkg.numero) - intakes
+        return medicine.remainingUnitsWithoutTherapy()
     }
     // Stato scorte: testo neutro se non in warning
     private var stocksStatusText: String? {
         if stocksWarning != nil { return nil }
         if !therapies.isEmpty {
-            if let days = autonomyDays { return "Copertura: \(days) giorni" }
+            // Copertura rimossa dalle card
             return nil
         } else {
             if let rem = remainingUnits { return "Unità rimanenti: \(rem)" }
@@ -266,7 +268,6 @@ struct MedicineRowView: View {
             topRow
             subtitleRow
             warningOrStocksRow
-            actionsRow
         }
         .padding(14)
         .background(
@@ -277,48 +278,58 @@ struct MedicineRowView: View {
     }
     
     // MARK: - Sub-views (nuovo layout)
+    private var hasTherapiesFlag: Bool { !therapies.isEmpty }
+    private var stocksOk: Bool { stocksWarning == nil }
     private var topRow: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center, spacing: 10) {
+            if section == .purchase {
+                Button {
+                    let pkg = getPackage(for: medicine)
+                    rowVM.addPurchase(for: medicine, package: pkg)
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                } label: {
+                    Image(systemName: "circle")
+                        .foregroundColor(.blue)
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Segna \(medicine.nome) come acquistato")
+            }
             Text(medicine.nome)
                 .font(.headline)
                 .fontWeight(.semibold)
-            Spacer(minLength: 8)
-            if let overdue = earliestOverdueDoseTime {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundStyle(.red)
-                    Text(time(overdue))
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(.red)
+            if section == .tuttoOk {
+                Button {
+                    rowVM.emptyStocks(for: medicine)
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 18, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 6)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color.red.opacity(0.12)))
-                .accessibilityLabel("Assunzione in ritardo alle \(time(overdue))")
-            } else if let pill = rightPillText {
-                Text(pill)
-                    .font(.subheadline.monospacedDigit())
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(.secondarySystemBackground)))
+                .accessibilityLabel("Svuota scorte")
             }
+            Spacer(minLength: 8)
         }
     }
 
     private var subtitleRow: some View {
         Group {
-            if let desc = nextDescription {
-                Text(desc)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            if infoMode != .nextDose {
+                if hasTherapiesFlag {
+                    Image(systemName: "stethoscope")
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 6)
+                }
             }
         }
     }
 
     private var warningOrStocksRow: some View {
-        Group {
+        HStack {
             if let warn = stocksWarning {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Image(systemName: warn.icon)
                         .foregroundStyle(warn.color)
                     Text(warn.text)
@@ -327,43 +338,34 @@ struct MedicineRowView: View {
                 }
                 .accessibilityLabel("Avviso scorte: \(warn.text)")
             } else if let text = stocksStatusText {
-                Text(text)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Text(text)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    
+                }
+            }
+            if infoMode == .nextDose, let pill = rightPillText {
+                        Image(systemName: "stethoscope")
+                            .foregroundStyle(.secondary)
+                        Text(pill)
+                            .font(.footnote.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+            if let overdue = earliestOverdueDoseTime {
+                HStack(spacing: 6) {
+                    Image(systemName: "stethoscope")
+                        .foregroundStyle(.red)
+                    Text(time(overdue))
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.red)
+                }
+                .accessibilityLabel("Assunzione in ritardo alle \(time(overdue))")
             }
         }
     }
 
-    private var actionsRow: some View {
-        Group {
-            if hasRemainingDosesToday {
-                HStack(spacing: 8) {
-                    Button {
-                        let pkg = getPackage(for: medicine)
-                        rowVM.addIntake(for: medicine, package: pkg)
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    } label: {
-                        Label("Assunto", systemImage: "checkmark")
-                            .font(.subheadline)
-                            .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(RoundedRectangle(cornerRadius: 10).fill(Color(.secondarySystemBackground)))
-                    }
-                    Spacer()
-                    Button {
-                        let pkg = getPackage(for: medicine)
-                        rowVM.addPurchase(for: medicine, package: pkg)
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    } label: {
-                        Label("Compra", systemImage: "bag")
-                            .font(.subheadline)
-                            .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(RoundedRectangle(cornerRadius: 10).fill(Color(.secondarySystemBackground)))
-                    }
-                }
-                .padding(.top, 6)
-            }
-        }
-    }
+    private var actionsRow: some View { EmptyView() }
 }
 
 // MARK: - Convenienza
