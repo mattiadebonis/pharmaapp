@@ -85,34 +85,27 @@ class MedicineRowViewModel: ObservableObject {
         guard inEsaurimento else { return nil }
         
         if medicine.hasPendingNewPrescription() {
-            return "Comprato"
-        } else if medicine.hasNewPrescritpionRequest() {
-            return "Ricetta arrivata"
+            return "Compra"
         } else {
-            return "Ricetta richiesta"
+            return "Richiedi ricetta"
         }
     }
     
     @ViewBuilder
     func actionButton(for status: String, medicine: Medicine) -> some View {
         switch status {
-        case "Ricetta richiesta":
+        case "Richiedi ricetta":
             Button(action: {
                 self.addNewPrescriptionRequest(for: medicine)
-            }) {
-                Text("Ricetta richiesta")
-            }
-        case "Ricetta arrivata":
-            Button(action: {
                 self.addNewPrescription(for: medicine)
             }) {
-                Text("Ricetta arrivata")
+                Text("Richiedi ricetta")
             }
-        case "Comprato":
+        case "Compra":
             Button(action: {
                 self.addPurchase(for: medicine)
             }) {
-                Text("Comprato")
+                Text("Compra")
             }
         default:
             EmptyView()

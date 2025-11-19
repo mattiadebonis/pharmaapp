@@ -11,6 +11,12 @@ import MapKit
 import CoreLocation
 
 struct FeedView: View {
+    @EnvironmentObject private var appVM: AppViewModel
+    enum Mode {
+        case insights
+        case medicines
+    }
+
     @Environment(\.managedObjectContext) var managedObjectContext
     @FetchRequest(fetchRequest: Medicine.extractMedicines())
     var medicines: FetchedResults<Medicine>
@@ -18,79 +24,83 @@ struct FeedView: View {
     private var options: FetchedResults<Option>
     @FetchRequest(fetchRequest: Log.extractLogs())
     private var logs: FetchedResults<Log>
-    
+    @FetchRequest(fetchRequest: Doctor.extractDoctors())
+    private var doctors: FetchedResults<Doctor>
     @ObservedObject var viewModel: FeedViewModel
+    let mode: Mode
     @State private var selectedMedicine: Medicine?
     @StateObject private var locationVM = LocationSearchViewModel()
+
+    init(viewModel: FeedViewModel, mode: Mode = .medicines) {
+        self.viewModel = viewModel
+        self.mode = mode
+    }
     
     var body: some View {
         let sections = computeSections()
-        
-        VStack(alignment: .leading, spacing: 16) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Sezione "Da acquistare": più discreta nel copy e nello stile
-                    Text("Da acquistare (\(sections.purchase.count))")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 16)
-                    if sections.purchase.isEmpty {
-                        HStack(alignment: .center, spacing: 10) {
-                            Image(systemName: "checkmark.seal.fill")
-                                .foregroundStyle(.green)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Tutto a posto: nessun acquisto necessario")
-                                    .font(.headline)
-                                    .foregroundStyle(.green)
-                                Text("Le scorte dei tuoi medicinali sono al sicuro.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color(.secondarySystemBackground))
-                        )
-                        .padding(.horizontal, 16)
-                    } else {
-                        VStack(spacing: 0) {
-                            ForEach(sections.purchase) { medicine in
-                                let showToday = hasTherapyToday(medicine)
-                                row(for: medicine, showCoverageInfo: true, infoMode: showToday ? .nextDose : .frequency, showPurchaseShortcut: true, section: .purchase)
-                            }
-                        }
-                    }
-                }
-
-                if !(sections.oggi.isEmpty && sections.ok.isEmpty) {
-                    let totalOk = sections.oggi.count + sections.ok.count
-                    HStack {
-
-                        Text("In ordine (\(totalOk))")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 16)
-                        Spacer()
-                    }
-                    VStack(spacing: 0) {
-                        // Prima quelli con terapia oggi (mostrano orario)
-                        ForEach(sections.oggi) { medicine in
-                            row(for: medicine, showCoverageInfo: false, infoMode: MedicineRowView.InfoMode.nextDose, section: .tuttoOk)
-                        }
-                        // Poi i restanti
-                        ForEach(sections.ok) { medicine in
-                            row(for: medicine, showCoverageInfo: false, infoMode: MedicineRowView.InfoMode.frequency, section: .tuttoOk)
-                        }
-                    }
-                }
+        let insightsContext = buildInsightsContext(for: sections)
+        Group {
+            switch mode {
+            case .insights:
+                insightsScreen(sections: sections, insightsContext: insightsContext)
+            case .medicines:
+                medicinesScreen(sections: sections)
             }
         }
-        // Ricostruisce la vista quando cambia il numero di log (assunzioni/acquisti)
+        .onAppear {
+            locationVM.ensureStarted()
+        }
+    }
+
+    private func orderedRows(for sections: (purchase: [Medicine], oggi: [Medicine], ok: [Medicine])) -> [(medicine: Medicine, section: MedicineRowView.RowSection)] {
+        sections.purchase.map { ($0, .purchase) } +
+        sections.oggi.map { ($0, .tuttoOk) } +
+        sections.ok.map { ($0, .tuttoOk) }
+    }
+
+    @ViewBuilder
+    private func insightsScreen(sections: (purchase: [Medicine], oggi: [Medicine], ok: [Medicine]), insightsContext: AIInsightsContext?) -> some View {
+        let rows = orderedRows(for: sections)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 32) {
+                if let insightsContext {
+                    AIInsightsPanel(context: insightsContext)
+                } else {
+                    insightsPlaceholder
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 32)
+        }
+    }
+
+    @ViewBuilder
+    private func medicinesScreen(sections: (purchase: [Medicine], oggi: [Medicine], ok: [Medicine])) -> some View {
+        let rows = orderedRows(for: sections)
+        List {
+           /*  Section {
+                medicineHero(for: sections)
+                    .listRowInsets(EdgeInsets(top: 16, leading: 0, bottom: 0, trailing: 0))
+                    .listRowBackground(Color.clear)
+            }
+            .listSectionSeparator(.hidden) */
+
+            if appVM.suggestNearestPharmacies {
+                Section {
+                    smartBannerCard
+                        .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 12, trailing: 0))
+                        .listRowBackground(Color.clear)
+                }
+                .listSectionSeparator(.hidden)
+            }
+            Section {
+                medicineList(for: rows)
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Color(.systemGroupedBackground))
+        .scrollIndicators(.hidden)
         .id(logs.count)
         .sheet(isPresented: Binding(
             get: { selectedMedicine != nil },
@@ -121,45 +131,297 @@ struct FeedView: View {
             }
         }
         .onChange(of: selectedMedicine) { newValue in
-            if (newValue == nil) {
+            if newValue == nil {
                 viewModel.clearSelection()
             }
         }
-        .onAppear {
-            // Avvia ricerca farmacia per mostrare nome e distanza
-            locationVM.ensureStarted()
+    }
+
+    private struct UpcomingStockEntry {
+        let name: String
+        let days: Int
+    }
+
+    private func medicineHero(for sections: (purchase: [Medicine], oggi: [Medicine], ok: [Medicine])) -> some View {
+        let total = medicines.count
+        let toRestock = sections.purchase.count
+        let todayCount = sections.oggi.count
+        let okCount = sections.ok.count
+        let highlightText: String = {
+            if toRestock > 0 {
+                return toRestock == 1 ? "1 farmaco richiede nuove scorte" : "\(toRestock) farmaci richiedono nuove scorte"
+            }
+            if todayCount > 0 {
+                return todayCount == 1 ? "1 assunzione programmata oggi" : "\(todayCount) assunzioni programmate oggi"
+            }
+            return "Armadio aggiornato: tutto sotto controllo"
+        }()
+
+        return VStack(alignment: .leading, spacing: 16) {
+            Capsule()
+                .fill(LinearGradient(colors: [.teal.opacity(0.6), .blue.opacity(0.6)], startPoint: .leading, endPoint: .trailing))
+                .frame(width: 80, height: 4)
+                .opacity(0.8)
+
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(LinearGradient(colors: [.teal.opacity(0.25), .blue.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 60, height: 60)
+                    Image(systemName: "cross.case.fill")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Armadio dei farmaci")
+                        .font(.title3.weight(.bold))
+                    Text(highlightText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+
+            HStack(spacing: 12) {
+                heroMetric(icon: "pills", title: "Totali", value: "\(total)", tint: .accentColor)
+                heroMetric(icon: "exclamationmark.triangle.fill", title: "Da riordinare", value: "\(toRestock)", tint: toRestock > 0 ? .orange : .green)
+                heroMetric(icon: "clock.badge.checkmark", title: "In programma", value: "\(todayCount)", tint: todayCount > 0 ? .blue : .teal)
+                heroMetric(icon: "checkmark.circle", title: "Stabili", value: "\(okCount)", tint: .secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 8)
+        )
+    }
+
+    private func heroMetric(icon: String, title: String, value: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(title, systemImage: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(tint, .secondary.opacity(0.7))
+                .labelStyle(.titleAndIcon)
+            Text(value)
+                .font(.title3.weight(.semibold))
+                .minimumScaleFactor(0.7)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+        )
+    }
+
+    private var smartBannerCard: some View {
+        Button {
+            appVM.isStocksIndexPresented = true
+        } label: {
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: "shippingbox.fill")
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(12)
+                    .background(Circle().fill(Color.white.opacity(0.2)))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Rifornisci i farmaci in esaurimento")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text("Ti suggeriamo la farmacia più comoda in questo momento.")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(LinearGradient(colors: [.accentColor, .accentColor.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func medicineList(for rows: [(medicine: Medicine, section: MedicineRowView.RowSection)]) -> some View {
+        ForEach(rows, id: \.medicine.objectID) { entry in
+            let medicine = entry.medicine
+            row(for: medicine)
         }
     }
-    
+
+    private func upcomingStockPanel(for medicines: [Medicine]) -> some View {
+        let entries = upcomingStockEntries(for: medicines)
+        return VStack(alignment: .leading, spacing: 8) {
+            if entries.isEmpty {
+                Text("Nessuna scorta da monitorare a breve.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Prossimamente")
+                    .font(.headline)
+                Text(upcomingStockSummary(from: entries))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func upcomingStockEntries(for medicines: [Medicine]) -> [UpcomingStockEntry] {
+        guard !medicines.isEmpty else { return [] }
+        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+        let threshold = Int(options.first?.day_threeshold_stocks_alarm ?? 7)
+        let maxWindow = max(threshold + 5, threshold * 2)
+        let entries = medicines.compactMap { medicine -> UpcomingStockEntry? in
+            let name = (medicine.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return nil }
+            guard let days = estimatedCoverageDays(for: medicine, recurrenceManager: rec) else { return nil }
+            if days <= threshold { return nil }
+            if days > maxWindow { return nil }
+            return UpcomingStockEntry(name: name, days: days)
+        }
+        return entries.sorted { $0.days < $1.days }
+    }
+
+    private func upcomingStockSummary(from entries: [UpcomingStockEntry]) -> String {
+        guard !entries.isEmpty else {
+            return "Tutte le scorte risultano stabili: controlla più avanti."
+        }
+        let limited = entries.prefix(3)
+        var sentences: [String] = []
+        for entry in limited {
+            let daysText: String
+            switch entry.days {
+            case 0:
+                daysText = "oggi stesso"
+            case 1:
+                daysText = "domani"
+            case 2:
+                daysText = "tra due giorni"
+            default:
+                daysText = "entro \(entry.days) giorni"
+            }
+            sentences.append("\(daysText.capitalized) programma il riordino di \(entry.name).")
+        }
+        if entries.count > limited.count {
+            sentences.append("Altri \(entries.count - limited.count) medicinali restano da monitorare.")
+        }
+        return sentences.joined(separator: " ")
+    }
+
+    private func estimatedCoverageDays(for medicine: Medicine, recurrenceManager: RecurrenceManager) -> Int? {
+        if let therapies = medicine.therapies, !therapies.isEmpty {
+            var totalLeft: Double = 0
+            var totalDaily: Double = 0
+            for therapy in therapies {
+                totalLeft += Double(therapy.leftover())
+                totalDaily += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
+            }
+            guard totalDaily > 0 else { return nil }
+            let days = Int(floor(totalLeft / totalDaily))
+            return max(days, 0)
+        }
+        if let remaining = medicine.remainingUnitsWithoutTherapy(), remaining > 0 {
+            return nil
+        }
+        return nil
+    }
+
+    private var insightsPlaceholder: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Nessun consiglio per oggi")
+                .font(.headline)
+            Text("Quando ci saranno scadenze o acquisti da fare vedrai qui le azioni suggerite.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     // MARK: - Row builder (gestures + card)
-    private func row(for medicine: Medicine, showCoverageInfo: Bool, infoMode: MedicineRowView.InfoMode, showPurchaseShortcut: Bool = false, section: MedicineRowView.RowSection = .tuttoOk) -> some View {
+    private func row(for medicine: Medicine) -> some View {
         MedicineRowView(
             medicine: medicine,
-            isSelected: viewModel.isSelecting && viewModel.selectedMedicines.contains(medicine),
-            toggleSelection: { viewModel.toggleSelection(for: medicine) },
-            showCoverageInfo: showCoverageInfo,
-            infoMode: infoMode, showPurchaseShortcut: showPurchaseShortcut, section: section
+            isSelected: viewModel.selectedMedicines.contains(medicine),
+            isInSelectionMode: viewModel.isSelecting
         )
-        .padding(8)
-        .background(viewModel.isSelecting && viewModel.selectedMedicines.contains(medicine) ? Color.gray.opacity(0.3) : Color.clear)
         .contentShape(Rectangle())
-        // Usa gesture con including: .gesture per non interferire con i pulsanti interni
-        .gesture(
-            TapGesture().onEnded {
-                if viewModel.isSelecting {
-                    viewModel.toggleSelection(for: medicine)
-                } else {
-                    selectedMedicine = medicine
-                }
-            }, including: .gesture
-        )
-        .gesture(
-            LongPressGesture().onEnded { _ in
+        .onTapGesture {
+            if viewModel.isSelecting {
+                viewModel.toggleSelection(for: medicine)
+            } else {
                 selectedMedicine = medicine
-                Haptics.impact(.medium)
-            }, including: .gesture
-        )
+            }
+        }
+        .onLongPressGesture(minimumDuration: 0.5) {
+            selectedMedicine = medicine
+            Haptics.impact(.medium)
+        }
         .accessibilityIdentifier("MedicineRow_\(medicine.objectID)")
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            if viewModel.isSelecting {
+                selectionSwipeButton(for: medicine)
+            } else {
+                Button {
+                    Haptics.impact(.light)
+                    viewModel.enterSelectionMode(with: medicine)
+                } label: {
+                    Label("Seleziona", systemImage: "checkmark.circle")
+                }
+                .tint(.accentColor)
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button {
+                Haptics.impact(.medium)
+                viewModel.markAsTaken(for: medicine)
+            } label: {
+                Label("Assunto", systemImage: "checkmark.circle.fill")
+            }
+            .tint(.green)
+            Button {
+                Haptics.impact(.medium)
+                viewModel.markAsPurchased(for: medicine)
+            } label: {
+                Label("Acquistato", systemImage: "cart.fill")
+            }
+            .tint(.blue)
+            if shouldShowPrescriptionAction(for: medicine) {
+                Button {
+                    Haptics.impact(.medium)
+                    viewModel.requestPrescription(for: medicine)
+                } label: {
+                    Label("Richiedi ricetta", systemImage: "envelope.fill")
+                }
+                .tint(.orange)
+            }
+        }
+        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        .listRowBackground(Color.clear)
+    }
+
+    @ViewBuilder
+    private func selectionSwipeButton(for medicine: Medicine) -> some View {
+        let isSelected = viewModel.selectedMedicines.contains(medicine)
+        Button {
+            Haptics.impact(.light)
+            viewModel.toggleSelection(for: medicine)
+        } label: {
+            Label(isSelected ? "Deseleziona" : "Seleziona", systemImage: isSelected ? "checkmark.circle.fill" : "checkmark.circle")
+        }
+        .tint(.accentColor)
+    }
+
+    private func shouldShowPrescriptionAction(for medicine: Medicine) -> Bool {
+        guard medicine.obbligo_ricetta else { return false }
+        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+        return needsPrescriptionBeforePurchase(medicine, recurrenceManager: rec)
     }
     
     // MARK: - New sorting algorithm (sections)
@@ -376,6 +638,119 @@ struct FeedView: View {
         return (purchase, oggi, ok)
     }
 
+    private func buildInsightsContext(for sections: (purchase: [Medicine], oggi: [Medicine], ok: [Medicine])) -> AIInsightsContext? {
+        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+        let purchaseCandidates = sections.purchase.filter { !needsPrescriptionBeforePurchase($0, recurrenceManager: rec) }
+        let purchaseLines = purchaseCandidates.prefix(5).map { medicine in
+            "\(medicine.nome): \(purchaseHighlight(for: medicine, recurrenceManager: rec))"
+        }
+        let therapyLines = sections.oggi.compactMap { medicine in
+            nextDoseHighlight(for: medicine, recurrenceManager: rec)
+        }
+        let upcomingLines = sections.ok.prefix(3).compactMap { medicine in
+            nextDoseHighlight(for: medicine, recurrenceManager: rec)
+        }
+        var prescriptionLines: [String] = []
+        for medicine in medicines {
+            let hasPendingPrescription = medicine.hasPendingNewPrescription()
+            if hasPendingPrescription {
+                continue
+            }
+            if medicine.hasNewPrescritpionRequest() {
+                prescriptionLines.append("\(medicine.nome): in attesa della risposta del medico")
+            } else if needsPrescriptionBeforePurchase(medicine, recurrenceManager: rec) {
+                prescriptionLines.append("\(medicine.nome): chiedi subito la ricetta")
+            }
+            if prescriptionLines.count >= 6 { break }
+        }
+        let context = AIInsightsContext(
+            purchaseHighlights: purchaseLines,
+            therapyHighlights: therapyLines,
+            upcomingHighlights: upcomingLines,
+            prescriptionHighlights: prescriptionLines,
+            pharmacySuggestion: purchaseLines.isEmpty ? nil : pharmacyHighlightLine
+        )
+        return context.hasSignals ? context : nil
+    }
+
+    private func purchaseHighlight(for medicine: Medicine, recurrenceManager: RecurrenceManager) -> String {
+        if let therapies = medicine.therapies, !therapies.isEmpty {
+            var totalLeft: Double = 0
+            var totalDaily: Double = 0
+            for therapy in therapies {
+                totalLeft += Double(therapy.leftover())
+                totalDaily += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
+            }
+            if totalLeft <= 0 {
+                return "scorte terminate"
+            }
+            guard totalDaily > 0 else {
+                return "copertura non stimabile"
+            }
+            let days = Int(totalLeft / totalDaily)
+            if days <= 0 { return "scorte terminate" }
+            return days == 1 ? "copertura per 1 giorno" : "copertura per \(days) giorni"
+        }
+        if let remaining = medicine.remainingUnitsWithoutTherapy() {
+            if remaining <= 0 { return "nessuna unità residua" }
+            if remaining < 5 { return "solo \(remaining) unità" }
+            return "\(remaining) unità disponibili"
+        }
+        return "scorte non monitorate"
+    }
+
+    private func nextDoseHighlight(for medicine: Medicine, recurrenceManager: RecurrenceManager) -> String? {
+        guard let therapies = medicine.therapies, !therapies.isEmpty else { return nil }
+        let now = Date()
+        let calendar = Calendar.current
+        let upcomingDates = therapies.compactMap { therapy -> Date? in
+            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+            let start = therapy.start_date ?? now
+            return recurrenceManager.nextOccurrence(rule: rule, startDate: start, after: now, doses: therapy.doses as NSSet?)
+        }
+        guard let next = upcomingDates.sorted().first else { return nil }
+        if calendar.isDateInToday(next) {
+            return "\(medicine.nome): \(FeedView.insightsTimeFormatter.string(from: next))"
+        } else if calendar.isDateInTomorrow(next) {
+            return "\(medicine.nome): domani"
+        } else {
+            return "\(medicine.nome): \(FeedView.insightsDateFormatter.string(from: next))"
+        }
+    }
+
+    private static let insightsTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    private static let insightsDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter
+    }()
+
+    private func isOutOfStock(_ medicine: Medicine, recurrenceManager: RecurrenceManager) -> Bool {
+        if let therapies = medicine.therapies, !therapies.isEmpty {
+            var totalLeft: Double = 0
+            for therapy in therapies {
+                totalLeft += Double(therapy.leftover())
+            }
+            return totalLeft <= 0
+        }
+        if let remaining = medicine.remainingUnitsWithoutTherapy() {
+            return remaining <= 0
+        }
+        return false
+    }
+
+    private func needsPrescriptionBeforePurchase(_ medicine: Medicine, recurrenceManager: RecurrenceManager) -> Bool {
+        guard medicine.obbligo_ricetta else { return false }
+        if medicine.hasPendingNewPrescription() { return false }
+        if medicine.hasNewPrescritpionRequest() { return false }
+        return isOutOfStock(medicine, recurrenceManager: recurrenceManager)
+    }
+
     // Verifica se una medicina ha almeno una terapia che ricorre oggi
     private func hasTherapyToday(_ m: Medicine) -> Bool {
         let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
@@ -433,6 +808,78 @@ struct FeedView: View {
         return nil
     }
     
+    // MARK: - Doctor & pharmacy highlights
+    private var doctorHighlightLine: String? {
+        guard let info = todayDoctorInfo else { return nil }
+        return "\(info.name) — \(info.schedule)"
+    }
+
+    private var pharmacyHighlightLine: String? {
+        guard let pin = locationVM.pinItem else { return nil }
+        var details: [String] = []
+        if let distance = locationVM.distanceString, !distance.isEmpty {
+            details.append(distance)
+        }
+        if let opening = locationVM.todayOpeningText, !opening.isEmpty {
+            details.append("\(opening)")
+        }
+        let suffix = details.isEmpty ? "" : " (\(details.joined(separator: " · ")))"
+        return "\(pin.title)\(suffix)"
+    }
+
+    private var todayDoctorInfo: (name: String, schedule: String)? {
+        guard !doctors.isEmpty else { return nil }
+        let candidates: [(Doctor, DoctorScheduleDTO.DaySchedule)] = doctors.compactMap { doctor in
+            let dto = doctor.scheduleDTO
+            guard let daySchedule = scheduleForToday(in: dto) else { return nil }
+            return (doctor, daySchedule)
+        }
+        guard !candidates.isEmpty else { return nil }
+        let selected = candidates.first(where: { $0.1.mode != .closed }) ?? candidates.first!
+        let doctor = selected.0
+        let schedule = selected.1
+        let nameComponents = [doctor.nome, doctor.cognome].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let displayName = nameComponents.isEmpty ? "Medico" : nameComponents.joined(separator: " ")
+        return (displayName, describe(day: schedule))
+    }
+
+    private func scheduleForToday(in dto: DoctorScheduleDTO) -> DoctorScheduleDTO.DaySchedule? {
+        let calendar = Calendar.current
+        let weekdayNumber = calendar.component(.weekday, from: Date())
+        let target: DoctorScheduleDTO.DaySchedule.Weekday
+        switch weekdayNumber {
+        case 1: target = .sunday
+        case 2: target = .monday
+        case 3: target = .tuesday
+        case 4: target = .wednesday
+        case 5: target = .thursday
+        case 6: target = .friday
+        case 7: target = .saturday
+        default: target = .monday
+        }
+        return dto.days.first(where: { $0.day == target })
+    }
+
+    private func describe(day: DoctorScheduleDTO.DaySchedule) -> String {
+        func format(_ slot: DoctorScheduleDTO.TimeSlot) -> String {
+            let start = slot.start.trimmingCharacters(in: .whitespacesAndNewlines)
+            let end = slot.end.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !start.isEmpty, !end.isEmpty else { return "" }
+            return "\(start) - \(end)"
+        }
+
+        switch day.mode {
+        case .closed:
+            return "Oggi: chiuso"
+        case .continuous:
+            let text = format(day.primary)
+            return text.isEmpty ? "Oggi: orario non disponibile" : "Oggi: \(text)"
+        case .split:
+            let parts = [format(day.primary), format(day.secondary)].filter { !$0.isEmpty }
+            return parts.isEmpty ? "Oggi: orario non disponibile" : "Oggi: " + parts.joined(separator: " / ")
+        }
+    }
+
     // MARK: - Low stock detection (per mostrare la card)
     private func hasLowStock() -> Bool {
         let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
@@ -459,78 +906,6 @@ struct FeedView: View {
             }
         }
         return false
-    }
-    
-    // MARK: - Nearest pharmacy card
-    struct NearestPharmacyCard: View {
-        @ObservedObject var viewModel: LocationSearchViewModel
-        
-        var body: some View {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 8) {
-                    Image(systemName: "cross.case.fill")
-                        .foregroundStyle(.green)
-                    Text("Farmacia più vicina")
-                        .font(.headline)
-                    Spacer()
-                    if let d = viewModel.distanceString { Text(d).font(.subheadline).foregroundStyle(.secondary) }
-                }
-                .padding(.top, 4)
-                
-                if let name = viewModel.pinItem?.title {
-                    // Al posto della mappa, mostra nome farmacia e distanza
-                    HStack(spacing: 8) {
-                        Text(name)
-                            .font(.subheadline)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        Spacer()
-                        if let d = viewModel.distanceString {
-                            Text(d)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    if let opening = viewModel.todayOpeningText {
-                        HStack(spacing: 6) {
-                            Image(systemName: "clock")
-                                .foregroundStyle(.secondary)
-                            Text("Oggi: \(opening)")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-                    }
-                    HStack {
-                        Spacer()
-                        Button {
-                            viewModel.openInMaps()
-                        } label: {
-                            Label("Apri in Mappe", systemImage: "arrow.turn.up.right")
-                        }
-                    }
-                } else {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.secondarySystemBackground))
-                        .frame(height: 60)
-                        .overlay(
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                Text("Cerco farmacie vicine…")
-                                    .foregroundStyle(.secondary)
-                            }
-                        )
-                }
-            }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(.systemBackground))
-                    .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 2)
-            )
-            .onAppear { viewModel.ensureStarted() }
-        }
     }
     
     final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManagerDelegate {
@@ -652,6 +1027,26 @@ struct FeedView: View {
             let folded = lowered.folding(options: .diacriticInsensitive, locale: .current)
             let allowed = folded.filter { $0.isLetter || $0.isNumber || $0 == " " }
             return allowed.replacingOccurrences(of: "  ", with: " ")
+        }
+    }
+}
+
+private struct DividerWithLabel: View {
+    let title: String
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Rectangle()
+                .frame(height: 1)
+                .foregroundStyle(.tertiary)
+            Text(title)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Rectangle()
+                .frame(height: 1)
+                .foregroundStyle(.tertiary)
         }
     }
 }

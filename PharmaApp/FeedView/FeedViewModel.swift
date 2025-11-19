@@ -32,29 +32,38 @@ class FeedViewModel: ObservableObject {
 
     func requestPrescription() {
         for medicine in selectedMedicines {
-            if let package = getPackage(for: medicine) {
-                addNewPrescriptionRequest(for: medicine, for: package)
-            }
+            requestPrescription(for: medicine)
         }
         clearSelection()
+    }
+
+    func requestPrescription(for medicine: Medicine) {
+        guard let package = getPackage(for: medicine) else { return }
+        addNewPrescriptionRequest(for: medicine, for: package)
     }
 
     func markAsPurchased() {
         for medicine in selectedMedicines {
-            if let package = getPackage(for: medicine) {
-                addPurchase(for: medicine, for: package)
-            }
+            markAsPurchased(for: medicine)
         }
         clearSelection()
     }
 
+    func markAsPurchased(for medicine: Medicine) {
+        guard let package = getPackage(for: medicine) else { return }
+        addPurchase(for: medicine, for: package)
+    }
+
     func markAsTaken() {
         for medicine in selectedMedicines {
-            if let package = getPackage(for: medicine) {
-                addIntake(for: medicine, for: package)
-            }
+            markAsTaken(for: medicine)
         }
         clearSelection()
+    }
+
+    func markAsTaken(for medicine: Medicine) {
+        guard let package = getPackage(for: medicine) else { return }
+        addIntake(for: medicine, for: package)
     }
 
     func clearSelection() {

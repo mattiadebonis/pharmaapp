@@ -53,12 +53,7 @@ struct SearchView: View {
     }
 
     private func row(for medicine: Medicine) -> some View {
-        MedicineRowView(
-            medicine: medicine,
-            isSelected: false,
-            toggleSelection: {}
-        )
-        .padding(8)
+        MedicineRowView(medicine: medicine)
         .contentShape(Rectangle())
         .gesture(
             TapGesture().onEnded {
@@ -72,6 +67,8 @@ struct SearchView: View {
             }, including: .gesture
         )
         .accessibilityIdentifier("Search_MedicineRow_\(medicine.objectID)")
+        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        .listRowBackground(Color.clear)
     }
 
     private func getPackage(for medicine: Medicine) -> Package? {

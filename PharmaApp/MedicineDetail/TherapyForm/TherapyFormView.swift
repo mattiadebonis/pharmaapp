@@ -288,69 +288,35 @@ extension TherapyFormView {
                 )
             }
         } else {
-            // In creazione: se esiste già una therapy per la stessa persona e medicina, aggiornala (niente duplicati)
-            let existingForPerson = (medicine.therapies as? Set<Therapy>)?.first(where: { $0.person == effectivePerson })
-            if let therapyToUpdate = existingForPerson {
-                if selectedFrequencyType == .daily {
-                    therapyFormViewModel.updateTherapy(
-                        therapy: therapyToUpdate,
-                        freq: "DAILY",
-                        interval: interval,
-                        until: useUntil ? untilDate : nil,
-                        count: useCount ? countNumber : nil,
-                        byDay: [],
-                        startDate: startDate,
-                        times: times,
-                        package: package,
-                        importance: selectedImportance,
-                        person: effectivePerson
-                    )
-                } else {
-                    therapyFormViewModel.updateTherapy(
-                        therapy: therapyToUpdate,
-                        freq: "WEEKLY",
-                        interval: interval,
-                        until: useUntil ? untilDate : nil,
-                        count: useCount ? countNumber : nil,
-                        byDay: byDay,
-                        startDate: startDate,
-                        times: times,
-                        package: package,
-                        importance: selectedImportance,
-                        person: effectivePerson
-                    )
-                }
+            // In creazione: aggiungi sempre una nuova therapy per la combinazione selezionata.
+            if selectedFrequencyType == .daily {
+                therapyFormViewModel.saveTherapy(
+                    medicine: medicine,
+                    freq: "DAILY",
+                    interval: interval,
+                    until: useUntil ? untilDate : nil,
+                    count: useCount ? countNumber : nil,
+                    byDay: [],
+                    startDate: startDate,
+                    times: times,
+                    package: package,
+                    importance: selectedImportance,
+                    person: effectivePerson
+                )
             } else {
-                // Crea una nuova therapy
-                if selectedFrequencyType == .daily {
-                    therapyFormViewModel.saveTherapy(
-                        medicine: medicine,
-                        freq: "DAILY",
-                        interval: interval,
-                        until: useUntil ? untilDate : nil,
-                        count: useCount ? countNumber : nil,
-                        byDay: [],
-                        startDate: startDate,
-                        times: times,
-                        package: package,
-                        importance: selectedImportance,
-                        person: effectivePerson
-                    )
-                } else {
-                    therapyFormViewModel.saveTherapy(
-                        medicine: medicine,
-                        freq: "WEEKLY",
-                        interval: interval,
-                        until: useUntil ? untilDate : nil,
-                        count: useCount ? countNumber : nil,
-                        byDay: byDay,
-                        startDate: startDate,
-                        times: times,
-                        package: package,
-                        importance: selectedImportance,
-                        person: effectivePerson
-                    )
-                }
+                therapyFormViewModel.saveTherapy(
+                    medicine: medicine,
+                    freq: "WEEKLY",
+                    interval: interval,
+                    until: useUntil ? untilDate : nil,
+                    count: useCount ? countNumber : nil,
+                    byDay: byDay,
+                    startDate: startDate,
+                    times: times,
+                    package: package,
+                    importance: selectedImportance,
+                    person: effectivePerson
+                )
             }
         }
         

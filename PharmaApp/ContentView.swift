@@ -3,15 +3,9 @@
 //
 //  Created by Mattia De Bonis on 09/12/24.
 //  Redesigned on 16/07/25 to match new UX blueprint
-//
-//  NOTE: alcuni tipi (FeedViewModel, FeedView, SearchIndex, etc.)
-//  sono riutilizzati dal tuo progetto. Questa bozza si focalizza
-//  esclusivamente sull’impostazione visuale; collega i view model
-//  dove necessario.
 
 import SwiftUI
 import CoreData
-// import Vision spostato nella schermata di creazione
 
 struct ContentView: View {
     // MARK: – Dependencies
@@ -19,173 +13,138 @@ struct ContentView: View {
     @EnvironmentObject private var appVM: AppViewModel
     @StateObject private var feedVM = FeedViewModel()
 
-    @State private var isNewMedicinePresented = false
-    @State private var selectedTab: Int = 0 // 0 = Medicine, 1 = Impostazioni
+    private enum AppTab: Hashable {
+        case oggi
+        case medicine
+        case nuovo
+    }
+
+    @State private var selectedTab: AppTab = .oggi
+    @State private var previousTab: AppTab = .oggi
+    @State private var isAddPresented = false
+    @State private var isSettingsPresented = false
 
     // Init fake data once
     init() {
-        // Medicines are now entered manually by users; no JSON preload
         DataManager.shared.initializePharmaciesDataIfNeeded()
         DataManager.shared.initializeOptionsIfEmpty()
     }
 
     // MARK: – UI
     var body: some View {
-        TabView(selection: $selectedTab) {
-            NavigationStack {
-                ZStack(alignment: .bottom) {
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            VStack(spacing: 12) {
-                                smartBanner
-                                contentList
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.top, 8)
-                        }
-                    }
-                    if feedVM.isSelecting { floatingActionBar() }
-                    if !feedVM.isSelecting {
-                        VStack { 
-                            Spacer()
-                            HStack {
-                                Spacer()
-                                Button(action: { isNewMedicinePresented = true }) {
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 22, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .frame(width: 56, height: 56)
-                                        .background(Circle().fill(Color.accentColor))
-                                        .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
-                                }
-                                .accessibilityLabel("Aggiungi medicinale")
-                                .padding(.trailing, 20)
-                                .padding(.bottom, 20)
-                            }
-                        }
+        ZStack(alignment: .bottomTrailing) {
+            TabView(selection: $selectedTab) {
+                // TAB 1 – Insights (a sinistra)
+                Tab("Insights", systemImage: "sparkles", value: AppTab.oggi) {
+                    NavigationStack {
+                        FeedView(viewModel: feedVM, mode: .insights)
                     }
                 }
-                // Nessuna lente nella toolbar: la ricerca è una tab dedicata
-            }
-            .tabItem {
-                Image(systemName: "pills")
-                Text("Medicine")
-            }
-            .tag(0)
 
+                // TAB 2 – Medicine (a sinistra)
+                Tab("Medicine", systemImage: "pills", value: AppTab.medicine) {
+                    NavigationStack {
+                        FeedView(viewModel: feedVM, mode: .medicines)
+                            .navigationTitle("Armadio dei farmaci")
+                            .navigationBarTitleDisplayMode(.large)
+                            .toolbar {
+                                ToolbarItem(placement: .navigationBarTrailing) {
+                                    Button {
+                                        isSettingsPresented = true
+                                    } label: {
+                                        Image(systemName: "gearshape")
+                                    }
+                                }
+                            }
+                    }
+                }
+
+                // TAB 3 – Nuovo (separato a destra grazie al role: .search)
+                Tab("Nuovo",
+                    systemImage: "plus.circle.fill",
+                    value: AppTab.nuovo,
+                    role: .search
+                ) {
+                    // Non mostriamo realmente un contenuto,
+                    // perché usiamo il tab come "azione"
+                    Color.clear
+                }
+            }
+            .onChange(of: selectedTab) { newValue in
+                if newValue == .nuovo {
+                    // Mostra il foglio "Nuovo" e torna al tab precedente
+                    isAddPresented = true
+                    selectedTab = previousTab
+                } else {
+                    previousTab = newValue
+                }
+            }
+
+            // Floating action bar solo in tab Medicine quando si seleziona
+            if selectedTab == .medicine && feedVM.isSelecting {
+                floatingActionBar()
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 32)
+            }
+        }
+        .background(Color(.systemGroupedBackground))
+        .sheet(isPresented: $isAddPresented) {
+            NavigationStack {
+                NewMedicineView()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Chiudi") { isAddPresented = false }
+                        }
+                    }
+            }
+        }
+        .sheet(isPresented: $isSettingsPresented) {
             NavigationStack {
                 OptionsView()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Chiudi") { isSettingsPresented = false }
+                        }
+                    }
             }
-            .tabItem {
-                Image(systemName: "gearshape")
-                Text("Impostazioni")
-            }
-            .tag(1)
         }
-        .sheet(isPresented: $isNewMedicinePresented) { NewMedicineView() }
-        // ↓ evita che la floating bar venga coperta dalla tastiera
         .ignoresSafeArea(.keyboard, edges: .bottom)
     }
-    
+
+    // MARK: – Floating bar (selezione multipla)
     @ViewBuilder
     private func floatingActionBar() -> some View {
-        VStack {
+        HStack {
+            if feedVM.allRequirePrescription {
+                Button("Richiedi Ricetta") {
+                    feedVM.requestPrescription()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            Button("Acquistato") {
+                feedVM.markAsPurchased()
+            }
+
+            Button("Assunto") {
+                feedVM.markAsTaken()
+            }
+
             Spacer()
-            HStack {
-                if feedVM.allRequirePrescription {
-                    Button("Richiedi Ricetta") { feedVM.requestPrescription() }
-                }
-                Button("Acquistato") { feedVM.markAsPurchased() }
-                Button("Assunto") { feedVM.markAsTaken() }
-                Spacer()
-                Button("Annulla") { feedVM.cancelSelection() }
+
+            Button("Annulla") {
+                feedVM.cancelSelection()
             }
-            .padding()
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .shadow(radius: 10)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+            .foregroundStyle(.red)
         }
+        .font(.body)
+        .padding()
         .frame(maxWidth: .infinity)
-        .frame(height: 80)
-        .background(Color.white.opacity(0.9))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color(white: 0.8), lineWidth: 1)
-        )
-        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(radius: 10)
     }
 
-    // MARK: – Sub‑views
-    /// Banner rifornimento (appare solo quando necessario)
-    private var smartBanner: some View {
-        Group {
-            if appVM.suggestNearestPharmacies {
-                Button {
-                    appVM.isStocksIndexPresented = true
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
-                        Text("Rifornisci i farmaci in esaurimento")
-                            .font(.body.bold())
-                        Spacer()
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(.white)
-                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.accentColor))
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-    }
-
-    // Barra di ricerca rimossa come richiesto
-
-    /// Segment "Oggi / Tutti" (commentato se non serve)
-    
-
-    /// Lista card o indice ricerca
-    private var contentList: some View {
-        // La tab Medicine mostra sempre il feed; la ricerca è in una tab separata
-        FeedView(viewModel: feedVM)
-    }
-
-    // ...existing code...
-
-    // MARK: Floating bar (selezione multipla)
-//    private var floatingActionBar: some View {
-//        VStack(spacing: 0) {
-//            Divider().opacity(0)
-//            HStack {
-//                if feedVM.allRequirePrescription {
-//                    Button("Richiedi Ricetta") { feedVM.requestPrescription() }
-//                }
-//                Button("Acquistato") { feedVM.markAsPurchased() }
-//                Button("Assunto") { feedVM.markAsTaken() }
-//                Spacer()
-//                Button("Annulla") { feedVM.cancelSelection() }
-//            }
-//            .font(.body)
-//            .padding()
-//            .frame(maxWidth: .infinity)
-//            .background(.thinMaterial)
-//            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-//            .shadow(radius: 10)
-//            .padding(.horizontal, 16)
-//            .padding(.bottom, 12)
-//        }
-//        .transition(.move(edge: .bottom))
-//        .animation(.easeInOut, value: feedVM.isSelecting)
-//    }
-
-    // MARK: – Helpers
-    // addMedicine sheet removed; settings now in tab
-
-    // Funzionalità fotocamera spostata nel form di creazione
 }
 
 // MARK: – Preview

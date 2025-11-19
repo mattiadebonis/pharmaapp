@@ -204,5 +204,4 @@ class DataManager {
             fatalError("Errore durante il controllo o l'inizializzazione delle opzioni: \(error.localizedDescription)")
         }
     }
-
 }
