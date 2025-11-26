@@ -15,7 +15,6 @@ struct MedicineDetailView: View {
     )
     @State private var detailDetent: PresentationDetent = .fraction(0.66)
     @State private var emailDetent: PresentationDetent = .fraction(0.55)
-    @State private var editedName: String = ""
     
     let medicine: Medicine
     let package: Package
@@ -48,16 +47,14 @@ struct MedicineDetailView: View {
     var body: some View {
         NavigationStack {
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 20) {
-                    nameField
-                    heroCard
+                VStack(spacing: 24) {
                     stockSection
                     therapiesSection
-                    actionButtonsSection
+                    quickActionsSection
                 }
                 .padding(.horizontal)
-                .padding(.top, 16)
-                .padding(.bottom, 32)
+                .padding(.top, 24)
+                .padding(.bottom, 40)
             }
             .background(Color(.systemGroupedBackground).ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
@@ -86,12 +83,7 @@ struct MedicineDetailView: View {
                 }
             }
         }
-        .onAppear {
-            detailDetent = .fraction(0.66)
-            if editedName.isEmpty {
-                editedName = medicine.nome
-            }
-        }
+        .onAppear { detailDetent = .fraction(0.66) }
         .presentationDetents([.fraction(0.66), .large], selection: $detailDetent)
         .sheet(isPresented: $showEmailSheet) {
             EmailRequestSheet(
@@ -120,17 +112,30 @@ struct MedicineDetailView: View {
         }
     }
     
+    private struct PrimaryAction {
+        let label: String
+        let icon: String
+        let color: Color
+    }
+    
     // MARK: - Computed properties
     private var currentOption: Option? {
         options.first
     }
     
-    private var shouldShowPrescriptionRequestButton: Bool {
-        guard let option = currentOption, medicine.obbligo_ricetta else { return false }
-        let low = medicine.isInEsaurimento(option: option, recurrenceManager: recurrenceManager) || totalLeftover <= 0
-        return low && !medicine.hasPendingNewPrescription()
+    private var primaryAction: PrimaryAction? {
+        if let option = currentOption,
+           medicine.obbligo_ricetta,
+           medicine.isInEsaurimento(option: option, recurrenceManager: recurrenceManager) {
+            if medicine.hasPendingNewPrescription() {
+                return PrimaryAction(label: "Compra", icon: "cart.fill", color: .blue)
+            } else {
+                return PrimaryAction(label: "Richiedi ricetta", icon: "envelope", color: .orange)
+            }
+        }
+        return PrimaryAction(label: "Registra acquisto", icon: "cart.fill", color: .blue)
     }
-    
+
     private var detailAccentColor: Color {
         if totalLeftover <= 0 {
             return .red
@@ -291,24 +296,16 @@ struct MedicineDetailView: View {
         return formatter.string(from: earliest.time)
     }
     
+    private func handlePrimaryAction(_ action: PrimaryAction) {
+        if action.label == "Richiedi ricetta" {
+            showEmailSheet = true
+        } else {
+            viewModel.addPurchase(for: medicine, for: package)
+        }
+    }
+    
     private func markAsToPurchase() {
         actionsViewModel.emptyStocks(for: medicine)
-    }
-    
-    private func registerIntake() {
-        let therapy = medicine.therapies?.first
-        actionsViewModel.addIntake(for: medicine, package: package, therapy: therapy)
-    }
-    
-    private func saveMedicineName() {
-        let trimmed = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed != medicine.nome else { return }
-        medicine.nome = trimmed
-        do {
-            try context.save()
-        } catch {
-            print("Errore salvataggio nome medicina: \(error.localizedDescription)")
-        }
     }
     
     private func handleThresholdSelection(mode: StockThresholdMode, value: Int) {
@@ -421,55 +418,6 @@ struct MedicineDetailView: View {
         }
         return false
     }
-    
-    private var actionButtonsSection: some View {
-        Section {
-            VStack(spacing: 12) {
-                if shouldShowPrescriptionRequestButton {
-                    Button("Richiedi ricetta") {
-                        showEmailSheet = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                } else {
-                    Button("Compra") {
-                        viewModel.addPurchase(for: medicine, for: package)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                }
-                
-                Button("Svuota scorte") {
-                    markAsToPurchase()
-                }
-                .buttonStyle(.bordered)
-                .frame(maxWidth: .infinity, alignment: .center)
-                
-                Button("Assumi") {
-                    registerIntake()
-                }
-                .buttonStyle(.bordered)
-                .frame(maxWidth: .infinity, alignment: .center)
-            }
-            .controlSize(.large)
-        }
-        .textCase(nil)
-        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 12, trailing: 16))
-        .listRowBackground(Color.clear)
-    }
-    
-    private var nameField: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Nome farmaco")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            TextField("Inserisci nome", text: $editedName)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { saveMedicineName() }
-                .onChange(of: editedName) { _ in saveMedicineName() }
-        }
-        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 0, trailing: 16))
-    }
 }
 
 // MARK: - Decorative sections
@@ -538,6 +486,32 @@ extension MedicineDetailView {
         )
         .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
         .shadow(color: detailAccentColor.opacity(0.3), radius: 16, y: 8)
+    }
+
+    private var quickActionsSection: some View {
+            VStack(spacing: 14) {
+                if let action = primaryAction {
+                    Button {
+                        handlePrimaryAction(action)
+                    } label: {
+                        Label(action.label, systemImage: action.icon)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(CapsuleActionButtonStyle(fill: action.color, textColor: .white))
+                }
+
+                HStack(spacing: 12) {
+                    Button {
+                        markAsToPurchase()
+                    } label: {
+                        Label("Svuota scorte", systemImage: "cart.badge.plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(CapsuleActionButtonStyle(fill: .gray.opacity(0.2), textColor: .primary))
+                }
+            }
+       
+       
     }
 
     private var stockSection: some View {
@@ -647,6 +621,24 @@ private struct HeroStat: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(Color.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+}
+
+private struct CapsuleActionButtonStyle: ButtonStyle {
+    let fill: Color
+    let textColor: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(textColor)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(fill.opacity(configuration.isPressed ? 0.7 : 1))
+            )
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
     }
 }
 
