@@ -46,11 +46,5 @@ struct StockRowView: View {
         }
         .padding(20)
         .foregroundColor(textColor)
-        .background(Color.white)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color(red: 220/255, green: 220/255, blue: 220/255), lineWidth: 1)
-        )
-        .cornerRadius(8)
     }
 }

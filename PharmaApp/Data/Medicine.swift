@@ -14,9 +14,12 @@ public class Medicine: NSManagedObject, Identifiable {
     @NSManaged public var nome: String
     @NSManaged public var principio_attivo: String
     @NSManaged public var obbligo_ricetta: Bool
+    @NSManaged public var custom_stock_threshold: Int32
+    @NSManaged public var prescribingDoctor: Doctor?
     @NSManaged public var therapies: Set<Therapy>?
     @NSManaged public var packages: Set<Package>
     @NSManaged public var logs: Set<Log>?
+    @NSManaged public var cabinet: Set<Cabinet>?
     
     // MARK: - Relazioni di convenienza
     func addToTherapies(_ therapy: Therapy) {
@@ -82,7 +85,7 @@ extension Medicine {
         }
         
         let coverageDays = totaleScorte / consumoGiornalieroTotale
-        return coverageDays < Double(option.day_threeshold_stocks_alarm)
+        return coverageDays < Double(stockThreshold(option: option))
     }
 
     /// Calcola il numero totale di unità disponibili quando la medicina non è legata a terapie.
@@ -184,6 +187,15 @@ extension Medicine {
         }
         
         return totalScore
+    }
+    
+    func stockThreshold(option: Option?) -> Int {
+        let custom = Int(custom_stock_threshold)
+        if custom > 0 {
+            return custom
+        }
+        let general = Int(option?.day_threeshold_stocks_alarm ?? 0)
+        return general > 0 ? general : 7
     }
     
     

@@ -156,7 +156,7 @@ struct MedicineRowView: View {
         return Calendar.current.isDateInToday(d) && hasRemainingDosesToday
     }
     private var coverageThreshold: Int {
-        Int(option?.day_threeshold_stocks_alarm ?? 7)
+        medicine.stockThreshold(option: option)
     }
 
     // Messaggio e stile per warning scorte (sotto soglia copertura o poche unità senza terapie)
@@ -194,33 +194,28 @@ struct MedicineRowView: View {
     // MARK: - Body
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 16) {
-                leadingIcon
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(displayName)
-                        .font(.headline.weight(.semibold))
-                        .lineLimit(2)
-                    Text(medicineSubtitleText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 12) {
+            leadingIcon
+            VStack(alignment: .leading, spacing: 10) {
+                Text(displayName)
+                    .font(.headline.weight(.semibold))
+                    .lineLimit(2)
+                infoPills
+                if hasBadges {
+                    badgesRow
                 }
-                Spacer(minLength: 12)
-                stockColumn
             }
-            badgesRow
+            Spacer(minLength: 0)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color(.systemBackground))
-                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 6)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(selectionBorderColor, lineWidth: selectionBorderWidth)
-        )
+        .padding(.vertical, 12)
+        .padding(.horizontal, 4)
+        .contentShape(Rectangle())
+        .overlay {
+            if isInSelectionMode {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(selectionBorderColor, lineWidth: selectionBorderWidth)
+            }
+        }
     }
     
     private var hasTherapiesFlag: Bool { !therapies.isEmpty }
@@ -229,28 +224,11 @@ struct MedicineRowView: View {
         return trimmed.isEmpty ? "Medicinale" : trimmed
     }
     
-    private var medicineSubtitleText: String {
-        var parts: [String] = []
-        if let descriptor = packageDescriptor {
-            parts.append(descriptor)
-        }
-        if let window = therapyWindowDescription {
-            parts.append(window)
-        } else {
-            parts.append(hasTherapiesFlag ? "Terapia attiva" : "Uso al bisogno")
-        }
-        return parts.joined(separator: " · ")
-    }
-    
     private var leadingIcon: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(iconGradient)
-                .frame(width: 56, height: 56)
-            Image(systemName: leadingIconSymbol)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(.white)
-        }
+        Image(systemName: leadingIconSymbol)
+            .font(.system(size: 22, weight: .semibold))
+            .foregroundStyle(leadingAccentColor)
+            .frame(width: 28, height: 28, alignment: .topLeading)
     }
     
     private var leadingIconSymbol: String {
@@ -261,14 +239,6 @@ struct MedicineRowView: View {
             return "pills.fill"
         }
         return "cross.case.fill"
-    }
-    
-    private var iconGradient: LinearGradient {
-        LinearGradient(
-            colors: [leadingAccentColor, leadingAccentColor.opacity(0.8)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
     }
     
     private var leadingAccentColor: Color {
@@ -284,29 +254,83 @@ struct MedicineRowView: View {
         return hasTherapiesFlag ? .teal : .green
     }
     
-    private var stockColumn: some View {
-        let display = stockDisplay
-        return VStack(alignment: .trailing, spacing: 4) {
-            HStack(spacing: 6) {
-                Image(systemName: display.icon)
-                Text(display.primary)
-                    .fontWeight(.semibold)
+    private var infoPills: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                pill(for: therapyInfoChip)
             }
-            .font(.subheadline)
-            .foregroundStyle(display.color)
-            
-            Text(display.secondary)
-                .font(.caption)
-                .foregroundStyle(display.color.opacity(0.85))
+            HStack(spacing: 8) {
+                pill(for: stockChip)
+                if let packageChip = packageChip {
+                    pill(for: packageChip)
+                }
+            }
         }
-        .frame(minWidth: 92, alignment: .trailing)
+    }
+
+    private struct InfoChip {
+        let icon: String?
+        let text: String
+        let color: Color
+    }
+
+    private func pill(for data: InfoChip) -> some View {
+        HStack(spacing: 6) {
+            if let icon = data.icon {
+                Image(systemName: icon)
+                    .foregroundStyle(data.color)
+            }
+            Text(data.text)
+                .foregroundStyle(.secondary)
+        }
+        .font(.subheadline)
+        .multilineTextAlignment(.leading)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var therapyInfoChip: InfoChip {
+        guard hasTherapiesFlag else {
+            return InfoChip(icon: "staroflife", text: "Uso al bisogno", color: .teal)
+        }
+        let nextText: String = {
+            guard let next = nextDate else { return "nessuna dose programmata" }
+            let cal = Calendar.current
+            if cal.isDateInToday(next) {
+                return "oggi alle \(time(next))"
+            }
+            if cal.isDateInTomorrow(next) {
+                return "domani"
+            }
+            if let overm = cal.date(byAdding: .day, value: 2, to: Date()), cal.isDate(next, inSameDayAs: overm) {
+                return "dopodomani"
+            }
+            return day(next).lowercased()
+        }()
+        let personText = therapyPersonSummary.map { "per \($0)" } ?? ""
+        let text = [nextText, personText].filter { !$0.isEmpty }.joined(separator: " · ")
+        let isToday = nextDate.map { Calendar.current.isDateInToday($0) } ?? false
+        let color: Color = isToday ? .blue : .teal
+        return InfoChip(icon: "staroflife", text: text, color: color)
+    }
+
+    private var stockChip: InfoChip {
+        let display = stockDisplay
+        return InfoChip(
+            icon: "square.stack.3d.up.fill",
+            text: "\(display.primary) · \(display.secondary)",
+            color: display.color
+        )
+    }
+
+    private var packageChip: InfoChip? {
+        guard let descriptor = packageDescriptor else { return nil }
+        return InfoChip(icon: nil, text: descriptor, color: .secondary)
     }
     
     private var badgesRow: some View {
         HStack(spacing: 8) {
-            badge(for: therapyBadgeData)
-            if let stockBadge = stockStatusBadge {
-                badge(for: stockBadge)
+            if let therapyBadge = therapyBadgeData {
+                badge(for: therapyBadge)
             }
             Spacer()
         }
@@ -317,35 +341,47 @@ struct MedicineRowView: View {
         let text: String
         let color: Color
     }
-    
-    private func badge(for data: BadgeData) -> some View {
-        Label(data.text, systemImage: data.icon)
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(data.color.opacity(0.15))
-            )
-            .foregroundStyle(data.color)
+
+    private var hasBadges: Bool {
+        therapyBadgeData != nil
     }
     
-    private var therapyBadgeData: BadgeData {
+    private func badge(for data: BadgeData) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: data.icon)
+                .foregroundStyle(data.color)
+            Text(data.text)
+                .foregroundStyle(.secondary)
+        }
+        .font(.footnote)
+    }
+    
+    private var therapyBadgeData: BadgeData? {
         if let overdue = earliestOverdueDoseTime {
             return BadgeData(icon: "bell.badge.fill", text: "Dose saltata \(time(overdue))", color: .red)
         }
-        if isDoseToday, let next = nextDate {
-            return BadgeData(icon: "clock.fill", text: "Dose oggi \(time(next))", color: .blue)
-        }
-        if hasTherapiesFlag {
-            return BadgeData(icon: "stethoscope", text: "Terapia programmata", color: .teal)
-        }
-        return BadgeData(icon: "staroflife", text: "Uso al bisogno", color: .secondary)
+        return nil
     }
-    
-    private var stockStatusBadge: BadgeData? {
-        guard let warning = stocksWarning else { return nil }
-        return BadgeData(icon: warning.icon, text: warning.text, color: warning.color)
+
+    private var therapyPersonSummary: String? {
+        let rawNames = therapies.compactMap { therapyPersonName($0) }.filter { !$0.isEmpty }
+        guard !rawNames.isEmpty else { return nil }
+        var seen = Set<String>()
+        var unique: [String] = []
+        for name in rawNames where seen.insert(name).inserted {
+            unique.append(name)
+        }
+        if unique.count == 1 { return unique.first }
+        if unique.count == 2 { return "\(unique[0]) e \(unique[1])" }
+        let firstTwo = unique.prefix(2).joined(separator: ", ")
+        return "\(firstTwo) +\(unique.count - 2)"
+    }
+
+    private func therapyPersonName(_ therapy: Therapy) -> String? {
+        let first = (therapy.person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let last = (therapy.person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let components = [first, last].filter { !$0.isEmpty }
+        return components.joined(separator: " ")
     }
     
     private var packageDescriptor: String? {
@@ -360,21 +396,6 @@ struct MedicineRowView: View {
     private var primaryPackage: Package? {
         guard !medicine.packages.isEmpty else { return nil }
         return medicine.packages.sorted { $0.numero > $1.numero }.first
-    }
-    
-    private var therapyWindowDescription: String? {
-        guard hasTherapiesFlag else { return nil }
-        guard let next = nextDate else { return nil }
-        if Calendar.current.isDateInToday(next) {
-            let hour = Calendar.current.component(.hour, from: next)
-            switch hour {
-            case 5..<12: return "Terapia mattutina"
-            case 12..<18: return "Terapia pomeridiana"
-            case 18..<24: return "Terapia serale"
-            default: return "Terapia notturna"
-            }
-        }
-        return "Dose \(day(next).lowercased())"
     }
     
     private var stockDisplay: StockDisplay {

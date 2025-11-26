@@ -13,6 +13,9 @@ struct MedicineDetailView: View {
     @StateObject private var actionsViewModel = MedicineRowViewModel(
         managedObjectContext: PersistenceController.shared.container.viewContext
     )
+    @State private var detailDetent: PresentationDetent = .fraction(0.66)
+    @State private var emailDetent: PresentationDetent = .fraction(0.55)
+    @State private var editedName: String = ""
     
     let medicine: Medicine
     let package: Package
@@ -45,18 +48,16 @@ struct MedicineDetailView: View {
     var body: some View {
         NavigationStack {
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 24) {
+                VStack(spacing: 20) {
+                    nameField
                     heroCard
-                    quickActionsSection
                     stockSection
-                    if shouldShowPrescriptionCard {
-                        prescriptionSection
-                    }
                     therapiesSection
+                    actionButtonsSection
                 }
                 .padding(.horizontal)
-                .padding(.top, 24)
-                .padding(.bottom, 40)
+                .padding(.top, 16)
+                .padding(.bottom, 32)
             }
             .background(Color(.systemGroupedBackground).ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
@@ -68,9 +69,30 @@ struct MedicineDetailView: View {
                     Text(medicine.nome.isEmpty ? "Dettagli" : medicine.nome)
                         .font(.headline)
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button(role: .destructive) {
+                            deleteMedicine()
+                        } label: {
+                            Label("Elimina", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.headline)
+                            .padding(6)
+                            .contentShape(Rectangle())
+                    }
+                    .contentShape(Rectangle())
+                }
             }
         }
-        .presentationDetents([.medium, .large])
+        .onAppear {
+            detailDetent = .fraction(0.66)
+            if editedName.isEmpty {
+                editedName = medicine.nome
+            }
+        }
+        .presentationDetents([.fraction(0.66), .large], selection: $detailDetent)
         .sheet(isPresented: $showEmailSheet) {
             EmailRequestSheet(
                 doctorName: doctorDisplayName,
@@ -93,14 +115,9 @@ struct MedicineDetailView: View {
                     }
                 }
             )
-            .presentationDetents([.medium, .large])
+            .onAppear { emailDetent = .fraction(0.55) }
+            .presentationDetents([.fraction(0.55), .large], selection: $emailDetent)
         }
-    }
-    
-    private struct PrimaryAction {
-        let label: String
-        let icon: String
-        let color: Color
     }
     
     // MARK: - Computed properties
@@ -108,23 +125,12 @@ struct MedicineDetailView: View {
         options.first
     }
     
-    private var primaryAction: PrimaryAction? {
-        if let option = currentOption,
-           medicine.obbligo_ricetta,
-           medicine.isInEsaurimento(option: option, recurrenceManager: recurrenceManager) {
-            if medicine.hasPendingNewPrescription() {
-                return PrimaryAction(label: "Compra", icon: "cart.fill", color: .blue)
-            } else {
-                return PrimaryAction(label: "Richiedi ricetta", icon: "envelope", color: .orange)
-            }
-        }
-        return PrimaryAction(label: "Registra acquisto", icon: "cart.fill", color: .blue)
+    private var shouldShowPrescriptionRequestButton: Bool {
+        guard let option = currentOption, medicine.obbligo_ricetta else { return false }
+        let low = medicine.isInEsaurimento(option: option, recurrenceManager: recurrenceManager) || totalLeftover <= 0
+        return low && !medicine.hasPendingNewPrescription()
     }
-
-    private var shouldShowPrescriptionCard: Bool {
-        !prescriptionStatus.isEmpty
-    }
-
+    
     private var detailAccentColor: Color {
         if totalLeftover <= 0 {
             return .red
@@ -192,6 +198,11 @@ struct MedicineDetailView: View {
         return "Stimato fino al \(stockDateFormatter.string(from: date))"
     }
     
+    private var generalStockThreshold: Int {
+        let value = Int(currentOption?.day_threeshold_stocks_alarm ?? 0)
+        return value > 0 ? value : 7
+    }
+    
     private var currentTherapiesSet: Set<Therapy> {
         medicine.therapies ?? []
     }
@@ -220,23 +231,27 @@ struct MedicineDetailView: View {
         totalLeftover <= 0 ? .red : .primary
     }
     
-    private var prescriptionStatus: String {
-        guard let option = currentOption, medicine.obbligo_ricetta else { return "" }
-        let inEsaurimento = medicine.isInEsaurimento(option: option, recurrenceManager: recurrenceManager)
-        if inEsaurimento {
-            if medicine.hasPendingNewPrescription() {
-                return "Da comprare"
-            } else if medicine.hasNewPrescritpionRequest() {
-                return "Ricetta richiesta"
-            } else {
-                return "Ricetta da chiedere"
-            }
+    private var assignedDoctor: Doctor? {
+        medicine.prescribingDoctor
+    }
+    
+    private var assignedDoctorEmail: String? {
+        guard let email = assignedDoctor?.mail?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !email.isEmpty else {
+            return nil
         }
-        return ""
+        return email
+    }
+    
+    private var assignedDoctorName: String? {
+        doctorFullName(assignedDoctor)
     }
     
     private var doctorWithEmail: Doctor? {
-        doctors.first(where: { !($0.mail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+        if let doctor = assignedDoctor, let email = doctor.mail?.trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty {
+            return doctor
+        }
+        return doctors.first(where: { !($0.mail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
     }
     
     private var doctorEmail: String? {
@@ -244,6 +259,9 @@ struct MedicineDetailView: View {
     }
     
     private var doctorDisplayName: String {
+        if let assignedName = assignedDoctorName, !assignedName.isEmpty {
+            return assignedName
+        }
         let first = doctorWithEmail?.nome?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let last = doctorWithEmail?.cognome?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let components = [first, last].filter { !$0.isEmpty }
@@ -273,16 +291,47 @@ struct MedicineDetailView: View {
         return formatter.string(from: earliest.time)
     }
     
-    private func handlePrimaryAction(_ action: PrimaryAction) {
-        if action.label == "Richiedi ricetta" {
-            showEmailSheet = true
-        } else {
-            viewModel.addPurchase(for: medicine, for: package)
+    private func markAsToPurchase() {
+        actionsViewModel.emptyStocks(for: medicine)
+    }
+    
+    private func registerIntake() {
+        let therapy = medicine.therapies?.first
+        actionsViewModel.addIntake(for: medicine, package: package, therapy: therapy)
+    }
+    
+    private func saveMedicineName() {
+        let trimmed = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != medicine.nome else { return }
+        medicine.nome = trimmed
+        do {
+            try context.save()
+        } catch {
+            print("Errore salvataggio nome medicina: \(error.localizedDescription)")
         }
     }
     
-    private func markAsToPurchase() {
-        actionsViewModel.emptyStocks(for: medicine)
+    private func handleThresholdSelection(mode: StockThresholdMode, value: Int) {
+        switch mode {
+        case .general:
+            medicine.custom_stock_threshold = 0
+        case .custom:
+            medicine.custom_stock_threshold = Int32(max(1, value))
+        }
+        do {
+            try context.save()
+        } catch {
+            print("Errore salvataggio soglia scorte: \(error.localizedDescription)")
+        }
+    }
+    
+    private func updatePrescribingDoctor(_ doctor: Doctor?) {
+        medicine.prescribingDoctor = doctor
+        do {
+            try context.save()
+        } catch {
+            print("Errore aggiornamento medico: \(error.localizedDescription)")
+        }
     }
     
     private func deleteMedicine() {
@@ -325,6 +374,18 @@ struct MedicineDetailView: View {
         }
     }
     
+    private func daysText(_ value: Int) -> String {
+        value == 1 ? "1 giorno" : "\(value) giorni"
+    }
+    
+    private func doctorFullName(_ doctor: Doctor?) -> String {
+        guard let doctor else { return "" }
+        let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let components = [first, last].filter { !$0.isEmpty }
+        return components.joined(separator: " ")
+    }
+    
     private func coverageDays(for med: Medicine, recurrenceManager: RecurrenceManager) -> Double? {
         if let therapies = med.therapies, !therapies.isEmpty {
             var totalLeft: Double = 0
@@ -359,6 +420,55 @@ struct MedicineDetailView: View {
             return remaining <= 0 || remaining < threshold
         }
         return false
+    }
+    
+    private var actionButtonsSection: some View {
+        Section {
+            VStack(spacing: 12) {
+                if shouldShowPrescriptionRequestButton {
+                    Button("Richiedi ricetta") {
+                        showEmailSheet = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                } else {
+                    Button("Compra") {
+                        viewModel.addPurchase(for: medicine, for: package)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                }
+                
+                Button("Svuota scorte") {
+                    markAsToPurchase()
+                }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity, alignment: .center)
+                
+                Button("Assumi") {
+                    registerIntake()
+                }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .controlSize(.large)
+        }
+        .textCase(nil)
+        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 12, trailing: 16))
+        .listRowBackground(Color.clear)
+    }
+    
+    private var nameField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Nome farmaco")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            TextField("Inserisci nome", text: $editedName)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { saveMedicineName() }
+                .onChange(of: editedName) { _ in saveMedicineName() }
+        }
+        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 0, trailing: 16))
     }
 }
 
@@ -430,50 +540,42 @@ extension MedicineDetailView {
         .shadow(color: detailAccentColor.opacity(0.3), radius: 16, y: 8)
     }
 
-    private var quickActionsSection: some View {
-        DetailSectionCard(title: "Azioni rapide", icon: "bolt.fill") {
-            VStack(spacing: 14) {
-                if let action = primaryAction {
-                    Button {
-                        handlePrimaryAction(action)
-                    } label: {
-                        Label(action.label, systemImage: action.icon)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(CapsuleActionButtonStyle(fill: action.color, textColor: .white))
-                }
-
-                HStack(spacing: 12) {
-                    Button {
-                        markAsToPurchase()
-                    } label: {
-                        Label("Da acquistare", systemImage: "cart.badge.plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(CapsuleActionButtonStyle(fill: Color(.secondarySystemBackground), textColor: .primary))
-
-                    Button(role: .destructive) {
-                        deleteMedicine()
-                    } label: {
-                        Label("Elimina", systemImage: "trash")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(CapsuleActionButtonStyle(fill: Color.red.opacity(0.15), textColor: .red))
-                }
-            }
-        }
-    }
-
     private var stockSection: some View {
-        DetailSectionCard(title: "Scorte", icon: "shippingbox") {
-            NavigationInfoRow(
-                icon: "square.stack.3d",
-                title: "Gestione scorte",
-                subtitle: stockEstimateSubtitle,
-                value: stockDisplayValue,
-                valueColor: leftoverColor
-            ) {
-                StockManagementView(medicine: medicine, package: package, viewModel: viewModel)
+        Section {
+            NavigationLink {
+                StockManagementView(
+                    viewModel: viewModel,
+                    medicine: medicine,
+                    package: package,
+                    generalThreshold: generalStockThreshold,
+                    doctors: doctors,
+                    onThresholdSave: handleThresholdSelection,
+                    onDoctorSave: updatePrescribingDoctor
+                )
+            } label: {
+                HStack(alignment: .center, spacing: 12) {
+                    Image(systemName: "square.stack.3d")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .frame(width: 28, height: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Refill e scorte")
+                            .font(.body.weight(.semibold))
+                        if let subtitle = stockEstimateSubtitle, !subtitle.isEmpty {
+                            Text(subtitle)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Text(stockDisplayValue)
+                        .font(.headline)
+                        .foregroundStyle(leftoverColor)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 6)
             }
 
             if totalLeftover <= 0 {
@@ -482,45 +584,46 @@ extension MedicineDetailView {
                     .foregroundStyle(.secondary)
             }
         }
+        .textCase(nil)
+        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+        .listRowBackground(Color(.systemBackground))
     }
 
     private var therapiesSection: some View {
-        DetailSectionCard(title: "Terapie", icon: "clock") {
-            NavigationInfoRow(
-                icon: "clock.arrow.circlepath",
-                title: "Terapie attive",
-                subtitle: therapySummarySubtitle,
-                value: "\(therapyCount)",
-                valueColor: .primary
-            ) {
+        Section {
+            NavigationLink {
                 TherapiesManagementView(medicine: medicine, package: package)
+            } label: {
+                HStack(alignment: .center, spacing: 12) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .frame(width: 28, height: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Terapie")
+                            .font(.body.weight(.semibold))
+                        if !therapySummarySubtitle.isEmpty {
+                            Text(therapySummarySubtitle)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Text("\(therapyCount)")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 6)
             }
         }
+        .textCase(nil)
+        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+        .listRowBackground(Color(.systemBackground))
     }
 
-    private var prescriptionSection: some View {
-        DetailSectionCard(title: "Ricetta", icon: "doc.text.fill") {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.title3)
-                    .foregroundStyle(.orange)
-                    .frame(width: 40, height: 40)
-                    .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Stato ricetta")
-                        .font(.subheadline.weight(.semibold))
-                    Text(prescriptionStatus)
-                        .font(.body)
-                    if let email = doctorEmail {
-                        Label(email, systemImage: "envelope")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-            }
-        }
-    }
 }
 // MARK: - UI helpers
 private struct HeroStat: View {
@@ -544,112 +647,6 @@ private struct HeroStat: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(Color.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-    }
-}
-
-private struct DetailSectionCard<Content: View>: View {
-    let title: String
-    let icon: String
-    let content: Content
-
-    init(title: String, icon: String, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.icon = icon
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label(title.uppercased(), systemImage: icon)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            content
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.black.opacity(0.04), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.04), radius: 12, y: 4)
-    }
-}
-
-private struct NavigationInfoRow<Destination: View>: View {
-    let icon: String
-    let title: String
-    let subtitle: String?
-    let value: String?
-    let valueColor: Color
-    let destination: Destination
-
-    init(icon: String,
-         title: String,
-         subtitle: String?,
-         value: String?,
-         valueColor: Color,
-         @ViewBuilder destination: () -> Destination) {
-        self.icon = icon
-        self.title = title
-        self.subtitle = subtitle
-        self.value = value
-        self.valueColor = valueColor
-        self.destination = destination()
-    }
-
-    var body: some View {
-        NavigationLink(destination: destination) {
-            HStack(alignment: .center, spacing: 16) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color(.secondarySystemBackground))
-                        .frame(width: 48, height: 48)
-                    Image(systemName: icon)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.body.weight(.semibold))
-                    if let subtitle, !subtitle.isEmpty {
-                        Text(subtitle)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-                if let value {
-                    Text(value)
-                        .font(.headline)
-                        .foregroundStyle(valueColor)
-                }
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(12)
-            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct CapsuleActionButtonStyle: ButtonStyle {
-    let fill: Color
-    let textColor: Color
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(textColor)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(fill.opacity(configuration.isPressed ? 0.7 : 1))
-            )
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
     }
 }
 
@@ -830,28 +827,134 @@ private struct EmailRequestSheet: View {
     }
 }
 
+private enum StockThresholdMode {
+    case general
+    case custom
+}
+
+private struct StockThresholdSheet: View {
+    let generalThreshold: Int
+    let onSave: (StockThresholdMode, Int) -> Void
+    
+    @State private var mode: StockThresholdMode
+    @State private var customValue: Int
+    @Environment(\.dismiss) private var dismiss
+    
+    init(generalThreshold: Int,
+         initialMode: StockThresholdMode,
+         initialCustomValue: Int,
+         onSave: @escaping (StockThresholdMode, Int) -> Void) {
+        self.generalThreshold = max(1, generalThreshold)
+        _mode = State(initialValue: initialMode)
+        let clamped = min(max(initialCustomValue, 1), 60)
+        _customValue = State(initialValue: clamped)
+        self.onSave = onSave
+    }
+    
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                optionRow(
+                    title: "Usa la soglia generale (\(daysText(generalThreshold)))",
+                    subtitle: "Valida per tutti i farmaci senza impostazioni personalizzate.",
+                    selection: .general
+                )
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    optionRow(
+                        title: "Imposta una soglia solo per questo farmaco",
+                        subtitle: nil,
+                        selection: .custom
+                    )
+                    if mode == .custom {
+                        Stepper(value: $customValue, in: 1...60) {
+                            Text("Avvisami quando restano \(daysText(customValue)) di scorte.")
+                                .font(.body)
+                        }
+                        .padding(.leading, 34)
+                    }
+                }
+                
+                Spacer(minLength: 0)
+            }
+            .padding()
+            .navigationTitle("Allarme scorte per questo farmaco")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annulla") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Salva") {
+                        onSave(mode, customValue)
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func optionRow(title: String, subtitle: String?, selection: StockThresholdMode) -> some View {
+        Button {
+            mode = selection
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: mode == selection ? "largecircle.fill.circle" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(.blue)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+            }
+            .padding(.vertical, 10)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private func daysText(_ value: Int) -> String {
+        value == 1 ? "1 giorno" : "\(value) giorni"
+    }
+}
+
 private struct StockManagementView: View {
     @ObservedObject var viewModel: MedicineFormViewModel
     let medicine: Medicine
     let package: Package
+    let generalThreshold: Int
+    let doctors: FetchedResults<Doctor>
+    let onThresholdSave: (StockThresholdMode, Int) -> Void
+    let onDoctorSave: (Doctor?) -> Void
     
-    @FetchRequest private var logs: FetchedResults<Log>
+    @State private var showThresholdSheet = false
+    @State private var customThreshold: Int?
+    @State private var selectedDoctorID: NSManagedObjectID?
     
-    private let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
-    
-    init(medicine: Medicine, package: Package, viewModel: MedicineFormViewModel) {
+    init(viewModel: MedicineFormViewModel,
+         medicine: Medicine,
+         package: Package,
+         generalThreshold: Int,
+         doctors: FetchedResults<Doctor>,
+         onThresholdSave: @escaping (StockThresholdMode, Int) -> Void,
+         onDoctorSave: @escaping (Doctor?) -> Void) {
         self.medicine = medicine
         self.package = package
         self.viewModel = viewModel
-        let request: NSFetchRequest<Log> = Log.fetchRequest() as! NSFetchRequest<Log>
-        request.predicate = NSPredicate(format: "medicine == %@", medicine)
-        request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: false)]
-        _logs = FetchRequest(fetchRequest: request)
+        self.generalThreshold = generalThreshold
+        self.doctors = doctors
+        self.onThresholdSave = onThresholdSave
+        self.onDoctorSave = onDoctorSave
+        let custom = Int(medicine.custom_stock_threshold)
+        _customThreshold = State(initialValue: custom > 0 ? custom : nil)
+        _selectedDoctorID = State(initialValue: medicine.prescribingDoctor?.objectID)
     }
     
     var body: some View {
@@ -865,36 +968,82 @@ private struct StockManagementView: View {
                     valueColor: stockColor,
                     showDisclosure: false
                 )
+    
+            }
+            
+            Section(header: Text("Allarme scorte")) {
+                SettingRow(
+                    icon: "bell.badge",
+                    title: "Soglia",
+                    value: thresholdValueText,
+                    subtitle: thresholdSubtitle,
+                    valueColor: .primary,
+                    showDisclosure: false
+                )
                 Button {
-                    viewModel.saveForniture(medicine: medicine, package: package)
+                    showThresholdSheet = true
                 } label: {
-                    Label("Registra acquisto", systemImage: "cart.badge.plus")
-                        .foregroundColor(.accentColor)
+                    Text("Imposta una soglia diversa per questo farmaco…")
+                        .font(.footnote.weight(.semibold))
                 }
                 .buttonStyle(.plain)
             }
             
-            Section(header: Text("Storico movimenti")) {
-                if logs.isEmpty {
-                    Text("Nessun movimento registrato")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(logs) { log in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(logDescription(for: log))
-                                .font(.subheadline)
-                            Text(dateFormatter.string(from: log.timestamp))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+            if medicine.obbligo_ricetta {
+                Section(header: Text("Medico prescrittore")) {
+                    if doctors.isEmpty {
+                        Text("Aggiungi un medico nelle Impostazioni per associarlo alle ricette.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Menu {
+                            Button {
+                                handleDoctorSelection(nil)
+                            } label: {
+                                HStack {
+                                    Text("Nessuno")
+                                    if selectedDoctorID == nil {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                            ForEach(doctors, id: \.objectID) { doctor in
+                                Button {
+                                    handleDoctorSelection(doctor)
+                                } label: {
+                                    HStack {
+                                        Text(doctorFullName(doctor) ?? "Medico")
+                                        if doctor.objectID == selectedDoctorID {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            SettingRow(
+                                icon: "stethoscope",
+                                title: "Medico",
+                                value: doctorFullName(selectedDoctor) ?? "Seleziona",
+                                subtitle: doctorSubtitle,
+                                valueColor: .primary
+                            )
                         }
-                        .padding(.vertical, 4)
                     }
                 }
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("Gestione scorte")
+        .navigationTitle("Refill e scorte")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showThresholdSheet) {
+            StockThresholdSheet(
+                generalThreshold: generalThreshold,
+                initialMode: customThreshold == nil ? .general : .custom,
+                initialCustomValue: customThreshold ?? generalThreshold,
+                onSave: handleThresholdSelection
+            )
+            .presentationDetents([.medium, .large])
+        }
     }
     
     private var stockValue: String {
@@ -904,6 +1053,24 @@ private struct StockManagementView: View {
     
     private var stockColor: Color {
         totalLeftover <= 0 ? .red : .primary
+    }
+    
+    private var thresholdValueText: String {
+        daysText(customThreshold ?? generalThreshold)
+    }
+    
+    private var thresholdSubtitle: String {
+        customThreshold != nil ? "Personalizzata per questo farmaco" : "Usa impostazioni generali"
+    }
+    
+    private var doctorSubtitle: String? {
+        guard let doctor = selectedDoctor else {
+            return doctors.isEmpty ? nil : "Nessuno"
+        }
+        if let email = doctor.mail?.trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty {
+            return email
+        }
+        return nil
     }
 
     private var totalLeftover: Int {
@@ -915,19 +1082,39 @@ private struct StockManagementView: View {
         return medicine.remainingUnitsWithoutTherapy() ?? 0
     }
     
-    private func logDescription(for log: Log) -> String {
-        switch log.type {
-        case "purchase":
-            return "Acquisto"
-        case "intake":
-            return "Assunzione registrata"
-        case "new_prescription":
-            return "Nuova ricetta"
-        case "new_prescription_request":
-            return "Richiesta ricetta"
-        default:
-            return log.type.capitalized
+    private func handleThresholdSelection(mode: StockThresholdMode, value: Int) {
+        switch mode {
+        case .general:
+            customThreshold = nil
+        case .custom:
+            customThreshold = max(1, value)
         }
+        onThresholdSave(mode, value)
+    }
+    
+    private func handleDoctorSelection(_ doctor: Doctor?) {
+        onDoctorSave(doctor)
+        selectedDoctorID = doctor?.objectID
+    }
+    
+    private func daysText(_ value: Int) -> String {
+        value == 1 ? "1 giorno" : "\(value) giorni"
+    }
+    
+    private func doctorFullName(_ doctor: Doctor?) -> String? {
+        guard let doctor else { return nil }
+        let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = [first, last].filter { !$0.isEmpty }
+        if parts.isEmpty {
+            return "Medico"
+        }
+        return parts.joined(separator: " ")
+    }
+    
+    private var selectedDoctor: Doctor? {
+        guard let id = selectedDoctorID else { return nil }
+        return doctors.first(where: { $0.objectID == id })
     }
 }
 

@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23605" systemVersion="24D60" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="24299" systemVersion="24G325" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+    <entity name="Cabinet" representedClassName=".Cabinet" syncable="YES">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <relationship name="medicines" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="cabinet" inverseEntity="Medicine"/>
+    </entity>
     <entity name="Doctor" representedClassName="Doctor" syncable="YES">
         <attribute name="cognome" optional="YES" attributeType="String"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
@@ -8,6 +13,7 @@
         <attribute name="nome" optional="YES" attributeType="String"/>
         <attribute name="orari" optional="YES" attributeType="String"/>
         <attribute name="telefono" optional="YES" attributeType="String"/>
+        <relationship name="medicines" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Medicine" inverseName="prescribingDoctor" inverseEntity="Medicine"/>
     </entity>
     <entity name="Dose" representedClassName=".Dose" syncable="YES">
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
@@ -24,11 +30,14 @@
     </entity>
     <entity name="Medicine" representedClassName=".Medicine" syncable="YES">
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="custom_stock_threshold" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="nome" optional="YES" attributeType="String"/>
         <attribute name="obbligo_ricetta" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
         <attribute name="principio_attivo" optional="YES" attributeType="String"/>
+        <relationship name="cabinet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Cabinet" inverseName="medicines" inverseEntity="Cabinet"/>
         <relationship name="logs" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Log" inverseName="medicine" inverseEntity="Log"/>
         <relationship name="packages" toMany="YES" deletionRule="Nullify" destinationEntity="Package" inverseName="medicine" inverseEntity="Package"/>
+        <relationship name="prescribingDoctor" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Doctor" inverseName="medicines" inverseEntity="Doctor"/>
         <relationship name="therapies" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Therapy" inverseName="medicine" inverseEntity="Therapy"/>
     </entity>
     <entity name="OpeningTime" representedClassName=".OpeningTime" syncable="YES">

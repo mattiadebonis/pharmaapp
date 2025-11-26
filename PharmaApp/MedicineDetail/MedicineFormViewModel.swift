@@ -54,6 +54,40 @@ class MedicineFormViewModel: ObservableObject {
     func addIntake(for medicine: Medicine, for package: Package, for therapy: Therapy) {
         addLog(for: medicine, for: package, for: therapy ,type: "intake")
     }
+
+    func setStockUnits(medicine: Medicine, package: Package, targetUnits: Int) {
+        let current = Self.currentUnits(for: medicine)
+        let desired = max(0, targetUnits)
+        let delta = desired - current
+        guard delta != 0 else { return }
+        let packSize = max(1, Int(package.numero))
+
+        if delta > 0 {
+            let purchaseCount = (delta + packSize - 1) / packSize
+            for _ in 0..<purchaseCount {
+                addLog(for: medicine, for: package, for: nil, type: "purchase")
+            }
+            let overshoot = purchaseCount * packSize - delta
+            if overshoot > 0 {
+                for _ in 0..<overshoot {
+                    addLog(for: medicine, for: package, for: nil, type: "intake")
+                }
+            }
+        } else {
+            for _ in 0..<abs(delta) {
+                addLog(for: medicine, for: package, for: nil, type: "intake")
+            }
+        }
+
+        do {
+            try context.save()
+            DispatchQueue.main.async {
+                self.isDataUpdated = true
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
     
     private func addLog(for medicine: Medicine, for package: Package, for therapy: Therapy?, type: String) {
         let newLog = Log(context: context)
@@ -71,5 +105,12 @@ class MedicineFormViewModel: ObservableObject {
         } catch {
             errorMessage = "Errore nel salvataggio del log: \(error.localizedDescription)"
         }
+    }
+
+    private static func currentUnits(for medicine: Medicine) -> Int {
+        if let therapies = medicine.therapies as? Set<Therapy>, !therapies.isEmpty {
+            return therapies.reduce(0) { $0 + Int($1.leftover()) }
+        }
+        return medicine.remainingUnitsWithoutTherapy() ?? 0
     }
 }

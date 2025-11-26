@@ -29,6 +29,7 @@ struct FeedView: View {
     @ObservedObject var viewModel: FeedViewModel
     let mode: Mode
     @State private var selectedMedicine: Medicine?
+    @State private var detailSheetDetent: PresentationDetent = .fraction(0.66)
     @StateObject private var locationVM = LocationSearchViewModel()
 
     init(viewModel: FeedViewModel, mode: Mode = .medicines) {
@@ -78,12 +79,6 @@ struct FeedView: View {
     private func medicinesScreen(sections: (purchase: [Medicine], oggi: [Medicine], ok: [Medicine])) -> some View {
         let rows = orderedRows(for: sections)
         List {
-           /*  Section {
-                medicineHero(for: sections)
-                    .listRowInsets(EdgeInsets(top: 16, leading: 0, bottom: 0, trailing: 0))
-                    .listRowBackground(Color.clear)
-            }
-            .listSectionSeparator(.hidden) */
 
             if appVM.suggestNearestPharmacies {
                 Section {
@@ -97,9 +92,10 @@ struct FeedView: View {
                 medicineList(for: rows)
             }
         }
+        .listRowSeparator(.hidden)
+        .listSectionSeparator(.hidden)
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color(.systemGroupedBackground))
         .scrollIndicators(.hidden)
         .id(logs.count)
         .sheet(isPresented: Binding(
@@ -114,7 +110,7 @@ struct FeedView: View {
                         medicine: medicine,
                         package: package
                     )
-                    .presentationDetents([.medium, .large])
+                    .presentationDetents([.fraction(0.66), .large], selection: $detailSheetDetent)
                     .presentationDragIndicator(.visible)
                 } else {
                     VStack(spacing: 12) {
@@ -142,80 +138,6 @@ struct FeedView: View {
         let days: Int
     }
 
-    private func medicineHero(for sections: (purchase: [Medicine], oggi: [Medicine], ok: [Medicine])) -> some View {
-        let total = medicines.count
-        let toRestock = sections.purchase.count
-        let todayCount = sections.oggi.count
-        let okCount = sections.ok.count
-        let highlightText: String = {
-            if toRestock > 0 {
-                return toRestock == 1 ? "1 farmaco richiede nuove scorte" : "\(toRestock) farmaci richiedono nuove scorte"
-            }
-            if todayCount > 0 {
-                return todayCount == 1 ? "1 assunzione programmata oggi" : "\(todayCount) assunzioni programmate oggi"
-            }
-            return "Armadio aggiornato: tutto sotto controllo"
-        }()
-
-        return VStack(alignment: .leading, spacing: 16) {
-            Capsule()
-                .fill(LinearGradient(colors: [.teal.opacity(0.6), .blue.opacity(0.6)], startPoint: .leading, endPoint: .trailing))
-                .frame(width: 80, height: 4)
-                .opacity(0.8)
-
-            HStack(alignment: .top, spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(LinearGradient(colors: [.teal.opacity(0.25), .blue.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 60, height: 60)
-                    Image(systemName: "cross.case.fill")
-                        .font(.system(size: 26, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Armadio dei farmaci")
-                        .font(.title3.weight(.bold))
-                    Text(highlightText)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-
-            HStack(spacing: 12) {
-                heroMetric(icon: "pills", title: "Totali", value: "\(total)", tint: .accentColor)
-                heroMetric(icon: "exclamationmark.triangle.fill", title: "Da riordinare", value: "\(toRestock)", tint: toRestock > 0 ? .orange : .green)
-                heroMetric(icon: "clock.badge.checkmark", title: "In programma", value: "\(todayCount)", tint: todayCount > 0 ? .blue : .teal)
-                heroMetric(icon: "checkmark.circle", title: "Stabili", value: "\(okCount)", tint: .secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(Color(.systemBackground))
-                .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 8)
-        )
-    }
-
-    private func heroMetric(icon: String, title: String, value: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: icon)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(tint, .secondary.opacity(0.7))
-                .labelStyle(.titleAndIcon)
-            Text(value)
-                .font(.title3.weight(.semibold))
-                .minimumScaleFactor(0.7)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
-        )
-    }
 
     private var smartBannerCard: some View {
         Button {
@@ -276,12 +198,12 @@ struct FeedView: View {
     private func upcomingStockEntries(for medicines: [Medicine]) -> [UpcomingStockEntry] {
         guard !medicines.isEmpty else { return [] }
         let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
-        let threshold = Int(options.first?.day_threeshold_stocks_alarm ?? 7)
-        let maxWindow = max(threshold + 5, threshold * 2)
         let entries = medicines.compactMap { medicine -> UpcomingStockEntry? in
             let name = (medicine.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { return nil }
             guard let days = estimatedCoverageDays(for: medicine, recurrenceManager: rec) else { return nil }
+            let threshold = medicine.stockThreshold(option: options.first)
+            let maxWindow = max(threshold + 5, threshold * 2)
             if days <= threshold { return nil }
             if days > maxWindow { return nil }
             return UpcomingStockEntry(name: name, days: days)
@@ -404,6 +326,7 @@ struct FeedView: View {
         }
         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
         .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
     }
 
     @ViewBuilder
@@ -433,7 +356,6 @@ struct FeedView: View {
             let start = cal.startOfDay(for: now)
             return cal.date(byAdding: DateComponents(day: 1, second: -1), to: start) ?? now
         }()
-        let coverageThreshold = Int(options.first?.day_threeshold_stocks_alarm ?? 7)
         
         enum StockStatus {
             case ok
@@ -563,15 +485,16 @@ struct FeedView: View {
         }
         
         func stockStatus(for m: Medicine) -> StockStatus {
+            let threshold = m.stockThreshold(option: options.first)
             if let coverage = coverageDays(for: m) {
                 if coverage <= 0 {
                     return .critical
                 }
-                return coverage < Double(coverageThreshold) ? .low : .ok
+                return coverage < Double(threshold) ? .low : .ok
             }
             if let remaining = m.remainingUnitsWithoutTherapy() {
                 if remaining <= 0 { return .critical }
-                return remaining < 7 ? .low : .ok
+                return remaining < threshold ? .low : .ok
             }
             return .unknown
         }
@@ -883,8 +806,8 @@ struct FeedView: View {
     // MARK: - Low stock detection (per mostrare la card)
     private func hasLowStock() -> Bool {
         let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
-        let threshold = Int(options.first?.day_threeshold_stocks_alarm ?? 7)
         for m in medicines {
+            let threshold = m.stockThreshold(option: options.first)
             if let therapies = m.therapies, !therapies.isEmpty {
                 var totalLeft: Double = 0
                 var totalDaily: Double = 0
@@ -901,7 +824,7 @@ struct FeedView: View {
                 }
             } else {
                 if let remaining = m.remainingUnitsWithoutTherapy() {
-                    if remaining <= 0 || remaining < 7 { return true }
+                    if remaining <= 0 || remaining < threshold { return true }
                 }
             }
         }
