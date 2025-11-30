@@ -14,10 +14,8 @@ struct NewMedicineView: View {
     // Medicine fields (semplificati)
     @State private var nome: String = ""
     @State private var obbligoRicetta: Bool = false
-    @State private var customThreshold: Int? = nil
+    @State private var customThreshold: Int = 7
     @State private var selectedDoctor: Doctor? = nil
-    @State private var thresholdMode: ThresholdMode = .general
-    @State private var thresholdValue: Int = 7
     @State private var therapySheetId = UUID()
     @State private var nameHighlights: [String] = []
     @State private var parsedName: String = ""
@@ -41,16 +39,11 @@ struct NewMedicineView: View {
 
     // Modal flags
     @State private var showRecipeSheet = false
-    @State private var showThresholdSheet = false
     @State private var showTherapySheet = false
     
     @State private var draftContext: NSManagedObjectContext?
     @State private var draftMedicine: Medicine?
     @State private var draftPackage: Package?
-    
-    private enum ThresholdMode {
-        case general, custom
-    }
     
     private struct CatalogMedicine: Identifiable, Hashable {
         let id: String
@@ -112,36 +105,9 @@ struct NewMedicineView: View {
     var body: some View {
         NavigationStack {
             Form {
-                
                 Section(header: Text("Soglia scorte")) {
-                    Toggle(isOn: Binding(
-                        get: { customThreshold != nil },
-                        set: { useCustom in
-                            customThreshold = useCustom ? (customThreshold ?? generalThreshold) : nil
-                            thresholdMode = useCustom ? .custom : .general
-                            thresholdValue = customThreshold ?? generalThreshold
-                        }
-                    )) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Soglia personalizzata")
-                            Text("Notifiche quando le scorte scendono sotto la soglia scelta.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .toggleStyle(SwitchToggleStyle(tint: .teal))
-                    
-                    if customThreshold != nil {
-                        Stepper(value: Binding(
-                            get: { customThreshold ?? generalThreshold },
-                            set: { customThreshold = max(1, min($0, 60)); thresholdValue = customThreshold ?? generalThreshold }
-                        ), in: 1...60) {
-                            Text("Avvisami quando restano \(customThreshold ?? generalThreshold) giorni")
-                        }
-                    } else {
-                        Text("Usa soglia generale: \(generalThreshold) giorni")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                    Stepper(value: $customThreshold, in: 1...60) {
+                        Text("Avvisami quando restano \(customThreshold) giorni")
                     }
                 }
                 
@@ -205,9 +171,6 @@ struct NewMedicineView: View {
         .sheet(isPresented: $showRecipeSheet) {
             recipeSheet
         }
-        .sheet(isPresented: $showThresholdSheet) {
-            thresholdSheet
-        }
         .sheet(isPresented: $showTherapySheet) {
             therapySheet.id(therapySheetId)
         }
@@ -242,13 +205,6 @@ struct NewMedicineView: View {
         return name
     }
     
-    private var thresholdSubtitle: String {
-        if let custom = customThreshold {
-            return "Personalizzata: \(custom) giorni"
-        }
-        return "Usa impostazioni generali (\(generalThreshold) giorni)"
-    }
-    
     private var ricettaSummary: String {
         if !obbligoRicetta {
             return "Ricetta non richiesta"
@@ -264,11 +220,6 @@ struct NewMedicineView: View {
             return "Terapie aggiunte (\(therapies.count))"
         }
         return "Nessuna terapia aggiunta"
-    }
-    
-    private var generalThreshold: Int {
-        let value = Int(options.first?.day_threeshold_stocks_alarm ?? 0)
-        return value > 0 ? value : 7
     }
     
     private var ricettaSubtitle: String {
@@ -354,82 +305,6 @@ struct NewMedicineView: View {
         }
     }
     
-    private var thresholdSheet: some View {
-        NavigationStack {
-            Form {
-                Section(header: Text("Modalità soglia")) {
-                    Button {
-                        thresholdMode = .general
-                        thresholdValue = generalThreshold
-                    } label: {
-                        HStack {
-                            Image(systemName: thresholdMode == .general ? "largecircle.fill.circle" : "circle")
-                                .foregroundStyle(.teal)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Usa la soglia generale (\(generalThreshold) giorni)")
-                                Text("Valida per tutti i farmaci senza impostazioni personalizzate.")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Button {
-                        thresholdMode = .custom
-                        if customThreshold == nil { thresholdValue = generalThreshold }
-                    } label: {
-                        HStack {
-                            Image(systemName: thresholdMode == .custom ? "largecircle.fill.circle" : "circle")
-                                .foregroundStyle(.teal)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Imposta una soglia solo per questo farmaco")
-                                if thresholdMode == .custom {
-                                    Text("Soglia attuale: \(thresholdValue) giorni")
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            Spacer()
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    
-                    if thresholdMode == .custom {
-                        Stepper(value: Binding(
-                            get: { thresholdValue },
-                            set: { thresholdValue = max(1, min($0, 60)) }
-                        ), in: 1...60) {
-                            Text("Avvisami quando restano \(thresholdValue) giorni")
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Soglia scorte")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                thresholdMode = customThreshold == nil ? .general : .custom
-                thresholdValue = customThreshold ?? generalThreshold
-            }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Chiudi") { showThresholdSheet = false }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("OK") {
-                        if thresholdMode == .general {
-                            customThreshold = nil
-                        } else {
-                            customThreshold = thresholdValue
-                        }
-                        showThresholdSheet = false
-                    }
-                }
-            }
-        }
-    }
-    
     private var therapySheet: some View {
         NavigationStack {
             if let draftMedicine, let draftPackage, let draftContext {
@@ -487,7 +362,7 @@ struct NewMedicineView: View {
             med.nome = baseName()
             med.obbligo_ricetta = obbligoRicetta
             med.principio_attivo = selectedCatalogMedicine?.principle ?? med.principio_attivo
-            med.custom_stock_threshold = Int32(customThreshold ?? 0)
+            med.custom_stock_threshold = Int32(customThreshold)
             med.prescribingDoctor = selectedDoctor
             pkg.numero = Int32(numeroUnita)
             pkg.tipologia = tipologia
@@ -502,7 +377,7 @@ struct NewMedicineView: View {
         medicine.principio_attivo = selectedCatalogMedicine?.principle ?? ""
         medicine.obbligo_ricetta = obbligoRicetta
         medicine.in_cabinet = true
-        medicine.custom_stock_threshold = Int32(customThreshold ?? 0)
+        medicine.custom_stock_threshold = Int32(customThreshold)
         medicine.prescribingDoctor = selectedDoctor
 
         let package = Package(context: context)
@@ -529,7 +404,7 @@ struct NewMedicineView: View {
         medicine.principio_attivo = selectedCatalogMedicine?.principle ?? ""
         medicine.obbligo_ricetta = obbligoRicetta
         medicine.in_cabinet = true
-        medicine.custom_stock_threshold = Int32(customThreshold ?? 0)
+        medicine.custom_stock_threshold = Int32(customThreshold)
         if let doc = selectedDoctor {
             medicine.prescribingDoctor = child.object(with: doc.objectID) as? Doctor
         }
@@ -551,7 +426,7 @@ struct NewMedicineView: View {
         guard let child = draftContext, let med = draftMedicine, let pkg = draftPackage else { return }
         med.nome = baseName()
         med.obbligo_ricetta = obbligoRicetta
-        med.custom_stock_threshold = Int32(customThreshold ?? 0)
+        med.custom_stock_threshold = Int32(customThreshold)
         if let doc = selectedDoctor {
             med.prescribingDoctor = child.object(with: doc.objectID) as? Doctor
         } else {

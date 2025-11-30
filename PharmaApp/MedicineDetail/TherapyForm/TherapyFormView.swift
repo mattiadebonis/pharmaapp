@@ -67,9 +67,10 @@ struct TherapyFormView: View {
     @State private var interval: Int = 1
     // Data di inizio
     @State private var startDate: Date = Date()
+    @State private var manualIntakeRegistration: Bool = false
     
     // Sezione Orari: con pulsante + per aggiungere e - per rimuovere
-    @State private var times: [Date] = [Date()]
+        @State private var times: [Date] = [Date()]
     @State private var isShowingFrequencySheet = false
     
     @State private var selectedImportance: String = Therapy.importanceValues.first ?? "standard"
@@ -149,6 +150,17 @@ struct TherapyFormView: View {
                         }
                     }
                     .pickerStyle(SegmentedPickerStyle())
+                }
+                
+                Section(header: Text("Promemoria")) {
+                    Toggle(isOn: $manualIntakeRegistration) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Chiedi conferma assunzione")
+                            Text("Quando ricevi il promemoria, conferma manualmente l'assunzione.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
             .navigationTitle("\(medicine.nome) • \(package.numero) unità/conf.")
@@ -270,7 +282,8 @@ extension TherapyFormView {
                     times: times,
                     package: package,
                     importance: selectedImportance,
-                    person: effectivePerson
+                    person: effectivePerson,
+                    manualIntake: manualIntakeRegistration
                 )
             } else {
                 therapyFormViewModel.updateTherapy(
@@ -284,7 +297,8 @@ extension TherapyFormView {
                     times: times,
                     package: package,
                     importance: selectedImportance,
-                    person: effectivePerson
+                    person: effectivePerson,
+                    manualIntake: manualIntakeRegistration
                 )
             }
         } else {
@@ -301,7 +315,8 @@ extension TherapyFormView {
                     times: times,
                     package: package,
                     importance: selectedImportance,
-                    person: effectivePerson
+                    person: effectivePerson,
+                    manualIntake: manualIntakeRegistration
                 )
             } else {
                 therapyFormViewModel.saveTherapy(
@@ -315,7 +330,8 @@ extension TherapyFormView {
                     times: times,
                     package: package,
                     importance: selectedImportance,
-                    person: effectivePerson
+                    person: effectivePerson,
+                    manualIntake: manualIntakeRegistration
                 )
             }
         }
@@ -384,6 +400,7 @@ extension TherapyFormView {
         } else {
             self.times = []
         }
+        self.manualIntakeRegistration = therapy.manual_intake_registration
     }
 
     private func saveContext() {

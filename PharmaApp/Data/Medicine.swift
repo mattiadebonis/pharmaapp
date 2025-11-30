@@ -192,11 +192,7 @@ extension Medicine {
     
     func stockThreshold(option: Option?) -> Int {
         let custom = Int(custom_stock_threshold)
-        if custom > 0 {
-            return custom
-        }
-        let general = Int(option?.day_threeshold_stocks_alarm ?? 0)
-        return general > 0 ? general : 7
+        return custom > 0 ? custom : 7
     }
     
     

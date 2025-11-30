@@ -13,59 +13,14 @@ struct OptionsView: View {
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
     @FetchRequest(fetchRequest: Doctor.extractDoctors()) private var doctors: FetchedResults<Doctor>
     @FetchRequest(fetchRequest: Person.extractPersons()) private var persons: FetchedResults<Person>
-    @State private var stockAlertThreshold: Int = 7
     
     var body: some View {
         Form {
             // SECTION 1: Impostazioni generali
             Section(header: Text("Opzioni")) {
-                if let option = options.first {
-                    Toggle(isOn: Binding(
-                        get: { option.manual_intake_registration },
-                        set: { newValue in
-                            option.manual_intake_registration = newValue
-                            saveContext()
-                        }
-                    )) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Registrazione manuale assunzioni")
-                            Text("Se disattivo, le assunzioni vengono registrate automaticamente.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Stepper(value: Binding(
-                        get: { stockAlertThreshold },
-                        set: { newValue in
-                            let clamped = min(max(newValue, 1), 30)
-                            stockAlertThreshold = clamped
-                            option.day_threeshold_stocks_alarm = Int32(clamped)
-                            saveContext()
-                        }
-                    ), in: 1...30) {
-                        HStack {
-                            Text("Soglia allarme scorte")
-                            Spacer()
-                            Text("\(stockAlertThreshold) giorni")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .onAppear {
-                        let currentValue = Int(option.day_threeshold_stocks_alarm)
-                        if stockAlertThreshold != currentValue {
-                            stockAlertThreshold = currentValue
-                        }
-                    }
-                    .onChange(of: option.day_threeshold_stocks_alarm) { newValue in
-                        let intValue = Int(newValue)
-                        if stockAlertThreshold != intValue {
-                            stockAlertThreshold = intValue
-                        }
-                    }
-                } else {
-                    Text("Nessuna opzione disponibile.")
-                }
+                Text("Le impostazioni di soglia e registrazione assunzioni ora si configurano per singolo farmaco.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
             
             // SECTION 2: Gestione Dottori

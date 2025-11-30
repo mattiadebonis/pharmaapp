@@ -15,6 +15,14 @@ struct MedicineDetailView: View {
     )
     @State private var detailDetent: PresentationDetent = .fraction(0.66)
     @State private var emailDetent: PresentationDetent = .fraction(0.55)
+    @State private var customThresholdValue: Int = 7
+    @State private var selectedDoctorID: NSManagedObjectID? = nil
+    @State private var showTherapySheet = false
+    @State private var selectedTherapy: Therapy?
+    @State private var showThresholdSheet = false
+    @State private var showDoctorSheet = false
+    @State private var unitsCount: Int = 0
+    @State private var previousUnitsCount: Int = 0
     
     let medicine: Medicine
     let package: Package
@@ -35,6 +43,14 @@ struct MedicineDetailView: View {
         return formatter
     }()
     
+    private func saveContext() {
+        do {
+            try context.save()
+        } catch {
+            print("Errore salvataggio: \(error)")
+        }
+    }
+    
     init(medicine: Medicine, package: Package) {
         self.medicine = medicine
         self.package = package
@@ -47,17 +63,13 @@ struct MedicineDetailView: View {
     
     var body: some View {
         NavigationStack {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 24) {
-                    stockSection
-                    therapiesSection
-                    quickActionsSection
-                }
-                .padding(.horizontal)
-                .padding(.top, 24)
-                .padding(.bottom, 40)
+            Form {
+                stockAdjustSection
+                therapiesInlineSection
+                quickActionsSection
             }
-            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .scrollContentBackground(.hidden)
+            .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -69,6 +81,16 @@ struct MedicineDetailView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        Button {
+                            showThresholdSheet = true
+                        } label: {
+                            Label("Soglia scorte", systemImage: "gauge.medium")
+                        }
+                        Button {
+                            showDoctorSheet = true
+                        } label: {
+                            Label("Medico prescrittore", systemImage: "stethoscope")
+                        }
                         Button {
                             showLogsSheet = true
                         } label: {
@@ -89,7 +111,15 @@ struct MedicineDetailView: View {
                 }
             }
         }
-        .onAppear { detailDetent = .fraction(0.66) }
+        .onAppear {
+            detailDetent = .fraction(0.66)
+            let current = Int(medicine.custom_stock_threshold)
+            customThresholdValue = current > 0 ? current : 7
+            selectedDoctorID = medicine.prescribingDoctor?.objectID
+            let units = max(totalLeftover, 0)
+            unitsCount = units
+            previousUnitsCount = unitsCount
+        }
         .presentationDetents([.fraction(0.66), .large], selection: $detailDetent)
         .sheet(isPresented: $showEmailSheet) {
             EmailRequestSheet(
@@ -128,6 +158,94 @@ struct MedicineDetailView: View {
                     }
             }
         }
+        .sheet(isPresented: $showTherapySheet) {
+            TherapyFormView(
+                medicine: medicine,
+                package: package,
+                context: context,
+                editingTherapy: selectedTherapy
+            )
+            .id(selectedTherapy?.objectID.uriRepresentation().absoluteString ?? UUID().uuidString)
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showThresholdSheet) {
+            NavigationStack {
+                Form {
+                    Section(header: Text("Soglia scorte")) {
+                        Stepper(value: $customThresholdValue, in: 1...60) {
+                            Text("Avvisami quando restano \(customThresholdValue) giorni")
+                        }
+                        .onChange(of: customThresholdValue) { newValue in
+                            medicine.custom_stock_threshold = Int32(newValue)
+                            saveContext()
+                        }
+                    }
+                }
+                .navigationTitle("Soglia scorte")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Chiudi") { showThresholdSheet = false }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showDoctorSheet) {
+            NavigationStack {
+                Form {
+                    Section(header: Text("Medico prescrittore")) {
+                        Picker("Medico prescrittore", selection: Binding(
+                            get: { selectedDoctorID },
+                            set: { newID in
+                                selectedDoctorID = newID
+                            }
+                        )) {
+                            Text("Nessuno").tag(NSManagedObjectID?.none)
+                            ForEach(doctors, id: \.objectID) { doc in
+                                Text(doctorFullName(doc)).tag(Optional(doc.objectID))
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("Medico")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Chiudi") { showDoctorSheet = false }
+                    }
+                }
+            }
+        }
+        .onChange(of: selectedDoctorID) { newValue in
+            if let newValue, let doc = doctors.first(where: { $0.objectID == newValue }) {
+                medicine.prescribingDoctor = doc
+                saveContext()
+            } else {
+                medicine.prescribingDoctor = nil
+                saveContext()
+            }
+        }
+    }
+    
+    private func openTherapyForm(for therapy: Therapy?) {
+        selectedTherapy = therapy
+        showTherapySheet = true
+    }
+    
+    private func adjustStockUnits(to newValue: Int) {
+        let delta = newValue - previousUnitsCount
+        previousUnitsCount = newValue
+        if delta > 0 {
+            // aggiungi delta unità con log di acquisto
+            for _ in 0..<delta {
+                actionsViewModel.addPurchase(for: medicine, package: package)
+            }
+        } else if delta < 0 {
+            let toRemove = abs(delta)
+            for _ in 0..<toRemove {
+                actionsViewModel.addIntake(for: medicine, package: package, therapy: nil)
+            }
+        }
     }
     
     private struct PrimaryAction {
@@ -151,7 +269,7 @@ struct MedicineDetailView: View {
                 return PrimaryAction(label: "Richiedi ricetta", icon: "envelope", color: .orange)
             }
         }
-        return PrimaryAction(label: "Registra acquisto", icon: "cart.fill", color: .blue)
+        return PrimaryAction(label: "Registra acquisto confezione", icon: "cart.fill", color: .blue)
     }
 
     private var detailAccentColor: Color {
@@ -183,6 +301,11 @@ struct MedicineDetailView: View {
             parts.append(type.capitalized)
         }
         return parts.isEmpty ? nil : parts.joined(separator: " • ")
+    }
+    
+    private var activeIngredient: String? {
+        let active = medicine.principio_attivo.trimmingCharacters(in: .whitespacesAndNewlines)
+        return active.isEmpty ? nil : active
     }
 
     private var coverageSummaryText: String {
@@ -221,13 +344,36 @@ struct MedicineDetailView: View {
         return "Stimato fino al \(stockDateFormatter.string(from: date))"
     }
     
-    private var generalStockThreshold: Int {
-        let value = Int(currentOption?.day_threeshold_stocks_alarm ?? 0)
-        return value > 0 ? value : 7
-    }
-    
     private var currentTherapiesSet: Set<Therapy> {
         medicine.therapies ?? []
+    }
+
+    private func recurrenceDescription(for therapy: Therapy) -> String {
+        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+        let description = recurrenceManager.describeRecurrence(rule: rule)
+        return description.capitalized
+    }
+    
+    private func nextDose(for therapy: Therapy) -> Date? {
+        recurrenceManager.nextOccurrence(
+            rule: recurrenceManager.parseRecurrenceString(therapy.rrule ?? ""),
+            startDate: therapy.start_date ?? Date(),
+            after: Date(),
+            doses: therapy.doses as NSSet?
+        )
+    }
+    
+    private func formattedDate(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) {
+            return DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .short)
+        } else if calendar.isDateInTomorrow(date) {
+            return "Domani"
+        }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
     
     private var estimatedDepletionDate: Date? {
@@ -319,6 +465,9 @@ struct MedicineDetailView: View {
             showEmailSheet = true
         } else {
             viewModel.addPurchase(for: medicine, for: package)
+            let addedUnits = max(Int(package.numero), 1)
+            unitsCount += addedUnits
+            previousUnitsCount = unitsCount
         }
     }
     
@@ -531,84 +680,60 @@ extension MedicineDetailView {
        
        
     }
-
-    private var stockSection: some View {
-        Section {
-            NavigationLink {
-                StockManagementView(
-                    viewModel: viewModel,
-                    medicine: medicine,
-                    package: package,
-                    generalThreshold: generalStockThreshold,
-                    doctors: doctors,
-                    onThresholdSave: handleThresholdSelection,
-                    onDoctorSave: updatePrescribingDoctor
-                )
-            } label: {
-                HStack(alignment: .center, spacing: 12) {
-                    Image(systemName: "square.stack.3d")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .frame(width: 28, height: 28)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Refill e scorte")
-                            .font(.body.weight(.semibold))
-                        if let subtitle = stockEstimateSubtitle, !subtitle.isEmpty {
-                            Text(subtitle)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Spacer()
-                    Text(stockDisplayValue)
-                        .font(.headline)
-                        .foregroundStyle(leftoverColor)
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.vertical, 6)
+    
+    private var stockAdjustSection: some View {
+        Section(header: Text("Scorte disponibili")) {
+            let autonomyText = currentAutonomyDays.flatMap { $0 > 0 ? " • \($0) giorni" : nil } ?? ""
+            Stepper(value: $unitsCount, in: 0...2000) {
+                Text("\(unitsCount) unità\(autonomyText)")
             }
-
-            if totalLeftover <= 0 {
-                Text("Scorte esaurite: aggiorna con un nuovo acquisto per azzerare l'allarme.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            .onChange(of: unitsCount) { newValue in
+                adjustStockUnits(to: newValue)
             }
         }
         .textCase(nil)
         .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
         .listRowBackground(Color(.systemBackground))
     }
+    
+    private var currentAutonomyDays: Int? {
+        guard !currentTherapiesSet.isEmpty else { return nil }
+        let usageData = currentTherapiesSet.reduce(into: (left: 0.0, daily: 0.0)) { result, therapy in
+            result.left += Double(therapy.leftover())
+            result.daily += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
+        }
+        guard usageData.daily > 0 else { return nil }
+        return Int(usageData.left / usageData.daily)
+    }
 
-    private var therapiesSection: some View {
-        Section {
-            NavigationLink {
-                TherapiesManagementView(medicine: medicine, package: package)
-            } label: {
-                HStack(alignment: .center, spacing: 12) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .frame(width: 28, height: 28)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Terapie")
-                            .font(.body.weight(.semibold))
-                        if !therapySummarySubtitle.isEmpty {
-                            Text(therapySummarySubtitle)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+    private var therapiesInlineSection: some View {
+        Section(header: Text("Terapie")) {
+            if therapies.isEmpty {
+                Text("Nessuna terapia aggiunta.")
+                    .foregroundStyle(.secondary)
+                    .font(.footnote)
+            } else {
+                ForEach(therapies, id: \.objectID) { therapy in
+                    Button {
+                        openTherapyForm(for: therapy)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(recurrenceDescription(for: therapy))
+                                .foregroundStyle(.primary)
+                            if let next = nextDose(for: therapy) {
+                                Text("Prossima: \(formattedDate(next))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
-                    Spacer()
-                    Text("\(therapyCount)")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.tertiary)
                 }
-                .padding(.vertical, 6)
+            }
+            
+            Button {
+                openTherapyForm(for: nil)
+            } label: {
+                Label("Aggiungi terapia", systemImage: "plus.circle")
             }
         }
         .textCase(nil)
@@ -618,6 +743,9 @@ extension MedicineDetailView {
 
 }
 // MARK: - UI helpers
+extension MedicineDetailView {
+}
+
 private struct HeroStat: View {
     let icon: String
     let title: String
@@ -1110,12 +1238,12 @@ private struct StockManagementView: View {
     }
 }
 
-private struct TherapiesManagementView: View {
-    @Environment(\.managedObjectContext) private var context
-    
-    let medicine: Medicine
-    let package: Package
-    
+    private struct TherapiesManagementView: View {
+        @Environment(\.managedObjectContext) private var context
+        
+        let medicine: Medicine
+        let package: Package
+        
     @FetchRequest private var therapies: FetchedResults<Therapy>
     
     @State private var showTherapySheet = false
@@ -1132,11 +1260,11 @@ private struct TherapiesManagementView: View {
         _therapies = FetchRequest(fetchRequest: request)
     }
     
-    var body: some View {
-        List {
-            Section(header: Text("Terapie")) {
-                if therapies.isEmpty {
-                    Text("Nessuna terapia programmata")
+        var body: some View {
+            List {
+                Section(header: Text("Terapie")) {
+                    if therapies.isEmpty {
+                        Text("Nessuna terapia programmata")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(therapies, id: \.objectID) { therapy in
@@ -1183,50 +1311,51 @@ private struct TherapiesManagementView: View {
                 context: context,
                 editingTherapy: selectedTherapy
             )
-            .id(selectedTherapy?.id ?? UUID())
+            .id(selectedTherapy?.objectID.uriRepresentation().absoluteString ?? UUID().uuidString)
             .presentationDetents([.medium, .large])
+            }
         }
-    }
-    
-    private func openTherapyForm(for therapy: Therapy?) {
-        selectedTherapy = therapy
-        showTherapySheet = true
-    }
-    
-    private func recurrenceDescription(for therapy: Therapy) -> String {
-        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-        let description = recurrenceManager.describeRecurrence(rule: rule)
-        return description.capitalized
-    }
-    
-    private func nextDose(for therapy: Therapy) -> Date? {
-        recurrenceManager.nextOccurrence(
-            rule: recurrenceManager.parseRecurrenceString(therapy.rrule ?? ""),
-            startDate: therapy.start_date ?? Date(),
-            after: Date(),
-            doses: therapy.doses as NSSet?
-        )
-    }
-    
-    private func formattedDate(_ date: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(date) {
-            return DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .short)
-        } else if calendar.isDateInTomorrow(date) {
-            return "Domani"
+        
+        private func openTherapyForm(for therapy: Therapy?) {
+            selectedTherapy = therapy
+            showTherapySheet = true
         }
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
-    }
-    
-    private func personName(for therapy: Therapy) -> String? {
-        let first = (therapy.person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (therapy.person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let components = [first, last].filter { !$0.isEmpty }
+        
+        private func recurrenceDescription(for therapy: Therapy) -> String {
+            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+            let description = recurrenceManager.describeRecurrence(rule: rule)
+            return description.capitalized
+        }
+        
+        private func nextDose(for therapy: Therapy) -> Date? {
+            recurrenceManager.nextOccurrence(
+                rule: recurrenceManager.parseRecurrenceString(therapy.rrule ?? ""),
+                startDate: therapy.start_date ?? Date(),
+                after: Date(),
+                doses: therapy.doses as NSSet?
+            )
+        }
+        
+        private func formattedDate(_ date: Date) -> String {
+            let calendar = Calendar.current
+            if calendar.isDateInToday(date) {
+                return DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .short)
+            } else if calendar.isDateInTomorrow(date) {
+                return "Domani"
+            }
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .short
+            return formatter.string(from: date)
+        }
+        
+        private func personName(for therapy: Therapy) -> String? {
+            let first = (therapy.person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let last = (therapy.person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let components = [first, last].filter { !$0.isEmpty }
         return components.joined(separator: " ")
     }
+    
 }
 
 // MARK: - Logs modal
