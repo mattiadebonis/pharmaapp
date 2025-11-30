@@ -24,6 +24,8 @@ struct ContentView: View {
     @State private var isSettingsPresented = false
     @State private var showNewMedicineForm = false
     @State private var catalogSelection: CatalogSelection? = nil
+    @State private var showCabinetSheet = false
+    @State private var newCabinetName: String = ""
 
     // Init fake data once
     init() {
@@ -49,6 +51,13 @@ struct ContentView: View {
                             .navigationTitle("Armadio dei farmaci")
                             .navigationBarTitleDisplayMode(.large)
                             .toolbar {
+                                ToolbarItem(placement: .navigationBarTrailing) {
+                                    Button {
+                                        showCabinetSheet = true
+                                    } label: {
+                                        Image(systemName: "folder.badge.plus")
+                                    }
+                                }
                                 ToolbarItem(placement: .navigationBarTrailing) {
                                     Button {
                                         isSettingsPresented = true
@@ -91,6 +100,28 @@ struct ContentView: View {
                             Button("Chiudi") { isSettingsPresented = false }
                         }
                     }
+            }
+        }
+        .sheet(isPresented: $showCabinetSheet) {
+            NavigationStack {
+                Form {
+                    Section(header: Text("Nome cabinet")) {
+                        TextField("Es. Antidolorifici", text: $newCabinetName)
+                            .textInputAutocapitalization(.words)
+                    }
+                }
+                .navigationTitle("Nuovo cabinet")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Chiudi") { showCabinetSheet = false }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Crea") {
+                            createCabinet()
+                        }
+                        .disabled(newCabinetName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
             }
         }
         .sheet(isPresented: $showNewMedicineForm) {
@@ -141,6 +172,22 @@ struct ContentView: View {
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(radius: 10)
+    }
+
+    private func createCabinet() {
+        let trimmed = newCabinetName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let ctx = PersistenceController.shared.container.viewContext
+        let cabinet = Cabinet(context: ctx)
+        cabinet.id = UUID()
+        cabinet.name = trimmed
+        do {
+            try ctx.save()
+            newCabinetName = ""
+            showCabinetSheet = false
+        } catch {
+            print("Errore creazione cabinet: \(error)")
+        }
     }
 
 }

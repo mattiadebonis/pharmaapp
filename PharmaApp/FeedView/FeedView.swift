@@ -26,9 +26,12 @@ struct FeedView: View {
     private var logs: FetchedResults<Log>
     @FetchRequest(fetchRequest: Doctor.extractDoctors())
     private var doctors: FetchedResults<Doctor>
+    @FetchRequest(fetchRequest: Cabinet.extractCabinets())
+    private var cabinets: FetchedResults<Cabinet>
     @ObservedObject var viewModel: FeedViewModel
     let mode: Mode
     @State private var selectedMedicine: Medicine?
+    @State private var activeCabinetID: NSManagedObjectID?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.66)
     @StateObject private var locationVM = LocationSearchViewModel()
 
@@ -88,6 +91,16 @@ struct FeedView: View {
                 }
                 .listSectionSeparator(.hidden)
             }
+            
+            if !cabinets.isEmpty {
+                Section {
+                    cabinetsList()
+                } header: {
+                    Text("Cabinet")
+                }
+                .listRowSeparator(.hidden)
+            }
+
             Section {
                 medicineList(for: rows)
             }
@@ -172,9 +185,39 @@ struct FeedView: View {
     }
 
     private func medicineList(for rows: [(medicine: Medicine, section: MedicineRowView.RowSection)]) -> some View {
-        ForEach(rows, id: \.medicine.objectID) { entry in
-            let medicine = entry.medicine
-            row(for: medicine)
+        ForEach(rows.filter { $0.medicine.cabinet == nil }, id: \.medicine.objectID) { entry in
+            row(for: entry.medicine)
+        }
+    }
+    
+    private func cabinetsList() -> some View {
+        ForEach(cabinets, id: \.objectID) { cabinet in
+            let meds = sortedMedicines(in: cabinet)
+            ZStack {
+                Button {
+                    activeCabinetID = cabinet.objectID
+                } label: {
+                    CabinetCardView(
+                        cabinet: cabinet,
+                        medicineCount: meds.count
+                    )
+                }
+                .buttonStyle(.plain)
+                
+                NavigationLink(
+                    destination: CabinetDetailView(cabinet: cabinet, medicines: meds),
+                    isActive: Binding(
+                        get: { activeCabinetID == cabinet.objectID },
+                        set: { newValue in
+                            if !newValue { activeCabinetID = nil }
+                        }
+                    )
+                ) {
+                    EmptyView()
+                }
+                .hidden()
+            }
+            .listRowBackground(Color.clear)
         }
     }
 
@@ -209,6 +252,14 @@ struct FeedView: View {
             return UpcomingStockEntry(name: name, days: days)
         }
         return entries.sorted { $0.days < $1.days }
+    }
+    
+    private func sortedMedicines(in cabinet: Cabinet) -> [Medicine] {
+        cabinet.medicines.sorted { (lhs, rhs) in
+            let left = (lhs.nome ?? "").lowercased()
+            let right = (rhs.nome ?? "").lowercased()
+            return left < right
+        }
     }
 
     private func upcomingStockSummary(from entries: [UpcomingStockEntry]) -> String {
@@ -503,7 +554,9 @@ struct FeedView: View {
         var oggi: [Medicine] = []
         var ok: [Medicine] = []
         
-        for m in medicines {
+        let nonCabinetMedicines = medicines.filter { $0.cabinet == nil }
+        
+        for m in nonCabinetMedicines {
             let status = stockStatus(for: m)
             if status == .critical || status == .low {
                 purchase.append(m)

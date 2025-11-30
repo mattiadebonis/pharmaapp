@@ -21,6 +21,8 @@ struct MedicineDetailView: View {
     @State private var selectedTherapy: Therapy?
     @State private var showThresholdSheet = false
     @State private var showDoctorSheet = false
+    @State private var showCabinetSheet = false
+    @State private var selectedCabinetID: NSManagedObjectID?
     @State private var unitsCount: Int = 0
     @State private var previousUnitsCount: Int = 0
     
@@ -31,6 +33,7 @@ struct MedicineDetailView: View {
     @FetchRequest private var therapies: FetchedResults<Therapy>
     @FetchRequest(fetchRequest: Doctor.extractDoctors()) private var doctors: FetchedResults<Doctor>
     @FetchRequest(fetchRequest: Medicine.extractMedicines()) private var allMedicines: FetchedResults<Medicine>
+    @FetchRequest(fetchRequest: Cabinet.extractCabinets()) private var cabinets: FetchedResults<Cabinet>
     
     private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
     @State private var showEmailSheet = false
@@ -92,6 +95,11 @@ struct MedicineDetailView: View {
                             Label("Medico prescrittore", systemImage: "stethoscope")
                         }
                         Button {
+                            showCabinetSheet = true
+                        } label: {
+                            Label("Cabinet", systemImage: "folder")
+                        }
+                        Button {
                             showLogsSheet = true
                         } label: {
                             Label("Visualizza log", systemImage: "clock.arrow.circlepath")
@@ -119,6 +127,7 @@ struct MedicineDetailView: View {
             let units = max(totalLeftover, 0)
             unitsCount = units
             previousUnitsCount = unitsCount
+            selectedCabinetID = medicine.cabinet?.objectID
         }
         .presentationDetents([.fraction(0.66), .large], selection: $detailDetent)
         .sheet(isPresented: $showEmailSheet) {
@@ -216,6 +225,33 @@ struct MedicineDetailView: View {
                 }
             }
         }
+        .sheet(isPresented: $showCabinetSheet) {
+            NavigationStack {
+                Form {
+                    Section(header: Text("Cabinet")) {
+                        Picker("Cabinet", selection: Binding(
+                            get: { selectedCabinetID },
+                            set: { newID in
+                                selectedCabinetID = newID
+                            }
+                        )) {
+                            Text("Nessuno").tag(NSManagedObjectID?.none)
+                            ForEach(cabinets, id: \.objectID) { cab in
+                                Text(cab.name.isEmpty ? "Cabinet" : cab.name)
+                                    .tag(Optional(cab.objectID))
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("Cabinet")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Chiudi") { showCabinetSheet = false }
+                    }
+                }
+            }
+        }
         .onChange(of: selectedDoctorID) { newValue in
             if let newValue, let doc = doctors.first(where: { $0.objectID == newValue }) {
                 medicine.prescribingDoctor = doc
@@ -224,6 +260,16 @@ struct MedicineDetailView: View {
                 medicine.prescribingDoctor = nil
                 saveContext()
             }
+        }
+        .onChange(of: selectedCabinetID) { newValue in
+            if let newValue, let cab = cabinets.first(where: { $0.objectID == newValue }) {
+                medicine.cabinet = cab
+                medicine.in_cabinet = true
+            } else {
+                medicine.cabinet = nil
+                medicine.in_cabinet = false
+            }
+            saveContext()
         }
     }
     

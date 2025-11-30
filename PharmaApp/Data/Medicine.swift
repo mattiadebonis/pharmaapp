@@ -20,7 +20,7 @@ public class Medicine: NSManagedObject, Identifiable {
     @NSManaged public var therapies: Set<Therapy>?
     @NSManaged public var packages: Set<Package>
     @NSManaged public var logs: Set<Log>?
-    @NSManaged public var cabinet: Set<Cabinet>?
+    @NSManaged public var cabinet: Cabinet?
     
     // MARK: - Relazioni di convenienza
     func addToTherapies(_ therapy: Therapy) {

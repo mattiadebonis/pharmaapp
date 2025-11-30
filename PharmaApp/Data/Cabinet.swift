@@ -12,7 +12,7 @@ import CoreData
 public class Cabinet : NSManagedObject , Identifiable{
     @NSManaged public var id : UUID
     @NSManaged public var name : String
-    @NSManaged public var medicines: Medicine
+    @NSManaged public var medicines: Set<Medicine>
 
 }
 
@@ -24,4 +24,3 @@ extension Cabinet{
         return request
     }
 }
-

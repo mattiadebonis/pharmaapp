@@ -3,7 +3,7 @@
     <entity name="Cabinet" representedClassName=".Cabinet" syncable="YES">
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="name" optional="YES" attributeType="String"/>
-        <relationship name="medicines" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="cabinet" inverseEntity="Medicine"/>
+        <relationship name="medicines" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Medicine" inverseName="cabinet" inverseEntity="Medicine"/>
     </entity>
     <entity name="Doctor" representedClassName="Doctor" syncable="YES">
         <attribute name="cognome" optional="YES" attributeType="String"/>
