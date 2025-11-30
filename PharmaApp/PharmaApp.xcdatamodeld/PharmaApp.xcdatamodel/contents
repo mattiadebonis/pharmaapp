@@ -29,8 +29,9 @@
         <relationship name="therapy" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Therapy" inverseName="logs" inverseEntity="Therapy"/>
     </entity>
     <entity name="Medicine" representedClassName=".Medicine" syncable="YES">
-        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="custom_stock_threshold" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="in_cabinet" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="nome" optional="YES" attributeType="String"/>
         <attribute name="obbligo_ricetta" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
         <attribute name="principio_attivo" optional="YES" attributeType="String"/>

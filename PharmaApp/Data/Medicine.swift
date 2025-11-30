@@ -15,6 +15,7 @@ public class Medicine: NSManagedObject, Identifiable {
     @NSManaged public var principio_attivo: String
     @NSManaged public var obbligo_ricetta: Bool
     @NSManaged public var custom_stock_threshold: Int32
+    @NSManaged public var in_cabinet: Bool
     @NSManaged public var prescribingDoctor: Doctor?
     @NSManaged public var therapies: Set<Therapy>?
     @NSManaged public var packages: Set<Package>

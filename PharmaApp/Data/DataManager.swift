@@ -27,47 +27,45 @@ class DataManager {
         let medicines = loadMedicinesFromJSON()
 
         for medicineData in medicines {
-            guard let idString = medicineData["id"] as? String,
-                  let id = UUID(uuidString: idString),
-                  let nome = medicineData["nome"] as? String,
-                  let principioAttivo = medicineData["principio_attivo"] as? String,
-                  let obbligoRicetta = medicineData["obbligo_ricetta"] as? Bool
-            else {
-                print("Errore: dati incompleti per un medicinale, saltato.")
-                continue
-            }
+            let medicineId = UUID(uuidString: medicineData["id"] as? String ?? "") ?? UUID()
+            let medicinalInfo = medicineData["medicinale"] as? [String: Any]
+            let nome = (medicinalInfo?["denominazioneMedicinale"] as? String)
+                ?? (medicineData["descrizioneFormaDosaggio"] as? String)
+                ?? (medicineData["principiAttiviIt"] as? [String])?.first
+                ?? "Medicinale"
+
+            let principiAttivi = medicineData["principiAttiviIt"] as? [String] ?? []
+            let descrizioniAtc = medicineData["descrizioneAtc"] as? [String] ?? []
+            let principioAttivo = {
+                let joined = principiAttivi.joined(separator: ", ")
+                if !joined.isEmpty { return joined }
+                let fallback = descrizioniAtc.joined(separator: ", ")
+                return fallback.isEmpty ? nome : fallback
+            }()
+
+            let confezioni = medicineData["confezioni"] as? [[String: Any]] ?? []
+            let obbligoRicetta = requiresPrescription(from: confezioni)
+            let dosage = parseDosage(from: medicineData["descrizioneFormaDosaggio"] as? String)
 
             let medicine = Medicine(context: context)
-            medicine.id = id
+            medicine.id = medicineId
             medicine.nome = nome
             medicine.principio_attivo = principioAttivo
             medicine.obbligo_ricetta = obbligoRicetta
-            if let confezioni = medicineData["confezioni"] as? [[String: Any]] {
-                for conf in confezioni {
-                    guard let confIdString = conf["id"] as? String,
-                          let confId = UUID(uuidString: confIdString),
-                          let numero = conf["numero"] as? Int32,
-                          let tipologia = conf["tipologia"] as? String,
-                          let dosaggio = conf["dosaggio"] as? [String: Any],
-                          let valore = dosaggio["valore"] as? Int32,
-                          let unita = dosaggio["unita"] as? String,
-                          let volume = dosaggio["volume"] as? String
-                    else {
-                        print("Errore: dati incompleti per una confezione, saltata.")
-                        continue
-                    }
-                    print(numero)
-                    let package = Package(context: context)
-                    package.id = confId
-                    package.numero = numero
-                    package.tipologia = tipologia
-                    package.valore = valore
-                    package.unita = unita
-                    package.volume = volume
-                    package.medicine = medicine
-                    medicine.addToPackages(package)
-                }
-            } 
+
+            for conf in confezioni {
+                let package = Package(context: context)
+                let confIdString = conf["idPackage"] as? String ?? ""
+                package.id = UUID(uuidString: confIdString) ?? UUID()
+                let tipologia = conf["denominazionePackage"] as? String ?? "Confezione"
+                package.tipologia = tipologia
+                package.numero = Int32(extractUnitCount(from: tipologia))
+                package.valore = dosage.value
+                package.unita = dosage.unit
+                package.volume = extractVolume(from: tipologia)
+                package.medicine = medicine
+                medicine.addToPackages(package)
+            }
         }
 
         do {
@@ -203,5 +201,70 @@ class DataManager {
         } catch {
             fatalError("Errore durante il controllo o l'inizializzazione delle opzioni: \(error.localizedDescription)")
         }
+    }
+
+    private func requiresPrescription(from packages: [[String: Any]]) -> Bool {
+        for package in packages {
+            if let intFlag = package["flagPrescrizione"] as? Int, intFlag != 0 {
+                return true
+            }
+            if let boolFlag = package["flagPrescrizione"] as? Bool, boolFlag {
+                return true
+            }
+            if let classe = (package["classeFornitura"] as? String)?.uppercased(),
+               ["RR", "RRL", "OSP"].contains(classe) {
+                return true
+            }
+            if let descrizioni = package["descrizioneRf"] as? [String],
+               descrizioni.contains(where: { $0.lowercased().contains("prescrizione") }) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func parseDosage(from description: String?) -> (value: Int32, unit: String) {
+        guard let text = description else { return (0, "") }
+        let tokens = text.split(separator: " ")
+        var value: Int32 = 0
+        var unit = ""
+        for (index, token) in tokens.enumerated() {
+            let digitString = token.filter(\.isNumber)
+            if let parsed = Int32(digitString), !digitString.isEmpty {
+                value = parsed
+                if index + 1 < tokens.count {
+                    let possibleUnit = tokens[index + 1]
+                    if possibleUnit.rangeOfCharacter(from: .letters) != nil || possibleUnit.contains("/") {
+                        unit = String(possibleUnit)
+                    }
+                }
+                break
+            }
+        }
+        return (value, unit)
+    }
+
+    private func extractUnitCount(from text: String) -> Int {
+        let pattern = "\\d+"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return 0 }
+        let matches = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+        guard let last = matches.last,
+              let range = Range(last.range, in: text),
+              let value = Int(text[range]) else {
+            return 0
+        }
+        return value
+    }
+
+    private func extractVolume(from text: String) -> String {
+        let uppercased = text.uppercased()
+        let pattern = "\\d+\\s*(ML|L)"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return "" }
+        let range = NSRange(location: 0, length: (uppercased as NSString).length)
+        if let match = regex.firstMatch(in: uppercased, range: range),
+           let matchRange = Range(match.range, in: uppercased) {
+            return uppercased[matchRange].lowercased()
+        }
+        return ""
     }
 }

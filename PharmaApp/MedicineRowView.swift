@@ -196,10 +196,16 @@ struct MedicineRowView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             leadingIcon
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(displayName)
                     .font(.headline.weight(.semibold))
                     .lineLimit(2)
+                if let pkgInfo = firstPackageInfo {
+                    Text(pkgInfo)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
                 infoPills
                 if hasBadges {
                     badgesRow
@@ -221,7 +227,33 @@ struct MedicineRowView: View {
     private var hasTherapiesFlag: Bool { !therapies.isEmpty }
     private var displayName: String {
         let trimmed = medicine.nome.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Medicinale" : trimmed
+        let base = trimmed.isEmpty ? "Medicinale" : trimmed
+        return camelCase(base)
+    }
+    
+    private var firstPackageInfo: String? {
+        guard let pkg = medicine.packages.first else { return nil }
+        var parts: [String] = []
+        if pkg.valore > 0 {
+            let unit = pkg.unita.trimmingCharacters(in: .whitespacesAndNewlines)
+            parts.append(unit.isEmpty ? "\(pkg.valore)" : "\(pkg.valore) \(unit)")
+        }
+        let tipologia = pkg.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !tipologia.isEmpty {
+            parts.append(tipologia)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
+    }
+    
+    private func camelCase(_ text: String) -> String {
+        let lowered = text.lowercased()
+        return lowered
+            .split(separator: " ")
+            .map { part in
+                guard let first = part.first else { return "" }
+                return String(first).uppercased() + part.dropFirst()
+            }
+            .joined(separator: " ")
     }
     
     private var leadingIcon: some View {
@@ -261,9 +293,9 @@ struct MedicineRowView: View {
             }
             HStack(spacing: 8) {
                 pill(for: stockChip)
-                if let packageChip = packageChip {
+                /* if let packageChip = packageChip {
                     pill(for: packageChip)
-                }
+                } */
             }
         }
     }
