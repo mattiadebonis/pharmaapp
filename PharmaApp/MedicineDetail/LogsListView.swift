@@ -43,19 +43,25 @@ struct LogsListView: View {
     }
     
     private func packageSummary(_ pkg: Package) -> String {
-        var parts: [String] = []
-        if pkg.valore > 0 {
+        let typeRaw = pkg.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
+        let quantity: String? = {
+            if pkg.numero > 0 {
+                let unitLabel = typeRaw.isEmpty ? "unità" : typeRaw.lowercased()
+                return "\(pkg.numero) \(unitLabel)"
+            }
+            return typeRaw.isEmpty ? nil : typeRaw.capitalized
+        }()
+        let dosage: String? = {
+            guard pkg.valore > 0 else { return nil }
             let unit = pkg.unita.trimmingCharacters(in: .whitespacesAndNewlines)
-            parts.append(unit.isEmpty ? "\(pkg.valore)" : "\(pkg.valore) \(unit)")
+            return unit.isEmpty ? "\(pkg.valore)" : "\(pkg.valore) \(unit)"
+        }()
+        if let quantity, let dosage {
+            return "\(quantity) da \(dosage)"
         }
-        let tipologia = pkg.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !tipologia.isEmpty {
-            parts.append(tipologia)
-        }
-        if pkg.numero > 0 {
-            parts.append("\(pkg.numero) pz")
-        }
-        return parts.isEmpty ? "Confezione" : parts.joined(separator: " • ")
+        if let quantity { return quantity }
+        if let dosage { return dosage }
+        return "Confezione"
     }
     
     private var dateFormatter: DateFormatter {

@@ -5,28 +5,356 @@ struct CabinetCardView: View {
     let cabinet: Cabinet
     var medicineCount: Int
     
+    @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
+    private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+    
     var body: some View {
+        let stockLine = stockSummary
+        let therapyLine = therapySummary
         HStack(alignment: .top, spacing: 12) {
             leadingIcon
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(cabinet.name)
                     .font(.headline.weight(.semibold))
                     .lineLimit(2)
-                Text("\(medicineCount) medicine")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                infoRow(for: stockLine)
+                infoRow(for: therapyLine)
             }
             Spacer(minLength: 0)
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 4)
         .contentShape(Rectangle())
+        .background(Color.clear)
     }
     
     private var leadingIcon: some View {
-        Image(systemName: "folder.fill")
-            .font(.system(size: 22, weight: .semibold))
-            .foregroundStyle(Color.accentColor)
-            .frame(width: 28, height: 28, alignment: .topLeading)
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: "folder.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(baseAccentColor)
+                .frame(width: 28, height: 28, alignment: .topLeading)
+            
+            if let badge = urgencyBadge {
+                Circle()
+                    .fill(badge.color)
+                    .frame(width: 14, height: 14)
+                    .overlay {
+                        Image(systemName: badge.icon)
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .offset(x: 8, y: -6)
+            }
+        }
+    }
+    
+    // MARK: - Info rows
+    private struct InfoLine {
+        let icon: String
+        let text: String
+        let color: Color
+    }
+    
+    private struct UrgencyBadge {
+        let icon: String
+        let color: Color
+    }
+    
+    private func infoRow(for line: InfoLine) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: line.icon)
+                .foregroundStyle(line.color)
+            Text(line.text)
+                .foregroundStyle(.secondary)
+        }
+        .font(.subheadline)
+        .lineLimit(2)
+    }
+    
+    // MARK: - Stock summary
+    private enum StockLevel {
+        case empty
+        case low
+        case ok
+    }
+    
+    private struct StockEvaluation {
+        let level: StockLevel
+        let coverageDays: Int?
+    }
+    
+    private var stockSummary: InfoLine {
+        let evaluations = medicines.compactMap { evaluateStock(for: $0) }
+        let emptyCount = evaluations.filter { $0.level == .empty }.count
+        let lowCount = evaluations.filter { $0.level == .low }.count
+        let minCoverage = evaluations.compactMap { $0.coverageDays }.min()
+        
+        if emptyCount > 0 {
+            let suffix = lowCount > 0 ? " · \(lowCount) sotto soglia" : ""
+            return InfoLine(icon: "exclamationmark.triangle.fill", text: "\(emptyCount) esauriti\(suffix)", color: .red)
+        }
+        if lowCount > 0 {
+            return InfoLine(icon: "hourglass", text: "\(lowCount) sotto soglia", color: .orange)
+        }
+        if let minCoverage {
+            return InfoLine(icon: "shippingbox.fill", text: "Scorte ok · riordino ~\(minCoverage) gg", color: .teal)
+        }
+        if medicines.isEmpty {
+            return InfoLine(icon: "shippingbox.fill", text: "Nessun medicinale nel cassetto", color: .secondary)
+        }
+        return InfoLine(icon: "shippingbox.fill", text: "Scorte ok", color: .green)
+    }
+    
+    private var urgencyBadge: UrgencyBadge? {
+        let evaluations = medicines.compactMap { evaluateStock(for: $0) }
+        let emptyCount = evaluations.filter { $0.level == .empty }.count
+        let lowCount = evaluations.filter { $0.level == .low }.count
+        if overdueInfo.count > 0 || emptyCount > 0 {
+            return UrgencyBadge(icon: "exclamationmark", color: .red)
+        }
+        if lowCount > 0 || todaySchedule.pendingToday > 0 {
+            return UrgencyBadge(icon: "exclamationmark", color: .orange)
+        }
+        if nextDoseDate != nil {
+            return UrgencyBadge(icon: "clock", color: .blue)
+        }
+        return UrgencyBadge(icon: "checkmark", color: .green)
+    }
+    
+    private var baseAccentColor: Color {
+        if urgencyBadge?.color == .red { return .red }
+        if urgencyBadge?.color == .orange { return .orange }
+        if urgencyBadge?.color == .blue { return .blue }
+        return .teal
+    }
+    
+    private func evaluateStock(for medicine: Medicine) -> StockEvaluation? {
+        let option = options.first
+        if let therapies = medicine.therapies, !therapies.isEmpty {
+            var totalLeftover: Double = 0
+            var dailyUsage: Double = 0
+            for therapy in therapies {
+                totalLeftover += Double(therapy.leftover())
+                dailyUsage += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
+            }
+            guard dailyUsage > 0 else { return nil }
+            if totalLeftover <= 0 {
+                return StockEvaluation(level: .empty, coverageDays: 0)
+            }
+            let days = Int(floor(totalLeftover / dailyUsage))
+            if days < medicine.stockThreshold(option: option) {
+                return StockEvaluation(level: .low, coverageDays: max(0, days))
+            }
+            return StockEvaluation(level: .ok, coverageDays: max(0, days))
+        }
+        
+        if let remaining = medicine.remainingUnitsWithoutTherapy() {
+            if remaining <= 0 {
+                return StockEvaluation(level: .empty, coverageDays: nil)
+            } else if remaining < 5 {
+                return StockEvaluation(level: .low, coverageDays: nil)
+            } else {
+                return StockEvaluation(level: .ok, coverageDays: nil)
+            }
+        }
+        return nil
+    }
+    
+    // MARK: - Therapy summary
+    private var therapySummary: InfoLine {
+        let overdue = overdueInfo
+        if overdue.count > 0 {
+            let timeText = overdue.earliest.map { " · \(timeString($0))" } ?? ""
+            return InfoLine(icon: "bell.badge.fill", text: "\(overdue.count) dose saltate\(timeText)", color: .red)
+        }
+        
+        let today = todaySchedule
+        if today.pendingToday > 0, let firstPending = today.firstPending {
+            return InfoLine(icon: "clock.badge.exclamationmark", text: "Oggi: \(today.pendingToday) dosi · prima \(timeString(firstPending))", color: .blue)
+        }
+        
+        if let next = nextDoseDate {
+            let cal = Calendar.current
+            if cal.isDateInToday(next) {
+                return InfoLine(icon: "clock", text: "Prossima oggi \(timeString(next))", color: .blue)
+            } else if cal.isDateInTomorrow(next) {
+                return InfoLine(icon: "clock", text: "Prossima domani \(timeString(next))", color: .teal)
+            } else {
+                return InfoLine(icon: "clock", text: "Prossima \(dayString(next))", color: .teal)
+            }
+        }
+        
+        if medicinesWithTherapy.isEmpty {
+            return InfoLine(icon: "staroflife", text: "Nessuna terapia in corso", color: .secondary)
+        }
+        return InfoLine(icon: "clock", text: "Nessuna dose imminente", color: .secondary)
+    }
+    
+    private var overdueInfo: (count: Int, earliest: Date?) {
+        let now = Date()
+        var totalOverdue = 0
+        var earliestOverdue: Date?
+        
+        for medicine in medicinesWithTherapy {
+            let schedule = scheduleToday(for: medicine)
+            let taken = intakeLogsToday(for: medicine)
+            let pending = Array(schedule.dropFirst(min(taken, schedule.count)))
+            let overdue = pending.filter { $0 <= now }
+            totalOverdue += overdue.count
+            if let first = overdue.min() {
+                earliestOverdue = minDate(earliestOverdue, first)
+            }
+        }
+        return (totalOverdue, earliestOverdue)
+    }
+    
+    private var todaySchedule: (pendingToday: Int, firstPending: Date?) {
+        let now = Date()
+        var totalPending = 0
+        var firstPending: Date?
+        
+        for medicine in medicinesWithTherapy {
+            let schedule = scheduleToday(for: medicine)
+            let taken = intakeLogsToday(for: medicine)
+            let pending = Array(schedule.dropFirst(min(taken, schedule.count)))
+            totalPending += pending.count
+            if let first = pending.filter({ $0 > now }).min() {
+                firstPending = minDate(firstPending, first)
+            }
+        }
+        return (totalPending, firstPending)
+    }
+    
+    private var nextDoseDate: Date? {
+        var nextDate: Date?
+        for therapy in therapiesInCabinet {
+            guard let start = therapy.start_date else { continue }
+            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+            if let date = recurrenceManager.nextOccurrence(rule: rule, startDate: start, after: Date(), doses: therapy.doses as NSSet?) {
+                nextDate = minDate(nextDate, date)
+            }
+        }
+        return nextDate
+    }
+    
+    // MARK: - Helpers
+    private var medicines: [Medicine] {
+        Array(cabinet.medicines)
+    }
+    
+    private var medicinesWithTherapy: [Medicine] {
+        medicines.filter { $0.therapies?.isEmpty == false }
+    }
+    
+    private var therapiesInCabinet: [Therapy] {
+        medicinesWithTherapy.flatMap { Array($0.therapies ?? []) }
+    }
+    
+    private func scheduleToday(for medicine: Medicine) -> [Date] {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        guard let therapies = medicine.therapies, !therapies.isEmpty else { return [] }
+        var times: [Date] = []
+        for therapy in therapies {
+            guard occursToday(therapy) else { continue }
+            if let doseSet = therapy.doses as? Set<Dose> {
+                for dose in doseSet {
+                    let time = dose.time
+                    if let combined = combine(day: today, withTime: time) {
+                        times.append(combined)
+                    }
+                }
+            }
+        }
+        return times.sorted()
+    }
+    
+    private func intakeLogsToday(for medicine: Medicine) -> Int {
+        let cal = Calendar.current
+        let today = Date()
+        guard let logs = medicine.logs else { return 0 }
+        return logs.filter { $0.type == "intake" && cal.isDate($0.timestamp, inSameDayAs: today) }.count
+    }
+    
+    private func occursToday(_ therapy: Therapy) -> Bool {
+        let now = Date()
+        let cal = Calendar.current
+        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+        let start = therapy.start_date ?? now
+        let endOfDay = cal.date(byAdding: DateComponents(day: 1, second: -1), to: cal.startOfDay(for: now)) ?? now
+        if start > endOfDay { return false }
+        if let until = rule.until, cal.startOfDay(for: until) < cal.startOfDay(for: now) { return false }
+        let interval = rule.interval ?? 1
+        switch rule.freq.uppercased() {
+        case "DAILY":
+            let startSOD = cal.startOfDay(for: start)
+            let todaySOD = cal.startOfDay(for: now)
+            if let days = cal.dateComponents([.day], from: startSOD, to: todaySOD).day, days >= 0 {
+                return days % max(1, interval) == 0
+            }
+            return false
+        case "WEEKLY":
+            let byDays = rule.byDay
+            let allowed = byDays.isEmpty ? ["MO","TU","WE","TH","FR","SA","SU"] : byDays
+            guard allowed.contains(icsCode(for: now)) else { return false }
+            let startWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: start)) ?? start
+            let todayWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
+            if let weeks = cal.dateComponents([.weekOfYear], from: startWeek, to: todayWeek).weekOfYear, weeks >= 0 {
+                return weeks % max(1, interval) == 0
+            }
+            return false
+        default:
+            return false
+        }
+    }
+    
+    private func combine(day: Date, withTime time: Date) -> Date? {
+        let cal = Calendar.current
+        var comps = DateComponents()
+        let dayComps = cal.dateComponents([.year, .month, .day], from: day)
+        let timeComps = cal.dateComponents([.hour, .minute, .second], from: time)
+        comps.year = dayComps.year
+        comps.month = dayComps.month
+        comps.day = dayComps.day
+        comps.hour = timeComps.hour
+        comps.minute = timeComps.minute
+        comps.second = timeComps.second
+        return cal.date(from: comps)
+    }
+    
+    private func icsCode(for date: Date) -> String {
+        let wd = Calendar.current.component(.weekday, from: date)
+        switch wd {
+        case 1: return "SU"
+        case 2: return "MO"
+        case 3: return "TU"
+        case 4: return "WE"
+        case 5: return "TH"
+        case 6: return "FR"
+        case 7: return "SA"
+        default: return "MO"
+        }
+    }
+    
+    private func timeString(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        return f.string(from: date)
+    }
+    
+    private func dayString(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        return f.string(from: date)
+    }
+    
+    private func minDate(_ lhs: Date?, _ rhs: Date?) -> Date? {
+        switch (lhs, rhs) {
+        case let (l?, r?): return min(l, r)
+        case let (l?, nil): return l
+        case let (nil, r?): return r
+        default: return nil
+        }
     }
 }

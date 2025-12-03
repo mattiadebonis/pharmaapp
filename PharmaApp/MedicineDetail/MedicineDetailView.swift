@@ -19,12 +19,6 @@ struct MedicineDetailView: View {
     @State private var selectedDoctorID: NSManagedObjectID? = nil
     @State private var showTherapySheet = false
     @State private var selectedTherapy: Therapy?
-    @State private var showThresholdSheet = false
-    @State private var showDoctorSheet = false
-    @State private var showCabinetSheet = false
-    @State private var selectedCabinetID: NSManagedObjectID?
-    @State private var unitsCount: Int = 0
-    @State private var previousUnitsCount: Int = 0
     
     let medicine: Medicine
     let package: Package
@@ -33,7 +27,6 @@ struct MedicineDetailView: View {
     @FetchRequest private var therapies: FetchedResults<Therapy>
     @FetchRequest(fetchRequest: Doctor.extractDoctors()) private var doctors: FetchedResults<Doctor>
     @FetchRequest(fetchRequest: Medicine.extractMedicines()) private var allMedicines: FetchedResults<Medicine>
-    @FetchRequest(fetchRequest: Cabinet.extractCabinets()) private var cabinets: FetchedResults<Cabinet>
     
     private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
     @State private var showEmailSheet = false
@@ -67,8 +60,8 @@ struct MedicineDetailView: View {
     var body: some View {
         NavigationStack {
             Form {
-                stockAdjustSection
                 therapiesInlineSection
+                settingsSection
                 quickActionsSection
             }
             .scrollContentBackground(.hidden)
@@ -84,21 +77,6 @@ struct MedicineDetailView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button {
-                            showThresholdSheet = true
-                        } label: {
-                            Label("Soglia scorte", systemImage: "gauge.medium")
-                        }
-                        Button {
-                            showDoctorSheet = true
-                        } label: {
-                            Label("Medico prescrittore", systemImage: "stethoscope")
-                        }
-                        Button {
-                            showCabinetSheet = true
-                        } label: {
-                            Label("Cabinet", systemImage: "folder")
-                        }
                         Button {
                             showLogsSheet = true
                         } label: {
@@ -124,10 +102,6 @@ struct MedicineDetailView: View {
             let current = Int(medicine.custom_stock_threshold)
             customThresholdValue = current > 0 ? current : 7
             selectedDoctorID = medicine.prescribingDoctor?.objectID
-            let units = max(totalLeftover, 0)
-            unitsCount = units
-            previousUnitsCount = unitsCount
-            selectedCabinetID = medicine.cabinet?.objectID
         }
         .presentationDetents([.fraction(0.66), .large], selection: $detailDetent)
         .sheet(isPresented: $showEmailSheet) {
@@ -174,83 +148,8 @@ struct MedicineDetailView: View {
                 context: context,
                 editingTherapy: selectedTherapy
             )
-            .id(selectedTherapy?.objectID.uriRepresentation().absoluteString ?? UUID().uuidString)
+            .id(selectedTherapy?.objectID ?? UUID() as! NSManagedObjectID?)
             .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showThresholdSheet) {
-            NavigationStack {
-                Form {
-                    Section(header: Text("Soglia scorte")) {
-                        Stepper(value: $customThresholdValue, in: 1...60) {
-                            Text("Avvisami quando restano \(customThresholdValue) giorni")
-                        }
-                        .onChange(of: customThresholdValue) { newValue in
-                            medicine.custom_stock_threshold = Int32(newValue)
-                            saveContext()
-                        }
-                    }
-                }
-                .navigationTitle("Soglia scorte")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Chiudi") { showThresholdSheet = false }
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $showDoctorSheet) {
-            NavigationStack {
-                Form {
-                    Section(header: Text("Medico prescrittore")) {
-                        Picker("Medico prescrittore", selection: Binding(
-                            get: { selectedDoctorID },
-                            set: { newID in
-                                selectedDoctorID = newID
-                            }
-                        )) {
-                            Text("Nessuno").tag(NSManagedObjectID?.none)
-                            ForEach(doctors, id: \.objectID) { doc in
-                                Text(doctorFullName(doc)).tag(Optional(doc.objectID))
-                            }
-                        }
-                    }
-                }
-                .navigationTitle("Medico")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Chiudi") { showDoctorSheet = false }
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $showCabinetSheet) {
-            NavigationStack {
-                Form {
-                    Section(header: Text("Cabinet")) {
-                        Picker("Cabinet", selection: Binding(
-                            get: { selectedCabinetID },
-                            set: { newID in
-                                selectedCabinetID = newID
-                            }
-                        )) {
-                            Text("Nessuno").tag(NSManagedObjectID?.none)
-                            ForEach(cabinets, id: \.objectID) { cab in
-                                Text(cab.name.isEmpty ? "Cabinet" : cab.name)
-                                    .tag(Optional(cab.objectID))
-                            }
-                        }
-                    }
-                }
-                .navigationTitle("Cabinet")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Chiudi") { showCabinetSheet = false }
-                    }
-                }
-            }
         }
         .onChange(of: selectedDoctorID) { newValue in
             if let newValue, let doc = doctors.first(where: { $0.objectID == newValue }) {
@@ -261,37 +160,11 @@ struct MedicineDetailView: View {
                 saveContext()
             }
         }
-        .onChange(of: selectedCabinetID) { newValue in
-            if let newValue, let cab = cabinets.first(where: { $0.objectID == newValue }) {
-                medicine.cabinet = cab
-                medicine.in_cabinet = true
-            } else {
-                medicine.cabinet = nil
-                medicine.in_cabinet = false
-            }
-            saveContext()
-        }
     }
     
     private func openTherapyForm(for therapy: Therapy?) {
         selectedTherapy = therapy
         showTherapySheet = true
-    }
-    
-    private func adjustStockUnits(to newValue: Int) {
-        let delta = newValue - previousUnitsCount
-        previousUnitsCount = newValue
-        if delta > 0 {
-            // aggiungi delta unità con log di acquisto
-            for _ in 0..<delta {
-                actionsViewModel.addPurchase(for: medicine, package: package)
-            }
-        } else if delta < 0 {
-            let toRemove = abs(delta)
-            for _ in 0..<toRemove {
-                actionsViewModel.addIntake(for: medicine, package: package, therapy: nil)
-            }
-        }
     }
     
     private struct PrimaryAction {
@@ -315,7 +188,7 @@ struct MedicineDetailView: View {
                 return PrimaryAction(label: "Richiedi ricetta", icon: "envelope", color: .orange)
             }
         }
-        return PrimaryAction(label: "Registra acquisto confezione", icon: "cart.fill", color: .blue)
+        return PrimaryAction(label: "Registra acquisto", icon: "cart.fill", color: .blue)
     }
 
     private var detailAccentColor: Color {
@@ -326,27 +199,7 @@ struct MedicineDetailView: View {
     }
 
     private var packageSummary: String? {
-        var parts: [String] = []
-        if package.valore > 0 {
-            let unit = package.unita.trimmingCharacters(in: .whitespacesAndNewlines)
-            if unit.isEmpty {
-                parts.append("\(package.valore)")
-            } else {
-                parts.append("\(package.valore) \(unit)")
-            }
-        }
-        let volume = package.volume.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !volume.isEmpty {
-            parts.append(volume)
-        }
-        if package.numero > 0 {
-            parts.append("\(package.numero) pz")
-        }
-        let type = package.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !type.isEmpty {
-            parts.append(type.capitalized)
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " • ")
+        formattedPackageLabel(package)
     }
     
     private var activeIngredient: String? {
@@ -511,9 +364,6 @@ struct MedicineDetailView: View {
             showEmailSheet = true
         } else {
             viewModel.addPurchase(for: medicine, for: package)
-            let addedUnits = max(Int(package.numero), 1)
-            unitsCount += addedUnits
-            previousUnitsCount = unitsCount
         }
     }
     
@@ -636,71 +486,6 @@ struct MedicineDetailView: View {
 // MARK: - Decorative sections
 extension MedicineDetailView {
     @ViewBuilder
-    private var heroCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(medicine.nome.isEmpty ? "Medicinale" : medicine.nome)
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.leading)
-                    let active = medicine.principio_attivo.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !active.isEmpty {
-                        Text(active)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.white.opacity(0.85))
-                            .textCase(.uppercase)
-                    }
-                }
-                Spacer()
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(0.18))
-                        .frame(width: 60, height: 60)
-                    Image(systemName: medicine.obbligo_ricetta ? "cross.case.fill" : "pills.fill")
-                        .font(.title3)
-                        .foregroundStyle(.white)
-                }
-            }
-            if let packageSummary {
-                Text(packageSummary)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 12)
-                    .background(Color.white.opacity(0.18), in: Capsule())
-            }
-            HStack(spacing: 12) {
-                HeroStat(icon: "cube.box.fill", title: "Unità", value: "\(max(totalLeftover, 0))")
-                HeroStat(icon: "calendar.badge.clock", title: "Copertura", value: coverageSummaryText)
-                HeroStat(icon: "clock.arrow.circlepath", title: "Terapie", value: "\(therapyCount)")
-            }
-            if medicine.obbligo_ricetta {
-                Label("Richiede ricetta", systemImage: "doc.text.fill")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 12)
-                    .background(Color.white.opacity(0.2), in: Capsule())
-            }
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            LinearGradient(
-                colors: [
-                    detailAccentColor.opacity(0.95),
-                    detailAccentColor.opacity(0.7),
-                    detailAccentColor.opacity(0.6)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-        .shadow(color: detailAccentColor.opacity(0.3), radius: 16, y: 8)
-    }
-
     private var quickActionsSection: some View {
             VStack(spacing: 14) {
                 if let action = primaryAction {
@@ -722,19 +507,48 @@ extension MedicineDetailView {
                     }
                     .buttonStyle(CapsuleActionButtonStyle(fill: .gray.opacity(0.2), textColor: .primary))
                 }
-            }
+        }
        
        
     }
-    
-    private var stockAdjustSection: some View {
-        Section(header: Text("Scorte disponibili")) {
-            let autonomyText = currentAutonomyDays.flatMap { $0 > 0 ? " • \($0) giorni" : nil } ?? ""
-            Stepper(value: $unitsCount, in: 0...2000) {
-                Text("\(unitsCount) unità\(autonomyText)")
+
+    private var settingsSection: some View {
+        Section {
+            Stepper(value: $customThresholdValue, in: 1...60) {
+                Text("Avvisami quando restano \(customThresholdValue) giorni")
             }
-            .onChange(of: unitsCount) { newValue in
-                adjustStockUnits(to: newValue)
+            .onChange(of: customThresholdValue) { newValue in
+                medicine.custom_stock_threshold = Int32(newValue)
+                saveContext()
+            }
+            
+            Picker("Medico prescrittore", selection: Binding(
+                get: { selectedDoctorID },
+                set: { newID in
+                    selectedDoctorID = newID
+                }
+            )) {
+                Text("Nessuno").tag(NSManagedObjectID?.none)
+                ForEach(doctors, id: \.objectID) { doc in
+                    Text(doctorFullName(doc)).tag(Optional(doc.objectID))
+                }
+            }
+            
+            if let option = currentOption {
+                Toggle(isOn: Binding(
+                    get: { option.manual_intake_registration },
+                    set: { newValue in
+                        option.manual_intake_registration = newValue
+                        saveContext()
+                    }
+                )) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Registrazione manuale assunzioni")
+                        Text("Se disattivo, le assunzioni vengono registrate automaticamente.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .textCase(nil)
@@ -742,44 +556,41 @@ extension MedicineDetailView {
         .listRowBackground(Color(.systemBackground))
     }
     
-    private var currentAutonomyDays: Int? {
-        guard !currentTherapiesSet.isEmpty else { return nil }
-        let usageData = currentTherapiesSet.reduce(into: (left: 0.0, daily: 0.0)) { result, therapy in
-            result.left += Double(therapy.leftover())
-            result.daily += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
-        }
-        guard usageData.daily > 0 else { return nil }
-        return Int(usageData.left / usageData.daily)
-    }
-
     private var therapiesInlineSection: some View {
-        Section(header: Text("Terapie")) {
-            if therapies.isEmpty {
-                Text("Nessuna terapia aggiunta.")
-                    .foregroundStyle(.secondary)
-                    .font(.footnote)
-            } else {
-                ForEach(therapies, id: \.objectID) { therapy in
-                    Button {
-                        openTherapyForm(for: therapy)
-                    } label: {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .foregroundStyle(.primary)
+                    Text("Terapie")
+                        .font(.body.weight(.semibold))
+                }
+                
+                if therapies.isEmpty {
+                    Text("Nessuna terapia aggiunta.")
+                        .foregroundStyle(.secondary)
+                        .font(.footnote)
+                } else {
+                    ForEach(therapies, id: \.objectID) { therapy in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(recurrenceDescription(for: therapy))
-                                .foregroundStyle(.primary)
+                                .font(.subheadline)
                             if let next = nextDose(for: therapy) {
                                 Text("Prossima: \(formattedDate(next))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
+                        .padding(.vertical, 4)
                     }
                 }
-            }
-            
-            Button {
-                openTherapyForm(for: nil)
-            } label: {
-                Label("Aggiungi terapia", systemImage: "plus.circle")
+                
+                Button {
+                    openTherapyForm(for: nil)
+                } label: {
+                    Label("Aggiungi terapia", systemImage: "plus.circle")
+                        .font(.callout)
+                }
             }
         }
         .textCase(nil)
@@ -1357,7 +1168,7 @@ private struct StockManagementView: View {
                 context: context,
                 editingTherapy: selectedTherapy
             )
-            .id(selectedTherapy?.objectID.uriRepresentation().absoluteString ?? UUID().uuidString)
+            .id(selectedTherapy?.id ?? UUID())
             .presentationDetents([.medium, .large])
             }
         }
@@ -1447,19 +1258,7 @@ struct MedicineLogsView: View {
     }
     
     private func packageSummary(_ pkg: Package) -> String {
-        var parts: [String] = []
-        if pkg.valore > 0 {
-            let unit = pkg.unita.trimmingCharacters(in: .whitespacesAndNewlines)
-            parts.append(unit.isEmpty ? "\(pkg.valore)" : "\(pkg.valore) \(unit)")
-        }
-        let tipologia = pkg.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !tipologia.isEmpty {
-            parts.append(tipologia)
-        }
-        if pkg.numero > 0 {
-            parts.append("\(pkg.numero) pz")
-        }
-        return parts.isEmpty ? "Confezione" : parts.joined(separator: " • ")
+        formattedPackageLabel(pkg) ?? "Confezione"
     }
     
     private var dateFormatter: DateFormatter {
@@ -1468,4 +1267,27 @@ struct MedicineLogsView: View {
         df.timeStyle = .short
         return df
     }
+}
+
+// MARK: - Package formatting helper
+private func formattedPackageLabel(_ pkg: Package) -> String? {
+    let typeRaw = pkg.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
+    let quantity: String? = {
+        if pkg.numero > 0 {
+            let unitLabel = typeRaw.isEmpty ? "unità" : typeRaw.lowercased()
+            return "\(pkg.numero) \(unitLabel)"
+        }
+        return typeRaw.isEmpty ? nil : typeRaw.capitalized
+    }()
+    let dosage: String? = {
+        guard pkg.valore > 0 else { return nil }
+        let unit = pkg.unita.trimmingCharacters(in: .whitespacesAndNewlines)
+        return unit.isEmpty ? "\(pkg.valore)" : "\(pkg.valore) \(unit)"
+    }()
+    if let quantity, let dosage {
+        return "\(quantity) da \(dosage)"
+    }
+    if let quantity { return quantity }
+    if let dosage { return dosage }
+    return nil
 }

@@ -200,12 +200,6 @@ struct MedicineRowView: View {
                 Text(displayName)
                     .font(.headline.weight(.semibold))
                     .lineLimit(2)
-                if let pkgInfo = firstPackageInfo {
-                    Text(pkgInfo)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
                 infoPills
                 if hasBadges {
                     badgesRow
@@ -233,16 +227,29 @@ struct MedicineRowView: View {
     
     private var firstPackageInfo: String? {
         guard let pkg = medicine.packages.first else { return nil }
-        var parts: [String] = []
-        if pkg.valore > 0 {
+        return packageLabel(pkg)
+    }
+    
+    private func packageLabel(_ pkg: Package) -> String? {
+        let typeRaw = pkg.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
+        let quantity: String? = {
+            if pkg.numero > 0 {
+                let unitLabel = typeRaw.isEmpty ? "unità" : typeRaw.lowercased()
+                return "\(pkg.numero) \(unitLabel)"
+            }
+            return typeRaw.isEmpty ? nil : typeRaw.capitalized
+        }()
+        let dosage: String? = {
+            guard pkg.valore > 0 else { return nil }
             let unit = pkg.unita.trimmingCharacters(in: .whitespacesAndNewlines)
-            parts.append(unit.isEmpty ? "\(pkg.valore)" : "\(pkg.valore) \(unit)")
+            return unit.isEmpty ? "\(pkg.valore)" : "\(pkg.valore) \(unit)"
+        }()
+        if let quantity, let dosage {
+            return "\(quantity) da \(dosage)"
         }
-        let tipologia = pkg.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !tipologia.isEmpty {
-            parts.append(tipologia)
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " • ")
+        if let quantity { return quantity }
+        if let dosage { return dosage }
+        return nil
     }
     
     private func camelCase(_ text: String) -> String {

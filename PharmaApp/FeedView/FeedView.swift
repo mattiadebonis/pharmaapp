@@ -34,6 +34,7 @@ struct FeedView: View {
     @State private var activeCabinetID: NSManagedObjectID?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.66)
     @StateObject private var locationVM = LocationSearchViewModel()
+    @State private var medicineToMove: Medicine?
 
     init(viewModel: FeedViewModel, mode: Mode = .medicines) {
         self.viewModel = viewModel
@@ -80,7 +81,7 @@ struct FeedView: View {
 
     @ViewBuilder
     private func medicinesScreen(sections: (purchase: [Medicine], oggi: [Medicine], ok: [Medicine])) -> some View {
-        let rows = orderedRows(for: sections)
+        let entries = shelfEntries(from: sections)
         List {
 
             if appVM.suggestNearestPharmacies {
@@ -91,22 +92,44 @@ struct FeedView: View {
                 }
                 .listSectionSeparator(.hidden)
             }
-            
-            if !cabinets.isEmpty {
-                Section {
-                    cabinetsList()
-                } header: {
-                    Text("Cabinet")
-                }
-                .listRowSeparator(.hidden)
-            }
 
-            Section {
-                medicineList(for: rows)
+            ForEach(entries) { entry in
+                switch entry.kind {
+                case .medicine(let med):
+                    row(for: med)
+                case .cabinet(let cabinet):
+                    let meds = sortedMedicines(in: cabinet)
+                    ZStack {
+                        Button {
+                            activeCabinetID = cabinet.objectID
+                        } label: {
+                            CabinetCardView(
+                                cabinet: cabinet,
+                                medicineCount: meds.count
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        
+                        NavigationLink(
+                            destination: CabinetDetailView(cabinet: cabinet, medicines: meds, viewModel: viewModel),
+                            isActive: Binding(
+                                get: { activeCabinetID == cabinet.objectID },
+                                set: { newValue in
+                                    if !newValue { activeCabinetID = nil }
+                                }
+                            )
+                        ) {
+                            EmptyView()
+                        }
+                        .hidden()
+                    }
+                    .listRowBackground(Color.clear)
+                }
             }
         }
         .listRowSeparator(.hidden)
         .listSectionSeparator(.hidden)
+        .listSectionSpacing(0)
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .scrollIndicators(.hidden)
@@ -138,6 +161,17 @@ struct FeedView: View {
                     .presentationDetents([.medium])
                 }
             }
+        }
+        .sheet(item: $medicineToMove) { medicine in
+            MoveToCabinetSheet(
+                medicine: medicine,
+                cabinets: Array(cabinets),
+                onSelect: { cabinet in
+                    medicine.cabinet = cabinet
+                    saveContext()
+                }
+            )
+            .presentationDetents([.medium, .large])
         }
         .onChange(of: selectedMedicine) { newValue in
             if newValue == nil {
@@ -182,43 +216,6 @@ struct FeedView: View {
             )
         }
         .buttonStyle(.plain)
-    }
-
-    private func medicineList(for rows: [(medicine: Medicine, section: MedicineRowView.RowSection)]) -> some View {
-        ForEach(rows.filter { $0.medicine.cabinet == nil }, id: \.medicine.objectID) { entry in
-            row(for: entry.medicine)
-        }
-    }
-    
-    private func cabinetsList() -> some View {
-        ForEach(cabinets, id: \.objectID) { cabinet in
-            let meds = sortedMedicines(in: cabinet)
-            ZStack {
-                Button {
-                    activeCabinetID = cabinet.objectID
-                } label: {
-                    CabinetCardView(
-                        cabinet: cabinet,
-                        medicineCount: meds.count
-                    )
-                }
-                .buttonStyle(.plain)
-                
-                NavigationLink(
-                    destination: CabinetDetailView(cabinet: cabinet, medicines: meds),
-                    isActive: Binding(
-                        get: { activeCabinetID == cabinet.objectID },
-                        set: { newValue in
-                            if !newValue { activeCabinetID = nil }
-                        }
-                    )
-                ) {
-                    EmptyView()
-                }
-                .hidden()
-            }
-            .listRowBackground(Color.clear)
-        }
     }
 
     private func upcomingStockPanel(for medicines: [Medicine]) -> some View {
@@ -319,77 +316,32 @@ struct FeedView: View {
 
     // MARK: - Row builder (gestures + card)
     private func row(for medicine: Medicine) -> some View {
-        MedicineRowView(
-            medicine: medicine,
-            isSelected: viewModel.selectedMedicines.contains(medicine),
-            isInSelectionMode: viewModel.isSelecting
-        )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if viewModel.isSelecting {
-                viewModel.toggleSelection(for: medicine)
-            } else {
-                selectedMedicine = medicine
-            }
-        }
-        .onLongPressGesture(minimumDuration: 0.5) {
-            selectedMedicine = medicine
-            Haptics.impact(.medium)
-        }
-        .accessibilityIdentifier("MedicineRow_\(medicine.objectID)")
-        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-            if viewModel.isSelecting {
-                selectionSwipeButton(for: medicine)
-            } else {
-                Button {
-                    Haptics.impact(.light)
-                    viewModel.enterSelectionMode(with: medicine)
-                } label: {
-                    Label("Seleziona", systemImage: "checkmark.circle")
-                }
-                .tint(.accentColor)
-            }
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button {
-                Haptics.impact(.medium)
-                viewModel.markAsTaken(for: medicine)
-            } label: {
-                Label("Assunto", systemImage: "checkmark.circle.fill")
-            }
-            .tint(.green)
-            Button {
-                Haptics.impact(.medium)
-                viewModel.markAsPurchased(for: medicine)
-            } label: {
-                Label("Acquistato", systemImage: "cart.fill")
-            }
-            .tint(.blue)
-            if shouldShowPrescriptionAction(for: medicine) {
-                Button {
-                    Haptics.impact(.medium)
-                    viewModel.requestPrescription(for: medicine)
-                } label: {
-                    Label("Richiedi ricetta", systemImage: "envelope.fill")
-                }
-                .tint(.orange)
-            }
-        }
-        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
-    }
-
-    @ViewBuilder
-    private func selectionSwipeButton(for medicine: Medicine) -> some View {
         let isSelected = viewModel.selectedMedicines.contains(medicine)
-        Button {
-            Haptics.impact(.light)
-            viewModel.toggleSelection(for: medicine)
-        } label: {
-            Label(isSelected ? "Deseleziona" : "Seleziona", systemImage: isSelected ? "checkmark.circle.fill" : "checkmark.circle")
-        }
-        .tint(.accentColor)
+        let shouldShowRx = shouldShowPrescriptionAction(for: medicine)
+        return MedicineSwipeRow(
+            medicine: medicine,
+            isSelected: isSelected,
+            isInSelectionMode: viewModel.isSelecting,
+            shouldShowPrescription: shouldShowRx,
+            onTap: {
+                if viewModel.isSelecting {
+                    viewModel.toggleSelection(for: medicine)
+                } else {
+                    selectedMedicine = medicine
+                }
+            },
+            onLongPress: {
+                selectedMedicine = medicine
+                Haptics.impact(.medium)
+            },
+            onToggleSelection: { viewModel.toggleSelection(for: medicine) },
+            onEnterSelection: { viewModel.enterSelectionMode(with: medicine) },
+            onMarkTaken: { viewModel.markAsTaken(for: medicine) },
+            onMarkPurchased: { viewModel.markAsPurchased(for: medicine) },
+            onRequestPrescription: shouldShowRx ? { viewModel.requestPrescription(for: medicine) } : nil,
+            onMove: { medicineToMove = medicine }
+        )
+        .accessibilityIdentifier("MedicineRow_\(medicine.objectID)")
     }
 
     private func shouldShowPrescriptionAction(for medicine: Medicine) -> Bool {
@@ -400,218 +352,47 @@ struct FeedView: View {
     
     // MARK: - New sorting algorithm (sections)
     private func computeSections() -> (purchase: [Medicine], oggi: [Medicine], ok: [Medicine]) {
-        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
-        let now = Date()
-        let cal = Calendar.current
-        let endOfDay: Date = {
-            let start = cal.startOfDay(for: now)
-            return cal.date(byAdding: DateComponents(day: 1, second: -1), to: start) ?? now
-        }()
-        
-        enum StockStatus {
-            case ok
-            case low
-            case critical
-            case unknown
+        PharmaApp.computeSections(for: Array(medicines), logs: Array(logs), option: options.first)
+    }
+    
+    private struct ShelfEntry: Identifiable {
+        enum Kind {
+            case cabinet(Cabinet)
+            case medicine(Medicine)
+        }
+        let id: NSManagedObjectID
+        let priority: Int
+        let name: String
+        let kind: Kind
+    }
+    
+    private func shelfEntries(from sections: (purchase: [Medicine], oggi: [Medicine], ok: [Medicine])) -> [ShelfEntry] {
+        let orderedMeds = sections.purchase + sections.oggi + sections.ok
+        var indexMap: [NSManagedObjectID: Int] = [:]
+        for (idx, med) in orderedMeds.enumerated() {
+            indexMap[med.objectID] = idx
         }
         
-        // Calcolo unità rimanenti per una medicine, basato su logs e package
-        func remainingUnits(for m: Medicine) -> Int? {
-            if let therapies = m.therapies, !therapies.isEmpty {
-                return therapies.reduce(0) { $0 + Int($1.leftover()) }
+        var entries: [ShelfEntry] = []
+        for med in orderedMeds where med.cabinet == nil {
+            let priority = indexMap[med.objectID] ?? Int.max
+            entries.append(ShelfEntry(id: med.objectID, priority: priority, name: med.nome, kind: .medicine(med)))
+        }
+        
+        let baseIndex = orderedMeds.count
+        for (cabIdx, cabinet) in cabinets.enumerated() {
+            let meds = cabinet.medicines
+            let idxs = meds.compactMap { indexMap[$0.objectID] }
+            let priority = idxs.min() ?? (baseIndex + cabIdx)
+            entries.append(ShelfEntry(id: cabinet.objectID, priority: priority, name: cabinet.name, kind: .cabinet(cabinet)))
+        }
+        
+        return entries.sorted { lhs, rhs in
+            if lhs.priority == rhs.priority {
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
-            return m.remainingUnitsWithoutTherapy()
+            return lhs.priority < rhs.priority
         }
-        
-        func nextOccurrenceToday(for m: Medicine) -> Date? {
-            guard let therapies = m.therapies, !therapies.isEmpty else { return nil }
-            var best: Date? = nil
-            for t in therapies {
-                let rule = rec.parseRecurrenceString(t.rrule ?? "")
-                let startDate = t.start_date ?? now
-                if let d = rec.nextOccurrence(rule: rule, startDate: startDate, after: now, doses: t.doses as NSSet?) {
-                    if cal.isDate(d, inSameDayAs: now) && d <= endOfDay {
-                        if best == nil || d < best! { best = d }
-                    }
-                }
-            }
-            return best
-        }
-        
-        // Prossima assunzione (anche oltre oggi): usata come primo criterio d'ordinamento
-        func nextOccurrence(for m: Medicine) -> Date? {
-            guard let therapies = m.therapies, !therapies.isEmpty else { return nil }
-            var best: Date? = nil
-            for t in therapies {
-                let rule = rec.parseRecurrenceString(t.rrule ?? "")
-                let startDate = t.start_date ?? now
-                if let d = rec.nextOccurrence(rule: rule, startDate: startDate, after: now, doses: t.doses as NSSet?) {
-                    if best == nil || d < best! { best = d }
-                }
-            }
-            return best
-        }
-        
-        // MARK: - Pianificazione: conteggio dosi previste oggi
-        func icsCode(for date: Date) -> String {
-            let weekday = cal.component(.weekday, from: date)
-            switch weekday { case 1: return "SU"; case 2: return "MO"; case 3: return "TU"; case 4: return "WE"; case 5: return "TH"; case 6: return "FR"; case 7: return "SA"; default: return "MO" }
-        }
-        
-        func occursToday(_ t: Therapy) -> Bool {
-            let rule = rec.parseRecurrenceString(t.rrule ?? "")
-            let start = t.start_date ?? now
-            // Se la therapy parte dopo oggi, non è prevista oggi
-            if start > endOfDay { return false }
-            // Rispetta eventuale UNTIL
-            if let until = rule.until, cal.startOfDay(for: until) < cal.startOfDay(for: now) { return false }
-            
-            let freq = rule.freq.uppercased()
-            let interval = rule.interval ?? 1
-            
-            switch freq {
-            case "DAILY":
-                let startSOD = cal.startOfDay(for: start)
-                let todaySOD = cal.startOfDay(for: now)
-                if let days = cal.dateComponents([.day], from: startSOD, to: todaySOD).day, days >= 0 {
-                    return days % max(1, interval) == 0
-                }
-                return false
-                
-            case "WEEKLY":
-                let todayCode = icsCode(for: now)
-                let byDays = rule.byDay.isEmpty ? ["MO","TU","WE","TH","FR","SA","SU"] : rule.byDay
-                guard byDays.contains(todayCode) else { return false }
-                
-                // Verifica intervallo settimanale
-                let startWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: start)) ?? start
-                let todayWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
-                if let weeks = cal.dateComponents([.weekOfYear], from: startWeek, to: todayWeek).weekOfYear, weeks >= 0 {
-                    return weeks % max(1, interval) == 0
-                }
-                return false
-                
-            default:
-                return false
-            }
-        }
-        
-        func scheduledDosesTodayCount(for t: Therapy) -> Int {
-            guard occursToday(t) else { return 0 }
-            let count = t.doses?.count ?? 0
-            return max(0, count)
-        }
-        
-        func scheduledDosesTodayCount(for m: Medicine) -> Int {
-            guard let therapies = m.therapies, !therapies.isEmpty else { return 0 }
-            return therapies.reduce(0) { $0 + scheduledDosesTodayCount(for: $1) }
-        }
-        
-        func intakeLogsTodayCount(for m: Medicine) -> Int {
-            // Conta solo le assunzioni odierne legate a terapie che ricorrono oggi (o senza therapy per compatibilità)
-            let todaysTherapies: Set<Therapy> = Set((m.therapies ?? []).filter { occursToday($0) })
-            return logs.filter { log in
-                guard log.medicine == m, log.type == "intake", cal.isDate(log.timestamp, inSameDayAs: now) else { return false }
-                if let t = log.therapy { return todaysTherapies.contains(t) }
-                return true
-            }.count
-        }
-        
-        // Soglie fisse per classificazione
-        // <5 unità  => sezione "Oggi"
-        // <7 unità  => sezione "Da tenere d'occhio"
-        // Nota: da ora "Oggi" considera SOLO dosi odierne rimanenti, non la criticità scorte
-        func coverageDays(for m: Medicine) -> Double? {
-            guard let therapies = m.therapies, !therapies.isEmpty else { return nil }
-            var totalLeftover: Double = 0
-            var totalDailyUsage: Double = 0
-            for therapy in therapies {
-                totalLeftover += Double(therapy.leftover())
-                totalDailyUsage += therapy.stimaConsumoGiornaliero(recurrenceManager: rec)
-            }
-            if totalDailyUsage <= 0 {
-                return totalLeftover > 0 ? Double.greatestFiniteMagnitude : 0
-            }
-            return totalLeftover / totalDailyUsage
-        }
-        
-        func stockStatus(for m: Medicine) -> StockStatus {
-            let threshold = m.stockThreshold(option: options.first)
-            if let coverage = coverageDays(for: m) {
-                if coverage <= 0 {
-                    return .critical
-                }
-                return coverage < Double(threshold) ? .low : .ok
-            }
-            if let remaining = m.remainingUnitsWithoutTherapy() {
-                if remaining <= 0 { return .critical }
-                return remaining < threshold ? .low : .ok
-            }
-            return .unknown
-        }
-        
-        var purchase: [Medicine] = []
-        var oggi: [Medicine] = []
-        var ok: [Medicine] = []
-        
-        let nonCabinetMedicines = medicines.filter { $0.cabinet == nil }
-        
-        for m in nonCabinetMedicines {
-            let status = stockStatus(for: m)
-            if status == .critical || status == .low {
-                purchase.append(m)
-                continue
-            }
-            if let therapies = m.therapies, !therapies.isEmpty, therapies.contains(where: { occursToday($0) }) {
-                oggi.append(m)
-            } else {
-                ok.append(m)
-            }
-        }
-        
-        // Ordinamento: 1) prossima assunzione (ASC) 2) stato scorte (rimanenti, ASC) 3) nome
-        oggi.sort { (m1, m2) in
-            let d1 = nextOccurrence(for: m1) ?? Date.distantFuture
-            let d2 = nextOccurrence(for: m2) ?? Date.distantFuture
-            if d1 == d2 {
-                let r1 = remainingUnits(for: m1) ?? Int.max
-                let r2 = remainingUnits(for: m2) ?? Int.max
-                if r1 == r2 {
-                    return m1.nome.localizedCaseInsensitiveCompare(m2.nome) == .orderedAscending
-                }
-                return r1 < r2
-            }
-            return d1 < d2
-        }
-        
-        // Ordina Da comprare: prima i critical, poi rimanenti ASC, poi nome
-        purchase.sort { (m1, m2) in
-            let s1 = stockStatus(for: m1)
-            let s2 = stockStatus(for: m2)
-            if s1 != s2 { return (s1 == .critical) && (s2 != .critical) }
-            let r1 = remainingUnits(for: m1) ?? Int.max
-            let r2 = remainingUnits(for: m2) ?? Int.max
-            if r1 == r2 {
-                return m1.nome.localizedCaseInsensitiveCompare(m2.nome) == .orderedAscending
-            }
-            return r1 < r2
-        }
-        
-        ok.sort { (m1, m2) in
-            let d1 = nextOccurrence(for: m1) ?? Date.distantFuture
-            let d2 = nextOccurrence(for: m2) ?? Date.distantFuture
-            if d1 == d2 {
-                let r1 = remainingUnits(for: m1) ?? Int.max
-                let r2 = remainingUnits(for: m2) ?? Int.max
-                if r1 == r2 {
-                    return m1.nome.localizedCaseInsensitiveCompare(m2.nome) == .orderedAscending
-                }
-                return r1 < r2
-            }
-            return d1 < d2
-        }
-        
-        return (purchase, oggi, ok)
     }
 
     private func buildInsightsContext(for sections: (purchase: [Medicine], oggi: [Medicine], ok: [Medicine])) -> AIInsightsContext? {
@@ -706,27 +487,6 @@ struct FeedView: View {
         return formatter
     }()
 
-    private func isOutOfStock(_ medicine: Medicine, recurrenceManager: RecurrenceManager) -> Bool {
-        if let therapies = medicine.therapies, !therapies.isEmpty {
-            var totalLeft: Double = 0
-            for therapy in therapies {
-                totalLeft += Double(therapy.leftover())
-            }
-            return totalLeft <= 0
-        }
-        if let remaining = medicine.remainingUnitsWithoutTherapy() {
-            return remaining <= 0
-        }
-        return false
-    }
-
-    private func needsPrescriptionBeforePurchase(_ medicine: Medicine, recurrenceManager: RecurrenceManager) -> Bool {
-        guard medicine.obbligo_ricetta else { return false }
-        if medicine.hasPendingNewPrescription() { return false }
-        if medicine.hasNewPrescritpionRequest() { return false }
-        return isOutOfStock(medicine, recurrenceManager: recurrenceManager)
-    }
-
     // Verifica se una medicina ha almeno una terapia che ricorre oggi
     private func hasTherapyToday(_ m: Medicine) -> Bool {
         let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
@@ -782,6 +542,14 @@ struct FeedView: View {
             return package
         }
         return nil
+    }
+    
+    private func saveContext() {
+        do {
+            try managedObjectContext.save()
+        } catch {
+            print("Errore salvataggio: \(error)")
+        }
     }
     
     // MARK: - Doctor & pharmacy highlights
@@ -1007,6 +775,61 @@ struct FeedView: View {
     }
 }
 
+// MARK: - Move to cabinet sheet
+struct MoveToCabinetSheet: View {
+    let medicine: Medicine
+    let cabinets: [Cabinet]
+    let onSelect: (Cabinet) -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            List {
+                if cabinets.isEmpty {
+                    Text("Nessun cassetto disponibile.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(cabinetsWithIDs) { cabinet in
+                        moveRow(for: cabinet)
+                    }
+                }
+            }
+            .navigationTitle("Sposta in cassetto")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Chiudi") { dismiss() }
+                }
+            }
+        }
+    }
+    
+    private var cabinetsWithIDs: [IdentifiedCabinet] {
+        cabinets.map { IdentifiedCabinet(id: $0.id, cabinet: $0) }
+    }
+    
+    private func moveRow(for identified: IdentifiedCabinet) -> some View {
+        Button {
+            onSelect(identified.cabinet)
+            dismiss()
+        } label: {
+            HStack {
+                Text(identified.cabinet.name)
+                Spacer()
+                if medicine.cabinet?.id == identified.id {
+                    Image(systemName: "checkmark.circle.fill")
+                }
+            }
+        }
+    }
+    
+    private struct IdentifiedCabinet: Identifiable {
+        let id: UUID
+        let cabinet: Cabinet
+    }
+}
+
 private struct DividerWithLabel: View {
     let title: String
     
@@ -1025,4 +848,266 @@ private struct DividerWithLabel: View {
                 .foregroundStyle(.tertiary)
         }
     }
+}
+
+// MARK: - Shared helpers
+struct MedicineSwipeRow: View {
+    let medicine: Medicine
+    let isSelected: Bool
+    let isInSelectionMode: Bool
+    let shouldShowPrescription: Bool
+    
+    let onTap: () -> Void
+    let onLongPress: () -> Void
+    let onToggleSelection: () -> Void
+    let onEnterSelection: () -> Void
+    let onMarkTaken: () -> Void
+    let onMarkPurchased: () -> Void
+    let onRequestPrescription: (() -> Void)?
+    let onMove: () -> Void
+    
+    var body: some View {
+        MedicineRowView(
+            medicine: medicine,
+            isSelected: isSelected,
+            isInSelectionMode: isInSelectionMode
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { onTap() }
+        .onLongPressGesture(minimumDuration: 0.5) { onLongPress() }
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            if isInSelectionMode {
+                Button {
+                    Haptics.impact(.light)
+                    onToggleSelection()
+                } label: {
+                    Label(isSelected ? "Deseleziona" : "Seleziona", systemImage: isSelected ? "checkmark.circle.fill" : "checkmark.circle")
+                }
+                .tint(.accentColor)
+            } else {
+                Button {
+                    Haptics.impact(.light)
+                    onEnterSelection()
+                } label: {
+                    Label("Seleziona", systemImage: "checkmark.circle")
+                }
+                .tint(.accentColor)
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button {
+                Haptics.impact(.medium)
+                onMarkTaken()
+            } label: {
+                Label("Assunto", systemImage: "checkmark.circle.fill")
+            }
+            .tint(.green)
+            Button {
+                Haptics.impact(.medium)
+                onMarkPurchased()
+            } label: {
+                Label("Acquistato", systemImage: "cart.fill")
+            }
+            .tint(.blue)
+            if shouldShowPrescription {
+                Button {
+                    Haptics.impact(.medium)
+                    onRequestPrescription?()
+                } label: {
+                    Label("Richiedi ricetta", systemImage: "envelope.fill")
+                }
+                .tint(.orange)
+            }
+            Button {
+                Haptics.impact(.medium)
+                onMove()
+            } label: {
+                Label("Sposta", systemImage: "folder.fill")
+            }
+            .tint(.purple)
+        }
+        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+    }
+}
+
+func computeSections(for medicines: [Medicine], logs: [Log], option: Option?) -> (purchase: [Medicine], oggi: [Medicine], ok: [Medicine]) {
+    let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+    let now = Date()
+    let cal = Calendar.current
+    let endOfDay: Date = {
+        let start = cal.startOfDay(for: now)
+        return cal.date(byAdding: DateComponents(day: 1, second: -1), to: start) ?? now
+    }()
+    
+    enum StockStatus {
+        case ok
+        case low
+        case critical
+        case unknown
+    }
+    
+    func remainingUnits(for m: Medicine) -> Int? {
+        if let therapies = m.therapies, !therapies.isEmpty {
+            return therapies.reduce(0) { $0 + Int($1.leftover()) }
+        }
+        return m.remainingUnitsWithoutTherapy()
+    }
+    
+    func nextOccurrence(for m: Medicine) -> Date? {
+        guard let therapies = m.therapies, !therapies.isEmpty else { return nil }
+        var best: Date? = nil
+        for t in therapies {
+            let rule = rec.parseRecurrenceString(t.rrule ?? "")
+            let startDate = t.start_date ?? now
+            if let d = rec.nextOccurrence(rule: rule, startDate: startDate, after: now, doses: t.doses as NSSet?) {
+                if best == nil || d < best! { best = d }
+            }
+        }
+        return best
+    }
+    
+    func icsCode(for date: Date) -> String {
+        let weekday = cal.component(.weekday, from: date)
+        switch weekday { case 1: return "SU"; case 2: return "MO"; case 3: return "TU"; case 4: return "WE"; case 5: return "TH"; case 6: return "FR"; case 7: return "SA"; default: return "MO" }
+    }
+    
+    func occursToday(_ t: Therapy) -> Bool {
+        let rule = rec.parseRecurrenceString(t.rrule ?? "")
+        let start = t.start_date ?? now
+        if start > endOfDay { return false }
+        if let until = rule.until, cal.startOfDay(for: until) < cal.startOfDay(for: now) { return false }
+        
+        let freq = rule.freq.uppercased()
+        let interval = rule.interval ?? 1
+        
+        switch freq {
+        case "DAILY":
+            let startSOD = cal.startOfDay(for: start)
+            let todaySOD = cal.startOfDay(for: now)
+            if let days = cal.dateComponents([.day], from: startSOD, to: todaySOD).day, days >= 0 {
+                return days % max(1, interval) == 0
+            }
+            return false
+            
+        case "WEEKLY":
+            let todayCode = icsCode(for: now)
+            let byDays = rule.byDay.isEmpty ? ["MO","TU","WE","TH","FR","SA","SU"] : rule.byDay
+            guard byDays.contains(todayCode) else { return false }
+            
+            let startWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: start)) ?? start
+            let todayWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
+            if let weeks = cal.dateComponents([.weekOfYear], from: startWeek, to: todayWeek).weekOfYear, weeks >= 0 {
+                return weeks % max(1, interval) == 0
+            }
+            return false
+            
+        default:
+            return false
+        }
+    }
+    
+    func stockStatus(for m: Medicine) -> StockStatus {
+        let threshold = m.stockThreshold(option: option)
+        if let therapies = m.therapies, !therapies.isEmpty {
+            var totalLeftover: Double = 0
+            var totalDailyUsage: Double = 0
+            for therapy in therapies {
+                totalLeftover += Double(therapy.leftover())
+                totalDailyUsage += therapy.stimaConsumoGiornaliero(recurrenceManager: rec)
+            }
+            if totalDailyUsage <= 0 {
+                return totalLeftover > 0 ? .ok : .unknown
+            }
+            let coverage = totalLeftover / totalDailyUsage
+            if coverage <= 0 { return .critical }
+            return coverage < Double(threshold) ? .low : .ok
+        }
+        if let remaining = m.remainingUnitsWithoutTherapy() {
+            if remaining <= 0 { return .critical }
+            return remaining < threshold ? .low : .ok
+        }
+        return .unknown
+    }
+    
+    var purchase: [Medicine] = []
+    var oggi: [Medicine] = []
+    var ok: [Medicine] = []
+    
+    for m in medicines {
+        let status = stockStatus(for: m)
+        if status == .critical || status == .low {
+            purchase.append(m)
+            continue
+        }
+        if let therapies = m.therapies, !therapies.isEmpty, therapies.contains(where: { occursToday($0) }) {
+            oggi.append(m)
+        } else {
+            ok.append(m)
+        }
+    }
+    
+    oggi.sort { (m1, m2) in
+        let d1 = nextOccurrence(for: m1) ?? Date.distantFuture
+        let d2 = nextOccurrence(for: m2) ?? Date.distantFuture
+        if d1 == d2 {
+            let r1 = remainingUnits(for: m1) ?? Int.max
+            let r2 = remainingUnits(for: m2) ?? Int.max
+            if r1 == r2 {
+                return m1.nome.localizedCaseInsensitiveCompare(m2.nome) == .orderedAscending
+            }
+            return r1 < r2
+        }
+        return d1 < d2
+    }
+    
+    purchase.sort { (m1, m2) in
+        let s1 = stockStatus(for: m1)
+        let s2 = stockStatus(for: m2)
+        if s1 != s2 { return (s1 == .critical) && (s2 != .critical) }
+        let r1 = remainingUnits(for: m1) ?? Int.max
+        let r2 = remainingUnits(for: m2) ?? Int.max
+        if r1 == r2 {
+            return m1.nome.localizedCaseInsensitiveCompare(m2.nome) == .orderedAscending
+        }
+        return r1 < r2
+    }
+    
+    ok.sort { (m1, m2) in
+        let d1 = nextOccurrence(for: m1) ?? Date.distantFuture
+        let d2 = nextOccurrence(for: m2) ?? Date.distantFuture
+        if d1 == d2 {
+            let r1 = remainingUnits(for: m1) ?? Int.max
+            let r2 = remainingUnits(for: m2) ?? Int.max
+            if r1 == r2 {
+                return m1.nome.localizedCaseInsensitiveCompare(m2.nome) == .orderedAscending
+            }
+            return r1 < r2
+        }
+        return d1 < d2
+    }
+    
+    return (purchase, oggi, ok)
+}
+
+func isOutOfStock(_ medicine: Medicine, recurrenceManager: RecurrenceManager) -> Bool {
+    if let therapies = medicine.therapies, !therapies.isEmpty {
+        var totalLeft: Double = 0
+        for therapy in therapies {
+            totalLeft += Double(therapy.leftover())
+        }
+        return totalLeft <= 0
+    }
+    if let remaining = medicine.remainingUnitsWithoutTherapy() {
+        return remaining <= 0
+    }
+    return false
+}
+
+func needsPrescriptionBeforePurchase(_ medicine: Medicine, recurrenceManager: RecurrenceManager) -> Bool {
+    guard medicine.obbligo_ricetta else { return false }
+    if medicine.hasPendingNewPrescription() { return false }
+    if medicine.hasNewPrescritpionRequest() { return false }
+    return isOutOfStock(medicine, recurrenceManager: recurrenceManager)
 }
