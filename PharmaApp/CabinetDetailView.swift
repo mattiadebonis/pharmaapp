@@ -6,6 +6,7 @@ struct CabinetDetailView: View {
     let cabinet: Cabinet
     let medicines: [Medicine]
     @ObservedObject var viewModel: FeedViewModel
+    @Environment(\.dismiss) private var dismiss
     
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
     @FetchRequest(fetchRequest: Log.extractLogs()) private var logs: FetchedResults<Log>
@@ -31,6 +32,16 @@ struct CabinetDetailView: View {
         .listRowSeparator(.hidden)
         .scrollContentBackground(.hidden)
         .navigationTitle(cabinet.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    Label("Indietro", systemImage: "chevron.left")
+                }
+            }
+        }
         .sheet(isPresented: Binding(
             get: { selectedMedicine != nil },
             set: { newValue in if !newValue { selectedMedicine = nil } }
