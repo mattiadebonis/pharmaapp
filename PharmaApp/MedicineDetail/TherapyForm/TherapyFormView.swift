@@ -68,6 +68,9 @@ struct TherapyFormView: View {
     // Data di inizio
     @State private var startDate: Date = Date()
     @State private var manualIntakeRegistration: Bool = true
+    @State private var therapyDescriptionText: String = ""
+    @State private var doseAmount: Double = 1
+    @State private var doseUnit: String = "compressa"
     
     // Sezione Orari: con pulsante + per aggiungere e - per rimuovere
         @State private var times: [Date] = [Date()]
@@ -91,6 +94,7 @@ struct TherapyFormView: View {
     var body: some View {
         NavigationView {
             Form {
+                therapyDescriptionSection
                 Section(header: Text("Persona")) {
                     Picker("Seleziona Persona", selection: $selectedPerson) {
                         ForEach(persons, id: \.self) { person in
@@ -123,7 +127,7 @@ struct TherapyFormView: View {
                             HStack {
                                 DatePicker("", selection: $times[index], displayedComponents: .hourAndMinute)
                                     .labelsHidden()
-                                Text("1 compressa")
+                                Text(doseDisplayText)
                                     .foregroundColor(.secondary)
                                 Spacer()
                                 Button { times.remove(at: index) } label: {
@@ -194,6 +198,7 @@ struct TherapyFormView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Salva") {
+                        applyTherapyDescription(therapyDescriptionText)
                         saveTherapy()
                     }
                     .disabled(!canSave)
@@ -234,6 +239,150 @@ struct TherapyFormView: View {
             case "SA": return "Sabato"
             case "SU": return "Domenica"
             default:   return icsDay  
+        }
+    }
+
+    private var doseDisplayText: String {
+        let unit = doseUnit
+        if doseAmount == 0.5 {
+            return "½ \(unit)"
+        }
+        let isInt = abs(doseAmount.rounded() - doseAmount) < 0.0001
+        let numberString: String = {
+            if isInt { return String(Int(doseAmount.rounded())) }
+            return String(doseAmount).replacingOccurrences(of: ".", with: ",")
+        }()
+        let unitString: String = {
+            guard doseAmount > 1 else { return unit }
+            if unit == "compressa" { return "compresse" }
+            if unit == "capsula" { return "capsule" }
+            return unit
+        }()
+        return "\(numberString) \(unitString)"
+    }
+
+    private var therapyDescriptionSection: some View {
+        Section(header: Text("Descrizione terapia")) {
+            TextField(
+                "Es: Per Mattia 1 compressa ogni giorno alle 20:06, chiedi conferma",
+                text: $therapyDescriptionText,
+                axis: .vertical
+            )
+            .lineLimit(2...6)
+            .onChange(of: therapyDescriptionText) { newValue in
+                applyTherapyDescription(newValue)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(therapySummaryPills, id: \.self) { token in
+                        Text(token)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color(.secondarySystemBackground), in: Capsule())
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+
+    private var therapySummaryPills: [String] {
+        var parts: [String] = []
+        if let personName = selectedPersonName {
+            parts.append("👤 \(personName)")
+        }
+        parts.append("💊 \(doseDisplayText)")
+        parts.append("🔁 \(frequencySummaryText)")
+        if let timesText = timesSummaryText {
+            parts.append("⏰ \(timesText)")
+        }
+        parts.append(manualIntakeRegistration ? "✅ Conferma" : "Senza conferma")
+        return parts
+    }
+
+    private var selectedPersonName: String? {
+        guard let selectedPerson else { return nil }
+        let first = (selectedPerson.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let last = (selectedPerson.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let components = [first, last].filter { !$0.isEmpty }
+        let full = components.joined(separator: " ")
+        return full.isEmpty ? nil : full
+    }
+
+    private var frequencySummaryText: String {
+        switch selectedFrequencyType {
+        case .daily:
+            if interval == 1 { return "Ogni giorno" }
+            return "Ogni \(interval) giorni"
+        case .specificDays:
+            let dayNames = byDay.map { dayName(for: $0) }
+            return dayNames.isEmpty ? "In giorni specifici" : dayNames.joined(separator: ", ")
+        }
+    }
+
+    private var timesSummaryText: String? {
+        guard !times.isEmpty else { return nil }
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return times
+            .sorted()
+            .map { formatter.string(from: $0) }
+            .joined(separator: ", ")
+    }
+
+    private func applyTherapyDescription(_ text: String) {
+        let parser = TherapyDescriptionParser(persons: Array(persons), defaultPerson: persons.first)
+        let parsed = parser.parse(text)
+
+        if let person = parsed.person {
+            selectedPerson = person
+        }
+
+        if let dose = parsed.dose {
+            doseAmount = dose.amount
+            doseUnit = dose.unit
+        }
+
+        if let frequency = parsed.frequency {
+            switch frequency {
+            case .daily(let intervalDays):
+                selectedFrequencyType = .daily
+                freq = "DAILY"
+                interval = max(1, intervalDays)
+            case .weekly(let weekDays):
+                selectedFrequencyType = .specificDays
+                freq = "WEEKLY"
+                byDay = weekDays
+            }
+        }
+
+        if let parsedTimes = parsed.times, !parsedTimes.isEmpty {
+            times = parsedTimes
+        }
+
+        if let requiresConfirmation = parsed.requiresConfirmation {
+            manualIntakeRegistration = requiresConfirmation
+        }
+
+        if let duration = parsed.duration {
+            useUntil = true
+            useCount = false
+            let base = startDate
+            let until: Date?
+            switch duration.unit {
+            case .days:
+                until = Calendar.current.date(byAdding: .day, value: duration.value, to: base)
+            case .weeks:
+                until = Calendar.current.date(byAdding: .day, value: duration.value * 7, to: base)
+            case .months:
+                until = Calendar.current.date(byAdding: .month, value: duration.value, to: base)
+            }
+            if let until {
+                untilDate = until
+            }
         }
     }
 }
