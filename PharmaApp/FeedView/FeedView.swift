@@ -1512,38 +1512,31 @@ struct MedicineSwipeRow: View {
                 .tint(.accentColor)
             }
         }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button {
-                Haptics.impact(.medium)
-                onMarkTaken()
-            } label: {
-                Label("Assunto", systemImage: "checkmark.circle.fill")
-            }
-            .tint(.green)
-            Button {
-                Haptics.impact(.medium)
-                onMarkPurchased()
-            } label: {
-                Label("Acquistato", systemImage: "cart.fill")
-            }
-            .tint(.blue)
-            if shouldShowPrescription {
-                Button {
-                    Haptics.impact(.medium)
-                    onRequestPrescription?()
-                } label: {
-                    Label("Richiedi ricetta", systemImage: "envelope.fill")
-                }
-                .tint(.orange)
-            }
-            Button {
-                Haptics.impact(.medium)
-                onMove()
-            } label: {
-                Label("Sposta", systemImage: "folder.fill")
-            }
-            .tint(.purple)
-        }
+	        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+	            Button {
+	                Haptics.impact(.medium)
+	                onMarkTaken()
+	            } label: {
+	                Label("Assunto", systemImage: "checkmark.circle.fill")
+	            }
+	            .tint(.green)
+	            Button {
+	                Haptics.impact(.medium)
+	                onMarkPurchased()
+	            } label: {
+	                Label("Acquistato", systemImage: "cart.fill")
+	            }
+	            .tint(.blue)
+	            if shouldShowPrescription {
+	                Button {
+	                    Haptics.impact(.medium)
+	                    onRequestPrescription?()
+	                } label: {
+	                    Label("Richiedi ricetta", systemImage: "envelope.fill")
+	                }
+	                .tint(.orange)
+	            }
+	        }
         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)

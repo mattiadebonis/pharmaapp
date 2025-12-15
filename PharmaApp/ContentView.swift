@@ -45,23 +45,16 @@ struct ContentView: View {
                 }
 
                 // TAB 2 – Medicine (a sinistra)
-                Tab("Medicine", systemImage: "pills", value: AppTab.medicine) {
-                    NavigationStack {
-                        FeedView(viewModel: feedVM, mode: .medicines)
-                            .navigationTitle("Armadio dei farmaci")
-                            .navigationBarTitleDisplayMode(.large)
-                            .toolbar {
-                                ToolbarItem(placement: .navigationBarTrailing) {
-                                    Button {
-                                        showCabinetSheet = true
-                                    } label: {
-                                        Image(systemName: "folder.badge.plus")
-                                    }
-                                }
-                                ToolbarItem(placement: .navigationBarTrailing) {
-                                    Button {
-                                        isSettingsPresented = true
-                                    } label: {
+	                Tab("Medicine", systemImage: "pills", value: AppTab.medicine) {
+	                    NavigationStack {
+	                        FeedView(viewModel: feedVM, mode: .medicines)
+	                            .navigationTitle("Armadio dei farmaci")
+	                            .navigationBarTitleDisplayMode(.large)
+	                            .toolbar {
+	                                ToolbarItem(placement: .navigationBarTrailing) {
+	                                    Button {
+	                                        isSettingsPresented = true
+	                                    } label: {
                                         Image(systemName: "gearshape")
                                     }
                                 }
