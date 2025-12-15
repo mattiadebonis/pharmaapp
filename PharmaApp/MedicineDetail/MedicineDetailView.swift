@@ -20,12 +20,15 @@ struct MedicineDetailView: View {
     @State private var showTherapySheet = false
     @State private var selectedTherapy: Therapy?
     @State private var newTherapySheetID = UUID()
+    @State private var showThresholdSheet = false
+    @State private var showDoctorSheet = false
     
     let medicine: Medicine
     let package: Package
     
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
     @FetchRequest private var therapies: FetchedResults<Therapy>
+    @FetchRequest private var intakeLogs: FetchedResults<Log>
     @FetchRequest(fetchRequest: Doctor.extractDoctors()) private var doctors: FetchedResults<Doctor>
     @FetchRequest(fetchRequest: Medicine.extractMedicines()) private var allMedicines: FetchedResults<Medicine>
     
@@ -56,13 +59,13 @@ struct MedicineDetailView: View {
             sortDescriptors: [NSSortDescriptor(keyPath: \Therapy.start_date, ascending: true)],
             predicate: NSPredicate(format: "medicine == %@", medicine)
         )
+        _intakeLogs = FetchRequest(fetchRequest: Log.extractIntakeLogsFiltered(medicine: medicine))
     }
     
     var body: some View {
         NavigationStack {
             Form {
                 therapiesInlineSection
-                settingsSection
                 quickActionsSection
             }
             .scrollContentBackground(.hidden)
@@ -82,6 +85,18 @@ struct MedicineDetailView: View {
                             showLogsSheet = true
                         } label: {
                             Label("Visualizza log", systemImage: "clock.arrow.circlepath")
+                        }
+                        Button {
+                            showThresholdSheet = true
+                        } label: {
+                            Label("Soglia scorte", systemImage: "bell.badge")
+                        }
+                        if medicine.obbligo_ricetta {
+                            Button {
+                                showDoctorSheet = true
+                            } label: {
+                                Label("Medico prescrittore", systemImage: "stethoscope")
+                            }
                         }
                         Button(role: .destructive) {
                             deleteMedicine()
@@ -105,6 +120,26 @@ struct MedicineDetailView: View {
             selectedDoctorID = medicine.prescribingDoctor?.objectID
         }
         .presentationDetents([.fraction(0.66), .large], selection: $detailDetent)
+        .sheet(isPresented: $showThresholdSheet) {
+            ThresholdSheet(
+                value: $customThresholdValue,
+                onChange: { newValue in
+                    medicine.custom_stock_threshold = Int32(newValue)
+                    saveContext()
+                }
+            )
+        }
+        .sheet(isPresented: $showDoctorSheet) {
+            DoctorSheet(
+                selectedDoctorID: $selectedDoctorID,
+                doctors: doctors,
+                onChange: { newID in
+                    selectedDoctorID = newID
+                    medicine.prescribingDoctor = doctors.first(where: { $0.objectID == newID })
+                    saveContext()
+                }
+            )
+        }
         .sheet(isPresented: $showEmailSheet) {
             EmailRequestSheet(
                 doctorName: doctorDisplayName,
@@ -263,14 +298,107 @@ struct MedicineDetailView: View {
         let description = recurrenceManager.describeRecurrence(rule: rule)
         return description.capitalized
     }
+
+    private func combine(day: Date, withTime time: Date) -> Date? {
+        let calendar = Calendar.current
+        let dayComponents = calendar.dateComponents([.year, .month, .day], from: day)
+        let timeComponents = calendar.dateComponents([.hour, .minute, .second], from: time)
+
+        var mergedComponents = DateComponents()
+        mergedComponents.year = dayComponents.year
+        mergedComponents.month = dayComponents.month
+        mergedComponents.day = dayComponents.day
+        mergedComponents.hour = timeComponents.hour
+        mergedComponents.minute = timeComponents.minute
+        mergedComponents.second = timeComponents.second
+
+        return calendar.date(from: mergedComponents)
+    }
+
+    private func icsCode(for date: Date) -> String {
+        let weekday = Calendar.current.component(.weekday, from: date)
+        switch weekday { case 1: return "SU"; case 2: return "MO"; case 3: return "TU"; case 4: return "WE"; case 5: return "TH"; case 6: return "FR"; case 7: return "SA"; default: return "MO" }
+    }
+
+    private func occursToday(_ therapy: Therapy, now: Date) -> Bool {
+        let calendar = Calendar.current
+        let endOfDay: Date = {
+            let start = calendar.startOfDay(for: now)
+            return calendar.date(byAdding: DateComponents(day: 1, second: -1), to: start) ?? now
+        }()
+        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+        let start = therapy.start_date ?? now
+
+        if start > endOfDay { return false }
+        if let until = rule.until, calendar.startOfDay(for: until) < calendar.startOfDay(for: now) { return false }
+
+        let freq = rule.freq.uppercased()
+        let interval = rule.interval ?? 1
+
+        switch freq {
+        case "DAILY":
+            let startSOD = calendar.startOfDay(for: start)
+            let todaySOD = calendar.startOfDay(for: now)
+            if let days = calendar.dateComponents([.day], from: startSOD, to: todaySOD).day, days >= 0 {
+                return days % max(1, interval) == 0
+            }
+            return false
+        case "WEEKLY":
+            let todayCode = icsCode(for: now)
+            let byDays = rule.byDay.isEmpty ? ["MO","TU","WE","TH","FR","SA","SU"] : rule.byDay
+            guard byDays.contains(todayCode) else { return false }
+
+            let startWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: start)) ?? start
+            let todayWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
+            if let weeks = calendar.dateComponents([.weekOfYear], from: startWeek, to: todayWeek).weekOfYear, weeks >= 0 {
+                return weeks % max(1, interval) == 0
+            }
+            return false
+        default:
+            return false
+        }
+    }
+
+    private func scheduledTimesToday(for therapy: Therapy, now: Date) -> [Date] {
+        guard occursToday(therapy, now: now) else { return [] }
+        guard let doseSet = therapy.doses as? Set<Dose>, !doseSet.isEmpty else { return [] }
+        let today = Calendar.current.startOfDay(for: now)
+        return doseSet.compactMap { dose in
+            combine(day: today, withTime: dose.time)
+        }.sorted()
+    }
+
+    private func intakeCountToday(for therapy: Therapy, now: Date) -> Int {
+        let calendar = Calendar.current
+        let logsToday = intakeLogs.filter { calendar.isDate($0.timestamp, inSameDayAs: now) }
+        let assigned = logsToday.filter { $0.therapy == therapy }.count
+        if assigned > 0 { return assigned }
+
+        let unassigned = logsToday.filter { $0.therapy == nil }
+        if therapies.count == 1 { return unassigned.count }
+        return unassigned.filter { $0.package == therapy.package }.count
+    }
     
     private func nextDose(for therapy: Therapy) -> Date? {
-        recurrenceManager.nextOccurrence(
-            rule: recurrenceManager.parseRecurrenceString(therapy.rrule ?? ""),
-            startDate: therapy.start_date ?? Date(),
-            after: Date(),
-            doses: therapy.doses as NSSet?
-        )
+        let now = Date()
+        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+        let startDate = therapy.start_date ?? now
+
+        let calendar = Calendar.current
+        let timesToday = scheduledTimesToday(for: therapy, now: now)
+        if calendar.isDateInToday(now), !timesToday.isEmpty {
+            let takenCount = intakeCountToday(for: therapy, now: now)
+            if takenCount >= timesToday.count {
+                let endOfDay = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: calendar.startOfDay(for: now)) ?? now
+                return recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: endOfDay, doses: therapy.doses as NSSet?)
+            }
+            let pending = Array(timesToday.dropFirst(min(takenCount, timesToday.count)))
+            if let nextToday = pending.first(where: { $0 > now }) {
+                return nextToday
+            }
+        }
+
+        return recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: now, doses: therapy.doses as NSSet?)
     }
     
     private func formattedDate(_ date: Date) -> String {
@@ -522,80 +650,41 @@ extension MedicineDetailView {
        
        
     }
-
-    private var settingsSection: some View {
-        Section {
-            Stepper(value: $customThresholdValue, in: 1...60) {
-                Text("Avvisami quando restano \(customThresholdValue) giorni")
-            }
-            .onChange(of: customThresholdValue) { newValue in
-                medicine.custom_stock_threshold = Int32(newValue)
-                saveContext()
-            }
-            
-            Picker("Medico prescrittore", selection: Binding(
-                get: { selectedDoctorID },
-                set: { newID in
-                    selectedDoctorID = newID
-                }
-            )) {
-                Text("Nessuno").tag(NSManagedObjectID?.none)
-                ForEach(doctors, id: \.objectID) { doc in
-                    Text(doctorFullName(doc)).tag(Optional(doc.objectID))
-                }
-            }
-            
-            if let option = currentOption {
-                Toggle(isOn: Binding(
-                    get: { option.manual_intake_registration },
-                    set: { newValue in
-                        option.manual_intake_registration = newValue
-                        saveContext()
-                    }
-                )) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Registrazione manuale assunzioni")
-                        Text("Se disattivo, le assunzioni vengono registrate automaticamente.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-        .textCase(nil)
-        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-        .listRowBackground(Color(.systemBackground))
-    }
     
     private var therapiesInlineSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .foregroundStyle(.primary)
-                    Text("Terapie")
-                        .font(.body.weight(.semibold))
-                }
-                
-                if therapies.isEmpty {
+            if therapies.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Nessuna terapia aggiunta.")
                         .foregroundStyle(.secondary)
                         .font(.footnote)
-                } else {
-                    ForEach(therapies, id: \.objectID) { therapy in
-                        VStack(alignment: .leading, spacing: 4) {
+                    Button {
+                        openTherapyForm(for: nil)
+                    } label: {
+                        Label("Aggiungi terapia", systemImage: "plus.circle")
+                            .font(.callout)
+                    }
+                }
+            } else {
+                ForEach(therapies, id: \.objectID) { therapy in
+                    Button {
+                        openTherapyForm(for: therapy)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
                             Text(recurrenceDescription(for: therapy))
                                 .font(.subheadline)
+                                .foregroundStyle(.primary)
                             if let next = nextDose(for: therapy) {
                                 Text("Prossima: \(formattedDate(next))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 4)
                     }
+                    .buttonStyle(.plain)
                 }
-                
                 Button {
                     openTherapyForm(for: nil)
                 } label: {
@@ -603,12 +692,82 @@ extension MedicineDetailView {
                         .font(.callout)
                 }
             }
+        } header: {
+            HStack(spacing: 8) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .foregroundStyle(.primary)
+                Text("Terapie")
+                    .font(.body.weight(.semibold))
+            }
         }
         .textCase(nil)
-        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-        .listRowBackground(Color(.systemBackground))
     }
-
+    
+    private struct ThresholdSheet: View {
+        @Binding var value: Int
+        let onChange: (Int) -> Void
+        @Environment(\.dismiss) private var dismiss
+        
+        var body: some View {
+            NavigationStack {
+                Form {
+                    Section {
+                        Stepper(value: $value, in: 1...60) {
+                            Text("Avvisami quando restano \(value) giorni")
+                        }
+                        .onChange(of: value, perform: onChange)
+                    }
+                }
+                .navigationTitle("Soglia scorte")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Chiudi") { dismiss() }
+                    }
+                }
+            }
+            .presentationDetents([.fraction(0.3), .medium])
+        }
+    }
+    
+    private struct DoctorSheet: View {
+        @Binding var selectedDoctorID: NSManagedObjectID?
+        let doctors: FetchedResults<Doctor>
+        let onChange: (NSManagedObjectID?) -> Void
+        @Environment(\.dismiss) private var dismiss
+        
+        var body: some View {
+            NavigationStack {
+                Form {
+                    Section {
+                        Picker("Medico", selection: $selectedDoctorID) {
+                            Text("Nessuno").tag(NSManagedObjectID?.none)
+                            ForEach(doctors, id: \.objectID) { doc in
+                                Text(doctorFullName(doc)).tag(Optional(doc.objectID))
+                            }
+                        }
+                        .onChange(of: selectedDoctorID, perform: onChange)
+                    }
+                }
+                .navigationTitle("Medico")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Chiudi") { dismiss() }
+                    }
+                }
+            }
+            .presentationDetents([.fraction(0.3), .medium])
+        }
+        
+        private func doctorFullName(_ doctor: Doctor) -> String {
+            let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let parts = [first, last].filter { !$0.isEmpty }
+            return parts.isEmpty ? "Medico" : parts.joined(separator: " ")
+        }
+    }
+    
 }
 // MARK: - UI helpers
 extension MedicineDetailView {

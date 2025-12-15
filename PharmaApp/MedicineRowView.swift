@@ -6,9 +6,8 @@ struct MedicineRowView: View {
     private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
     
     // MARK: - Costanti
-    private let lookAheadDays = 7
     // MARK: - Input
-    var medicine: Medicine
+    @ObservedObject var medicine: Medicine
     var isSelected: Bool = false
     var isInSelectionMode: Bool = false
     enum RowSection { case purchase, tuttoOk }
@@ -33,15 +32,10 @@ struct MedicineRowView: View {
     private struct Occ { let therapy: Therapy; let date: Date }
     private var upcoming: [Occ] {
         guard !therapies.isEmpty else { return [] }
-        let limit = Calendar.current.date(byAdding: .day, value: lookAheadDays, to: Date())!
+        let now = Date()
         return therapies.compactMap { t in
-            guard let d = recurrenceManager.nextOccurrence(
-                rule: recurrenceManager.parseRecurrenceString(t.rrule ?? ""),
-                startDate: t.start_date ?? Date(),
-                after: Date(),
-                doses: t.doses as NSSet?
-            ) else { return nil }
-            return d <= limit ? Occ(therapy: t, date: d) : nil
+            guard let d = nextUpcomingDoseDate(for: t, now: now) else { return nil }
+            return Occ(therapy: t, date: d)
         }
         .sorted { $0.date < $1.date }
     }
@@ -271,13 +265,7 @@ struct MedicineRowView: View {
     }
     
     private var leadingIconSymbol: String {
-        if stocksWarning != nil {
-            return "exclamationmark.triangle.fill"
-        }
-        if hasTherapiesFlag {
-            return "pills.fill"
-        }
-        return "cross.case.fill"
+        return "pills.fill"
     }
     
     private var leadingAccentColor: Color {
@@ -293,10 +281,78 @@ struct MedicineRowView: View {
         return hasTherapiesFlag ? .teal : .green
     }
     
+    private func nextOccurrence(for therapy: Therapy) -> Date? {
+        recurrenceManager.nextOccurrence(
+            rule: recurrenceManager.parseRecurrenceString(therapy.rrule ?? ""),
+            startDate: therapy.start_date ?? Date(),
+            after: Date(),
+            doses: therapy.doses as NSSet?
+        )
+    }
+
+    private func intakeCountToday(for therapy: Therapy, now: Date) -> Int {
+        let calendar = Calendar.current
+        let logsToday = (medicine.logs ?? []).filter { $0.type == "intake" && calendar.isDate($0.timestamp, inSameDayAs: now) }
+        let assigned = logsToday.filter { $0.therapy == therapy }.count
+        if assigned > 0 { return assigned }
+
+        let unassigned = logsToday.filter { $0.therapy == nil }
+        if therapies.count == 1 { return unassigned.count }
+        return unassigned.filter { $0.package == therapy.package }.count
+    }
+
+    private func scheduledTimesToday(for therapy: Therapy, now: Date) -> [Date] {
+        guard occursToday(therapy) else { return [] }
+        let today = Calendar.current.startOfDay(for: now)
+        guard let doseSet = therapy.doses as? Set<Dose>, !doseSet.isEmpty else { return [] }
+        return doseSet.compactMap { dose in
+            combine(day: today, withTime: dose.time)
+        }.sorted()
+    }
+
+    private func nextUpcomingDoseDate(for therapy: Therapy, now: Date) -> Date? {
+        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+        let startDate = therapy.start_date ?? now
+
+        let calendar = Calendar.current
+        let timesToday = scheduledTimesToday(for: therapy, now: now)
+        if calendar.isDateInToday(now), !timesToday.isEmpty {
+            let takenCount = intakeCountToday(for: therapy, now: now)
+            if takenCount >= timesToday.count {
+                let endOfDay = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: calendar.startOfDay(for: now)) ?? now
+                return recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: endOfDay, doses: therapy.doses as NSSet?)
+            }
+            let pending = Array(timesToday.dropFirst(min(takenCount, timesToday.count)))
+            if let nextToday = pending.first(where: { $0 > now }) {
+                return nextToday
+            }
+        }
+
+        return recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: now, doses: therapy.doses as NSSet?)
+    }
+    
+    private func personName(for therapy: Therapy) -> String? {
+        let person = therapy.person
+        let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if last.isEmpty, first.lowercased() == "persona" { return nil }
+        let parts = [first, last].filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+    
+    private struct InfoChip: Identifiable {
+        let id = UUID()
+        let icon: String?
+        let text: String
+        let color: Color
+    }
+    
     private var infoPills: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                pill(for: therapyInfoChip)
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(therapyInfoChips) { chip in
+                    pill(for: chip)
+                }
             }
             HStack(spacing: 8) {
                 pill(for: stockChip)
@@ -307,17 +363,12 @@ struct MedicineRowView: View {
         }
     }
 
-    private struct InfoChip {
-        let icon: String?
-        let text: String
-        let color: Color
-    }
-
     private func pill(for data: InfoChip) -> some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .center, spacing: 6) {
             if let icon = data.icon {
                 Image(systemName: icon)
                     .foregroundStyle(data.color)
+                    .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] }
             }
             Text(data.text)
                 .foregroundStyle(.secondary)
@@ -327,30 +378,24 @@ struct MedicineRowView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var therapyInfoChip: InfoChip {
-        guard hasTherapiesFlag else {
-            return InfoChip(icon: "stethoscope", text: "Uso al bisogno", color: .teal)
+    private var therapyInfoChips: [InfoChip] {
+        guard let next = nextOcc else {
+            let text = medicine.obbligo_ricetta ? "Uso al bisogno con prescrizione medica" : "Uso al bisogno"
+            return [InfoChip(icon: "stethoscope", text: text, color: stockChip.color)]
         }
         let nextText: String = {
-            guard let next = nextDate else { return "nessuna dose programmata" }
             let cal = Calendar.current
-            if cal.isDateInToday(next) {
-                return "oggi alle \(time(next))"
-            }
-            if cal.isDateInTomorrow(next) {
-                return "domani"
-            }
-            if let overm = cal.date(byAdding: .day, value: 2, to: Date()), cal.isDate(next, inSameDayAs: overm) {
+            if cal.isDateInToday(next.date) { return "oggi alle \(time(next.date))" }
+            if cal.isDateInTomorrow(next.date) { return "domani" }
+            if let overm = cal.date(byAdding: .day, value: 2, to: Date()), cal.isDate(next.date, inSameDayAs: overm) {
                 return "dopodomani"
             }
-            return day(next).lowercased()
+            return day(next.date).lowercased()
         }()
         let base = "Prossima dose: \(nextText)"
-        let personText = therapyPersonSummary.map { "per \($0)" }
-        let text = [base, personText].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
-        let isToday = nextDate.map { Calendar.current.isDateInToday($0) } ?? false
-        let color: Color = isToday ? .blue : .teal
-        return InfoChip(icon: "stethoscope", text: text, color: color)
+        let person = personName(for: next.therapy).map { "per \($0)" }
+        let text = [base, person].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        return [InfoChip(icon: "stethoscope", text: text, color: stockChip.color)]
     }
 
     private var stockChip: InfoChip {

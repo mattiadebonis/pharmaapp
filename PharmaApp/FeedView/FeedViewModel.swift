@@ -54,6 +54,11 @@ class FeedViewModel: ObservableObject {
         addPurchase(for: medicine, for: package)
     }
 
+    func markPrescriptionReceived(for medicine: Medicine) {
+        guard let package = getPackage(for: medicine) else { return }
+        addPrescriptionReceived(for: medicine, for: package)
+    }
+
     func markAsTaken() {
         for medicine in selectedMedicines {
             markAsTaken(for: medicine)
@@ -62,8 +67,36 @@ class FeedViewModel: ObservableObject {
     }
 
     func markAsTaken(for medicine: Medicine) {
+        if let therapies = medicine.therapies, !therapies.isEmpty {
+            let recurrenceManager = RecurrenceManager(context: context)
+            let now = Date()
+
+            let candidates: [(therapy: Therapy, date: Date)] = therapies.compactMap { therapy in
+                let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+                let start = therapy.start_date ?? now
+                guard let next = recurrenceManager.nextOccurrence(rule: rule, startDate: start, after: now, doses: therapy.doses as NSSet?) else {
+                    return nil
+                }
+                return (therapy, next)
+            }
+
+            if let chosen = candidates.min(by: { $0.date < $1.date }) {
+                addIntake(for: medicine, for: chosen.therapy.package, therapy: chosen.therapy)
+                return
+            }
+
+            if let fallback = therapies.first {
+                addIntake(for: medicine, for: fallback.package, therapy: fallback)
+                return
+            }
+        }
+
         guard let package = getPackage(for: medicine) else { return }
         addIntake(for: medicine, for: package)
+    }
+
+    func markAsTaken(for therapy: Therapy) {
+        addIntake(for: therapy.medicine, for: therapy.package, therapy: therapy)
     }
 
     func clearSelection() {
@@ -78,10 +111,15 @@ class FeedViewModel: ObservableObject {
     private func getPackage(for medicine: Medicine) -> Package? {
         if let therapies = medicine.therapies, let therapy = therapies.first {
             return therapy.package
-        } else if let logs = medicine.logs {
+        }
+        if let logs = medicine.logs {
             let purchaseLogs = logs.filter { $0.type == "purchase" }
-            let sortedLogs = purchaseLogs.sorted { $0.timestamp > $1.timestamp }
-            return sortedLogs.first?.package
+            if let package = purchaseLogs.sorted(by: { $0.timestamp > $1.timestamp }).first?.package {
+                return package
+            }
+        }
+        if !medicine.packages.isEmpty {
+            return medicine.packages.sorted(by: { $0.numero > $1.numero }).first
         }
         return nil
     }
@@ -90,21 +128,26 @@ class FeedViewModel: ObservableObject {
         addLog(for: medicine, for: package, type: "new_prescription_request")
     }
 
+    private func addPrescriptionReceived(for medicine: Medicine, for package: Package) {
+        addLog(for: medicine, for: package, type: "new_prescription")
+    }
+
     private func addPurchase(for medicine: Medicine, for package: Package) {
         addLog(for: medicine, for: package, type: "purchase")
     }
 
-    private func addIntake(for medicine: Medicine, for package: Package) {
-        addLog(for: medicine, for: package, type: "intake")
+    private func addIntake(for medicine: Medicine, for package: Package, therapy: Therapy? = nil) {
+        addLog(for: medicine, for: package, type: "intake", therapy: therapy)
     }
 
-    private func addLog(for medicine: Medicine, for package: Package, type: String) {
+    private func addLog(for medicine: Medicine, for package: Package, type: String, therapy: Therapy? = nil) {
         let newLog = Log(context: context)
         newLog.id = UUID()
         newLog.type = type
         newLog.timestamp = Date()
         newLog.medicine = medicine
         newLog.package = package
+        newLog.therapy = therapy
 
         do {
             try context.save()
