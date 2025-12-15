@@ -329,7 +329,7 @@ struct MedicineRowView: View {
 
     private var therapyInfoChip: InfoChip {
         guard hasTherapiesFlag else {
-            return InfoChip(icon: "staroflife", text: "Uso al bisogno", color: .teal)
+            return InfoChip(icon: "stethoscope", text: "Uso al bisogno", color: .teal)
         }
         let nextText: String = {
             guard let next = nextDate else { return "nessuna dose programmata" }
@@ -345,18 +345,48 @@ struct MedicineRowView: View {
             }
             return day(next).lowercased()
         }()
-        let personText = therapyPersonSummary.map { "per \($0)" } ?? ""
-        let text = [nextText, personText].filter { !$0.isEmpty }.joined(separator: " · ")
+        let base = "Prossima dose: \(nextText)"
+        let personText = therapyPersonSummary.map { "per \($0)" }
+        let text = [base, personText].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
         let isToday = nextDate.map { Calendar.current.isDateInToday($0) } ?? false
         let color: Color = isToday ? .blue : .teal
-        return InfoChip(icon: "staroflife", text: text, color: color)
+        return InfoChip(icon: "stethoscope", text: text, color: color)
     }
 
     private var stockChip: InfoChip {
         let display = stockDisplay
+        let text: String = {
+            if let days = autonomyDays {
+                let clamped = max(0, days)
+                let daysText = clamped == 1 ? "Scorte per 1 giorno" : "Scorte per \(clamped) giorni"
+                let status: String
+                if clamped == 0 {
+                    status = "Esaurite"
+                } else if clamped < coverageThreshold {
+                    status = "Basse"
+                } else {
+                    status = "Ok"
+                }
+                return "\(daysText) · \(status)"
+            }
+            if let units = remainingUnits {
+                let clamped = max(0, units)
+                let unitsText = "Scorte: \(clamped) unità"
+                let status: String
+                if clamped == 0 {
+                    status = "Esaurite"
+                } else if clamped < 5 {
+                    status = "Basse"
+                } else {
+                    status = "Ok"
+                }
+                return "\(unitsText) · \(status)"
+            }
+            return "\(display.primary) · \(display.secondary)"
+        }()
         return InfoChip(
             icon: "square.stack.3d.up.fill",
-            text: "\(display.primary) · \(display.secondary)",
+            text: text,
             color: display.color
         )
     }
@@ -419,6 +449,7 @@ struct MedicineRowView: View {
     private func therapyPersonName(_ therapy: Therapy) -> String? {
         let first = (therapy.person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let last = (therapy.person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if last.isEmpty, first.lowercased() == "persona" { return nil }
         let components = [first, last].filter { !$0.isEmpty }
         return components.joined(separator: " ")
     }
