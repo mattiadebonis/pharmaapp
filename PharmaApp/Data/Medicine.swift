@@ -104,7 +104,9 @@ extension Medicine {
                 if let pkg = log.package {
                     total += Int(pkg.numero)
                 }
-            case "intake":
+            case "stock_increment":
+                total += 1
+            case "intake", "stock_adjustment":
                 total -= 1
             default:
                 continue

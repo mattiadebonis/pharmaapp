@@ -492,6 +492,7 @@ struct NewMedicineView: View {
         therapy.package = pkg
         therapy.start_date = Date()
         therapy.importance = Therapy.importanceValues.last
+        therapy.manual_intake_registration = true
         let parentPerson = draft.person ?? persons.first
         if let parentPerson,
            let childPerson = child.object(with: parentPerson.objectID) as? Person {

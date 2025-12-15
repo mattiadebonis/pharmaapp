@@ -51,13 +51,14 @@ extension Therapy {
         
         // Quanti acquisti e quante assunzioni
         let purchaseCount = relevantLogs.filter { $0.type == "purchase" }.count
-        let intakeCount   = relevantLogs.filter { $0.type == "intake" }.count
+        let incrementCount = relevantLogs.filter { $0.type == "stock_increment" }.count
+        let intakeCount = relevantLogs.filter { $0.type == "intake" || $0.type == "stock_adjustment" }.count
         
         // Quante unità contiene *ognuna* di queste confezioni?
         let confezioneValore = package.numero
         
-        // Scorte = (#purchase - #intake) * confezioneValore
-        return (Int32(purchaseCount) * confezioneValore) - Int32(intakeCount)
+        // Scorte = (#purchase * confezioneValore) + incrementi - decrementi
+        return (Int32(purchaseCount) * confezioneValore) + Int32(incrementCount) - Int32(intakeCount)
     }
 
     /// Stima il consumo giornaliero in base a rrule e al numero di dosi (orari).

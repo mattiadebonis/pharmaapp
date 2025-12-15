@@ -381,7 +381,7 @@ struct MedicineRowView: View {
     private var therapyInfoChips: [InfoChip] {
         guard let next = nextOcc else {
             let text = medicine.obbligo_ricetta ? "Uso al bisogno con prescrizione medica" : "Uso al bisogno"
-            return [InfoChip(icon: "stethoscope", text: text, color: stockChip.color)]
+            return [InfoChip(icon: nil, text: text, color: .secondary)]
         }
         let nextText: String = {
             let cal = Calendar.current
@@ -395,7 +395,7 @@ struct MedicineRowView: View {
         let base = "Prossima dose: \(nextText)"
         let person = personName(for: next.therapy).map { "per \($0)" }
         let text = [base, person].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
-        return [InfoChip(icon: "stethoscope", text: text, color: stockChip.color)]
+        return [InfoChip(icon: nil, text: text, color: .secondary)]
     }
 
     private var stockChip: InfoChip {
@@ -430,9 +430,9 @@ struct MedicineRowView: View {
             return "\(display.primary) · \(display.secondary)"
         }()
         return InfoChip(
-            icon: "square.stack.3d.up.fill",
+            icon: nil,
             text: text,
-            color: display.color
+            color: .secondary
         )
     }
 

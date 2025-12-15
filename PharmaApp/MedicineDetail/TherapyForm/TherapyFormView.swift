@@ -67,14 +67,12 @@ struct TherapyFormView: View {
     @State private var interval: Int = 1
     // Data di inizio
     @State private var startDate: Date = Date()
-    @State private var manualIntakeRegistration: Bool = false
+    @State private var manualIntakeRegistration: Bool = true
     
     // Sezione Orari: con pulsante + per aggiungere e - per rimuovere
         @State private var times: [Date] = [Date()]
     @State private var isShowingFrequencySheet = false
     
-    @State private var selectedImportance: String = Therapy.importanceValues.first ?? "standard"
-
     // MARK: - Init
     init(
         medicine: Medicine,
@@ -141,17 +139,6 @@ struct TherapyFormView: View {
                         }
                     }
                 }
-                
-                // Sezione Importanza
-                Section(header: Text("Importanza")) {
-                    Picker("Importanza", selection: $selectedImportance) {
-                        ForEach(Therapy.importanceValues, id: \.self) { importance in
-                            Text(importance.capitalized).tag(importance)
-                        }
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
-                }
-                
                 Section(header: Text("Promemoria")) {
                     Toggle(isOn: $manualIntakeRegistration) {
                         VStack(alignment: .leading, spacing: 4) {
@@ -256,6 +243,8 @@ struct TherapyFormView: View {
 extension TherapyFormView {
     
     private func saveTherapy() {
+        let effectiveImportance = editingTherapy?.importance ?? "standard"
+
         // Persona associata: in modifica usa quella della therapy; altrimenti usa selezione/first/crea
         let effectivePerson: Person = {
             if let t = editingTherapy { return t.person }
@@ -281,7 +270,7 @@ extension TherapyFormView {
                     startDate: startDate,
                     times: times,
                     package: package,
-                    importance: selectedImportance,
+                    importance: effectiveImportance,
                     person: effectivePerson,
                     manualIntake: manualIntakeRegistration
                 )
@@ -296,7 +285,7 @@ extension TherapyFormView {
                     startDate: startDate,
                     times: times,
                     package: package,
-                    importance: selectedImportance,
+                    importance: effectiveImportance,
                     person: effectivePerson,
                     manualIntake: manualIntakeRegistration
                 )
@@ -314,7 +303,7 @@ extension TherapyFormView {
                     startDate: startDate,
                     times: times,
                     package: package,
-                    importance: selectedImportance,
+                    importance: "standard",
                     person: effectivePerson,
                     manualIntake: manualIntakeRegistration
                 )
@@ -329,7 +318,7 @@ extension TherapyFormView {
                     startDate: startDate,
                     times: times,
                     package: package,
-                    importance: selectedImportance,
+                    importance: "standard",
                     person: effectivePerson,
                     manualIntake: manualIntakeRegistration
                 )

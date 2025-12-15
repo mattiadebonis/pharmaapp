@@ -50,7 +50,7 @@ class MedicineRowViewModel: ObservableObject {
         addLog(for: medicine, type: "intake", package: package, therapy: therapy)
     }
 
-    // Svuota tutte le scorte disponibili per la medicina, creando log di intake
+    // Svuota tutte le scorte disponibili per la medicina, creando log di stock_adjustment
     func emptyStocks(for medicine: Medicine) {
         // Caso con terapie: svuota per ogni therapy sulla base del suo package
         if let therapies = medicine.therapies, !therapies.isEmpty {
@@ -58,7 +58,7 @@ class MedicineRowViewModel: ObservableObject {
                 let left = Int(max(0, t.leftover()))
                 guard left > 0 else { continue }
                 for _ in 0..<left {
-                    addIntake(for: medicine, package: t.package, therapy: t)
+                    addLog(for: medicine, type: "stock_adjustment", package: t.package)
                 }
             }
             return
@@ -67,7 +67,7 @@ class MedicineRowViewModel: ObservableObject {
         if let remaining = medicine.remainingUnitsWithoutTherapy(), remaining > 0 {
             let pkg = (medicine.packages.first) ?? getLastPurchasedPackage(for: medicine)
             for _ in 0..<remaining {
-                addIntake(for: medicine, package: pkg)
+                addLog(for: medicine, type: "stock_adjustment", package: pkg)
             }
         }
     }

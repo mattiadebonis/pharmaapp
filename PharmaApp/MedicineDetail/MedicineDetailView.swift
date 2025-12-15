@@ -23,7 +23,7 @@ struct MedicineDetailView: View {
     @State private var showThresholdSheet = false
     @State private var showDoctorSheet = false
     
-    let medicine: Medicine
+    @ObservedObject var medicine: Medicine
     let package: Package
     
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
@@ -52,7 +52,7 @@ struct MedicineDetailView: View {
     }
     
     init(medicine: Medicine, package: Package) {
-        self.medicine = medicine
+        _medicine = ObservedObject(wrappedValue: medicine)
         self.package = package
         _therapies = FetchRequest(
             entity: Therapy.entity(),
@@ -66,7 +66,7 @@ struct MedicineDetailView: View {
         NavigationStack {
             Form {
                 therapiesInlineSection
-                quickActionsSection
+                stockSection
             }
             .scrollContentBackground(.hidden)
             .background(Color(.systemGroupedBackground))
@@ -288,7 +288,97 @@ struct MedicineDetailView: View {
         guard let date = estimatedDepletionDate else { return nil }
         return "Stimato fino al \(stockDateFormatter.string(from: date))"
     }
-    
+
+    private var packageUnitSize: Int {
+        max(1, Int(package.numero))
+    }
+
+    private func matchesSelectedPackage(_ log: Log) -> Bool {
+        if let pkg = log.package {
+            return pkg.objectID == package.objectID
+        }
+        return medicine.packages.count == 1
+    }
+
+    private var stockUnitsForSelectedPackage: Int {
+        guard let logs = medicine.logs else { return 0 }
+        let purchases = logs.filter { $0.type == "purchase" && matchesSelectedPackage($0) }.count
+        let increments = logs.filter { $0.type == "stock_increment" && matchesSelectedPackage($0) }.count
+        let intakes = logs.filter { $0.type == "intake" && matchesSelectedPackage($0) }.count
+        let adjustments = logs.filter { $0.type == "stock_adjustment" && matchesSelectedPackage($0) }.count
+        let units = purchases * packageUnitSize + increments - intakes - adjustments
+        return max(0, units)
+    }
+
+    private var stockPackagesForSelectedPackage: Int {
+        let units = stockUnitsForSelectedPackage
+        guard units > 0 else { return 0 }
+        return Int(ceil(Double(units) / Double(packageUnitSize)))
+    }
+
+    private var stockPackagesText: String {
+        stockPackagesForSelectedPackage == 1 ? "1 confezione" : "\(stockPackagesForSelectedPackage) confezioni"
+    }
+
+    private var stockUnitsText: String {
+        stockUnitsForSelectedPackage == 1 ? "1 unità" : "\(stockUnitsForSelectedPackage) unità"
+    }
+
+    private var estimatedCoverageDaysForSelectedPackage: Double? {
+        let relevant = therapies.filter { $0.package.objectID == package.objectID }
+        guard !relevant.isEmpty else { return nil }
+        var totalDaily: Double = 0
+        for therapy in relevant {
+            totalDaily += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
+        }
+        guard totalDaily > 0 else { return nil }
+        return Double(stockUnitsForSelectedPackage) / totalDaily
+    }
+
+    private enum StockStatus {
+        case ok
+        case low
+        case empty
+        case unknown
+    }
+
+    private var stockStatus: StockStatus {
+        guard stockUnitsForSelectedPackage > 0 else { return .empty }
+        guard let coverage = estimatedCoverageDaysForSelectedPackage else { return .unknown }
+        let threshold = Double(medicine.stockThreshold(option: currentOption))
+        return coverage < threshold ? .low : .ok
+    }
+
+    private var stockIndicatorColor: Color {
+        switch stockStatus {
+        case .ok:
+            return .green
+        case .low:
+            return .orange
+        case .empty:
+            return .red
+        case .unknown:
+            return .green
+        }
+    }
+
+    private var stockStatusLine: String? {
+        switch stockStatus {
+        case .empty:
+            return "Scorte esaurite"
+        case .unknown:
+            return "Scorte disponibili · Ok"
+        case .ok, .low:
+            guard let coverage = estimatedCoverageDaysForSelectedPackage else { return nil }
+            let statusText = (stockStatus == .low) ? "In esaurimento" : "Ok"
+            if coverage < 1 {
+                return "Scorte per meno di 1 giorno · \(statusText)"
+            }
+            let days = Int(coverage.rounded(.down))
+            return "Scorte per ~\(daysText(days)) · \(statusText)"
+        }
+    }
+
     private var currentTherapiesSet: Set<Therapy> {
         medicine.therapies ?? []
     }
@@ -506,10 +596,6 @@ struct MedicineDetailView: View {
         }
     }
     
-    private func markAsToPurchase() {
-        actionsViewModel.emptyStocks(for: medicine)
-    }
-    
     private func handleThresholdSelection(mode: StockThresholdMode, value: Int) {
         switch mode {
         case .general:
@@ -624,31 +710,90 @@ struct MedicineDetailView: View {
 
 // MARK: - Decorative sections
 extension MedicineDetailView {
-    @ViewBuilder
-    private var quickActionsSection: some View {
-            VStack(spacing: 14) {
-                if let action = primaryAction {
-                    Button {
-                        handlePrimaryAction(action)
-                    } label: {
-                        Label(action.label, systemImage: action.icon)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(CapsuleActionButtonStyle(fill: action.color, textColor: .white))
-                }
+    private var stockSection: some View {
+        Section {
+            if let stockStatusLine {
+                Text(stockStatusLine)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 2)
+            }
 
-                HStack(spacing: 12) {
-                    Button {
-                        markAsToPurchase()
-                    } label: {
-                        Label("Svuota scorte", systemImage: "cart.badge.plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(CapsuleActionButtonStyle(fill: .gray.opacity(0.2), textColor: .primary))
+            if let action = primaryAction, action.label == "Richiedi ricetta" {
+                Button {
+                    handlePrimaryAction(action)
+                } label: {
+                    Label(action.label, systemImage: action.icon)
                 }
+                .tint(action.color)
+            }
+
+            HStack {
+                Text("Confezioni")
+                Spacer()
+                HStack(spacing: 14) {
+                    Button {
+                        let target = max(0, stockUnitsForSelectedPackage - packageUnitSize)
+                        viewModel.setStockUnits(medicine: medicine, package: package, targetUnits: target)
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .tint(.blue)
+                    .disabled(stockUnitsForSelectedPackage <= 0)
+
+                    Text("\(stockPackagesForSelectedPackage)")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(minWidth: 40, alignment: .center)
+
+                    Button {
+                        viewModel.addPurchase(for: medicine, for: package)
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .tint(.blue)
+                }
+            }
+
+            HStack {
+                Text("Unità")
+                Spacer()
+                HStack(spacing: 14) {
+                    Button {
+                        let target = max(0, stockUnitsForSelectedPackage - 1)
+                        viewModel.setStockUnits(medicine: medicine, package: package, targetUnits: target)
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .tint(.blue)
+                    .disabled(stockUnitsForSelectedPackage <= 0)
+
+                    Text("\(stockUnitsForSelectedPackage)")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(minWidth: 40, alignment: .center)
+
+                    Button {
+                        let target = stockUnitsForSelectedPackage + 1
+                        viewModel.setStockUnits(medicine: medicine, package: package, targetUnits: target)
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .tint(.blue)
+                }
+            }
+
+            Text("Modificando questi valori aggiorni direttamente le scorte.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        } header: {
+            Text("Scorte")
         }
-       
-       
+        .textCase(nil)
     }
     
     private var therapiesInlineSection: some View {
@@ -658,46 +803,46 @@ extension MedicineDetailView {
                     Text("Nessuna terapia aggiunta.")
                         .foregroundStyle(.secondary)
                         .font(.footnote)
-                    Button {
-                        openTherapyForm(for: nil)
-                    } label: {
-                        Label("Aggiungi terapia", systemImage: "plus.circle")
-                            .font(.callout)
-                    }
                 }
             } else {
                 ForEach(therapies, id: \.objectID) { therapy in
                     Button {
                         openTherapyForm(for: therapy)
                     } label: {
-                        VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text(recurrenceDescription(for: therapy))
                                 .font(.subheadline)
                                 .foregroundStyle(.primary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            Spacer(minLength: 8)
                             if let next = nextDose(for: therapy) {
                                 Text("Prossima: \(formattedDate(next))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                    .layoutPriority(1)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 4)
                     }
                     .buttonStyle(.plain)
-                }
-                Button {
-                    openTherapyForm(for: nil)
-                } label: {
-                    Label("Aggiungi terapia", systemImage: "plus.circle")
-                        .font(.callout)
                 }
             }
         } header: {
             HStack(spacing: 8) {
-                Image(systemName: "clock.arrow.circlepath")
-                    .foregroundStyle(.primary)
                 Text("Terapie")
                     .font(.body.weight(.semibold))
+                Spacer()
+                Button {
+                    openTherapyForm(for: nil)
+                } label: {
+                    Text("Aggiungi")
+                        .font(.callout.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Aggiungi terapia")
             }
         }
         .textCase(nil)

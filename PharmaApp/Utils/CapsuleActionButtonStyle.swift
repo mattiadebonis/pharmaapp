@@ -3,11 +3,18 @@ import SwiftUI
 struct CapsuleActionButtonStyle: ButtonStyle {
     let fill: Color
     let textColor: Color
+    let verticalPadding: CGFloat
+
+    init(fill: Color, textColor: Color, verticalPadding: CGFloat = 18) {
+        self.fill = fill
+        self.textColor = textColor
+        self.verticalPadding = verticalPadding
+    }
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(textColor)
-            .padding(.vertical, 18)
+            .padding(.vertical, verticalPadding)
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
