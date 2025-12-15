@@ -19,6 +19,7 @@ struct MedicineDetailView: View {
     @State private var selectedDoctorID: NSManagedObjectID? = nil
     @State private var showTherapySheet = false
     @State private var selectedTherapy: Therapy?
+    @State private var newTherapySheetID = UUID()
     
     let medicine: Medicine
     let package: Package
@@ -148,7 +149,7 @@ struct MedicineDetailView: View {
                 context: context,
                 editingTherapy: selectedTherapy
             )
-            .id(selectedTherapy?.objectID ?? UUID() as! NSManagedObjectID?)
+            .id(therapySheetIdentity)
             .presentationDetents([.medium, .large])
         }
         .onChange(of: selectedDoctorID) { newValue in
@@ -164,7 +165,17 @@ struct MedicineDetailView: View {
     
     private func openTherapyForm(for therapy: Therapy?) {
         selectedTherapy = therapy
+        if therapy == nil {
+            newTherapySheetID = UUID()
+        }
         showTherapySheet = true
+    }
+
+    private var therapySheetIdentity: AnyHashable {
+        if let selectedTherapy {
+            return AnyHashable(selectedTherapy.objectID)
+        }
+        return AnyHashable(newTherapySheetID)
     }
     
     private struct PrimaryAction {

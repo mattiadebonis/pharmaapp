@@ -1,0 +1,30 @@
+{
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/Data/Pharmacie.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Pharmacie.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Pharmacie.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Pharmacie.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Pharmacie.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Pharmacie.swiftdeps"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/Data/Therapy.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Therapy.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Therapy.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Therapy.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Therapy.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Therapy.swiftdeps"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/FeedView/AIInsightsPanel.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/AIInsightsPanel.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/AIInsightsPanel.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/AIInsightsPanel.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/AIInsightsPanel.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/AIInsightsPanel.swiftdeps"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/FeedView/FeedView.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/FeedView.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/FeedView.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/FeedView.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/FeedView.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/FeedView.swiftdeps"
+  }
+}

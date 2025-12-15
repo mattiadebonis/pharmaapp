@@ -1,0 +1,30 @@
+{
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/Data/Cabinet.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Cabinet.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Cabinet.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Cabinet.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Cabinet.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Cabinet.swiftdeps"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/Data/DataManager.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/DataManager.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/DataManager.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/DataManager.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/DataManager.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/DataManager.swiftdeps"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/Data/Doctor.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Doctor.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Doctor.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Doctor.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Doctor.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Doctor.swiftdeps"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/Data/DoctorScheduleDTO.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/DoctorScheduleDTO.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/DoctorScheduleDTO.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/DoctorScheduleDTO.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/DoctorScheduleDTO.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/DoctorScheduleDTO.swiftdeps"
+  }
+}

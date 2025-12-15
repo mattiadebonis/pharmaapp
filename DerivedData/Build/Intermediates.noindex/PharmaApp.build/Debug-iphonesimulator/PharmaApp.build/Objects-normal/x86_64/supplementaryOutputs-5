@@ -1,0 +1,30 @@
+{
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/FeedView/FeedViewModel.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/FeedViewModel.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/FeedViewModel.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/FeedViewModel.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/FeedViewModel.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/FeedViewModel.swiftdeps"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/FeedView/TodayInsightsView.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/TodayInsightsView.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/TodayInsightsView.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/TodayInsightsView.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/TodayInsightsView.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/TodayInsightsView.swiftdeps"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/FeedView/TodayInsightsViewBuilder.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/TodayInsightsViewBuilder.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/TodayInsightsViewBuilder.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/TodayInsightsViewBuilder.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/TodayInsightsViewBuilder.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/TodayInsightsViewBuilder.swiftdeps"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/FeedView/TodayTodoView.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/TodayTodoView.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/TodayTodoView.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/TodayTodoView.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/TodayTodoView.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/TodayTodoView.swiftdeps"
+  }
+}

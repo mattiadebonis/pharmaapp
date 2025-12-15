@@ -1,0 +1,30 @@
+{
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/NewMedicineView.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/NewMedicineView.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/NewMedicineView.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/NewMedicineView.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/NewMedicineView.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/NewMedicineView.swiftdeps"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/OptionsView.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/OptionsView.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/OptionsView.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/OptionsView.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/OptionsView.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/OptionsView.swiftdeps"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/Persistence.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Persistence.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Persistence.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Persistence.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Persistence.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/Persistence.swiftdeps"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/PharmaAppApp.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/PharmaAppApp.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/PharmaAppApp.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/PharmaAppApp.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/PharmaAppApp.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/arm64/PharmaAppApp.swiftdeps"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "source": "/Users/mattiadebonis/pharmaapp/PharmaApp/MedicineDetail/LogsListView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Nessun log disponibile.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 22
+        }
+      }
+    ]
+  },
+  "version": 1
+}

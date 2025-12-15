@@ -1,0 +1,304 @@
+[
+  {
+    "ID": 1,
+    "Nome": "FARMACIA SAN FRANCESCO DA PAOLA",
+    "Indirizzo": "Via San Francesco da Paola, 10TORINO (TO)",
+    "Telefono": "0118170340",
+    "Orari": [
+      {
+        "data": "martedì, 27/08/24",
+        "orario_apertura": "9:00-13:00 e 15:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "13:00" },
+          { "start": "15:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "mercoledì, 28/08/24",
+        "orario_apertura": "9:00-13:00 e 15:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "13:00" },
+          { "start": "15:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "giovedì, 29/08/24",
+        "orario_apertura": "9:00-13:00 e 15:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "13:00" },
+          { "start": "15:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "venerdì, 30/08/24",
+        "orario_apertura": "9:00-13:00 e 15:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "13:00" },
+          { "start": "15:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "sabato, 31/08/24",
+        "orario_apertura": "9:00-13:00 e 15:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "13:00" },
+          { "start": "15:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "domenica, 01/09/24",
+        "orario_apertura": "Chiusa",
+        "turno": "",
+        "fasce_orarie": []
+      },
+      {
+        "data": "lunedì, 02/09/24",
+        "orario_apertura": "9:00-13:00 e 15:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "13:00" },
+          { "start": "15:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "martedì, 03/09/24",
+        "orario_apertura": "9:00-13:00 e 15:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "13:00" },
+          { "start": "15:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "mercoledì, 04/09/24",
+        "orario_apertura": "9:00-13:00 e 15:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "13:00" },
+          { "start": "15:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "giovedì, 05/09/24",
+        "orario_apertura": "9:00-13:00 e 15:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "13:00" },
+          { "start": "15:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "venerdì, 06/09/24",
+        "orario_apertura": "9:00-13:00 e 15:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "13:00" },
+          { "start": "15:30", "end": "19:30" }
+        ]
+      }
+    ]
+  },
+  {
+    "ID": 2,
+    "Nome": "FARMACIA ALGOSTINO DEMICHELISDR. MARIO GALLO",
+    "Indirizzo": "Piazza Vittorio Veneto, 10TORINO (TO)",
+    "Telefono": "0118141495",
+    "Orari": [
+      {
+        "data": "martedì, 27/08/24",
+        "orario_apertura": "9:00-12:30 e 15:00-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "12:30" },
+          { "start": "15:00", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "mercoledì, 28/08/24",
+        "orario_apertura": "9:00-12:30 e 15:00-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "12:30" },
+          { "start": "15:00", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "giovedì, 29/08/24",
+        "orario_apertura": "9:00-12:30 e 15:00-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "12:30" },
+          { "start": "15:00", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "venerdì, 30/08/24",
+        "orario_apertura": "9:00-12:30 e 15:00-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "12:30" },
+          { "start": "15:00", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "sabato, 31/08/24",
+        "orario_apertura": "9:00-12:30 e 15:00-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "12:30" },
+          { "start": "15:00", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "domenica, 01/09/24",
+        "orario_apertura": "Chiusa",
+        "turno": "",
+        "fasce_orarie": []
+      },
+      {
+        "data": "lunedì, 02/09/24",
+        "orario_apertura": "9:00-12:30 e 15:00-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "12:30" },
+          { "start": "15:00", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "martedì, 03/09/24",
+        "orario_apertura": "9:00-12:30 e 15:00-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "12:30" },
+          { "start": "15:00", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "mercoledì, 04/09/24",
+        "orario_apertura": "9:00-12:30 e 15:00-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "12:30" },
+          { "start": "15:00", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "giovedì, 05/09/24",
+        "orario_apertura": "9:00-12:30 e 15:00-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "12:30" },
+          { "start": "15:00", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "venerdì, 06/09/24",
+        "orario_apertura": "9:00-12:30 e 15:00-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "9:00", "end": "12:30" },
+          { "start": "15:00", "end": "19:30" }
+        ]
+      }
+    ]
+  },
+  {
+    "ID": 3,
+    "Nome": "FARMACIA COLLEGIATADR. CARLO FERRERO",
+    "Indirizzo": "Piazza SavoiaTORINO (TO)",
+    "Telefono": "0114369595",
+    "Orari": [
+      {
+        "data": "martedì, 27/08/24",
+        "orario_apertura": "8:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "8:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "mercoledì, 28/08/24",
+        "orario_apertura": "8:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "8:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "giovedì, 29/08/24",
+        "orario_apertura": "8:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "8:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "venerdì, 30/08/24",
+        "orario_apertura": "8:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "8:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "sabato, 31/08/24",
+        "orario_apertura": "8:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "8:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "domenica, 01/09/24",
+        "orario_apertura": "Chiusa",
+        "turno": "",
+        "fasce_orarie": []
+      },
+      {
+        "data": "lunedì, 02/09/24",
+        "orario_apertura": "8:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "8:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "martedì, 03/09/24",
+        "orario_apertura": "8:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "8:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "mercoledì, 04/09/24",
+        "orario_apertura": "8:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "8:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "giovedì, 05/09/24",
+        "orario_apertura": "8:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "8:30", "end": "19:30" }
+        ]
+      },
+      {
+        "data": "venerdì, 06/09/24",
+        "orario_apertura": "8:30-19:30",
+        "turno": "",
+        "fasce_orarie": [
+          { "start": "8:30", "end": "19:30" }
+        ]
+      }
+    ]
+  }
+]

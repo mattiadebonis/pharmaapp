@@ -1,0 +1,24 @@
+{
+  "source": "/Users/mattiadebonis/pharmaapp/PharmaApp/Data/MedicineRowViewModel.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Richiedi ricetta",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 102
+        }
+      },
+      {
+        "comment": "",
+        "key": "Compra",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 108
+        }
+      }
+    ]
+  },
+  "version": 1
+}

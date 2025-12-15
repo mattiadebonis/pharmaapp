@@ -1,0 +1,23 @@
+{
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/AddDoctorView.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/AddDoctorView.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/AddDoctorView.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/AddDoctorView.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/AddDoctorView.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/AddDoctorView.swiftdeps"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/AddPersonView.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/AddPersonView.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/AddPersonView.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/AddPersonView.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/AddPersonView.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/AddPersonView.swiftdeps"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaApp/AppViewModel.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/AppViewModel.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/AppViewModel.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/AppViewModel.dia",
+    "object" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/AppViewModel.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/DerivedData/Build/Intermediates.noindex/PharmaApp.build/Debug-iphonesimulator/PharmaApp.build/Objects-normal/x86_64/AppViewModel.swiftdeps"
+  }
+}

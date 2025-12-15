@@ -1,0 +1,216 @@
+{
+  "source": "/Users/mattiadebonis/pharmaapp/PharmaApp/FeedView/FeedView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Oggi",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 154
+        }
+      },
+      {
+        "comment": "",
+        "key": "Opzioni",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 148
+        }
+      },
+      {
+        "comment": "",
+        "key": "Completa i dati del medicinale",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 229
+        }
+      },
+      {
+        "comment": "",
+        "key": "Aggiungi una confezione dalla schermata dettaglio per utilizzare le funzioni avanzate.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 231
+        }
+      },
+      {
+        "comment": "",
+        "key": "Rifornisci i farmaci in esaurimento",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 276
+        }
+      },
+      {
+        "comment": "",
+        "key": "Ti suggeriamo la farmacia più comoda in questo momento.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 279
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nessuna scorta da monitorare a breve.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 301
+        }
+      },
+      {
+        "comment": "",
+        "key": "Prossimamente",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 305
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nessun todo urgente",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 384
+        }
+      },
+      {
+        "comment": "",
+        "key": "Quando ci saranno scadenze o acquisti da fare vedrai qui le azioni pratiche.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 386
+        }
+      },
+      {
+        "comment": "",
+        "key": "Opzioni",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 611
+        }
+      },
+      {
+        "comment": "",
+        "key": "Ordinamento",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 597
+        }
+      },
+      {
+        "comment": "",
+        "key": "Raggruppamento",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 607
+        }
+      },
+      {
+        "comment": "",
+        "key": "Ordina per",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 598
+        }
+      },
+      {
+        "comment": "",
+        "key": "Raggruppa per tipologia",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 608
+        }
+      },
+      {
+        "comment": "",
+        "key": "Fine",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 615
+        }
+      },
+      {
+        "comment": "",
+        "key": "Sposta in cassetto",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1112
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nessun cassetto disponibile.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1104
+        }
+      },
+      {
+        "comment": "",
+        "key": "Chiudi",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 1116
+        }
+      },
+      {
+        "comment": "",
+        "key": "Deseleziona",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 1198
+        }
+      },
+      {
+        "comment": "",
+        "key": "Seleziona",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 1198
+        }
+      },
+      {
+        "comment": "",
+        "key": "Seleziona",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 1206
+        }
+      },
+      {
+        "comment": "",
+        "key": "Assunto",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 1216
+        }
+      },
+      {
+        "comment": "",
+        "key": "Acquistato",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 1223
+        }
+      },
+      {
+        "comment": "",
+        "key": "Richiedi ricetta",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 1231
+        }
+      },
+      {
+        "comment": "",
+        "key": "Sposta",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 1239
+        }
+      }
+    ]
+  },
+  "version": 1
+}

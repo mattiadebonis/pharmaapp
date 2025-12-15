@@ -9,12 +9,41 @@ import SwiftUI
 import CoreData
 import MapKit
 import CoreLocation
+import UIKit
 
 struct FeedView: View {
     @EnvironmentObject private var appVM: AppViewModel
+    @Environment(\.openURL) private var openURL
     enum Mode {
         case insights
         case medicines
+    }
+
+    private enum TodoSortOption: String, CaseIterable {
+        case time
+        case action
+        case priority
+
+        var label: String {
+            switch self {
+            case .time: return "Orario"
+            case .action: return "Tipo di azione"
+            case .priority: return "Priorità"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .time: return "clock"
+            case .action: return "square.grid.2x2"
+            case .priority: return "exclamationmark.triangle"
+            }
+        }
+    }
+
+    private enum TodoActionShortcut {
+        case message
+        case map
     }
 
     @Environment(\.managedObjectContext) var managedObjectContext
@@ -35,6 +64,10 @@ struct FeedView: View {
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.66)
     @StateObject private var locationVM = LocationSearchViewModel()
     @State private var medicineToMove: Medicine?
+    @State private var completedTodoIDs: Set<String> = []
+    @AppStorage("feed.todoSortOption") private var sortOption: TodoSortOption = .time
+    @AppStorage("feed.todoGroupByType") private var groupTodosByType = false
+    @State private var prescriptionEmailMedicine: Medicine?
 
     init(viewModel: FeedViewModel, mode: Mode = .medicines) {
         self.viewModel = viewModel
@@ -65,18 +98,69 @@ struct FeedView: View {
 
     @ViewBuilder
     private func insightsScreen(sections: (purchase: [Medicine], oggi: [Medicine], ok: [Medicine]), insightsContext: AIInsightsContext?) -> some View {
-        let rows = orderedRows(for: sections)
-        ScrollView {
-            VStack(alignment: .leading, spacing: 32) {
-                if let insightsContext {
-                    AIInsightsPanel(context: insightsContext)
+        let urgentIDs = urgentMedicineIDs(for: sections)
+        let todos = buildTodoItems(from: insightsContext, urgentIDs: urgentIDs)
+        let sorted = sortTodos(todos, urgentIDs: urgentIDs)
+        let showMapShortcut = locationVM.pinItem != nil
+
+        List {
+            if sorted.isEmpty {
+                insightsPlaceholder
+                    .listRowSeparator(.hidden)
+            } else {
+                if groupTodosByType {
+                    ForEach(todoGroups(from: sorted)) { group in
+                        Section {
+                            ForEach(group.items) { item in
+                                todoListRow(
+                                    for: item,
+                                    isCompleted: completedTodoIDs.contains(item.id),
+                                    urgentIDs: urgentIDs,
+                                    showMapShortcut: showMapShortcut
+                                )
+                            }
+                        } header: {
+                            Text(groupTitle(for: group.category))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .textCase(nil)
+                        }
+                    }
                 } else {
-                    insightsPlaceholder
+                    ForEach(sorted) { item in
+                        todoListRow(
+                            for: item,
+                            isCompleted: completedTodoIDs.contains(item.id),
+                            urgentIDs: urgentIDs,
+                            showMapShortcut: showMapShortcut
+                        )
+                    }
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 32)
         }
+        .listStyle(.plain)
+        .scrollIndicators(.hidden)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                todoOptionsMenu()
+            }
+        }
+        .sheet(item: $prescriptionEmailMedicine) { medicine in
+            let doctorName = prescriptionDoctorName(for: medicine)
+            PrescriptionEmailSheet(
+                doctorName: doctorName,
+                emailAddress: prescriptionDoctorEmail(for: medicine),
+                messageBody: prescriptionEmailBody(for: [medicine], doctorName: doctorName),
+                onCopy: {
+                    UIPasteboard.general.string = prescriptionEmailBody(for: [medicine], doctorName: doctorName)
+                },
+                onSend: {
+                    sendPrescriptionEmail(for: [medicine], doctorName: doctorName, emailAddress: prescriptionDoctorEmail(for: medicine))
+                }
+            )
+        }
+        .navigationTitle("Oggi")
+        .navigationBarTitleDisplayMode(.large)
     }
 
     @ViewBuilder
@@ -305,13 +389,541 @@ struct FeedView: View {
 
     private var insightsPlaceholder: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Nessun consiglio per oggi")
+            Text("Nessun todo urgente")
                 .font(.headline)
-            Text("Quando ci saranno scadenze o acquisti da fare vedrai qui le azioni suggerite.")
+            Text("Quando ci saranno scadenze o acquisti da fare vedrai qui le azioni pratiche.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+    }
+
+    private func buildTodoItems(from context: AIInsightsContext?, urgentIDs: Set<NSManagedObjectID>) -> [TodayTodoItem] {
+        guard let context else { return [] }
+        var items = TodayTodoBuilder.makeTodos(from: context, medicines: Array(medicines), urgentIDs: urgentIDs)
+        items = items.filter { [.therapy, .purchase, .prescription].contains($0.category) }
+        return items
+    }
+
+    private func sortTodos(_ items: [TodayTodoItem], urgentIDs: Set<NSManagedObjectID>) -> [TodayTodoItem] {
+        switch sortOption {
+        case .time:
+            return items.sorted { lhs, rhs in
+                let lTime = timeSortValue(for: lhs) ?? Int.max
+                let rTime = timeSortValue(for: rhs) ?? Int.max
+                if lTime != rTime { return lTime < rTime }
+                if categoryRank(lhs.category) != categoryRank(rhs.category) {
+                    return categoryRank(lhs.category) < categoryRank(rhs.category)
+                }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+        case .action:
+            return items.sorted { lhs, rhs in
+                if categoryRank(lhs.category) != categoryRank(rhs.category) {
+                    return categoryRank(lhs.category) < categoryRank(rhs.category)
+                }
+                let lTime = timeSortValue(for: lhs) ?? Int.max
+                let rTime = timeSortValue(for: rhs) ?? Int.max
+                if lTime != rTime { return lTime < rTime }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+        case .priority:
+            return items.sorted { lhs, rhs in
+                let lUrgent = isUrgent(lhs, urgentIDs: urgentIDs)
+                let rUrgent = isUrgent(rhs, urgentIDs: urgentIDs)
+                if lUrgent != rUrgent { return lUrgent }
+                let lTime = timeSortValue(for: lhs) ?? Int.max
+                let rTime = timeSortValue(for: rhs) ?? Int.max
+                if lTime != rTime { return lTime < rTime }
+                if categoryRank(lhs.category) != categoryRank(rhs.category) {
+                    return categoryRank(lhs.category) < categoryRank(rhs.category)
+                }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+        }
+    }
+
+    private struct TodoGroup: Identifiable {
+        var id: TodayTodoItem.Category { category }
+        let category: TodayTodoItem.Category
+        let items: [TodayTodoItem]
+    }
+
+    private func todoGroups(from items: [TodayTodoItem]) -> [TodoGroup] {
+        let grouped = Dictionary(grouping: items, by: \.category)
+        return TodayTodoItem.Category.displayOrder.compactMap { category in
+            guard let items = grouped[category], !items.isEmpty else { return nil }
+            return TodoGroup(category: category, items: items)
+        }
+    }
+
+    private func timeSortValue(for item: TodayTodoItem) -> Int? {
+        guard let detail = item.detail, let match = timeComponents(from: detail) else { return nil }
+        return match.hour * 60 + match.minute
+    }
+
+    private func timeComponents(from detail: String) -> (hour: Int, minute: Int)? {
+        let pattern = "([0-9]{1,2}):([0-9]{2})"
+        guard let range = detail.range(of: pattern, options: .regularExpression) else { return nil }
+        let substring = String(detail[range])
+        let parts = substring.split(separator: ":").compactMap { Int($0) }
+        guard parts.count == 2 else { return nil }
+        let hour = parts[0]
+        let minute = parts[1]
+        guard (0...23).contains(hour), (0...59).contains(minute) else { return nil }
+        return (hour, minute)
+    }
+
+    private func categoryRank(_ category: TodayTodoItem.Category) -> Int {
+        TodayTodoItem.Category.displayOrder.firstIndex(of: category) ?? Int.max
+    }
+
+    private func isUrgent(_ item: TodayTodoItem, urgentIDs: Set<NSManagedObjectID>) -> Bool {
+        guard let id = item.medicineID else { return false }
+        return urgentIDs.contains(id)
+    }
+
+    private func urgentMedicineIDs(for sections: (purchase: [Medicine], oggi: [Medicine], ok: [Medicine])) -> Set<NSManagedObjectID> {
+        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+        let allMedicines = sections.purchase + sections.oggi + sections.ok
+        let urgent = allMedicines.filter {
+            isOutOfStock($0, recurrenceManager: rec) && hasUpcomingTherapyInNextWeek(for: $0, recurrenceManager: rec)
+        }
+        return Set(urgent.map { $0.objectID })
+    }
+
+    private func hasUpcomingTherapyInNextWeek(for medicine: Medicine, recurrenceManager: RecurrenceManager) -> Bool {
+        guard let therapies = medicine.therapies as? Set<Therapy>, !therapies.isEmpty else { return false }
+        let now = Date()
+        let limit = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
+        for therapy in therapies {
+            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+            let startDate = therapy.start_date ?? now
+            if let next = recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: now, doses: therapy.doses as NSSet?) {
+                if next <= limit { return true }
+            }
+        }
+        return false
+    }
+
+    private func todoListRow(for item: TodayTodoItem, isCompleted: Bool, urgentIDs: Set<NSManagedObjectID>, showMapShortcut: Bool) -> some View {
+        let trailing = trailingAction(for: item, showMapShortcut: showMapShortcut)
+        let rowColor: Color = isCompleted ? .secondary : .primary
+        let mainLine = mainLineText(for: item, urgentIDs: urgentIDs)
+
+        return HStack(alignment: .top, spacing: 10) {
+            Button {
+                toggleCompletion(for: item)
+            } label: {
+                Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(rowColor)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                toggleCompletion(for: item)
+            } label: {
+                Text(mainLine)
+                    .font(.subheadline)
+                    .foregroundStyle(rowColor)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
+            }
+            .buttonStyle(.plain)
+
+            if let trailing {
+                Button {
+                    performShortcut(trailing, for: item)
+                } label: {
+                    trailingIcon(for: trailing, color: rowColor)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+    }
+
+    private func mainLineText(for item: TodayTodoItem, urgentIDs: Set<NSManagedObjectID>) -> String {
+        let detail = (item.detail ?? "")
+            .replacingOccurrences(of: "\n", with: " - ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let medicine = medicine(for: item)
+        let formattedName = formattedMedicineName(medicine?.nome ?? item.title)
+        let isUrgent = isUrgent(item, urgentIDs: urgentIDs)
+        let doseLabel = item.medicineID.flatMap { nextDoseLabelInNextWeek(for: $0) }
+
+        switch item.category {
+        case .therapy:
+            if let medicine, let info = nextDoseTodayInfo(for: medicine) {
+                var parts: [String] = ["Assumi", formattedName]
+                if let personName = info.personName, !personName.isEmpty {
+                    parts.append("per \(personName)")
+                }
+                parts.append("alle \(FeedView.insightsTimeFormatter.string(from: info.date))")
+                return parts.joined(separator: " ")
+            }
+        case .prescription:
+            if isUrgent, let doseLabel {
+                let verb = medicine.map { therapyVerb(for: $0) } ?? "continuare"
+                return "Chiedi al medico la ricetta di \(formattedName): le scorte sono finite e \(doseLabel) devi \(verb) la terapia."
+            }
+        case .purchase:
+            if isUrgent, let doseLabel {
+                if let medicine, medicine.obbligo_ricetta, medicine.hasNewPrescritpionRequest(), !medicine.hasPendingNewPrescription() {
+                    return "Compra \(formattedName) appena il medico ti risponde: le scorte sono finite e \(doseLabel) devi prenderlo."
+                }
+                return "Compra \(formattedName): le scorte sono finite e \(doseLabel) devi prenderlo."
+            }
+        default:
+            break
+        }
+
+        var parts: [String] = []
+        switch item.category {
+        case .therapy, .purchase, .prescription:
+            parts.append(actionLabel(for: item.category))
+            parts.append(formattedName)
+        case .upcoming, .pharmacy:
+            parts.append(formattedName)
+        }
+        if !detail.isEmpty { parts.append(detail) }
+        return parts.joined(separator: " ")
+    }
+
+    private struct TodayDoseInfo {
+        let date: Date
+        let personName: String?
+    }
+
+    private func nextDoseTodayInfo(for medicine: Medicine) -> TodayDoseInfo? {
+        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+        guard let therapies = medicine.therapies as? Set<Therapy>, !therapies.isEmpty else { return nil }
+        let now = Date()
+        let calendar = Calendar.current
+
+        var best: (date: Date, personName: String?)? = nil
+        for therapy in therapies {
+            let rule = rec.parseRecurrenceString(therapy.rrule ?? "")
+            let startDate = therapy.start_date ?? now
+            guard let next = rec.nextOccurrence(rule: rule, startDate: startDate, after: now, doses: therapy.doses as NSSet?) else {
+                continue
+            }
+            guard calendar.isDateInToday(next) else { continue }
+            let personName = (therapy.value(forKey: "person") as? Person).flatMap { displayName(for: $0) }
+            if best == nil || next < best!.date {
+                best = (next, personName)
+            }
+        }
+        guard let best else { return nil }
+        return TodayDoseInfo(date: best.date, personName: best.personName)
+    }
+
+    private func displayName(for person: Person) -> String? {
+        let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if last.isEmpty, first.lowercased() == "persona" { return nil }
+        let parts = [first, last].filter { !$0.isEmpty }
+        let joined = parts.joined(separator: " ")
+        return joined.isEmpty ? nil : joined
+    }
+
+    private func therapyVerb(for medicine: Medicine) -> String {
+        let now = Date()
+        guard let therapies = medicine.therapies as? Set<Therapy>, !therapies.isEmpty else { return "continuare" }
+        let earliestStart = therapies.compactMap(\.start_date).min() ?? now
+        return earliestStart > now ? "iniziare" : "continuare"
+    }
+
+    private func nextDoseLabelInNextWeek(for medicineID: NSManagedObjectID) -> String? {
+        guard let medicine = medicines.first(where: { $0.objectID == medicineID }) else { return nil }
+        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+        guard let next = earliestDoseInNextWeek(for: medicine, recurrenceManager: rec) else { return nil }
+        return formattedDoseDateTime(next)
+    }
+
+    private func earliestDoseInNextWeek(for medicine: Medicine, recurrenceManager: RecurrenceManager) -> Date? {
+        guard let therapies = medicine.therapies as? Set<Therapy>, !therapies.isEmpty else { return nil }
+        let now = Date()
+        let limit = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
+        var best: Date? = nil
+        for therapy in therapies {
+            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+            let startDate = therapy.start_date ?? now
+            if let next = recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: now, doses: therapy.doses as NSSet?) {
+                guard next <= limit else { continue }
+                if best == nil || next < best! { best = next }
+            }
+        }
+        return best
+    }
+
+    private func formattedDoseDateTime(_ date: Date) -> String {
+        let calendar = Calendar.current
+
+        let timeFormatter = DateFormatter()
+        timeFormatter.locale = Locale(identifier: "it_IT")
+        timeFormatter.dateStyle = .none
+        timeFormatter.timeStyle = .short
+        let time = timeFormatter.string(from: date)
+
+        if calendar.isDateInToday(date) { return "Oggi \(time)" }
+        if calendar.isDateInTomorrow(date) { return "Domani \(time)" }
+        if let dayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: Date()),
+           calendar.isDate(date, inSameDayAs: dayAfterTomorrow) {
+            return "Dopodomani \(time)"
+        }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "it_IT")
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    private func formattedMedicineName(_ name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+        return trimmed.lowercased().localizedCapitalized
+    }
+
+    private func actionLabel(for category: TodayTodoItem.Category) -> String {
+        switch category {
+        case .therapy: return "Assumi"
+        case .purchase: return "Compra"
+        case .prescription: return "Chiedi al medico la ricetta di"
+        case .upcoming: return "Promemoria"
+        case .pharmacy: return "Farmacia"
+        }
+    }
+
+    private func groupTitle(for category: TodayTodoItem.Category) -> String {
+        switch category {
+        case .therapy: return "Assumi"
+        case .purchase: return "Compra"
+        case .prescription: return "Ricette"
+        case .upcoming: return "Promemoria"
+        case .pharmacy: return "Farmacia"
+        }
+    }
+
+    @ViewBuilder
+    private func todoOptionsMenu() -> some View {
+        Menu {
+            ForEach(TodoSortOption.allCases, id: \.self) { option in
+                Button {
+                    sortOption = option
+                } label: {
+                    HStack {
+                        Image(systemName: option.icon)
+                        Text(option.label)
+                        if option == sortOption {
+                            Spacer()
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+
+            Divider()
+
+            Button {
+                groupTodosByType.toggle()
+            } label: {
+                HStack {
+                    Image(systemName: "square.grid.2x2")
+                    Text("Raggruppa per tipologia")
+                    if groupTodosByType {
+                        Spacer()
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+        } label: {
+            Label("Ordina", systemImage: "arrow.up.arrow.down")
+                .labelStyle(.titleAndIcon)
+        }
+    }
+
+    private func trailingAction(for item: TodayTodoItem, showMapShortcut: Bool) -> TodoActionShortcut? {
+        switch item.category {
+        case .prescription:
+            return .message
+        case .purchase where showMapShortcut:
+            return .map
+        default:
+            return nil
+        }
+    }
+
+    private func trailingIcon(for action: TodoActionShortcut, color: Color) -> some View {
+        let symbol = action == .message ? "envelope" : "mappin.and.ellipse"
+        return Image(systemName: symbol)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(color)
+            .padding(8)
+    }
+
+    private func performShortcut(_ action: TodoActionShortcut, for item: TodayTodoItem) {
+        switch action {
+        case .message:
+            if let medicine = medicine(for: item) {
+                prescriptionEmailMedicine = medicine
+                Haptics.impact(.medium)
+            }
+        case .map:
+            locationVM.openInMaps()
+            Haptics.impact(.medium)
+        }
+    }
+
+    private func toggleCompletion(for item: TodayTodoItem) {
+        if completedTodoIDs.contains(item.id) {
+            completedTodoIDs.remove(item.id)
+        } else {
+            completedTodoIDs.insert(item.id)
+            recordLogCompletion(for: item)
+        }
+    }
+
+    private func recordLogCompletion(for item: TodayTodoItem) {
+        guard let medicine = medicine(for: item) else { return }
+        switch item.category {
+        case .therapy:
+            viewModel.markAsTaken(for: medicine)
+        case .purchase:
+            viewModel.markAsPurchased(for: medicine)
+        case .prescription:
+            viewModel.requestPrescription(for: medicine)
+        case .upcoming, .pharmacy:
+            break
+        }
+    }
+
+    private func medicine(for item: TodayTodoItem) -> Medicine? {
+        if let id = item.medicineID, let medicine = medicines.first(where: { $0.objectID == id }) {
+            return medicine
+        }
+        let normalizedTitle = item.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return medicines.first(where: { $0.nome.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalizedTitle })
+    }
+
+    private func prescriptionDoctorName(for medicine: Medicine) -> String {
+        let doctor = prescriptionDoctor(for: medicine)
+        let first = (doctor?.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let last = (doctor?.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = [first, last].filter { !$0.isEmpty }
+        return parts.isEmpty ? "Dottore" : parts.joined(separator: " ")
+    }
+
+    private func prescriptionDoctorEmail(for medicine: Medicine) -> String? {
+        let candidate = prescriptionDoctor(for: medicine)?.mail?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (candidate?.isEmpty == false) ? candidate : nil
+    }
+
+    private func prescriptionDoctor(for medicine: Medicine) -> Doctor? {
+        if let assigned = medicine.prescribingDoctor {
+            return assigned
+        }
+        return doctors.first(where: { !($0.mail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+    }
+
+    private func prescriptionEmailBody(for medicines: [Medicine], doctorName: String) -> String {
+        let list = medicines
+            .map { formattedMedicineName($0.nome) }
+            .map { "- \($0)" }
+            .joined(separator: "\n")
+        return """
+        Gentile \(doctorName),
+
+        avrei bisogno della ricetta per:
+        \(list)
+
+        Potresti inviarla appena possibile? Grazie!
+
+        """
+    }
+
+    private func sendPrescriptionEmail(for medicines: [Medicine], doctorName: String, emailAddress: String?) {
+        guard let emailAddress, !emailAddress.isEmpty else { return }
+        let subjectList = medicines.map { formattedMedicineName($0.nome) }.joined(separator: ", ")
+        let subject = "Richiesta ricetta \(subjectList)"
+        let body = prescriptionEmailBody(for: medicines, doctorName: doctorName)
+        let components: [String: String] = [
+            "subject": subject,
+            "body": body
+        ]
+        let query = components.compactMap { key, value in
+            value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed).map { "\(key)=\($0)" }
+        }.joined(separator: "&")
+        if let url = URL(string: "mailto:\(emailAddress)?\(query)") {
+            openURL(url)
+        }
+    }
+
+    private struct PrescriptionEmailSheet: View {
+        let doctorName: String
+        let emailAddress: String?
+        let messageBody: String
+        let onCopy: () -> Void
+        let onSend: () -> Void
+
+        @Environment(\.dismiss) private var dismiss
+
+        var body: some View {
+            NavigationStack {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Text("Messaggio da inviare a \(doctorName)")
+                            .font(.headline)
+                        Spacer()
+                        HStack(spacing: 12) {
+                            Button {
+                                onCopy()
+                                dismiss()
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.title3)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel("Copia testo")
+
+                            if emailAddress != nil {
+                                Button {
+                                    onSend()
+                                    dismiss()
+                                } label: {
+                                    Image(systemName: "paperplane.fill")
+                                        .font(.title3)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .accessibilityLabel("Invia email")
+                            }
+                        }
+                    }
+
+                    ScrollView {
+                        Text(messageBody)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                            .background(Color(.secondarySystemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .padding()
+                .navigationTitle("Richiedi ricetta")
+                .navigationBarTitleDisplayMode(.inline)
+            }
+            .presentationDetents([.medium, .large])
+        }
     }
 
     // MARK: - Row builder (gestures + card)
@@ -402,22 +1014,15 @@ struct FeedView: View {
             "\(medicine.nome): \(purchaseHighlight(for: medicine, recurrenceManager: rec))"
         }
         let therapyLines = sections.oggi.compactMap { medicine in
-            nextDoseHighlight(for: medicine, recurrenceManager: rec)
+            nextDoseTodayHighlight(for: medicine, recurrenceManager: rec)
         }
         let upcomingLines = sections.ok.prefix(3).compactMap { medicine in
             nextDoseHighlight(for: medicine, recurrenceManager: rec)
         }
         var prescriptionLines: [String] = []
         for medicine in medicines {
-            let hasPendingPrescription = medicine.hasPendingNewPrescription()
-            if hasPendingPrescription {
-                continue
-            }
-            if medicine.hasNewPrescritpionRequest() {
-                prescriptionLines.append("\(medicine.nome): in attesa della risposta del medico")
-            } else if needsPrescriptionBeforePurchase(medicine, recurrenceManager: rec) {
-                prescriptionLines.append("\(medicine.nome): chiedi subito la ricetta")
-            }
+            guard needsPrescriptionBeforePurchase(medicine, recurrenceManager: rec) else { continue }
+            prescriptionLines.append(medicine.nome)
             if prescriptionLines.count >= 6 { break }
         }
         let context = AIInsightsContext(
@@ -473,6 +1078,19 @@ struct FeedView: View {
         } else {
             return "\(medicine.nome): \(FeedView.insightsDateFormatter.string(from: next))"
         }
+    }
+
+    private func nextDoseTodayHighlight(for medicine: Medicine, recurrenceManager: RecurrenceManager) -> String? {
+        guard let therapies = medicine.therapies, !therapies.isEmpty else { return nil }
+        let now = Date()
+        let calendar = Calendar.current
+        let upcomingDates = therapies.compactMap { therapy -> Date? in
+            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+            let start = therapy.start_date ?? now
+            return recurrenceManager.nextOccurrence(rule: rule, startDate: start, after: now, doses: therapy.doses as NSSet?)
+        }
+        guard let next = upcomingDates.sorted().first, calendar.isDateInToday(next) else { return nil }
+        return "\(medicine.nome): \(FeedView.insightsTimeFormatter.string(from: next))"
     }
 
     private static let insightsTimeFormatter: DateFormatter = {
@@ -543,7 +1161,7 @@ struct FeedView: View {
         }
         return nil
     }
-    
+
     private func saveContext() {
         do {
             try managedObjectContext.save()

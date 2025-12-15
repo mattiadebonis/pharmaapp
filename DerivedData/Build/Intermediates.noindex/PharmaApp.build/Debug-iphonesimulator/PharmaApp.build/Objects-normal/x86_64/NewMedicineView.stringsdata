@@ -1,0 +1,168 @@
+{
+  "source": "/Users/mattiadebonis/pharmaapp/PharmaApp/NewMedicineView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Soglia scorte",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 108
+        }
+      },
+      {
+        "comment": "",
+        "key": "Medico prescrittore",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 114
+        }
+      },
+      {
+        "comment": "",
+        "key": "Terapie",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 132
+        }
+      },
+      {
+        "comment": "",
+        "key": "Avvisami quando restano %lld giorni",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 110
+        }
+      },
+      {
+        "comment": "",
+        "key": "Medico prescrittore",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 115
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nessuno",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 125
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nessuna terapia aggiunta.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 135
+        }
+      },
+      {
+        "comment": "",
+        "key": "Aggiungi terapia",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 145
+        }
+      },
+      {
+        "comment": "",
+        "key": "Aggiungi all'armadietto",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 154
+        }
+      },
+      {
+        "comment": "",
+        "key": "Ricetta medica",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 295
+        }
+      },
+      {
+        "comment": "",
+        "key": "Stato ricetta",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 245
+        }
+      },
+      {
+        "comment": "",
+        "key": "Medico prescrittore",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 261
+        }
+      },
+      {
+        "comment": "",
+        "key": "Se è attivo, il farmaco viene considerato con ricetta.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 256
+        }
+      },
+      {
+        "comment": "",
+        "key": "Richiede ricetta medica",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 246
+        }
+      },
+      {
+        "comment": "",
+        "key": "Se scegli un medico, la ricetta verrà segnata come necessaria.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 263
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nessuno",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 272
+        }
+      },
+      {
+        "comment": "",
+        "key": "Chiudi",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 299
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 302
+        }
+      },
+      {
+        "comment": "",
+        "key": "Crea il farmaco per aggiungere una terapia.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 321
+        }
+      },
+      {
+        "comment": "",
+        "key": "Chiudi",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 324
+        }
+      }
+    ]
+  },
+  "version": 1
+}

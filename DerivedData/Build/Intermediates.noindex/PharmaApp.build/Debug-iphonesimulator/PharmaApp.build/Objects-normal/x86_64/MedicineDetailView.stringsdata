@@ -1,0 +1,312 @@
+{
+  "source": "/Users/mattiadebonis/pharmaapp/PharmaApp/MedicineDetail/MedicineDetailView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Chiudi",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 72
+        }
+      },
+      {
+        "comment": "",
+        "key": "Visualizza log",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 83
+        }
+      },
+      {
+        "comment": "",
+        "key": "Elimina",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 88
+        }
+      },
+      {
+        "comment": "",
+        "key": "Log di %@",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 135
+        }
+      },
+      {
+        "comment": "",
+        "key": "Chiudi",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 139
+        }
+      },
+      {
+        "comment": "",
+        "key": "Svuota scorte",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 505
+        }
+      },
+      {
+        "comment": "",
+        "key": "Medico prescrittore",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 525
+        }
+      },
+      {
+        "comment": "",
+        "key": "Avvisami quando restano %lld giorni",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 518
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nessuno",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 531
+        }
+      },
+      {
+        "comment": "",
+        "key": "Registrazione manuale assunzioni",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 546
+        }
+      },
+      {
+        "comment": "",
+        "key": "Se disattivo, le assunzioni vengono registrate automaticamente.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 547
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nessuna terapia aggiunta.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 570
+        }
+      },
+      {
+        "comment": "",
+        "key": "Terapie",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 565
+        }
+      },
+      {
+        "comment": "",
+        "key": "Prossima: %@",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 579
+        }
+      },
+      {
+        "comment": "",
+        "key": "Aggiungi terapia",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 591
+        }
+      },
+      {
+        "comment": "",
+        "key": "Richiedi ricetta",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 775
+        }
+      },
+      {
+        "comment": "",
+        "key": "Altri farmaci che richiedono ricetta",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 736
+        }
+      },
+      {
+        "comment": "",
+        "key": "Messaggio da inviare a %@",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 700
+        }
+      },
+      {
+        "comment": "",
+        "key": "Copia testo",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 712
+        }
+      },
+      {
+        "comment": "",
+        "key": "Invia email",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 722
+        }
+      },
+      {
+        "comment": "",
+        "key": "Selezionato",
+        "location": {
+          "startingColumn": 59,
+          "startingLine": 750
+        }
+      },
+      {
+        "comment": "",
+        "key": "Seleziona",
+        "location": {
+          "startingColumn": 75,
+          "startingLine": 750
+        }
+      },
+      {
+        "comment": "",
+        "key": "Allarme scorte per questo farmaco",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 858
+        }
+      },
+      {
+        "comment": "",
+        "key": "Avvisami quando restano %@ di scorte.",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 848
+        }
+      },
+      {
+        "comment": "",
+        "key": "Annulla",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 862
+        }
+      },
+      {
+        "comment": "",
+        "key": "Salva",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 865
+        }
+      },
+      {
+        "comment": "",
+        "key": "Refill e scorte",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1013
+        }
+      },
+      {
+        "comment": "",
+        "key": "Disponibilità",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 939
+        }
+      },
+      {
+        "comment": "",
+        "key": "Allarme scorte",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 951
+        }
+      },
+      {
+        "comment": "",
+        "key": "Medico prescrittore",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 970
+        }
+      },
+      {
+        "comment": "",
+        "key": "Imposta una soglia diversa per questo farmaco…",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 963
+        }
+      },
+      {
+        "comment": "",
+        "key": "Aggiungi un medico nelle Impostazioni per associarlo alle ricette.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 972
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nessuno",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 981
+        }
+      },
+      {
+        "comment": "",
+        "key": "Terapie attive",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1162
+        }
+      },
+      {
+        "comment": "",
+        "key": "Terapie",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 1122
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nessuna terapia programmata",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1124
+        }
+      },
+      {
+        "comment": "",
+        "key": "Aggiungi terapia",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 1157
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nessun log disponibile.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 1237
+        }
+      }
+    ]
+  },
+  "version": 1
+}

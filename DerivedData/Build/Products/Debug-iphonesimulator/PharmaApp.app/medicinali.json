@@ -1,0 +1,1290 @@
+[
+  {
+    "id": "0000050046",
+    "principiAttiviIt": [
+      "VORTIOXETINA BROMIDRATO",
+      "VORTIOXETINA"
+    ],
+    "confezioni": [
+      {
+        "idPackage": "146683",
+        "denominazionePackage": "10 MG - COMPRESSE RIVESTITE CON FILM - USO ORALE - BLISTER (PVC/PVDC/ALU) - 14 COMPRESSE",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050046",
+        "aic": "043187095",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2014-03-19T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "Cnn",
+        "descrizioneRimborsabilita": "C NON NEGOZIATA",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2014-03-18T00:00:00.000+00:00",
+        "dataRicezionePratica": "2012-09-19T08:00:00.000+00:00",
+        "pianoTerapeutico": null,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      },
+      {
+        "idPackage": "146685",
+        "denominazionePackage": "10 MG - COMPRESSE RIVESTITE CON FILM - USO ORALE - BLISTER (PVC/PVDC/ALU) - 28 COMPRESSE",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050046",
+        "aic": "043187107",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2014-03-19T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "A",
+        "descrizioneRimborsabilita": "A TOTALE CARICO DEL SSN.",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2014-03-18T00:00:00.000+00:00",
+        "dataRicezionePratica": "2012-09-19T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      }
+    ],
+    "medicinale": {
+      "codiceMedicinale": "23166",
+      "aic6": 43187,
+      "denominazioneMedicinale": "BRINTELLIX",
+      "codiceSis": 911,
+      "aziendaTitolare": "H. LUNDBECK A/S",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "A"
+    },
+    "vieSomministrazione": [
+      "ORALE"
+    ],
+    "codiceAtc": [
+      "N06AX26"
+    ],
+    "descrizioneAtc": [
+      "VORTIOXETINE"
+    ],
+    "formaFarmaceutica": "Compressa rivestita con film",
+    "pianoTerapeutico": 0,
+    "descrizioneFormaDosaggio": "10 mg COMPRESSA RIVESTITA CON FILM",
+    "flagAlcol": 0,
+    "flagPotassio": 0,
+    "flagGuida": 0,
+    "flagDopante": 0,
+    "livelloGuida": null,
+    "descrizioneLivello": null,
+    "carente": 0,
+    "innovativo": 0,
+    "orfano": 0,
+    "revocato": 0,
+    "sospeso": 0,
+    "principioAttivoForma": [
+      {
+        "principioAttivo": [
+          "VORTIOXETINA",
+          "VORTIOXETINA BROMIDRATO"
+        ],
+        "formaFarmaceutica": "Compressa rivestita con film",
+        "flagDopante": null
+      }
+    ],
+    "flagFI": true,
+    "flagRCP": true,
+    "tipoAutorizzazione": "A",
+    "aic6ImportazioneParallela": null,
+    "sisImportazioneParallela": null,
+    "denImportazioneParallela": null,
+    "ragImportazioneParallela": null,
+    "position": null
+  },
+  {
+    "id": "0000050047",
+    "principiAttiviIt": [
+      "ATORVASTATINA CALCIO",
+      "ATORVASTATINA"
+    ],
+    "confezioni": [
+      {
+        "idPackage": "200101",
+        "denominazionePackage": "20 MG - COMPRESSE RIVESTITE - USO ORALE - BLISTER - 14 COMPRESSE",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050047",
+        "aic": "050101014",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2019-01-15T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "A",
+        "descrizioneRimborsabilita": "A TOTALE CARICO DEL SSN.",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2019-01-14T00:00:00.000+00:00",
+        "dataRicezionePratica": "2017-09-10T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      },
+      {
+        "idPackage": "200102",
+        "denominazionePackage": "20 MG - COMPRESSE RIVESTITE - USO ORALE - BLISTER - 28 COMPRESSE",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050047",
+        "aic": "050101028",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2019-01-15T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "A",
+        "descrizioneRimborsabilita": "A TOTALE CARICO DEL SSN.",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2019-01-14T00:00:00.000+00:00",
+        "dataRicezionePratica": "2017-09-10T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      }
+    ],
+    "medicinale": {
+      "codiceMedicinale": "30010",
+      "aic6": 50101,
+      "denominazioneMedicinale": "ATORVASTATINA MYLAN",
+      "codiceSis": 1101,
+      "aziendaTitolare": "MYLAN",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "A"
+    },
+    "vieSomministrazione": [
+      "ORALE"
+    ],
+    "codiceAtc": [
+      "C10AA05"
+    ],
+    "descrizioneAtc": [
+      "ATORVASTATIN"
+    ],
+    "formaFarmaceutica": "Compressa rivestita con film",
+    "pianoTerapeutico": 0,
+    "descrizioneFormaDosaggio": "20 mg COMPRESSA RIVESTITA",
+    "flagAlcol": 0,
+    "flagPotassio": 0,
+    "flagGuida": 0,
+    "flagDopante": 0,
+    "livelloGuida": null,
+    "descrizioneLivello": null,
+    "carente": 0,
+    "innovativo": 0,
+    "orfano": 0,
+    "revocato": 0,
+    "sospeso": 0,
+    "principioAttivoForma": [
+      {
+        "principioAttivo": [
+          "ATORVASTATINA",
+          "ATORVASTATINA CALCIO"
+        ],
+        "formaFarmaceutica": "Compressa rivestita con film",
+        "flagDopante": null
+      }
+    ],
+    "flagFI": true,
+    "flagRCP": true,
+    "tipoAutorizzazione": "A",
+    "aic6ImportazioneParallela": null,
+    "sisImportazioneParallela": null,
+    "denImportazioneParallela": null,
+    "ragImportazioneParallela": null,
+    "position": null
+  },
+  {
+    "id": "0000050048",
+    "principiAttiviIt": [
+      "PANTOPRAZOLO",
+      "PANTOPRAZOLO SODIO SESQUIIDRATO"
+    ],
+    "confezioni": [
+      {
+        "idPackage": "300201",
+        "denominazionePackage": "20 MG - COMPRESSE GASTRORESISTENTI - USO ORALE - BLISTER - 14 COMPRESSE",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050048",
+        "aic": "030201014",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2020-06-01T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "A",
+        "descrizioneRimborsabilita": "A TOTALE CARICO DEL SSN.",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2020-05-30T00:00:00.000+00:00",
+        "dataRicezionePratica": "2019-01-05T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      },
+      {
+        "idPackage": "300202",
+        "denominazionePackage": "40 MG - COMPRESSE GASTRORESISTENTI - USO ORALE - BLISTER - 14 COMPRESSE",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050048",
+        "aic": "030202014",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2020-06-01T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "A",
+        "descrizioneRimborsabilita": "A TOTALE CARICO DEL SSN.",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2020-05-30T00:00:00.000+00:00",
+        "dataRicezionePratica": "2019-01-05T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      }
+    ],
+    "medicinale": {
+      "codiceMedicinale": "34020",
+      "aic6": 30201,
+      "denominazioneMedicinale": "PANTOPRAZOLO DOC",
+      "codiceSis": 1201,
+      "aziendaTitolare": "DOC GENERICI",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "A"
+    },
+    "vieSomministrazione": [
+      "ORALE"
+    ],
+    "codiceAtc": [
+      "A02BC02"
+    ],
+    "descrizioneAtc": [
+      "PANTOPRAZOLE"
+    ],
+    "formaFarmaceutica": "Compressa gastroresistente",
+    "pianoTerapeutico": 0,
+    "descrizioneFormaDosaggio": "20 mg COMPRESSA GASTRORESISTENTE",
+    "flagAlcol": 0,
+    "flagPotassio": 0,
+    "flagGuida": 0,
+    "flagDopante": 0,
+    "livelloGuida": null,
+    "descrizioneLivello": null,
+    "carente": 0,
+    "innovativo": 0,
+    "orfano": 0,
+    "revocato": 0,
+    "sospeso": 0,
+    "principioAttivoForma": [
+      {
+        "principioAttivo": [
+          "PANTOPRAZOLO",
+          "PANTOPRAZOLO SODIO SESQUIIDRATO"
+        ],
+        "formaFarmaceutica": "Compressa gastroresistente",
+        "flagDopante": null
+      }
+    ],
+    "flagFI": true,
+    "flagRCP": true,
+    "tipoAutorizzazione": "A",
+    "aic6ImportazioneParallela": null,
+    "sisImportazioneParallela": null,
+    "denImportazioneParallela": null,
+    "ragImportazioneParallela": null,
+    "position": null
+  },
+  {
+    "id": "0000050049",
+    "principiAttiviIt": [
+      "PARACETAMOLO"
+    ],
+    "confezioni": [
+      {
+        "idPackage": "400301",
+        "denominazionePackage": "500 MG - COMPRESSE - USO ORALE - BLISTER - 20 COMPRESSE",
+        "descrizioneFornitura": null,
+        "classeFornitura": "SOP",
+        "codiceFormaDosaggio": "0000050049",
+        "aic": "040301020",
+        "descrizioneRf": [
+          "Medicinale senza obbligo di prescrizione"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2018-02-10T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 0,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "Cnn",
+        "descrizioneRimborsabilita": "C NON NEGOZIATA",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2018-02-09T00:00:00.000+00:00",
+        "dataRicezionePratica": "2017-05-01T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      },
+      {
+        "idPackage": "400302",
+        "denominazionePackage": "1000 MG - COMPRESSE EFFERVESCENTI - USO ORALE - TUBO - 10 COMPRESSE",
+        "descrizioneFornitura": null,
+        "classeFornitura": "OTC",
+        "codiceFormaDosaggio": "0000050049",
+        "aic": "040301010",
+        "descrizioneRf": [
+          "Medicinale di automedicazione"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2018-02-10T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 0,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "Cnn",
+        "descrizioneRimborsabilita": "C NON NEGOZIATA",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2018-02-09T00:00:00.000+00:00",
+        "dataRicezionePratica": "2017-05-01T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      }
+    ],
+    "medicinale": {
+      "codiceMedicinale": "41030",
+      "aic6": 40301,
+      "denominazioneMedicinale": "PARACETAMOLO ANGELINI",
+      "codiceSis": 1250,
+      "aziendaTitolare": "ANGELINI",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "A"
+    },
+    "vieSomministrazione": [
+      "ORALE"
+    ],
+    "codiceAtc": [
+      "N02BE01"
+    ],
+    "descrizioneAtc": [
+      "PARACETAMOL"
+    ],
+    "formaFarmaceutica": "Compressa",
+    "pianoTerapeutico": 0,
+    "descrizioneFormaDosaggio": "500 mg COMPRESSA",
+    "flagAlcol": 0,
+    "flagPotassio": 0,
+    "flagGuida": 0,
+    "flagDopante": 0,
+    "livelloGuida": null,
+    "descrizioneLivello": null,
+    "carente": 0,
+    "innovativo": 0,
+    "orfano": 0,
+    "revocato": 0,
+    "sospeso": 0,
+    "principioAttivoForma": [
+      {
+        "principioAttivo": [
+          "PARACETAMOLO"
+        ],
+        "formaFarmaceutica": "Compressa",
+        "flagDopante": null
+      }
+    ],
+    "flagFI": true,
+    "flagRCP": true,
+    "tipoAutorizzazione": "A",
+    "aic6ImportazioneParallela": null,
+    "sisImportazioneParallela": null,
+    "denImportazioneParallela": null,
+    "ragImportazioneParallela": null,
+    "position": null
+  },
+  {
+    "id": "0000050050",
+    "principiAttiviIt": [
+      "AMOXICILLINA",
+      "ACIDO CLAVULANICO"
+    ],
+    "confezioni": [
+      {
+        "idPackage": "500401",
+        "denominazionePackage": "875 MG/125 MG - COMPRESSE RIVESTITE CON FILM - USO ORALE - BLISTER - 12 COMPRESSE",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050050",
+        "aic": "050401012",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2017-11-01T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "A",
+        "descrizioneRimborsabilita": "A TOTALE CARICO DEL SSN.",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2017-10-30T00:00:00.000+00:00",
+        "dataRicezionePratica": "2016-02-15T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      },
+      {
+        "idPackage": "500402",
+        "denominazionePackage": "400 MG/57 MG - POLVERE PER SOSPENSIONE ORALE - FLACONE - 70 ML",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050050",
+        "aic": "050401070",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2017-11-01T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "A",
+        "descrizioneRimborsabilita": "A TOTALE CARICO DEL SSN.",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2017-10-30T00:00:00.000+00:00",
+        "dataRicezionePratica": "2016-02-15T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      }
+    ],
+    "medicinale": {
+      "codiceMedicinale": "52040",
+      "aic6": 50401,
+      "denominazioneMedicinale": "AUGMENTIN",
+      "codiceSis": 1301,
+      "aziendaTitolare": "GLAXOSMITHKLINE",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "A"
+    },
+    "vieSomministrazione": [
+      "ORALE"
+    ],
+    "codiceAtc": [
+      "J01CR02"
+    ],
+    "descrizioneAtc": [
+      "AMOXICILLIN AND BETA-LACTAMASE INHIBITOR"
+    ],
+    "formaFarmaceutica": "Compressa rivestita con film",
+    "pianoTerapeutico": 0,
+    "descrizioneFormaDosaggio": "875 mg/125 mg COMPRESSA RIVESTITA",
+    "flagAlcol": 0,
+    "flagPotassio": 0,
+    "flagGuida": 0,
+    "flagDopante": 0,
+    "livelloGuida": null,
+    "descrizioneLivello": null,
+    "carente": 0,
+    "innovativo": 0,
+    "orfano": 0,
+    "revocato": 0,
+    "sospeso": 0,
+    "principioAttivoForma": [
+      {
+        "principioAttivo": [
+          "AMOXICILLINA",
+          "ACIDO CLAVULANICO"
+        ],
+        "formaFarmaceutica": "Compressa rivestita con film",
+        "flagDopante": null
+      }
+    ],
+    "flagFI": true,
+    "flagRCP": true,
+    "tipoAutorizzazione": "A",
+    "aic6ImportazioneParallela": null,
+    "sisImportazioneParallela": null,
+    "denImportazioneParallela": null,
+    "ragImportazioneParallela": null,
+    "position": null
+  },
+  {
+    "id": "0000050051",
+    "principiAttiviIt": [
+      "IBUPROFENE"
+    ],
+    "confezioni": [
+      {
+        "idPackage": "600501",
+        "denominazionePackage": "600 MG - COMPRESSE RIVESTITE CON FILM - USO ORALE - BLISTER - 12 COMPRESSE",
+        "descrizioneFornitura": null,
+        "classeFornitura": "OTC",
+        "codiceFormaDosaggio": "0000050051",
+        "aic": "060501012",
+        "descrizioneRf": [
+          "Medicinale di automedicazione"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2016-03-20T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 0,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "Cnn",
+        "descrizioneRimborsabilita": "C NON NEGOZIATA",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2016-03-19T00:00:00.000+00:00",
+        "dataRicezionePratica": "2015-08-01T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      },
+      {
+        "idPackage": "600502",
+        "denominazionePackage": "400 MG - SOSPENSIONE ORALE - FLACONE - 200 ML",
+        "descrizioneFornitura": null,
+        "classeFornitura": "OTC",
+        "codiceFormaDosaggio": "0000050051",
+        "aic": "060501200",
+        "descrizioneRf": [
+          "Medicinale di automedicazione"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2016-03-20T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 0,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "Cnn",
+        "descrizioneRimborsabilita": "C NON NEGOZIATA",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2016-03-19T00:00:00.000+00:00",
+        "dataRicezionePratica": "2015-08-01T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      }
+    ],
+    "medicinale": {
+      "codiceMedicinale": "63050",
+      "aic6": 60501,
+      "denominazioneMedicinale": "MOMENT",
+      "codiceSis": 1310,
+      "aziendaTitolare": "ANGELINI",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "A"
+    },
+    "vieSomministrazione": [
+      "ORALE"
+    ],
+    "codiceAtc": [
+      "M01AE01"
+    ],
+    "descrizioneAtc": [
+      "IBUPROFEN"
+    ],
+    "formaFarmaceutica": "Compressa rivestita con film",
+    "pianoTerapeutico": 0,
+    "descrizioneFormaDosaggio": "600 mg COMPRESSA RIVESTITA",
+    "flagAlcol": 0,
+    "flagPotassio": 0,
+    "flagGuida": 0,
+    "flagDopante": 0,
+    "livelloGuida": null,
+    "descrizioneLivello": null,
+    "carente": 0,
+    "innovativo": 0,
+    "orfano": 0,
+    "revocato": 0,
+    "sospeso": 0,
+    "principioAttivoForma": [
+      {
+        "principioAttivo": [
+          "IBUPROFENE"
+        ],
+        "formaFarmaceutica": "Compressa rivestita con film",
+        "flagDopante": null
+      }
+    ],
+    "flagFI": true,
+    "flagRCP": true,
+    "tipoAutorizzazione": "A",
+    "aic6ImportazioneParallela": null,
+    "sisImportazioneParallela": null,
+    "denImportazioneParallela": null,
+    "ragImportazioneParallela": null,
+    "position": null
+  },
+  {
+    "id": "0000050052",
+    "principiAttiviIt": [
+      "LORAZEPAM"
+    ],
+    "confezioni": [
+      {
+        "idPackage": "700601",
+        "denominazionePackage": "1 MG - COMPRESSE - USO ORALE - BLISTER - 20 COMPRESSE",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050052",
+        "aic": "070601020",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2015-07-10T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "Cnn",
+        "descrizioneRimborsabilita": "C NON NEGOZIATA",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2015-07-09T00:00:00.000+00:00",
+        "dataRicezionePratica": "2014-02-11T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      },
+      {
+        "idPackage": "700602",
+        "denominazionePackage": "2,5 MG/ML - GOCCE ORALI, SOLUZIONE - FLACONE - 20 ML",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050052",
+        "aic": "070601021",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2015-07-10T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "Cnn",
+        "descrizioneRimborsabilita": "C NON NEGOZIATA",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2015-07-09T00:00:00.000+00:00",
+        "dataRicezionePratica": "2014-02-11T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      }
+    ],
+    "medicinale": {
+      "codiceMedicinale": "75060",
+      "aic6": 70601,
+      "denominazioneMedicinale": "LORAZEPAM DOC",
+      "codiceSis": 1320,
+      "aziendaTitolare": "DOC GENERICI",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "A"
+    },
+    "vieSomministrazione": [
+      "ORALE"
+    ],
+    "codiceAtc": [
+      "N05BA06"
+    ],
+    "descrizioneAtc": [
+      "LORAZEPAM"
+    ],
+    "formaFarmaceutica": "Compressa",
+    "pianoTerapeutico": 0,
+    "descrizioneFormaDosaggio": "1 mg COMPRESSA",
+    "flagAlcol": 0,
+    "flagPotassio": 0,
+    "flagGuida": 0,
+    "flagDopante": 0,
+    "livelloGuida": null,
+    "descrizioneLivello": null,
+    "carente": 0,
+    "innovativo": 0,
+    "orfano": 0,
+    "revocato": 0,
+    "sospeso": 0,
+    "principioAttivoForma": [
+      {
+        "principioAttivo": [
+          "LORAZEPAM"
+        ],
+        "formaFarmaceutica": "Compressa",
+        "flagDopante": null
+      }
+    ],
+    "flagFI": true,
+    "flagRCP": true,
+    "tipoAutorizzazione": "A",
+    "aic6ImportazioneParallela": null,
+    "sisImportazioneParallela": null,
+    "denImportazioneParallela": null,
+    "ragImportazioneParallela": null,
+    "position": null
+  },
+  {
+    "id": "0000050053",
+    "principiAttiviIt": [
+      "INSULINA ASPART"
+    ],
+    "confezioni": [
+      {
+        "idPackage": "800701",
+        "denominazionePackage": "100 U/ML - SOLUZIONE INIETTABILE - CARTUCCIA - 5 X 3 ML",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050053",
+        "aic": "080701015",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2021-04-05T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "SOTTOCUTANEA"
+        ],
+        "classeRimborsabilita": "A",
+        "descrizioneRimborsabilita": "A TOTALE CARICO DEL SSN.",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2021-04-04T00:00:00.000+00:00",
+        "dataRicezionePratica": "2020-02-20T08:00:00.000+00:00",
+        "pianoTerapeutico": 1,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      },
+      {
+        "idPackage": "800702",
+        "denominazionePackage": "100 U/ML - SOLUZIONE INIETTABILE - PENNE PRERIEMPITE - 5 X 3 ML",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050053",
+        "aic": "080701016",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2021-04-05T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "SOTTOCUTANEA"
+        ],
+        "classeRimborsabilita": "A",
+        "descrizioneRimborsabilita": "A TOTALE CARICO DEL SSN.",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2021-04-04T00:00:00.000+00:00",
+        "dataRicezionePratica": "2020-02-20T08:00:00.000+00:00",
+        "pianoTerapeutico": 1,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      }
+    ],
+    "medicinale": {
+      "codiceMedicinale": "88070",
+      "aic6": 80701,
+      "denominazioneMedicinale": "NOVORAPID",
+      "codiceSis": 1330,
+      "aziendaTitolare": "NOVO NORDISK",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "A"
+    },
+    "vieSomministrazione": [
+      "SOTTOCUTANEA"
+    ],
+    "codiceAtc": [
+      "A10AB05"
+    ],
+    "descrizioneAtc": [
+      "INSULIN ASPART"
+    ],
+    "formaFarmaceutica": "Soluzione iniettabile",
+    "pianoTerapeutico": 1,
+    "descrizioneFormaDosaggio": "100 U/ml SOLUZIONE INIETTABILE",
+    "flagAlcol": 0,
+    "flagPotassio": 0,
+    "flagGuida": 0,
+    "flagDopante": 0,
+    "livelloGuida": null,
+    "descrizioneLivello": null,
+    "carente": 0,
+    "innovativo": 0,
+    "orfano": 0,
+    "revocato": 0,
+    "sospeso": 0,
+    "principioAttivoForma": [
+      {
+        "principioAttivo": [
+          "INSULINA ASPART"
+        ],
+        "formaFarmaceutica": "Soluzione iniettabile",
+        "flagDopante": null
+      }
+    ],
+    "flagFI": true,
+    "flagRCP": true,
+    "tipoAutorizzazione": "A",
+    "aic6ImportazioneParallela": null,
+    "sisImportazioneParallela": null,
+    "denImportazioneParallela": null,
+    "ragImportazioneParallela": null,
+    "position": null
+  },
+  {
+    "id": "0000050054",
+    "principiAttiviIt": [
+      "LEVOCETIRIZINA DIIDROCLORURO"
+    ],
+    "confezioni": [
+      {
+        "idPackage": "900801",
+        "denominazionePackage": "5 MG - COMPRESSE RIVESTITE CON FILM - USO ORALE - BLISTER - 14 COMPRESSE",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050054",
+        "aic": "090801014",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2022-09-01T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "Cnn",
+        "descrizioneRimborsabilita": "C NON NEGOZIATA",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2022-08-31T00:00:00.000+00:00",
+        "dataRicezionePratica": "2021-05-20T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      },
+      {
+        "idPackage": "900802",
+        "denominazionePackage": "2,5 MG/ML - GOCCE ORALI, SOLUZIONE - FLACONE - 10 ML",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050054",
+        "aic": "090801010",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2022-09-01T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "Cnn",
+        "descrizioneRimborsabilita": "C NON NEGOZIATA",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2022-08-31T00:00:00.000+00:00",
+        "dataRicezionePratica": "2021-05-20T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      }
+    ],
+    "medicinale": {
+      "codiceMedicinale": "98080",
+      "aic6": 90801,
+      "denominazioneMedicinale": "XYZAL",
+      "codiceSis": 1340,
+      "aziendaTitolare": "UCB",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "A"
+    },
+    "vieSomministrazione": [
+      "ORALE"
+    ],
+    "codiceAtc": [
+      "R06AE09"
+    ],
+    "descrizioneAtc": [
+      "LEVOCETIRIZINE"
+    ],
+    "formaFarmaceutica": "Compressa rivestita con film",
+    "pianoTerapeutico": 0,
+    "descrizioneFormaDosaggio": "5 mg COMPRESSA RIVESTITA",
+    "flagAlcol": 0,
+    "flagPotassio": 0,
+    "flagGuida": 0,
+    "flagDopante": 0,
+    "livelloGuida": null,
+    "descrizioneLivello": null,
+    "carente": 0,
+    "innovativo": 0,
+    "orfano": 0,
+    "revocato": 0,
+    "sospeso": 0,
+    "principioAttivoForma": [
+      {
+        "principioAttivo": [
+          "LEVOCETIRIZINA DIIDROCLORURO"
+        ],
+        "formaFarmaceutica": "Compressa rivestita con film",
+        "flagDopante": null
+      }
+    ],
+    "flagFI": true,
+    "flagRCP": true,
+    "tipoAutorizzazione": "A",
+    "aic6ImportazioneParallela": null,
+    "sisImportazioneParallela": null,
+    "denImportazioneParallela": null,
+    "ragImportazioneParallela": null,
+    "position": null
+  },
+  {
+    "id": "0000050055",
+    "principiAttiviIt": [
+      "RAMIPRIL"
+    ],
+    "confezioni": [
+      {
+        "idPackage": "1000901",
+        "denominazionePackage": "5 MG - CAPSULE - USO ORALE - BLISTER - 28 CAPSULE",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050055",
+        "aic": "100901028",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2013-04-01T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "A",
+        "descrizioneRimborsabilita": "A TOTALE CARICO DEL SSN.",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2013-03-30T00:00:00.000+00:00",
+        "dataRicezionePratica": "2011-12-15T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      },
+      {
+        "idPackage": "1000902",
+        "denominazionePackage": "10 MG - CAPSULE - USO ORALE - BLISTER - 28 CAPSULE",
+        "descrizioneFornitura": null,
+        "classeFornitura": "RR",
+        "codiceFormaDosaggio": "0000050055",
+        "aic": "100901029",
+        "descrizioneRf": [
+          "Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "2013-04-01T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 1,
+        "carente": 0,
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "classeRimborsabilita": "A",
+        "descrizioneRimborsabilita": "A TOTALE CARICO DEL SSN.",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "dataRegistrazioneGU": "2013-03-30T00:00:00.000+00:00",
+        "dataRicezionePratica": "2011-12-15T08:00:00.000+00:00",
+        "pianoTerapeutico": 0,
+        "fkFormaDosaggio": null,
+        "tipoAutorizzazione": "A",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null,
+        "categoriaMedicinale": "1"
+      }
+    ],
+    "medicinale": {
+      "codiceMedicinale": "110090",
+      "aic6": 100901,
+      "denominazioneMedicinale": "TRIATEC",
+      "codiceSis": 1350,
+      "aziendaTitolare": "SANOFI",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "A"
+    },
+    "vieSomministrazione": [
+      "ORALE"
+    ],
+    "codiceAtc": [
+      "C09AA05"
+    ],
+    "descrizioneAtc": [
+      "RAMIPRIL"
+    ],
+    "formaFarmaceutica": "Capsula",
+    "pianoTerapeutico": 0,
+    "descrizioneFormaDosaggio": "5 mg CAPSULA",
+    "flagAlcol": 0,
+    "flagPotassio": 0,
+    "flagGuida": 0,
+    "flagDopante": 0,
+    "livelloGuida": null,
+    "descrizioneLivello": null,
+    "carente": 0,
+    "innovativo": 0,
+    "orfano": 0,
+    "revocato": 0,
+    "sospeso": 0,
+    "principioAttivoForma": [
+      {
+        "principioAttivo": [
+          "RAMIPRIL"
+        ],
+        "formaFarmaceutica": "Capsula",
+        "flagDopante": null
+      }
+    ],
+    "flagFI": true,
+    "flagRCP": true,
+    "tipoAutorizzazione": "A",
+    "aic6ImportazioneParallela": null,
+    "sisImportazioneParallela": null,
+    "denImportazioneParallela": null,
+    "ragImportazioneParallela": null,
+    "position": null
+  }
+]

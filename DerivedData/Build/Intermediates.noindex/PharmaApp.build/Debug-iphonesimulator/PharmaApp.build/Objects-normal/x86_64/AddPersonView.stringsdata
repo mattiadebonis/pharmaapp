@@ -1,0 +1,48 @@
+{
+  "source": "/Users/mattiadebonis/pharmaapp/PharmaApp/AddPersonView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Aggiungi Persona",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 27
+        }
+      },
+      {
+        "comment": "",
+        "key": "Dettagli Persona",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 18
+        }
+      },
+      {
+        "comment": "",
+        "key": "Salva",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 23
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nome",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 19
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cognome",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 20
+        }
+      }
+    ]
+  },
+  "version": 1
+}

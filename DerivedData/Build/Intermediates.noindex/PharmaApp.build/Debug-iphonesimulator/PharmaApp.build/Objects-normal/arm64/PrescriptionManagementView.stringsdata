@@ -1,0 +1,48 @@
+{
+  "source": "/Users/mattiadebonis/pharmaapp/PharmaApp/MedicineDetail/PrescriptionManagement/PrescriptionManagementView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Gestione Ricetta",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 53
+        }
+      },
+      {
+        "comment": "",
+        "key": "Gestione Ricetta per %@",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 25
+        }
+      },
+      {
+        "comment": "",
+        "key": "Richiedi Ricetta",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 36
+        }
+      },
+      {
+        "comment": "",
+        "key": "Registra Ricetta",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 45
+        }
+      },
+      {
+        "comment": "",
+        "key": "Chiudi",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 57
+        }
+      }
+    ]
+  },
+  "version": 1
+}
