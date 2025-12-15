@@ -148,28 +148,29 @@ struct FeedView: View {
             }
         }
         .sheet(item: $prescriptionToConfirm) { medicine in
-            let doctorName = prescriptionDoctorName(for: medicine)
+            let doctor = prescriptionDoctorContact(for: medicine)
+            let formattedName = formattedMedicineName(medicine.nome)
+            let subject = "Richiesta ricetta per \(formattedName)"
             PrescriptionRequestConfirmationSheet(
-                medicine: medicine,
-                doctorName: doctorName,
-                onSend: {
-                    sendPrescriptionEmail(for: [medicine], doctorName: doctorName, emailAddress: prescriptionDoctorEmail(for: medicine))
-                    viewModel.requestPrescription(for: medicine)
-                }
+                medicineName: formattedName,
+                doctor: doctor,
+                subject: subject,
+                messageBody: prescriptionEmailBody(for: [medicine], doctorName: doctor.name),
+                onDidSend: { viewModel.requestPrescription(for: medicine) }
             )
         }
         .sheet(item: $prescriptionEmailMedicine) { medicine in
-            let doctorName = prescriptionDoctorName(for: medicine)
+            let doctor = prescriptionDoctorContact(for: medicine)
+            let formattedName = formattedMedicineName(medicine.nome)
+            let subject = "Richiesta ricetta per \(formattedName)"
             PrescriptionEmailSheet(
-                doctorName: doctorName,
-                emailAddress: prescriptionDoctorEmail(for: medicine),
-                messageBody: prescriptionEmailBody(for: [medicine], doctorName: doctorName),
+                doctor: doctor,
+                subject: subject,
+                messageBody: prescriptionEmailBody(for: [medicine], doctorName: doctor.name),
                 onCopy: {
-                    UIPasteboard.general.string = prescriptionEmailBody(for: [medicine], doctorName: doctorName)
+                    UIPasteboard.general.string = prescriptionEmailBody(for: [medicine], doctorName: doctor.name)
                 },
-                onSend: {
-                    sendPrescriptionEmail(for: [medicine], doctorName: doctorName, emailAddress: prescriptionDoctorEmail(for: medicine))
-                }
+                onDidSend: { viewModel.requestPrescription(for: medicine) }
             )
         }
         .navigationTitle("Oggi")
@@ -1024,11 +1025,28 @@ struct FeedView: View {
         return (candidate?.isEmpty == false) ? candidate : nil
     }
 
+    private func prescriptionDoctorPhoneInternational(for medicine: Medicine) -> String? {
+        let candidate = prescriptionDoctor(for: medicine)?.telefono?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let candidate, !candidate.isEmpty else { return nil }
+        return CommunicationService.normalizeInternationalPhone(candidate)
+    }
+
+    private func prescriptionDoctorContact(for medicine: Medicine) -> DoctorContact {
+        DoctorContact(
+            name: prescriptionDoctorName(for: medicine),
+            email: prescriptionDoctorEmail(for: medicine),
+            phoneInternational: prescriptionDoctorPhoneInternational(for: medicine)
+        )
+    }
+
     private func prescriptionDoctor(for medicine: Medicine) -> Doctor? {
         if let assigned = medicine.prescribingDoctor {
             return assigned
         }
-        return doctors.first(where: { !($0.mail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+        if let doctorWithEmail = doctors.first(where: { !($0.mail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
+            return doctorWithEmail
+        }
+        return doctors.first(where: { !($0.telefono ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
     }
 
     private func prescriptionEmailBody(for medicines: [Medicine], doctorName: String) -> String {
@@ -1047,37 +1065,24 @@ struct FeedView: View {
         """
     }
 
-    private func sendPrescriptionEmail(for medicines: [Medicine], doctorName: String, emailAddress: String?) {
-        guard let emailAddress, !emailAddress.isEmpty else { return }
-        let subjectList = medicines.map { formattedMedicineName($0.nome) }.joined(separator: ", ")
-        let subject = "Richiesta ricetta \(subjectList)"
-        let body = prescriptionEmailBody(for: medicines, doctorName: doctorName)
-        let components: [String: String] = [
-            "subject": subject,
-            "body": body
-        ]
-        let query = components.compactMap { key, value in
-            value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed).map { "\(key)=\($0)" }
-        }.joined(separator: "&")
-        if let url = URL(string: "mailto:\(emailAddress)?\(query)") {
-            openURL(url)
-        }
-    }
-
     private struct PrescriptionEmailSheet: View {
-        let doctorName: String
-        let emailAddress: String?
+        let doctor: DoctorContact
+        let subject: String
         let messageBody: String
         let onCopy: () -> Void
-        let onSend: () -> Void
+        let onDidSend: () -> Void
 
         @Environment(\.dismiss) private var dismiss
+        @Environment(\.openURL) private var openURL
 
         var body: some View {
+            let canSendEmail = (doctor.email?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            let canSendWhatsApp = (doctor.phoneInternational?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+
             NavigationStack {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
-                        Text("Messaggio da inviare a \(doctorName)")
+                        Text("Messaggio da inviare a \(doctor.name)")
                             .font(.headline)
                         Spacer()
                         HStack(spacing: 12) {
@@ -1091,16 +1096,31 @@ struct FeedView: View {
                             .buttonStyle(.bordered)
                             .accessibilityLabel("Copia testo")
 
-                            if emailAddress != nil {
+                            if canSendEmail {
                                 Button {
-                                    onSend()
+                                    CommunicationService(openURL: openURL).sendEmail(to: doctor, subject: subject, body: messageBody)
+                                    onDidSend()
                                     dismiss()
                                 } label: {
-                                    Image(systemName: "paperplane.fill")
+                                    Image(systemName: "envelope.fill")
                                         .font(.title3)
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .accessibilityLabel("Invia email")
+                            }
+
+                            if canSendWhatsApp {
+                                Button {
+                                    CommunicationService(openURL: openURL).sendWhatsApp(to: doctor, text: messageBody)
+                                    onDidSend()
+                                    dismiss()
+                                } label: {
+                                    Image(systemName: "message.fill")
+                                        .font(.title3)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(Color(red: 0.16, green: 0.78, blue: 0.45))
+                                .accessibilityLabel("Invia WhatsApp")
                             }
                         }
                     }
@@ -1124,15 +1144,21 @@ struct FeedView: View {
     }
 
     private struct PrescriptionRequestConfirmationSheet: View {
-        let medicine: Medicine
-        let doctorName: String
-        let onSend: () -> Void
+        let medicineName: String
+        let doctor: DoctorContact
+        let subject: String
+        let messageBody: String
+        let onDidSend: () -> Void
 
         @Environment(\.dismiss) private var dismiss
+        @Environment(\.openURL) private var openURL
 
         var body: some View {
+            let canSendEmail = (doctor.email?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            let canSendWhatsApp = (doctor.phoneInternational?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+
             VStack(alignment: .leading, spacing: 16) {
-                Text("Vuoi inviare una richiesta a \(doctorName) per la ricetta di \(medicine.nome)?")
+                Text("Vuoi inviare una richiesta a \(doctor.name) per la ricetta di \(medicineName)?")
                     .font(.headline)
                     .multilineTextAlignment(.leading)
 
@@ -1142,11 +1168,34 @@ struct FeedView: View {
                     }
                     .buttonStyle(.bordered)
 
-                    Button("Invia") {
-                        onSend()
-                        dismiss()
+                    Spacer()
+
+                    if canSendEmail {
+                        Button {
+                            CommunicationService(openURL: openURL).sendEmail(to: doctor, subject: subject, body: messageBody)
+                            onDidSend()
+                            dismiss()
+                        } label: {
+                            Image(systemName: "envelope.fill")
+                                .font(.title3)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityLabel("Invia email")
                     }
-                    .buttonStyle(.borderedProminent)
+
+                    if canSendWhatsApp {
+                        Button {
+                            CommunicationService(openURL: openURL).sendWhatsApp(to: doctor, text: messageBody)
+                            onDidSend()
+                            dismiss()
+                        } label: {
+                            Image(systemName: "message.fill")
+                                .font(.title3)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color(red: 0.16, green: 0.78, blue: 0.45))
+                        .accessibilityLabel("Invia WhatsApp")
+                    }
                 }
                 Spacer(minLength: 0)
             }

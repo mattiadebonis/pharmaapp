@@ -145,6 +145,7 @@ struct MedicineDetailView: View {
                 doctorName: doctorDisplayName,
                 primaryMedicine: medicine,
                 emailAddress: doctorEmail,
+                phoneInternational: doctorPhoneInternational,
                 baseMedicines: suggestionMedicines,
                 emailBuilder: { meds in emailBody(for: meds) },
                 onCopy: { meds in
@@ -155,7 +156,6 @@ struct MedicineDetailView: View {
                     }
                 },
                 onSend: { meds in
-                    sendEmailBody(for: meds)
                     meds.forEach { med in
                         actionsViewModel.addNewPrescriptionRequest(for: med)
                         actionsViewModel.addNewPrescription(for: med)
@@ -539,7 +539,15 @@ struct MedicineDetailView: View {
         }
         return email
     }
-    
+
+    private var assignedDoctorPhoneInternational: String? {
+        guard let raw = assignedDoctor?.telefono?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else {
+            return nil
+        }
+        return CommunicationService.normalizeInternationalPhone(raw)
+    }
+
     private var assignedDoctorName: String? {
         doctorFullName(assignedDoctor)
     }
@@ -553,6 +561,24 @@ struct MedicineDetailView: View {
     
     private var doctorEmail: String? {
         doctorWithEmail?.mail?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var doctorPhoneInternational: String? {
+        if let assigned = assignedDoctorPhoneInternational {
+            return assigned
+        }
+        if let raw = doctorWithEmail?.telefono?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !raw.isEmpty,
+           let normalized = CommunicationService.normalizeInternationalPhone(raw) {
+            return normalized
+        }
+        if let raw = doctors.first(where: { !($0.telefono ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })?
+            .telefono?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !raw.isEmpty {
+            return CommunicationService.normalizeInternationalPhone(raw)
+        }
+        return nil
     }
     
     private var doctorDisplayName: String {
@@ -983,6 +1009,7 @@ private struct EmailRequestSheet: View {
     let doctorName: String
     let primaryMedicine: Medicine
     let emailAddress: String?
+    let phoneInternational: String?
     let baseMedicines: [Medicine]
     let emailBuilder: ([Medicine]) -> String
     let onCopy: ([Medicine]) -> Void
@@ -990,10 +1017,12 @@ private struct EmailRequestSheet: View {
     
     @State private var selectedMedicines: Set<NSManagedObjectID>
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     
     init(doctorName: String,
          primaryMedicine: Medicine,
          emailAddress: String?,
+         phoneInternational: String?,
          baseMedicines: [Medicine],
          emailBuilder: @escaping ([Medicine]) -> String,
          onCopy: @escaping ([Medicine]) -> Void,
@@ -1001,6 +1030,7 @@ private struct EmailRequestSheet: View {
         self.doctorName = doctorName
         self.primaryMedicine = primaryMedicine
         self.emailAddress = emailAddress
+        self.phoneInternational = phoneInternational
         self.baseMedicines = baseMedicines
         self.emailBuilder = emailBuilder
         self.onCopy = onCopy
@@ -1025,16 +1055,40 @@ private struct EmailRequestSheet: View {
                         }
                         .buttonStyle(.bordered)
                         .accessibilityLabel("Copia testo")
+
                         if emailAddress != nil {
                             Button {
+                                communicationService.sendEmail(
+                                    to: doctorContact,
+                                    subject: emailSubject,
+                                    body: emailBuilder(selectedList)
+                                )
                                 onSend(selectedList)
                                 dismiss()
                             } label: {
-                                Image(systemName: "paperplane.fill")
+                                Image(systemName: "envelope.fill")
                                     .font(.title3)
                             }
                             .buttonStyle(.borderedProminent)
                             .accessibilityLabel("Invia email")
+                        }
+
+                        if phoneInternational != nil {
+                            Button {
+                                communicationService.sendWhatsApp(
+                                    to: doctorContact,
+                                    text: whatsappText
+                                )
+                                onSend(selectedList)
+                                dismiss()
+                            } label: {
+                                // SF Symbol generico: se vuoi l’icona ufficiale WhatsApp, inserisci un asset e sostituisci questa Image.
+                                Image(systemName: "message.fill")
+                                    .font(.title3)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.green)
+                            .accessibilityLabel("Invia messaggio WhatsApp")
                         }
                     }
                 }
@@ -1090,6 +1144,33 @@ private struct EmailRequestSheet: View {
             .navigationTitle("Richiedi ricetta")
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+
+    // MARK: - Helpers
+
+    private var communicationService: CommunicationService {
+        CommunicationService(openURL: openURL)
+    }
+
+    private var doctorContact: DoctorContact {
+        DoctorContact(
+            name: doctorName,
+            email: emailAddress,
+            phoneInternational: phoneInternational
+        )
+    }
+
+    private var emailSubject: String {
+        let names = selectedList.map { $0.nome }.joined(separator: ", ")
+        if selectedList.count == 1, let first = selectedList.first {
+            return "Richiesta ricetta per \(first.nome)"
+        }
+        return "Richiesta ricetta per \(names)"
+    }
+
+    private var whatsappText: String {
+        // Testo precompilato multi-linea (WhatsApp supporta i newline).
+        emailBuilder(selectedList)
     }
     
     private var selectedList: [Medicine] {

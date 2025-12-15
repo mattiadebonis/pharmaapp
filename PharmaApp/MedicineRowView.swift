@@ -265,7 +265,13 @@ struct MedicineRowView: View {
     }
     
     private var leadingIconSymbol: String {
-        return "pills.fill"
+        if stocksWarning != nil {
+            return "exclamationmark.triangle.fill"
+        }
+        if hasTherapiesFlag {
+            return "pills.fill"
+        }
+        return "cross.case.fill"
     }
     
     private var leadingAccentColor: Color {
@@ -346,6 +352,9 @@ struct MedicineRowView: View {
         let text: String
         let color: Color
     }
+
+    private var therapyChipIconColor: Color { .indigo }
+    private var stockChipIconColor: Color { .cyan }
     
     private var infoPills: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -381,7 +390,7 @@ struct MedicineRowView: View {
     private var therapyInfoChips: [InfoChip] {
         guard let next = nextOcc else {
             let text = medicine.obbligo_ricetta ? "Uso al bisogno con prescrizione medica" : "Uso al bisogno"
-            return [InfoChip(icon: nil, text: text, color: .secondary)]
+            return [InfoChip(icon: "stethoscope", text: text, color: therapyChipIconColor)]
         }
         let nextText: String = {
             let cal = Calendar.current
@@ -395,7 +404,7 @@ struct MedicineRowView: View {
         let base = "Prossima dose: \(nextText)"
         let person = personName(for: next.therapy).map { "per \($0)" }
         let text = [base, person].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
-        return [InfoChip(icon: nil, text: text, color: .secondary)]
+        return [InfoChip(icon: "stethoscope", text: text, color: therapyChipIconColor)]
     }
 
     private var stockChip: InfoChip {
@@ -430,9 +439,9 @@ struct MedicineRowView: View {
             return "\(display.primary) · \(display.secondary)"
         }()
         return InfoChip(
-            icon: nil,
+            icon: "square.stack.3d.up.fill",
             text: text,
-            color: .secondary
+            color: stockChipIconColor
         )
     }
 
