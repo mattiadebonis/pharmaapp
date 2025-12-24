@@ -19,6 +19,15 @@ struct FeedView: View {
         case medicines
     }
 
+    private var todayCalendarSymbolName: String {
+        let day = Calendar.current.component(.day, from: Date())
+        return "\(day).calendar"
+    }
+
+    private var todayNavigationTitle: String {
+        "Oggi"
+    }
+
     private enum TodoSortOption: String, CaseIterable {
         case time
         case action
@@ -143,6 +152,10 @@ struct FeedView: View {
         .listStyle(.plain)
         .scrollIndicators(.hidden)
         .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Label("Oggi", systemImage: todayCalendarSymbolName)
+                    .labelStyle(.iconOnly)
+            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 todoOptionsMenu()
             }
@@ -173,7 +186,7 @@ struct FeedView: View {
                 onDidSend: { viewModel.requestPrescription(for: medicine) }
             )
         }
-        .navigationTitle("Oggi")
+        .navigationTitle(todayNavigationTitle)
         .navigationBarTitleDisplayMode(.large)
     }
 

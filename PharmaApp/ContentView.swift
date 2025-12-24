@@ -14,6 +14,11 @@ struct ContentView: View {
     @EnvironmentObject private var appVM: AppViewModel
     @StateObject private var feedVM = FeedViewModel()
 
+    private var todayCalendarSymbolName: String {
+        let day = Calendar.current.component(.day, from: Date())
+        return "\(day).calendar"
+    }
+
     private enum AppTab: Hashable {
         case oggi
         case medicine
@@ -38,7 +43,7 @@ struct ContentView: View {
         ZStack(alignment: .bottomTrailing) {
             TabView(selection: $selectedTab) {
                 // TAB 1 – Insights (a sinistra)
-                Tab("Insights", systemImage: "sparkles", value: AppTab.oggi) {
+                Tab("Oggi", systemImage: todayCalendarSymbolName, value: AppTab.oggi) {
                     NavigationStack {
                         FeedView(viewModel: feedVM, mode: .insights)
                     }

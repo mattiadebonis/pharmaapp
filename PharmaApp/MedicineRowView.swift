@@ -15,6 +15,10 @@ struct MedicineRowView: View {
     // MARK: - Computed
     private var option: Option? { options.first }
     private var therapies: Set<Therapy> { medicine.therapies as? Set<Therapy> ?? [] }
+    private var totalDoseCount: Int {
+        guard !therapies.isEmpty else { return 0 }
+        return therapies.reduce(0) { $0 + ($1.doses?.count ?? 0) }
+    }
     private var autonomyDays: Int? {
         guard !therapies.isEmpty else { return nil }
         let res = therapies.reduce(into: (left: 0.0, daily: 0.0)) { acc, t in
@@ -388,22 +392,13 @@ struct MedicineRowView: View {
     }
 
     private var therapyInfoChips: [InfoChip] {
-        guard let next = nextOcc else {
+        let doseCount = totalDoseCount
+        guard doseCount > 0 else {
             let text = medicine.obbligo_ricetta ? "Uso al bisogno con prescrizione medica" : "Uso al bisogno"
             return [InfoChip(icon: "stethoscope", text: text, color: therapyChipIconColor)]
         }
-        let nextText: String = {
-            let cal = Calendar.current
-            if cal.isDateInToday(next.date) { return "oggi alle \(time(next.date))" }
-            if cal.isDateInTomorrow(next.date) { return "domani" }
-            if let overm = cal.date(byAdding: .day, value: 2, to: Date()), cal.isDate(next.date, inSameDayAs: overm) {
-                return "dopodomani"
-            }
-            return day(next.date).lowercased()
-        }()
-        let base = "Prossima dose: \(nextText)"
-        let person = personName(for: next.therapy).map { "per \($0)" }
-        let text = [base, person].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        let label = doseCount == 1 ? "Dose impostata" : "Dosi impostate"
+        let text = "\(label): \(doseCount)"
         return [InfoChip(icon: "stethoscope", text: text, color: therapyChipIconColor)]
     }
 

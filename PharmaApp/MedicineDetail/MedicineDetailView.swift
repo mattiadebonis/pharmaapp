@@ -646,6 +646,27 @@ struct MedicineDetailView: View {
     }
     
     private func deleteMedicine() {
+        // Core Data has required relationships (e.g., Log.medicine, Therapy.medicine, Package.medicine),
+        // so we must delete dependents first to avoid validation errors.
+        let relatedLogs = (medicine.logs as? Set<Log>) ?? []
+        let relatedTherapies = (medicine.therapies as? Set<Therapy>) ?? []
+        let relatedPackages = medicine.packages
+
+        for log in relatedLogs {
+            context.delete(log)
+        }
+        for therapy in relatedTherapies {
+            if let doses = therapy.doses as? Set<Dose> {
+                for dose in doses {
+                    context.delete(dose)
+                }
+            }
+            context.delete(therapy)
+        }
+        for package in relatedPackages {
+            context.delete(package)
+        }
+
         context.delete(medicine)
         do {
             try context.save()
