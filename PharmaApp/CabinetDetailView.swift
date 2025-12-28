@@ -5,7 +5,7 @@ import CoreData
 struct CabinetDetailView: View {
     let cabinet: Cabinet
     let medicines: [Medicine]
-    @ObservedObject var viewModel: FeedViewModel
+    @ObservedObject var viewModel: CabinetViewModel
     @Environment(\.dismiss) private var dismiss
     
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
@@ -52,7 +52,7 @@ struct CabinetDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding()
-                    .presentationDetents([.medium])
+                    .presentationDetents([PresentationDetent.medium])
                 }
             }
         }
@@ -65,7 +65,7 @@ struct CabinetDetailView: View {
                     saveContext()
                 }
             )
-            .presentationDetents([.medium, .large])
+            .presentationDetents([PresentationDetent.medium, PresentationDetent.large])
         }
     }
     
@@ -90,9 +90,9 @@ struct CabinetDetailView: View {
             },
             onToggleSelection: { viewModel.toggleSelection(for: medicine) },
             onEnterSelection: { viewModel.enterSelectionMode(with: medicine) },
-            onMarkTaken: { viewModel.markAsTaken(for: medicine) },
-            onMarkPurchased: { viewModel.markAsPurchased(for: medicine) },
-            onRequestPrescription: shouldShowRx ? { viewModel.requestPrescription(for: medicine) } : nil,
+            onMarkTaken: { viewModel.actionService.markAsTaken(for: medicine) },
+            onMarkPurchased: { viewModel.actionService.markAsPurchased(for: medicine) },
+            onRequestPrescription: shouldShowRx ? { viewModel.actionService.requestPrescription(for: medicine) } : nil,
             onMove: { medicineToMove = medicine }
         )
     }

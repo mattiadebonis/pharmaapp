@@ -1,6 +1,8 @@
 import SwiftUI
 import CoreData
 
+// Modelli e builder per i todo di "Oggi" (estratti dall'ex TodayTodoView).
+
 struct TodayTodoItem: Identifiable, Hashable {
     enum Category: String, CaseIterable, Hashable {
         case therapy
@@ -51,7 +53,7 @@ struct TodayTodoItem: Identifiable, Hashable {
     let medicineID: NSManagedObjectID?
 }
 
-struct TodayTodoBuilder {
+enum TodayTodoBuilder {
     static func makeTodos(from context: AIInsightsContext, medicines: [Medicine], urgentIDs: Set<NSManagedObjectID>) -> [TodayTodoItem] {
         var items: [TodayTodoItem] = []
         let medIndex: [String: Medicine] = {
@@ -137,11 +139,6 @@ struct TodayTodoBuilder {
         let components = trimmed.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         guard let raw = components.first, !raw.isEmpty else { return nil }
         var detail = components.count > 1 ? components[1] : nil
-        // highlight formati come:
-        // "compra Nome (in attesa della ricetta)"
-        // "compra Nome — chiedi ricetta"
-        // "compra Nome: copertura per X"
-        // oppure "Nome: copertura per X"
         let lower = raw.lowercased()
         let name: String
         if lower.hasPrefix("compra ") {
@@ -313,228 +310,4 @@ private extension Medicine {
         guard let logs = logs, let lastDate = logs.map(\.timestamp).max() else { return "0" }
         return String(Int(lastDate.timeIntervalSince1970))
     }
-}
-
-struct TodayTodoListView: View {
-    let items: [TodayTodoItem]
-    @Binding var completedIDs: Set<String>
-    let urgentIDs: Set<NSManagedObjectID>
-    var onPrescriptionTap: ((TodayTodoItem) -> Void)?
-    var onPurchaseTap: ((TodayTodoItem) -> Void)?
-
-    var body: some View {
-        ForEach(items) { item in
-            todoRow(for: item)
-        }
-    }
-
-    private struct TherapyBucket: Identifiable {
-        let id = UUID()
-        let label: String
-        let sortValue: Int?
-        let items: [TodayTodoItem]
-    }
-
-    private func buckets(for therapies: [TodayTodoItem]) -> [TherapyBucket] {
-        guard !therapies.isEmpty else { return [] }
-        var groups: [String: (sort: Int?, items: [TodayTodoItem])] = [:]
-        for item in therapies {
-            let key = timeLabel(for: item)
-            let sort = timeSortValue(for: item)
-            var current = groups[key] ?? (sort: sort, items: [])
-            current.items.append(item)
-            if current.sort == nil { current.sort = sort }
-            groups[key] = current
-        }
-        return groups.map { TherapyBucket(label: $0.key, sortValue: $0.value.sort, items: $0.value.items) }
-            .sorted { lhs, rhs in
-                switch (lhs.sortValue, rhs.sortValue) {
-                case let (l?, r?):
-                    return l < r
-                case (.some, .none):
-                    return true
-                case (.none, .some):
-                    return false
-                case (.none, .none):
-                    return lhs.label < rhs.label
-                }
-            }
-    }
-
-    private func timeLabel(for item: TodayTodoItem) -> String {
-        guard let detail = item.detail else { return "Senza orario" }
-        if let match = timeComponents(from: detail) {
-            return String(format: "%02d:%02d", match.hour, match.minute)
-        }
-        return "Senza orario"
-    }
-
-    private func timeSortValue(for item: TodayTodoItem) -> Int? {
-        guard let detail = item.detail, let match = timeComponents(from: detail) else { return nil }
-        return match.hour * 60 + match.minute
-    }
-
-    private func timeComponents(from detail: String) -> (hour: Int, minute: Int)? {
-        let pattern = "([0-9]{1,2}):([0-9]{2})"
-        guard let range = detail.range(of: pattern, options: .regularExpression) else { return nil }
-        let substring = String(detail[range])
-        let parts = substring.split(separator: ":").compactMap { Int($0) }
-        guard parts.count == 2 else { return nil }
-        let hour = parts[0]
-        let minute = parts[1]
-        guard (0...23).contains(hour), (0...59).contains(minute) else { return nil }
-        return (hour, minute)
-    }
-
-    private let iconColumnWidth: CGFloat = 24
-
-    private func timelineRow(for item: TodayTodoItem, isFirst: Bool) -> some View {
-        let isCompleted = completedIDs.contains(item.id)
-        return Button {
-            handleTap(for: item)
-        } label: {
-            HStack(alignment: .center, spacing: 10) {
-                Image(systemName: icon(for: item.category))
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(item.category.tint)
-                    .frame(width: iconColumnWidth, alignment: .center)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(naturalText(for: item))
-                        .font(.system(size: 22 ))
-                        .foregroundStyle(.primary)
-                    if let detail = item.detail, !detail.isEmpty {
-                        Text(detail)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Spacer(minLength: 8)
-
-                Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(isCompleted ? item.category.tint : Color.secondary)
-            }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .buttonStyle(.plain)
-        .contentShape(Rectangle())
-        .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
-    }
-
-    private func icon(for category: TodayTodoItem.Category) -> String {
-        switch category {
-        case .therapy: return "pills"
-        case .purchase: return "cart.badge.plus"
-        case .prescription: return "doc.text"
-        case .upcoming: return "calendar"
-        case .pharmacy: return "mappin"
-        }
-    }
-
-    private func todoRow(for item: TodayTodoItem) -> some View {
-        let isCompleted = completedIDs.contains(item.id)
-        return Button {
-            handleTap(for: item)
-        } label: {
-            HStack(alignment: .center, spacing: 10) {
-                Image(systemName: icon(for: item.category))
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(item.category.tint)
-                    .frame(width: 24, alignment: .leading)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(naturalText(for: item))
-                        .font(.system(size: 24, weight: .heavy))
-                        .foregroundStyle(.primary)
-                    if let detail = item.detail, !detail.isEmpty {
-                        Text(detail)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Spacer(minLength: 8)
-
-                Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(isCompleted ? item.category.tint : Color.secondary)
-            }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .buttonStyle(.plain)
-        .contentShape(Rectangle())
-        .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
-    }
-
-    private func toggleCompletion(for item: TodayTodoItem) {
-        if completedIDs.contains(item.id) {
-            completedIDs.remove(item.id)
-        } else {
-            completedIDs.insert(item.id)
-        }
-    }
-
-    private func isUrgent(_ item: TodayTodoItem) -> Bool {
-        guard let id = item.medicineID else { return false }
-        return urgentIDs.contains(id)
-    }
-
-    private func naturalText(for item: TodayTodoItem) -> String {
-        let name = item.title
-        let detail = item.detail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        switch item.category {
-        case .therapy:
-            if detail.isEmpty { return "Assumi \(name)" }
-            if let time = extractTime(from: detail) {
-                return "Assumi \(name) alle \(time)"
-            }
-            return "Assumi \(name) \(detail)"
-
-        case .purchase:
-            if detail.isEmpty { return "Compra \(name)" }
-            return "Compra \(name): \(detail)"
-
-        case .prescription:
-            if detail.isEmpty { return "Chiedi al medico la ricetta di \(name)" }
-            return "Chiedi al medico la ricetta di \(name): \(detail)"
-
-        case .upcoming, .pharmacy:
-            return name
-        }
-    }
-
-    private func handleTap(for item: TodayTodoItem) {
-        switch item.category {
-        case .prescription:
-            if let onPrescriptionTap { onPrescriptionTap(item) } else { toggleCompletion(for: item) }
-        case .purchase:
-            if let onPurchaseTap { onPurchaseTap(item) } else { toggleCompletion(for: item) }
-        default:
-            toggleCompletion(for: item)
-        }
-    }
-}
-
-private extension String {
-    func capitalizingFirstLetter() -> String {
-        guard let first = first else { return self }
-        return String(first).uppercased() + dropFirst()
-    }
-
-    func matchesRegex(_ pattern: String) -> Bool {
-        range(of: pattern, options: .regularExpression) != nil
-    }
-}
-
-private func extractTime(from detail: String) -> String? {
-    let trimmed = detail.trimmingCharacters(in: .whitespacesAndNewlines)
-    let pattern = "^[0-9]{1,2}:[0-9]{2}$"
-    return trimmed.matchesRegex(pattern) ? trimmed : nil
 }

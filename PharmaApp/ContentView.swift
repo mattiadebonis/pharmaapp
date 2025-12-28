@@ -18,8 +18,6 @@ struct ContentView: View {
     // MARK: – Dependencies
     @Environment(\.managedObjectContext) private var moc
     @EnvironmentObject private var appVM: AppViewModel
-    @StateObject private var feedVM = FeedViewModel()
-
     @State private var isNewMedicinePresented = false
     @State private var showMedicineWizard: Bool = false
     @State private var isSettingsPresented: Bool = false
@@ -46,7 +44,7 @@ struct ContentView: View {
             // TAB 1 – Insights
             Tab(value: AppTab.oggi) {
                 NavigationStack {
-                    FeedView(viewModel: feedVM, mode: .insights)
+                    TodayView()
                 }
             } label: {
                 Label {
@@ -59,7 +57,7 @@ struct ContentView: View {
             // TAB 2 – Medicine
             Tab("Medicine", systemImage: "pills", value: AppTab.medicine) {
                 NavigationStack {
-                    FeedView(viewModel: feedVM, mode: .medicines)
+                    CabinetView()
                         .navigationTitle("Armadio dei farmaci")
                         .navigationBarTitleDisplayMode(.large)
                         .toolbar {
