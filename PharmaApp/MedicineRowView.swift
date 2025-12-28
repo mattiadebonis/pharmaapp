@@ -205,12 +205,13 @@ struct MedicineRowView: View {
                 Text(displayName)
                     .font(.title3)
                     .lineLimit(2)
-                if let pkg = primaryPackageLabel {
-                    Text(pkg)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
+                // Temporaneamente nascosto su richiesta: descrizione confezione sotto al titolo
+                // if let pkg = primaryPackageLabel {
+                //     Text(pkg)
+                //         .font(.callout)
+                //         .foregroundStyle(.secondary)
+                //         .lineLimit(2)
+                // }
                 infoPills
                 if hasBadges {
                     badgesRow

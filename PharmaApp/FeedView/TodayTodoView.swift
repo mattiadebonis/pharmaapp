@@ -448,11 +448,11 @@ struct TodayTodoListView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(naturalText(for: item))
-                        .font(.body)
+                        .font(.system(size: 24, weight: .heavy))
                         .foregroundStyle(.primary)
                     if let detail = item.detail, !detail.isEmpty {
                         Text(detail)
-                            .font(.footnote)
+                            .font(.callout)
                             .foregroundStyle(.secondary)
                     }
                 }
