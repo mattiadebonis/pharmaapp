@@ -144,6 +144,10 @@ struct FeedView: View {
                     .buttonStyle(.plain)
                     .padding(.top, group.label == "Rifornimenti" ? 6 : 12)
                     .padding(.bottom, group.label == "Rifornimenti" ? 4 : 0)
+                    Divider()
+                        .padding(.leading, 48)
+                        .padding(.trailing, 16)
+                        .opacity(0.35)
                 }
                 
             }
@@ -298,7 +302,7 @@ struct FeedView: View {
                         .foregroundStyle(.secondary)
                     Text(statusLine)
                         .font(.callout)
-                        .foregroundStyle(statusLine == "Aperta" ? Color.green : .secondary)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -815,6 +819,7 @@ struct FeedView: View {
             let checkColor: Color = isCompleted ? .secondary : .secondary.opacity(0.4)
             let prescriptionMedicine = medicine(for: item)
             let isPrescriptionActionEnabled = item.category == .prescription && prescriptionTaskState(for: prescriptionMedicine, item: item) != .waitingResponse
+            let iconName = actionIcon(for: item)
 
             HStack(alignment: .center, spacing: 12) {
                 if item.category == .prescription {
@@ -822,6 +827,7 @@ struct FeedView: View {
                         item: item,
                         titleColor: titleColor,
                         prescriptionMedicine: prescriptionMedicine,
+                        iconName: iconName,
                         isEnabled: isPrescriptionActionEnabled,
                         onSend: {
                             handlePrescriptionTap(for: item, medicine: prescriptionMedicine, isEnabled: isPrescriptionActionEnabled)
@@ -830,35 +836,41 @@ struct FeedView: View {
                 } else {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Image(systemName: iconName)
+                                .font(.system(size: 18, weight: .regular))
+                                .foregroundStyle(actionLabelColor)
                             Text(actionText)
-                                .font(.system(size: 19, weight: .regular))
+                                .font(.system(size: 16, weight: .regular))
                                 .foregroundStyle(actionLabelColor)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
                                 .layoutPriority(2)
 
                             Text(title)
-                                .font(.system(size: 19, weight: .regular))
+                                .font(.system(size: 16, weight: .regular))
                                 .foregroundStyle(titleColor)
                                 .multilineTextAlignment(.leading)
                                 .lineLimit(nil)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .layoutPriority(1)
                         }
-                        if let subtitle {
-                            Text(subtitle)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.leading)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let subtitle {
+                                Text(subtitle)
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.leading)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            if let auxiliaryLine {
+                                auxiliaryLine
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.leading)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                         }
-                        if let auxiliaryLine {
-                            auxiliaryLine
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.leading)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                        .padding(.leading, 24)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -897,14 +909,36 @@ struct FeedView: View {
     }
 
     private func subtitleLine(for item: TodayTodoItem) -> String? {
-        nil
+        if item.category == .therapy, let med = medicine(for: item) {
+            return personNameForTherapy(med)
+        }
+        return nil
     }
 
     private func auxiliaryLineText(for item: TodayTodoItem) -> Text? {
-        if item.category == .purchase, let med = medicine(for: item), isAwaitingPrescription(med) {
-            let doctor = prescriptionDoctor(for: med)
-            let docName = doctor.map(doctorFullName) ?? "medico"
-            return Text("Richiesta ricetta inviata a \(docName)")
+        if item.category == .purchase, let med = medicine(for: item) {
+            var parts: [String] = []
+            if isAwaitingPrescription(med) {
+                let doctor = prescriptionDoctor(for: med)
+                let docName = doctor.map(doctorFullName) ?? "medico"
+                parts.append("Richiesta ricetta inviata a \(docName)")
+            }
+            if let stock = stockSubtitle(for: med) {
+                parts.append(stock)
+            }
+            guard !parts.isEmpty else { return nil }
+            return Text(parts.joined(separator: "\n"))
+        }
+        return nil
+    }
+
+    private func personNameForTherapy(_ medicine: Medicine) -> String? {
+        if let info = nextDoseTodayInfo(for: medicine), let person = info.personName, !person.isEmpty {
+            return person
+        }
+        if let therapies = medicine.therapies as? Set<Therapy>,
+           let person = therapies.compactMap({ ($0.value(forKey: "person") as? Person).flatMap(displayName(for:)) }).first(where: { !$0.isEmpty }) {
+            return person
         }
         return nil
     }
@@ -916,6 +950,7 @@ struct FeedView: View {
         let isOutOfStock: Bool
         let doctor: DoctorContact?
         let timeLabel: String?
+        let personName: String?
     }
 
     private func blockedTherapyInfo(for item: TodayTodoItem) -> BlockedTherapyInfo? {
@@ -926,12 +961,14 @@ struct FeedView: View {
         guard needsRx || outOfStock else { return nil }
         let contact = prescriptionDoctorContact(for: medicine)
         let timeLabel = timeLabel(for: item)
+        let personName = personNameForTherapy(medicine)
         return BlockedTherapyInfo(
             medicine: medicine,
             needsPrescription: needsRx,
             isOutOfStock: outOfStock,
             doctor: contact,
-            timeLabel: timeLabel
+            timeLabel: timeLabel,
+            personName: personName
         )
     }
 
@@ -944,10 +981,11 @@ struct FeedView: View {
             blockedStepRow(
                 title: "Assumi \(medName)",
                 status: nil,
-                subtitle: info.isOutOfStock ? "Da rifornire" : nil,
+                subtitle: info.personName,
                 subtitleColor: .secondary,
-                subtitleAsBadge: info.isOutOfStock,
-                trailingBadge: nil,
+                subtitleAsBadge: false,
+                iconName: "pills",
+                trailingBadge: info.isOutOfStock ? ("Da rifornire", .orange) : nil,
                 showCircle: true,
                 isDone: isBlockedSubtaskDone(type: "intake", medicine: info.medicine),
                 onCheck: { completeBlockedIntake(for: info) }
@@ -958,7 +996,7 @@ struct FeedView: View {
                     Rectangle()
                         .fill(Color.secondary.opacity(0.25))
                         .frame(width: 1)
-                        .padding(.leading, 28)
+                        .padding(.leading, 34)
                         .padding(.vertical, 10)
 
                     VStack(spacing: 10) {
@@ -966,24 +1004,27 @@ struct FeedView: View {
                             blockedStepRow(
                                 title: awaitingRx ? "In attesa della ricetta da \(doctorName)" : "Chiedi ricetta al medico \(doctorName)",
                                 status: nil,
-                                buttons: [],
+                                iconName: "heart.text.square",
+                                buttons: [
+                                    .init(label: "Invia richiesta", action: { sendPrescriptionRequest(for: info.medicine) })
+                                ],
                                 showCircle: !awaitingRx,
                                 isDone: isBlockedSubtaskDone(type: "prescription", medicine: info.medicine),
                                 onCheck: awaitingRx ? nil : { completeBlockedPrescription(for: info) }
                             )
-                            .padding(.leading, 40)
+                            .padding(.leading, 60)
                         }
 
                         blockedStepRow(
                             title: "Compra \(medName)",
                             status: nil,
-                            subtitle: awaitingRx ? "Richiesta ricetta inviata a \(doctorName)" : nil,
+                            subtitle: purchaseSubtitle(for: info.medicine, awaitingRx: awaitingRx, doctorName: doctorName),
                             subtitleColor: .secondary,
-                            buttons: [],
+                            iconName: "cart",
                             isDone: isBlockedSubtaskDone(type: "purchase", medicine: info.medicine),
                             onCheck: { completeBlockedPurchase(for: info) }
                         )
-                        .padding(.leading, 48)
+                        .padding(.leading, 60)
                     }
                 }
             }
@@ -1002,9 +1043,10 @@ struct FeedView: View {
             blockedStepRow(
                 title: "Compra \(medName)",
                 status: nil,
-                subtitle: awaitingRx ? "Richiesta ricetta inviata a \(doctorName)" : nil,
+                subtitle: purchaseSubtitle(for: medicine, awaitingRx: awaitingRx, doctorName: doctorName),
                 subtitleColor: .secondary,
                 subtitleAsBadge: false,
+                iconName: "cart",
                 showCircle: true,
                 isDone: isCompleted,
                 onCheck: { toggleCompletion(for: item) }
@@ -1014,7 +1056,7 @@ struct FeedView: View {
                 Rectangle()
                     .fill(Color.secondary.opacity(0.25))
                     .frame(width: 1)
-                    .padding(.leading, 28)
+                    .padding(.leading, 36)
                     .padding(.vertical, 8)
 
                 VStack(spacing: 10) {
@@ -1022,12 +1064,15 @@ struct FeedView: View {
                         blockedStepRow(
                             title: "Chiedi ricetta al medico \(doctorName)",
                             status: nil,
-                            buttons: [],
+                            iconName: "heart.text.square",
+                            buttons: [
+                                .init(label: "Invia richiesta", action: { sendPrescriptionRequest(for: medicine) })
+                            ],
                             showCircle: true,
                             isDone: isBlockedSubtaskDone(type: "prescription", medicine: medicine),
                             onCheck: { sendPrescriptionRequest(for: medicine) }
                         )
-                        .padding(.leading, 44)
+                        .padding(.leading, 64)
                     }
                 }
             }
@@ -1100,12 +1145,17 @@ struct FeedView: View {
     }
 
     @ViewBuilder
-    private func blockedStepRow(title: String, status: String? = nil, subtitle: String? = nil, subtitleColor: Color = .secondary, subtitleAsBadge: Bool = false, buttons: [SubtaskButton] = [], trailingBadge: (String, Color)? = nil, showCircle: Bool = true, isDone: Bool = false, onCheck: (() -> Void)? = nil) -> some View {
+    private func blockedStepRow(title: String, status: String? = nil, subtitle: String? = nil, subtitleColor: Color = .secondary, subtitleAsBadge: Bool = false, iconName: String? = nil, buttons: [SubtaskButton] = [], trailingBadge: (String, Color)? = nil, showCircle: Bool = true, isDone: Bool = false, onCheck: (() -> Void)? = nil) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if let iconName {
+                        Image(systemName: iconName)
+                            .font(.system(size: 16, weight: .regular))
+                            .foregroundStyle(.primary)
+                    }
                     Text(title)
-                        .font(.system(size: 19, weight: .regular))
+                        .font(.system(size: 16, weight: .regular))
                         .foregroundStyle(.primary)
                         .lineLimit(nil)
                     if let status {
@@ -1123,42 +1173,62 @@ struct FeedView: View {
                     }
                 }
                 if let subtitle {
-                    if subtitleAsBadge {
-                        Text(subtitle)
-                            .font(.callout)
-                            .foregroundStyle(subtitleColor)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(
-                                Capsule().fill(subtitleColor.opacity(0.15))
-                            )
-                    } else {
-                        Text(subtitle)
-                            .font(.callout)
-                            .foregroundStyle(subtitleColor)
-                            .lineLimit(nil)
+                    HStack(alignment: .top, spacing: 8) {
+                        if iconName != nil {
+                            Spacer()
+                                .frame(width: 24)
+                        }
+                        if subtitleAsBadge {
+                            Text(subtitle)
+                                .font(.callout)
+                                .foregroundStyle(subtitleColor)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule().fill(subtitleColor.opacity(0.15))
+                                )
+                        } else {
+                            Text(subtitle)
+                                .font(.callout)
+                                .foregroundStyle(subtitleColor)
+                                .lineLimit(nil)
+                        }
+                        Spacer(minLength: 0)
                     }
                 }
 
                 if !buttons.isEmpty {
                     HStack(spacing: 8) {
+                        if iconName != nil {
+                            Spacer()
+                                .frame(width: 24)
+                        }
                         ForEach(Array(buttons.enumerated()), id: \.offset) { entry in
                             let button = entry.element
+                            let isSend = button.label.lowercased().contains("invia richiesta")
                             Button(action: button.action) {
-                                Text(button.label)
-                                    .font(.callout)
-                                    .foregroundStyle(.primary)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 5)
-                                    .background(
-                                        Capsule().fill(Color(.systemGray5))
-                                    )
-                                    .overlay(
-                                        Capsule().stroke(Color(.systemGray4), lineWidth: 0.8)
-                                    )
+                                HStack(spacing: 6) {
+                                    if isSend {
+                                        Image(systemName: "paperplane.fill")
+                                    }
+                                    Text(button.label)
+                                }
+                                .font(.callout)
+                                .foregroundStyle(isSend ? Color.accentColor : .primary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(isSend ? Color.accentColor.opacity(0.12) : Color(.systemGray5))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .stroke(isSend ? Color.accentColor.opacity(0.35) : Color(.systemGray4), lineWidth: 1)
+                                )
                             }
                             .buttonStyle(.plain)
                         }
+                        Spacer(minLength: 0)
                     }
                 }
             }
@@ -1166,17 +1236,14 @@ struct FeedView: View {
             Spacer(minLength: 0)
 
             if let badge = trailingBadge {
-                Text(badge.0)
-                    .font(.callout)
-                    .foregroundStyle(badge.1)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule().fill(badge.1.opacity(0.12))
-                    )
-                    .overlay(
-                        Capsule().stroke(badge.1.opacity(0.35), lineWidth: 1)
-                    )
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(badge.1)
+                    Text(badge.0)
+                        .font(.callout)
+                        .foregroundStyle(badge.1)
+                }
             } else if showCircle {
                 let circle = Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 20, weight: .regular))
@@ -1217,14 +1284,20 @@ struct FeedView: View {
         item: TodayTodoItem,
         titleColor: Color,
         prescriptionMedicine: Medicine?,
+        iconName: String,
         isEnabled: Bool,
         onSend: @escaping () -> Void
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(prescriptionMainText(for: item, medicine: prescriptionMedicine))
-                .font(.title3)
-                .foregroundStyle(titleColor)
-                .multilineTextAlignment(.leading)
+            HStack(spacing: 6) {
+                Image(systemName: iconName)
+                    .font(.system(size: 18, weight: .regular))
+                    .foregroundStyle(titleColor)
+                Text(prescriptionMainText(for: item, medicine: prescriptionMedicine))
+                    .font(.title3)
+                    .foregroundStyle(titleColor)
+                    .multilineTextAlignment(.leading)
+            }
             Button {
                 onSend()
             } label: {
@@ -1249,6 +1322,19 @@ struct FeedView: View {
             .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func actionIcon(for item: TodayTodoItem) -> String {
+        switch item.category {
+        case .therapy:
+            return "pills"
+        case .purchase:
+            return "cart"
+        case .prescription:
+            return "heart.text.square"
+        case .upcoming, .pharmacy:
+            return "checkmark.circle"
+        }
     }
 
     private struct TodayDoseInfo {
@@ -1393,7 +1479,6 @@ struct FeedView: View {
     private func displayName(for person: Person) -> String? {
         let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if last.isEmpty, first.lowercased() == "persona" { return nil }
         let parts = [first, last].filter { !$0.isEmpty }
         let joined = parts.joined(separator: " ")
         return joined.isEmpty ? nil : joined
@@ -1514,6 +1599,28 @@ struct FeedView: View {
             return remaining <= 0 ? "Scorte 0" : "Scorte \(remaining) u"
         }
         return nil
+    }
+
+    private func stockSubtitle(for medicine: Medicine) -> String? {
+        if let therapies = medicine.therapies, !therapies.isEmpty {
+            let totalLeft = therapies.reduce(0.0) { $0 + Double($1.leftover()) }
+            return "Scorte: \(Int(max(0, totalLeft))) u"
+        }
+        if let remaining = medicine.remainingUnitsWithoutTherapy() {
+            return "Scorte: \(max(0, remaining)) u"
+        }
+        return nil
+    }
+
+    private func purchaseSubtitle(for medicine: Medicine, awaitingRx: Bool, doctorName: String) -> String? {
+        var parts: [String] = []
+        if awaitingRx {
+            parts.append("Richiesta ricetta inviata a \(doctorName)")
+        }
+        if let stock = stockSubtitle(for: medicine) {
+            parts.append(stock)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }
 
     private func dueLabel(for medicine: Medicine) -> String? {
@@ -2360,10 +2467,16 @@ struct FeedView: View {
 
         private func filtered(items: [MKMapItem]) -> [MKMapItem] {
             let cleaned = items.filter { item in
+                if let category = item.pointOfInterestCategory {
+                    if category != .pharmacy { return false }
+                }
                 let name = (item.name ?? "")
                     .folding(options: .diacriticInsensitive, locale: .current)
                     .lowercased()
-                return !name.contains("erboristeria") && !name.contains("parafarmacia")
+                return !name.contains("erboristeria")
+                && !name.contains("parafarmacia")
+                && !name.contains("vitamine")
+                && !name.contains("vitamin")
             }
             return cleaned
         }
