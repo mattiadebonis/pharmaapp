@@ -996,7 +996,7 @@ struct FeedView: View {
                     Rectangle()
                         .fill(Color.secondary.opacity(0.25))
                         .frame(width: 1)
-                        .padding(.leading, 34)
+                        .padding(.leading, 10)
                         .padding(.vertical, 10)
 
                     VStack(spacing: 10) {
@@ -1005,14 +1005,12 @@ struct FeedView: View {
                                 title: awaitingRx ? "In attesa della ricetta da \(doctorName)" : "Chiedi ricetta al medico \(doctorName)",
                                 status: nil,
                                 iconName: "heart.text.square",
-                                buttons: [
-                                    .init(label: "Invia richiesta", action: { sendPrescriptionRequest(for: info.medicine) })
-                                ],
+                                buttons: prescriptionButtons(for: info.medicine),
                                 showCircle: !awaitingRx,
                                 isDone: isBlockedSubtaskDone(type: "prescription", medicine: info.medicine),
                                 onCheck: awaitingRx ? nil : { completeBlockedPrescription(for: info) }
                             )
-                            .padding(.leading, 60)
+                            .padding(.leading, 28)
                         }
 
                         blockedStepRow(
@@ -1024,7 +1022,7 @@ struct FeedView: View {
                             isDone: isBlockedSubtaskDone(type: "purchase", medicine: info.medicine),
                             onCheck: { completeBlockedPurchase(for: info) }
                         )
-                        .padding(.leading, 60)
+                        .padding(.leading, 28)
                     }
                 }
             }
@@ -1056,7 +1054,7 @@ struct FeedView: View {
                 Rectangle()
                     .fill(Color.secondary.opacity(0.25))
                     .frame(width: 1)
-                    .padding(.leading, 36)
+                    .padding(.leading, 10)
                     .padding(.vertical, 8)
 
                 VStack(spacing: 10) {
@@ -1065,14 +1063,12 @@ struct FeedView: View {
                             title: "Chiedi ricetta al medico \(doctorName)",
                             status: nil,
                             iconName: "heart.text.square",
-                            buttons: [
-                                .init(label: "Invia richiesta", action: { sendPrescriptionRequest(for: medicine) })
-                            ],
+                            buttons: prescriptionButtons(for: medicine),
                             showCircle: true,
                             isDone: isBlockedSubtaskDone(type: "prescription", medicine: medicine),
                             onCheck: { sendPrescriptionRequest(for: medicine) }
                         )
-                        .padding(.leading, 64)
+                        .padding(.leading, 36)
                     }
                 }
             }
@@ -1142,6 +1138,28 @@ struct FeedView: View {
     private struct SubtaskButton {
         let label: String
         let action: () -> Void
+        let icon: String?
+    }
+
+    private func prescriptionButtons(for medicine: Medicine) -> [SubtaskButton] {
+        var buttons: [SubtaskButton] = []
+        if let email = prescriptionDoctorEmail(for: medicine), let url = URL(string: "mailto:\(email)") {
+            buttons.append(
+                SubtaskButton(label: "Email", action: { openURL(url) }, icon: "envelope.fill")
+            )
+        }
+        if let phone = prescriptionDoctorPhoneInternational(for: medicine) {
+            let number = phone.hasPrefix("+") ? phone : "+\(phone)"
+            if let smsURL = URL(string: "sms:\(number)") {
+                buttons.append(
+                    SubtaskButton(label: "Messaggio", action: { openURL(smsURL) }, icon: "message.fill")
+                )
+            }
+        }
+        if buttons.isEmpty {
+            buttons.append(SubtaskButton(label: "Invia richiesta", action: { sendPrescriptionRequest(for: medicine) }, icon: "paperplane.fill"))
+        }
+        return buttons
     }
 
     @ViewBuilder
@@ -1198,33 +1216,33 @@ struct FeedView: View {
                 }
 
                 if !buttons.isEmpty {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 10) {
                         if iconName != nil {
                             Spacer()
                                 .frame(width: 24)
                         }
                         ForEach(Array(buttons.enumerated()), id: \.offset) { entry in
                             let button = entry.element
-                            let isSend = button.label.lowercased().contains("invia richiesta")
                             Button(action: button.action) {
-                                HStack(spacing: 6) {
-                                    if isSend {
-                                        Image(systemName: "paperplane.fill")
-                                    }
+                                if let icon = button.icon {
+                                    Image(systemName: icon)
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundStyle(Color.accentColor)
+                                } else {
                                     Text(button.label)
+                                        .font(.callout)
+                                        .foregroundStyle(Color.primary)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .fill(Color(.systemGray5))
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .stroke(Color(.systemGray4), lineWidth: 1)
+                                        )
                                 }
-                                .font(.callout)
-                                .foregroundStyle(isSend ? Color.accentColor : .primary)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(isSend ? Color.accentColor.opacity(0.12) : Color(.systemGray5))
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .stroke(isSend ? Color.accentColor.opacity(0.35) : Color(.systemGray4), lineWidth: 1)
-                                )
                             }
                             .buttonStyle(.plain)
                         }
@@ -1442,8 +1460,8 @@ struct FeedView: View {
                 return recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: endOfDay, doses: therapy.doses as NSSet?)
             }
             let pending = Array(timesToday.dropFirst(min(takenCount, timesToday.count)))
-            if let nextToday = pending.first(where: { $0 > now }) {
-                return nextToday
+            if let firstPending = pending.first {
+                return firstPending
             }
         }
 

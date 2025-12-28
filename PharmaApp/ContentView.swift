@@ -11,6 +11,7 @@
 
 import SwiftUI
 import CoreData
+import UIKit
 // import Vision spostato nella schermata di creazione
 
 struct ContentView: View {
@@ -98,9 +99,8 @@ struct ContentView: View {
         return "calendar"
     }
 
-    private var todayDayNumber: String {
-        let day = Calendar.current.component(.day, from: Date())
-        return "\(day)"
+    private var todayDayNumber: Int {
+        Calendar.current.component(.day, from: Date())
     }
 }
 
@@ -113,15 +113,21 @@ struct ContentView: View {
 
 // Icona calendario con numero del giorno
 struct TodayCalendarIcon: View {
-    let day: String
+    let day: Int
 
     var body: some View {
-        ZStack(alignment: .center) {
-            Image(systemName: "calendar")
+        let symbolName = "\(day).calendar"
+        if let uiImage = UIImage(systemName: symbolName) {
+            Image(uiImage: uiImage)
                 .font(.system(size: 18, weight: .regular))
-            Text(day)
-                .font(.system(size: 11, weight: .semibold))
-                .offset(y: 2)
+        } else {
+            ZStack(alignment: .center) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 18, weight: .regular))
+                Text("\(day)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .offset(y: 2)
+            }
         }
     }
 }

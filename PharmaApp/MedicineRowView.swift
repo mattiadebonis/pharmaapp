@@ -189,6 +189,13 @@ struct MedicineRowView: View {
         guard therapies.isEmpty else { return nil }
         return medicine.remainingUnitsWithoutTherapy()
     }
+    private var primaryPackageLabel: String? {
+        guard let pkg = primaryPackage else { return nil }
+        if let desc = packageDescriptionLabel(pkg) {
+            return desc
+        }
+        return packageQuantityLabel(pkg)
+    }
     // MARK: - Body
     
     var body: some View {
@@ -196,8 +203,14 @@ struct MedicineRowView: View {
             leadingIcon
             VStack(alignment: .leading, spacing: 8) {
                 Text(displayName)
-                    .font(.title3.weight(.semibold))
+                    .font(.title3)
                     .lineLimit(2)
+                if let pkg = primaryPackageLabel {
+                    Text(pkg)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
                 infoPills
                 if hasBadges {
                     badgesRow
@@ -220,13 +233,24 @@ struct MedicineRowView: View {
     private var displayName: String {
         let trimmed = medicine.nome.trimmingCharacters(in: .whitespacesAndNewlines)
         let base = trimmed.isEmpty ? "Medicinale" : trimmed
+        if let dosage = primaryPackageDosage {
+            return "\(camelCase(base)) • \(dosage)"
+        }
         return camelCase(base)
     }
 
-    
     private var firstPackageInfo: String? {
-        guard let pkg = medicine.packages.first else { return nil }
-        return packageLabel(pkg)
+        guard let pkg = primaryPackage else { return nil }
+        return packageDescriptionLabel(pkg)
+    }
+
+    private var primaryPackage: Package? {
+        medicine.packages.sorted { $0.numero > $1.numero }.first
+    }
+
+    private var primaryPackageDosage: String? {
+        guard let pkg = primaryPackage else { return nil }
+        return packageDosageLabel(pkg)
     }
 
     private enum StockLevel {
@@ -234,16 +258,10 @@ struct MedicineRowView: View {
     }
 
     private var leadingIconName: String {
-        if let warning = stocksWarning {
-            return warning.icon
-        }
-        return "pills.fill"
+        stockLevel == .empty ? "cross.vial" : "cross.vial.fill"
     }
 
     private var leadingIconColor: Color {
-        if let warning = stocksWarning {
-            return warning.color
-        }
         switch stockLevel {
         case .empty:
             return .red
@@ -284,31 +302,67 @@ struct MedicineRowView: View {
 
     private var leadingIcon: some View {
         Image(systemName: leadingIconName)
-            .font(.system(size: 20, weight: .semibold))
+            .font(.system(size: 18, weight: .semibold))
             .foregroundStyle(leadingIconColor)
             .frame(width: 28, height: 28, alignment: .center)
     }
     
-    private func packageLabel(_ pkg: Package) -> String? {
+    private func packageQuantityLabel(_ pkg: Package) -> String? {
         let typeRaw = pkg.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
-        let quantity: String? = {
-            if pkg.numero > 0 {
-                let unitLabel = typeRaw.isEmpty ? "unità" : typeRaw.lowercased()
-                return "\(pkg.numero) \(unitLabel)"
-            }
-            return typeRaw.isEmpty ? nil : typeRaw.capitalized
-        }()
-        let dosage: String? = {
-            guard pkg.valore > 0 else { return nil }
-            let unit = pkg.unita.trimmingCharacters(in: .whitespacesAndNewlines)
-            return unit.isEmpty ? "\(pkg.valore)" : "\(pkg.valore) \(unit)"
-        }()
-        if let quantity, let dosage {
-            return "\(quantity) da \(dosage)"
+        if pkg.numero > 0 {
+            let unitLabel = typeRaw.isEmpty ? "unità" : typeRaw.lowercased()
+            return "\(pkg.numero) \(unitLabel)"
         }
-        if let quantity { return quantity }
-        if let dosage { return dosage }
-        return nil
+        return typeRaw.isEmpty ? nil : typeRaw.capitalized
+    }
+
+    private func packageDosageLabel(_ pkg: Package) -> String? {
+        guard pkg.valore > 0 else { return nil }
+        let unit = pkg.unita.trimmingCharacters(in: .whitespacesAndNewlines)
+        return unit.isEmpty ? "\(pkg.valore)" : "\(pkg.valore) \(unit)"
+    }
+
+    private func packageDescriptionLabel(_ pkg: Package) -> String? {
+        let qty = pkg.numero > 0 ? "\(pkg.numero)" : nil
+        let formRaw = pkg.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tokens = formRaw.split(separator: "-").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+
+        func isDosage(_ token: String) -> Bool {
+            let lower = token.lowercased()
+            if lower.range(of: "\\d", options: .regularExpression) == nil { return false }
+            return lower.contains("mg") || lower.contains("mcg") || lower.contains("g") || lower.contains("ml")
+        }
+
+        func isRouteToken(_ token: String) -> Bool {
+            let lower = token.lowercased()
+            return lower.contains("uso") || lower.contains("orale") || lower.contains("nasale") || lower.contains("cutaneo") || lower.contains("sublinguale")
+        }
+
+        func isContainer(_ token: String) -> Bool {
+            let lower = token.lowercased()
+            return lower.contains("blister") || lower.contains("flacone") || lower.contains("flaconcino") || lower.contains("siringa")
+        }
+
+        let form = tokens.first(where: { !isDosage($0) && !isRouteToken($0) && !isContainer($0) })?.lowercased()
+            ?? (formRaw.isEmpty ? nil : formRaw.lowercased())
+        let route = (tokens.first(where: isRouteToken) ?? usageRoute(for: form))?.lowercased()
+
+        var parts: [String] = []
+        if let form {
+            parts.append(form.lowercased())
+        }
+
+        if let route = route {
+            parts.append(route)
+        }
+
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+
+    private func usageRoute(for form: String?) -> String? {
+        // Non abbiamo un campo dedicato: usiamo un testo generico, ma solo se la forma è nota
+        guard form != nil else { return nil }
+        return "per uso orale"
     }
     
     private func camelCase(_ text: String) -> String {
@@ -527,13 +581,13 @@ struct MedicineRowView: View {
         .filter { !$0.isEmpty }
 
         for candidate in candidates {
-            if let container = extractPackageContainer(from: candidate) {
-                return formattedStockTypeLabel(container, count: stockLabelCount)
+            if let unit = extractPackageUnit(from: candidate) {
+                return formattedStockTypeLabel(unit, count: stockLabelCount)
             }
         }
         for candidate in candidates {
-            if let unit = extractPackageUnit(from: candidate) {
-                return formattedStockTypeLabel(unit, count: stockLabelCount)
+            if let container = extractPackageContainer(from: candidate) {
+                return formattedStockTypeLabel(container, count: stockLabelCount)
             }
         }
         return nil
@@ -694,11 +748,6 @@ struct MedicineRowView: View {
             return token
         }
         return nil
-    }
-    
-    private var primaryPackage: Package? {
-        guard !medicine.packages.isEmpty else { return nil }
-        return medicine.packages.sorted { $0.numero > $1.numero }.first
     }
     
     private var stockDisplay: StockDisplay {
