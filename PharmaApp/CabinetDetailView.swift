@@ -33,15 +33,6 @@ struct CabinetDetailView: View {
         .scrollContentBackground(.hidden)
         .navigationTitle(cabinet.name)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    dismiss()
-                } label: {
-                    Label("Indietro", systemImage: "chevron.left")
-                }
-            }
-        }
         .sheet(isPresented: Binding(
             get: { selectedMedicine != nil },
             set: { newValue in if !newValue { selectedMedicine = nil } }

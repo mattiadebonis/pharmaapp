@@ -65,8 +65,8 @@ struct MedicineDetailView: View {
     var body: some View {
         NavigationStack {
             Form {
-                therapiesInlineSection
                 stockSection
+                therapiesInlineSection
             }
             .scrollContentBackground(.hidden)
             .background(Color(.systemGroupedBackground))

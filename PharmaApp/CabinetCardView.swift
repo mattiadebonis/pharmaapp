@@ -15,7 +15,7 @@ struct CabinetCardView: View {
             leadingIcon
             VStack(alignment: .leading, spacing: 6) {
                 Text(cabinet.name)
-                    .font(.headline.weight(.semibold))
+                    .font(.title3.weight(.semibold))
                     .lineLimit(2)
                 infoRow(for: stockLine)
                 infoRow(for: therapyLine)
@@ -29,47 +29,30 @@ struct CabinetCardView: View {
     }
     
     private var leadingIcon: some View {
-        ZStack(alignment: .topTrailing) {
-            Image(systemName: "folder.fill")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(baseAccentColor)
-                .frame(width: 28, height: 28, alignment: .topLeading)
-            
-            if let badge = urgencyBadge {
-                Circle()
-                    .fill(badge.color)
-                    .frame(width: 14, height: 14)
-                    .overlay {
-                        Image(systemName: badge.icon)
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                    .offset(x: 8, y: -6)
-            }
-        }
+        Image(systemName: "cross.case")
+            .font(.system(size: 20, weight: .semibold))
+            .foregroundStyle(baseAccentColor)
+            .frame(width: 28, height: 28, alignment: .topLeading)
     }
     
     // MARK: - Info rows
     private struct InfoLine {
-        let icon: String
+        let icon: String?
         let text: String
-        let color: Color
-    }
-    
-    private struct UrgencyBadge {
-        let icon: String
-        let color: Color
+        let color: Color?
     }
     
     private func infoRow(for line: InfoLine) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: line.icon)
-                .foregroundStyle(line.color)
+        HStack(spacing: 8) {
+            if let icon = line.icon {
+                Image(systemName: icon)
+                    .foregroundStyle(line.color ?? .secondary)
+            }
             Text(line.text)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(line.color ?? .secondary)
+                .lineLimit(2)
         }
-        .font(.subheadline)
-        .lineLimit(2)
+        .font(.callout)
     }
     
     // MARK: - Stock summary
@@ -86,47 +69,47 @@ struct CabinetCardView: View {
     
     private var stockSummary: InfoLine {
         let evaluations = medicines.compactMap { evaluateStock(for: $0) }
-        let emptyCount = evaluations.filter { $0.level == .empty }.count
-        let lowCount = evaluations.filter { $0.level == .low }.count
-        let minCoverage = evaluations.compactMap { $0.coverageDays }.min()
-        
-        if emptyCount > 0 {
-            let suffix = lowCount > 0 ? " · \(lowCount) sotto soglia" : ""
-            return InfoLine(icon: "exclamationmark.triangle.fill", text: "\(emptyCount) esauriti\(suffix)", color: .red)
+        if let worst = lowestCoverageMedicine() {
+            let daysText = worst.days == 1 ? "1 giorno" : "\(worst.days) giorni"
+            let prefix: String
+            switch worst.evaluation.level {
+            case .empty:
+                prefix = "Scorte esaurite"
+            case .low:
+                prefix = "Scorte basse"
+            case .ok:
+                prefix = "Scorte minime"
+            }
+            return InfoLine(icon: nil, text: "\(prefix): \(daysText)", color: .secondary)
         }
-        if lowCount > 0 {
-            return InfoLine(icon: "hourglass", text: "\(lowCount) sotto soglia", color: .orange)
+
+        if let empty = firstEmptyMedicine {
+            return InfoLine(icon: nil, text: "Scorte esaurite", color: .secondary)
         }
-        if let minCoverage {
-            return InfoLine(icon: "shippingbox.fill", text: "Scorte ok · riordino ~\(minCoverage) gg", color: .teal)
+        if let low = firstLowMedicine {
+            let eval = evaluateStock(for: low)
+            let days = eval?.coverageDays ?? 0
+            let daysText = days == 1 ? "1 giorno" : "\(max(0, days)) giorni"
+            return InfoLine(icon: nil, text: "Scorte basse: \(daysText)", color: .secondary)
         }
         if medicines.isEmpty {
-            return InfoLine(icon: "shippingbox.fill", text: "Nessun medicinale nel cassetto", color: .secondary)
+            return InfoLine(icon: nil, text: "Nessun medicinale nel cassetto", color: .secondary)
         }
-        return InfoLine(icon: "shippingbox.fill", text: "Scorte ok", color: .green)
-    }
-    
-    private var urgencyBadge: UrgencyBadge? {
-        let evaluations = medicines.compactMap { evaluateStock(for: $0) }
-        let emptyCount = evaluations.filter { $0.level == .empty }.count
-        let lowCount = evaluations.filter { $0.level == .low }.count
-        if overdueInfo.count > 0 || emptyCount > 0 {
-            return UrgencyBadge(icon: "exclamationmark", color: .red)
-        }
-        if lowCount > 0 || todaySchedule.pendingToday > 0 {
-            return UrgencyBadge(icon: "exclamationmark", color: .orange)
-        }
-        if nextDoseDate != nil {
-            return UrgencyBadge(icon: "clock", color: .blue)
-        }
-        return UrgencyBadge(icon: "checkmark", color: .green)
+        return InfoLine(icon: nil, text: "Scorte ok", color: .secondary)
     }
     
     private var baseAccentColor: Color {
-        if urgencyBadge?.color == .red { return .red }
-        if urgencyBadge?.color == .orange { return .orange }
-        if urgencyBadge?.color == .blue { return .blue }
-        return .teal
+        if medicines.isEmpty {
+            return .gray
+        }
+        switch stockState {
+        case .empty:
+            return .red
+        case .low:
+            return .orange
+        case .ok:
+            return therapiesInCabinet.isEmpty ? .green : .blue
+        }
     }
     
     private func evaluateStock(for medicine: Medicine) -> StockEvaluation? {
@@ -160,35 +143,25 @@ struct CabinetCardView: View {
         }
         return nil
     }
+
+    private var stockState: StockLevel {
+        let evaluations = medicines.compactMap { evaluateStock(for: $0) }
+        if evaluations.contains(where: { $0.level == .empty }) {
+            return .empty
+        }
+        if evaluations.contains(where: { $0.level == .low }) {
+            return .low
+        }
+        return .ok
+    }
     
     // MARK: - Therapy summary
     private var therapySummary: InfoLine {
-        let overdue = overdueInfo
-        if overdue.count > 0 {
-            let timeText = overdue.earliest.map { " · \(timeString($0))" } ?? ""
-            return InfoLine(icon: "bell.badge.fill", text: "\(overdue.count) dose saltate\(timeText)", color: .red)
+        let activeTherapies = therapiesInCabinet.count
+        if activeTherapies == 0 {
+            return InfoLine(icon: nil, text: "Nessuna terapia attiva", color: .secondary)
         }
-        
-        let today = todaySchedule
-        if today.pendingToday > 0, let firstPending = today.firstPending {
-            return InfoLine(icon: "clock.badge.exclamationmark", text: "Oggi: \(today.pendingToday) dosi · prima \(timeString(firstPending))", color: .blue)
-        }
-        
-        if let next = nextDoseDate {
-            let cal = Calendar.current
-            if cal.isDateInToday(next) {
-                return InfoLine(icon: "clock", text: "Prossima oggi \(timeString(next))", color: .blue)
-            } else if cal.isDateInTomorrow(next) {
-                return InfoLine(icon: "clock", text: "Prossima domani \(timeString(next))", color: .teal)
-            } else {
-                return InfoLine(icon: "clock", text: "Prossima \(dayString(next))", color: .teal)
-            }
-        }
-        
-        if medicinesWithTherapy.isEmpty {
-            return InfoLine(icon: "staroflife", text: "Nessuna terapia in corso", color: .secondary)
-        }
-        return InfoLine(icon: "clock", text: "Nessuna dose imminente", color: .secondary)
+        return InfoLine(icon: nil, text: "\(activeTherapies) terapie attive", color: .secondary)
     }
     
     private var overdueInfo: (count: Int, earliest: Date?) {
@@ -249,6 +222,34 @@ struct CabinetCardView: View {
     
     private var therapiesInCabinet: [Therapy] {
         medicinesWithTherapy.flatMap { Array($0.therapies ?? []) }
+    }
+
+    private var firstEmptyMedicine: Medicine? {
+        medicines.first { evaluateStock(for: $0)?.level == .empty }
+    }
+
+    private var firstLowMedicine: Medicine? {
+        medicines.first { evaluateStock(for: $0)?.level == .low }
+    }
+
+    private func lowestCoverageMedicine() -> (medicine: Medicine, evaluation: StockEvaluation, days: Int)? {
+        var result: (Medicine, StockEvaluation, Int)?
+        for med in medicines {
+            guard let eval = evaluateStock(for: med), let days = eval.coverageDays else { continue }
+            if let current = result {
+                if days < current.2 {
+                    result = (med, eval, days)
+                }
+            } else {
+                result = (med, eval, days)
+            }
+        }
+        return result
+    }
+
+    private func formattedName(_ medicine: Medicine) -> String {
+        let raw = medicine.nome.trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? "Medicinale" : raw
     }
     
     private func scheduleToday(for medicine: Medicine) -> [Date] {

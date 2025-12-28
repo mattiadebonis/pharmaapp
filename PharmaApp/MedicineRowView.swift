@@ -196,7 +196,7 @@ struct MedicineRowView: View {
             leadingIcon
             VStack(alignment: .leading, spacing: 8) {
                 Text(displayName)
-                    .font(.headline.weight(.semibold))
+                    .font(.title3.weight(.semibold))
                     .lineLimit(2)
                 infoPills
                 if hasBadges {
@@ -222,10 +222,71 @@ struct MedicineRowView: View {
         let base = trimmed.isEmpty ? "Medicinale" : trimmed
         return camelCase(base)
     }
+
     
     private var firstPackageInfo: String? {
         guard let pkg = medicine.packages.first else { return nil }
         return packageLabel(pkg)
+    }
+
+    private enum StockLevel {
+        case empty, low, ok
+    }
+
+    private var leadingIconName: String {
+        if let warning = stocksWarning {
+            return warning.icon
+        }
+        return "pills.fill"
+    }
+
+    private var leadingIconColor: Color {
+        if let warning = stocksWarning {
+            return warning.color
+        }
+        switch stockLevel {
+        case .empty:
+            return .red
+        case .low:
+            return .orange
+        case .ok:
+            return therapies.isEmpty ? .green : .blue
+        }
+    }
+
+    private var stockLevel: StockLevel {
+        if let warning = stocksWarning {
+            // Map warnings back to severity.
+            if warning.color == .red {
+                return .empty
+            }
+            if warning.color == .orange {
+                return .low
+            }
+        }
+
+        if !therapies.isEmpty {
+            if let days = autonomyDays {
+                if days <= 0 { return .empty }
+                if days < coverageThreshold { return .low }
+            }
+            return .ok
+        }
+
+        if let rem = remainingUnits {
+            if rem <= 0 { return .empty }
+            if rem < 5 { return .low }
+            return .ok
+        }
+
+        return .ok
+    }
+
+    private var leadingIcon: some View {
+        Image(systemName: leadingIconName)
+            .font(.system(size: 20, weight: .semibold))
+            .foregroundStyle(leadingIconColor)
+            .frame(width: 28, height: 28, alignment: .center)
     }
     
     private func packageLabel(_ pkg: Package) -> String? {
@@ -259,36 +320,6 @@ struct MedicineRowView: View {
                 return String(first).uppercased() + part.dropFirst()
             }
             .joined(separator: " ")
-    }
-    
-    private var leadingIcon: some View {
-        Image(systemName: leadingIconSymbol)
-            .font(.system(size: 22, weight: .semibold))
-            .foregroundStyle(leadingAccentColor)
-            .frame(width: 28, height: 28, alignment: .topLeading)
-    }
-    
-    private var leadingIconSymbol: String {
-        if stocksWarning != nil {
-            return "exclamationmark.triangle.fill"
-        }
-        if hasTherapiesFlag {
-            return "pills.fill"
-        }
-        return "cross.case.fill"
-    }
-    
-    private var leadingAccentColor: Color {
-        if let warningColor = stocksWarning?.color {
-            return warningColor
-        }
-        if earliestOverdueDoseTime != nil {
-            return .orange
-        }
-        if isDoseToday {
-            return .blue
-        }
-        return hasTherapiesFlag ? .teal : .green
     }
     
     private func nextOccurrence(for therapy: Therapy) -> Date? {
@@ -350,6 +381,9 @@ struct MedicineRowView: View {
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
     
+    private var therapyChipIconColor: Color { .indigo }
+    private var stockChipIconColor: Color { .cyan }
+
     private struct InfoChip: Identifiable {
         let id = UUID()
         let icon: String?
@@ -357,21 +391,18 @@ struct MedicineRowView: View {
         let color: Color
     }
 
-    private var therapyChipIconColor: Color { .indigo }
-    private var stockChipIconColor: Color { .cyan }
-    
     private var infoPills: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(therapyInfoChips) { chip in
-                    pill(for: chip)
+        let therapyChips = therapyInfoChips
+        return VStack(alignment: .leading, spacing: 6) {
+            if !therapyChips.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(therapyChips) { chip in
+                        pill(for: chip)
+                    }
                 }
             }
             HStack(spacing: 8) {
                 pill(for: stockChip)
-                /* if let packageChip = packageChip {
-                    pill(for: packageChip)
-                } */
             }
         }
     }
@@ -386,63 +417,36 @@ struct MedicineRowView: View {
             Text(data.text)
                 .foregroundStyle(.secondary)
         }
-        .font(.subheadline)
+        .font(.callout)
         .multilineTextAlignment(.leading)
         .fixedSize(horizontal: false, vertical: true)
     }
 
     private var therapyInfoChips: [InfoChip] {
-        let doseCount = totalDoseCount
-        guard doseCount > 0 else {
-            let text = medicine.obbligo_ricetta ? "Uso al bisogno con prescrizione medica" : "Uso al bisogno"
-            return [InfoChip(icon: "stethoscope", text: text, color: therapyChipIconColor)]
-        }
-        let label = doseCount == 1 ? "Dose impostata" : "Dosi impostate"
-        let text = "\(label): \(doseCount)"
-        return [InfoChip(icon: "stethoscope", text: text, color: therapyChipIconColor)]
+        guard !therapies.isEmpty else { return [] }
+        let therapyCount = therapies.count
+        let text = therapyCount == 1 ? "1 terapia" : "\(therapyCount) terapie"
+        return [InfoChip(icon: nil, text: text, color: therapyChipIconColor)]
     }
 
     private var stockChip: InfoChip {
-        let display = stockDisplay
         let text: String = {
             if let days = autonomyDays {
                 let clamped = max(0, days)
-                let daysText = clamped == 1 ? "Scorte per 1 giorno" : "Scorte per \(clamped) giorni"
-                let status: String
-                if clamped == 0 {
-                    status = "Esaurite"
-                } else if clamped < coverageThreshold {
-                    status = "Basse"
-                } else {
-                    status = "Ok"
+                let suffix = clamped == 1 ? "per 1 giorno" : "per \(clamped) giorni"
+                if let label = stockTypeLabel {
+                    return "\(label) \(suffix)"
                 }
-                return "\(daysText) · \(status)"
+                return "Scorte \(suffix)"
             }
             if let units = remainingUnits {
                 let clamped = max(0, units)
-                let unitsText = "Scorte: \(clamped) unità"
-                let status: String
-                if clamped == 0 {
-                    status = "Esaurite"
-                } else if clamped < 5 {
-                    status = "Basse"
-                } else {
-                    status = "Ok"
-                }
-                return "\(unitsText) · \(status)"
+                return "\(clamped) \(stockUnitLabel)"
             }
+            let display = stockDisplay
             return "\(display.primary) · \(display.secondary)"
         }()
-        return InfoChip(
-            icon: "square.stack.3d.up.fill",
-            text: text,
-            color: stockChipIconColor
-        )
-    }
-
-    private var packageChip: InfoChip? {
-        guard let descriptor = packageDescriptor else { return nil }
-        return InfoChip(icon: nil, text: descriptor, color: .secondary)
+        return InfoChip(icon: nil, text: text, color: stockChipIconColor)
     }
     
     private var badgesRow: some View {
@@ -471,7 +475,7 @@ struct MedicineRowView: View {
             Text(data.text)
                 .foregroundStyle(.secondary)
         }
-        .font(.footnote)
+        .font(.callout)
     }
     
     private var therapyBadgeData: BadgeData? {
@@ -509,6 +513,186 @@ struct MedicineRowView: View {
         if !type.isEmpty { return type.capitalized }
         let unit = pkg.unita.trimmingCharacters(in: .whitespacesAndNewlines)
         if !unit.isEmpty { return unit.capitalized }
+        return nil
+    }
+
+    private var stockTypeLabel: String? {
+        guard let pkg = primaryPackage else { return nil }
+        let candidates = [
+            pkg.tipologia,
+            pkg.unita,
+            packageDescriptor
+        ]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+
+        for candidate in candidates {
+            if let container = extractPackageContainer(from: candidate) {
+                return formattedStockTypeLabel(container, count: stockLabelCount)
+            }
+        }
+        for candidate in candidates {
+            if let unit = extractPackageUnit(from: candidate) {
+                return formattedStockTypeLabel(unit, count: stockLabelCount)
+            }
+        }
+        return nil
+    }
+
+    private var stockUnitLabel: String {
+        guard let pkg = primaryPackage else { return "unità" }
+        let candidates = [
+            pkg.tipologia,
+            pkg.unita,
+            packageDescriptor
+        ]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+
+        for candidate in candidates {
+            if let token = extractPackageUnit(from: candidate) {
+                return token
+            }
+        }
+        if let fallback = candidates.first {
+            return fallback.lowercased()
+        }
+        return "unità"
+    }
+
+    private var stockLabelCount: Int {
+        if let units = remainingUnits {
+            return max(0, units)
+        }
+        return max(0, medicine.totalLeftover)
+    }
+
+    private func formattedStockTypeLabel(_ token: String, count: Int) -> String {
+        let normalized = token.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let inflected = inflectedPackageToken(normalized, count: count)
+        return camelCase(inflected)
+    }
+
+    private func inflectedPackageToken(_ token: String, count: Int) -> String {
+        let singularMap: [String: String] = [
+            "compressa": "compressa",
+            "compresse": "compressa",
+            "capsula": "capsula",
+            "capsule": "capsula",
+            "fiala": "fiala",
+            "fiale": "fiala",
+            "ampolla": "ampolla",
+            "ampolle": "ampolla",
+            "siringa": "siringa",
+            "siringhe": "siringa",
+            "bustina": "bustina",
+            "bustine": "bustina",
+            "flacone": "flacone",
+            "flaconi": "flacone",
+            "flaconcino": "flaconcino",
+            "flaconcini": "flaconcino",
+            "cartuccia": "cartuccia",
+            "cartucce": "cartuccia",
+            "tubo": "tubo",
+            "tubi": "tubo",
+            "cerotto": "cerotto",
+            "cerotti": "cerotto",
+            "goccia": "goccia",
+            "gocce": "goccia",
+            "pezzo": "pezzo",
+            "pezzi": "pezzo",
+            "blister": "blister",
+            "spray": "spray",
+            "sciroppo": "sciroppo",
+            "unità": "unità",
+            "pz": "pz",
+            "stick": "stick",
+            "sachet": "sachet"
+        ]
+        let pluralMap: [String: String] = [
+            "compressa": "compresse",
+            "compresse": "compresse",
+            "capsula": "capsule",
+            "capsule": "capsule",
+            "fiala": "fiale",
+            "fiale": "fiale",
+            "ampolla": "ampolle",
+            "ampolle": "ampolle",
+            "siringa": "siringhe",
+            "siringhe": "siringhe",
+            "bustina": "bustine",
+            "bustine": "bustine",
+            "flacone": "flaconi",
+            "flaconi": "flaconi",
+            "flaconcino": "flaconcini",
+            "flaconcini": "flaconcini",
+            "cartuccia": "cartucce",
+            "cartucce": "cartucce",
+            "tubo": "tubi",
+            "tubi": "tubi",
+            "cerotto": "cerotti",
+            "cerotti": "cerotti",
+            "goccia": "gocce",
+            "gocce": "gocce",
+            "pezzo": "pezzi",
+            "pezzi": "pezzi",
+            "blister": "blister",
+            "spray": "spray",
+            "sciroppo": "sciroppo",
+            "unità": "unità",
+            "pz": "pz",
+            "stick": "stick",
+            "sachet": "sachet"
+        ]
+        if count == 1 {
+            return singularMap[token] ?? token
+        }
+        return pluralMap[token] ?? token
+    }
+
+    private func extractPackageUnit(from text: String) -> String? {
+        let lowered = text.lowercased()
+        let tokens = [
+            "compresse", "compressa",
+            "capsule", "capsula",
+            "fiale", "fiala",
+            "sciroppo",
+            "spray",
+            "gocce", "goccia",
+            "cerotti", "cerotto",
+            "bustine", "bustina",
+            "siringhe", "siringa",
+            "flaconi", "flacone",
+            "ampolle", "ampolla",
+            "cartucce", "cartuccia",
+            "pz", "pezzi",
+            "unità"
+        ]
+        for token in tokens where lowered.contains(token) {
+            return token
+        }
+        return nil
+    }
+
+    private func extractPackageContainer(from text: String) -> String? {
+        let lowered = text.lowercased()
+        let tokens = [
+            "blister",
+            "cartuccia", "cartucce",
+            "flacone", "flaconi",
+            "flaconcino", "flaconcini",
+            "boccetta", "boccette",
+            "fiala", "fiale",
+            "ampolla", "ampolle",
+            "siringa", "siringhe",
+            "bustina", "bustine",
+            "tubo", "tubi",
+            "stick",
+            "sachet"
+        ]
+        for token in tokens where lowered.contains(token) {
+            return token
+        }
         return nil
     }
     

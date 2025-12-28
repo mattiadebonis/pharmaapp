@@ -29,7 +29,7 @@ struct StockRowView: View {
                 }){
                     Image(systemName: "circle")
                 }
-                Image(systemName: "cross.vial").foregroundColor(stockRowViewModel.isAvailable ? .green : .red)
+                Image(systemName: "cross.vial.fill").foregroundColor(stockRowViewModel.isAvailable ? .green : .red)
                 VStack(alignment: .leading) {
                     Text(stockRowViewModel.medicine.nome)
 

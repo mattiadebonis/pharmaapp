@@ -37,9 +37,10 @@ class FeedViewModel: ObservableObject {
         clearSelection()
     }
 
-    func requestPrescription(for medicine: Medicine) {
-        guard let package = getPackage(for: medicine) else { return }
-        addNewPrescriptionRequest(for: medicine, for: package)
+    @discardableResult
+    func requestPrescription(for medicine: Medicine) -> Log? {
+        guard let package = getPackage(for: medicine) else { return nil }
+        return addNewPrescriptionRequest(for: medicine, for: package)
     }
 
     func markAsPurchased() {
@@ -49,14 +50,16 @@ class FeedViewModel: ObservableObject {
         clearSelection()
     }
 
-    func markAsPurchased(for medicine: Medicine) {
-        guard let package = getPackage(for: medicine) else { return }
-        addPurchase(for: medicine, for: package)
+    @discardableResult
+    func markAsPurchased(for medicine: Medicine) -> Log? {
+        guard let package = getPackage(for: medicine) else { return nil }
+        return addPurchase(for: medicine, for: package)
     }
 
-    func markPrescriptionReceived(for medicine: Medicine) {
-        guard let package = getPackage(for: medicine) else { return }
-        addPrescriptionReceived(for: medicine, for: package)
+    @discardableResult
+    func markPrescriptionReceived(for medicine: Medicine) -> Log? {
+        guard let package = getPackage(for: medicine) else { return nil }
+        return addPrescriptionReceived(for: medicine, for: package)
     }
 
     func markAsTaken() {
@@ -66,7 +69,8 @@ class FeedViewModel: ObservableObject {
         clearSelection()
     }
 
-    func markAsTaken(for medicine: Medicine) {
+    @discardableResult
+    func markAsTaken(for medicine: Medicine) -> Log? {
         if let therapies = medicine.therapies, !therapies.isEmpty {
             let recurrenceManager = RecurrenceManager(context: context)
             let now = Date()
@@ -81,21 +85,20 @@ class FeedViewModel: ObservableObject {
             }
 
             if let chosen = candidates.min(by: { $0.date < $1.date }) {
-                addIntake(for: medicine, for: chosen.therapy.package, therapy: chosen.therapy)
-                return
+                return addIntake(for: medicine, for: chosen.therapy.package, therapy: chosen.therapy)
             }
 
             if let fallback = therapies.first {
-                addIntake(for: medicine, for: fallback.package, therapy: fallback)
-                return
+                return addIntake(for: medicine, for: fallback.package, therapy: fallback)
             }
         }
 
-        guard let package = getPackage(for: medicine) else { return }
-        addIntake(for: medicine, for: package)
+        guard let package = getPackage(for: medicine) else { return nil }
+        return addIntake(for: medicine, for: package)
     }
 
-    func markAsTaken(for therapy: Therapy) {
+    @discardableResult
+    func markAsTaken(for therapy: Therapy) -> Log? {
         addIntake(for: therapy.medicine, for: therapy.package, therapy: therapy)
     }
 
@@ -124,23 +127,28 @@ class FeedViewModel: ObservableObject {
         return nil
     }
 
-    private func addNewPrescriptionRequest(for medicine: Medicine, for package: Package) {
+    @discardableResult
+    private func addNewPrescriptionRequest(for medicine: Medicine, for package: Package) -> Log? {
         addLog(for: medicine, for: package, type: "new_prescription_request")
     }
 
-    private func addPrescriptionReceived(for medicine: Medicine, for package: Package) {
+    @discardableResult
+    private func addPrescriptionReceived(for medicine: Medicine, for package: Package) -> Log? {
         addLog(for: medicine, for: package, type: "new_prescription")
     }
 
-    private func addPurchase(for medicine: Medicine, for package: Package) {
+    @discardableResult
+    private func addPurchase(for medicine: Medicine, for package: Package) -> Log? {
         addLog(for: medicine, for: package, type: "purchase")
     }
 
-    private func addIntake(for medicine: Medicine, for package: Package, therapy: Therapy? = nil) {
+    @discardableResult
+    private func addIntake(for medicine: Medicine, for package: Package, therapy: Therapy? = nil) -> Log? {
         addLog(for: medicine, for: package, type: "intake", therapy: therapy)
     }
 
-    private func addLog(for medicine: Medicine, for package: Package, type: String, therapy: Therapy? = nil) {
+    @discardableResult
+    private func addLog(for medicine: Medicine, for package: Package, type: String, therapy: Therapy? = nil) -> Log? {
         let newLog = Log(context: context)
         newLog.id = UUID()
         newLog.type = type
@@ -152,8 +160,11 @@ class FeedViewModel: ObservableObject {
         do {
             try context.save()
             print("✅ Log saved: \(type) for \(medicine.nome ?? "Unknown Medicine")")
+            return newLog
         } catch {
+            context.delete(newLog)
             print("❌ Error saving log: \(error.localizedDescription)")
+            return nil
         }
     }
 

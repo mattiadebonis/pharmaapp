@@ -401,11 +401,11 @@ struct TodayTodoListView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(naturalText(for: item))
-                        .font(.subheadline)
+                        .font(.system(size: 22 ))
                         .foregroundStyle(.primary)
                     if let detail = item.detail, !detail.isEmpty {
                         Text(detail)
-                            .font(.caption)
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -413,7 +413,7 @@ struct TodayTodoListView: View {
                 Spacer(minLength: 8)
 
                 Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(isCompleted ? item.category.tint : Color.secondary)
             }
             .padding(.vertical, 8)
@@ -448,11 +448,11 @@ struct TodayTodoListView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(naturalText(for: item))
-                        .font(.subheadline)
+                        .font(.body)
                         .foregroundStyle(.primary)
                     if let detail = item.detail, !detail.isEmpty {
                         Text(detail)
-                            .font(.caption)
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -460,7 +460,7 @@ struct TodayTodoListView: View {
                 Spacer(minLength: 8)
 
                 Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(isCompleted ? item.category.tint : Color.secondary)
             }
             .padding(.vertical, 8)

@@ -2,6 +2,19 @@ import SwiftUI
 import CoreData
 import UIKit
 
+struct CatalogSelection {
+    let id: String
+    let name: String
+    let principle: String
+    let requiresPrescription: Bool
+    let packageLabel: String
+    let units: Int
+    let tipologia: String
+    let valore: Int32
+    let unita: String
+    let volume: String
+}
+
 struct NewMedicineView: View {
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
