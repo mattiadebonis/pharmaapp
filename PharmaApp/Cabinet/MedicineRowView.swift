@@ -261,7 +261,7 @@ struct MedicineRowView: View {
     }
 
     private var leadingIconName: String {
-        stockLevel == .empty ? "cross.vial" : "cross.vial.fill"
+        stockLevel == .empty ? "pills.fill" : "pills.fill"
     }
 
     private var leadingIconColor: Color {

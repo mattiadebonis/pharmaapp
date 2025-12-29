@@ -185,6 +185,24 @@ func isOutOfStock(_ medicine: Medicine, recurrenceManager: RecurrenceManager) ->
 
 func needsPrescriptionBeforePurchase(_ medicine: Medicine, recurrenceManager: RecurrenceManager) -> Bool {
     guard medicine.obbligo_ricetta else { return false }
-    if medicine.hasPendingNewPrescription() { return false }
-    return isOutOfStock(medicine, recurrenceManager: recurrenceManager)
+    if medicine.hasNewPrescritpionRequest() { return false }
+
+    if let therapies = medicine.therapies, !therapies.isEmpty {
+        var totalLeft: Double = 0
+        var dailyUsage: Double = 0
+        for therapy in therapies {
+            totalLeft += Double(therapy.leftover())
+            dailyUsage += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
+        }
+        if totalLeft <= 0 { return true }
+        guard dailyUsage > 0 else { return false }
+        let days = totalLeft / dailyUsage
+        let threshold = Double(medicine.stockThreshold(option: nil))
+        return days < threshold
+    }
+
+    if let remaining = medicine.remainingUnitsWithoutTherapy() {
+        return remaining <= medicine.stockThreshold(option: nil)
+    }
+    return false
 }

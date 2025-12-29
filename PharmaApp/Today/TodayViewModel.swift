@@ -28,8 +28,7 @@ class TodayViewModel: ObservableObject {
         option: Option?
     ) -> AIInsightsContext? {
         let rec = RecurrenceManager(context: viewContext)
-        let purchaseCandidates = sections.purchase.filter { !needsPrescriptionBeforePurchase($0, option: option, recurrenceManager: rec) }
-        let purchaseLines = purchaseCandidates.prefix(5).map { medicine in
+        let purchaseLines = sections.purchase.map { medicine in
             "\(medicine.nome): \(purchaseHighlight(for: medicine, option: option, recurrenceManager: rec))"
         }
         let therapySources = sections.oggi + sections.purchase
@@ -79,6 +78,18 @@ class TodayViewModel: ObservableObject {
                 return true
             }
         }
+        // Se esiste un todo di acquisto per un medicinale, rimuovi il todo di ricetta duplicato:
+        let purchaseIDs: Set<NSManagedObjectID> = Set(items.compactMap { item in
+            item.category == .purchase ? item.medicineID : nil
+        })
+        if !purchaseIDs.isEmpty {
+            items = items.filter { item in
+                if item.category == .prescription, let medID = item.medicineID {
+                    return !purchaseIDs.contains(medID)
+                }
+                return true
+            }
+        }
         items = items.map { item in
             if item.category == .prescription,
                let med = medicine(for: item, medicines: medicines),
@@ -93,12 +104,14 @@ class TodayViewModel: ObservableObject {
             }
             return item
         }
+        // Evita di duplicare il farmaco sia nella sezione oraria (terapia) sia nei rifornimenti
         items = items.filter { item in
-            if item.category == .purchase, let med = medicine(for: item, medicines: medicines) {
-                if earliestDoseToday(for: med, recurrenceManager: rec) != nil,
-                   isOutOfStock(med, option: option, recurrenceManager: rec) {
-                    return false
-                }
+            if item.category == .purchase,
+               let med = medicine(for: item, medicines: medicines),
+               med.hasIntakeToday(recurrenceManager: rec),
+               !med.hasIntakeLoggedToday(),
+               isOutOfStock(med, option: option, recurrenceManager: rec) {
+                return false
             }
             return true
         }

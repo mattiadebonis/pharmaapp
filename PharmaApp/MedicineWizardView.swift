@@ -81,10 +81,13 @@ struct MedicineWizardView: View {
             }
         }
         .onAppear { applyPrefillIfNeeded() }
+        .onChange(of: step) { newStep in
+            wizardDetent = defaultDetent(for: newStep)
+        }
         .sheet(isPresented: $showTherapySheet, onDismiss: refreshCreatedMedicine) {
             therapySheet
         }
-        .presentationDetents([.fraction(0.5), .large], selection: $wizardDetent)
+        .presentationDetents(Set(detentsForCurrentStep), selection: $wizardDetent)
     }
 
     private var wizardHeader: some View {
@@ -122,6 +125,22 @@ struct MedicineWizardView: View {
             therapiesStep
         case .stock:
             stockStep
+        }
+    }
+
+    private var detentsForCurrentStep: [PresentationDetent] {
+        switch step {
+        case .detail:
+            return [.fraction(0.5), .large]
+        case .therapies, .stock:
+            return [.medium, .large]
+        }
+    }
+
+    private func defaultDetent(for step: Step) -> PresentationDetent {
+        switch step {
+        case .detail: return .fraction(0.5)
+        case .therapies, .stock: return .medium
         }
     }
 

@@ -2,6 +2,7 @@ import SwiftUI
 import CoreData
 import MapKit
 import UIKit
+import MessageUI
 
 /// Vista dedicata al tab "Oggi" (ex insights) con logica locale
 struct TodayView: View {
@@ -33,6 +34,8 @@ struct TodayView: View {
     @State private var collapsedSections: Set<String> = []
     @State private var completedBlockedSubtasks: Set<String> = []
     @State private var pendingPrescriptionMedIDs: Set<NSManagedObjectID> = []
+    @State private var mailComposeData: MailComposeData?
+    @State private var messageComposeData: MessageComposeData?
 
     var body: some View {
         let sections = computeSections(for: Array(medicines), logs: Array(logs), option: options.first)
@@ -42,9 +45,6 @@ struct TodayView: View {
         let sorted = viewModel.sortTodos(todos)
         let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
         let filtered = sorted.filter { item in
-            if item.category == .prescription, let med = medicine(for: item) {
-                return !viewModel.needsPrescriptionBeforePurchase(med, option: options.first, recurrenceManager: rec)
-            }
             if item.category == .therapy, let med = medicine(for: item) {
                 return med.hasIntakeToday(recurrenceManager: rec) && !med.hasIntakeLoggedToday()
             }
@@ -141,6 +141,16 @@ struct TodayView: View {
                 },
                 onDidSend: { viewModel.actionService.requestPrescription(for: medicine) }
             )
+        }
+        .sheet(item: $messageComposeData) { data in
+            MessageComposeView(data: data) { _ in
+                messageComposeData = nil
+            }
+        }
+        .sheet(item: $mailComposeData) { data in
+            MailComposeView(data: data) { _ in
+                mailComposeData = nil
+            }
         }
         .sheet(isPresented: Binding(
             get: { selectedMedicine != nil },
@@ -327,9 +337,11 @@ struct TodayView: View {
                         prescriptionMedicine: prescriptionMedicine,
                         iconName: iconName,
                         isEnabled: isPrescriptionActionEnabled,
+                        isCompleted: isCompleted,
                         onSend: {
                             handlePrescriptionTap(for: item, medicine: prescriptionMedicine, isEnabled: isPrescriptionActionEnabled)
-                        }
+                        },
+                        onToggle: { toggleCompletion(for: item) }
                     )
                 } else {
                     TodayTodoRowView(
@@ -618,13 +630,10 @@ struct TodayView: View {
                 SubtaskButton(label: "Email", action: { sendPrescriptionEmail(for: medicine) }, icon: "envelope.fill")
             )
         }
-        if let phone = prescriptionDoctorPhoneInternational(for: medicine) {
-            let number = phone.hasPrefix("+") ? phone : "+\(phone)"
-            if let smsURL = URL(string: "sms:\(number)") {
-                buttons.append(
-                    SubtaskButton(label: "Messaggio", action: { openURL(smsURL) }, icon: "message.fill")
-                )
-            }
+        if prescriptionDoctorPhoneInternational(for: medicine) != nil {
+            buttons.append(
+                SubtaskButton(label: "Messaggio", action: { sendPrescriptionMessage(for: medicine) }, icon: "message.fill")
+            )
         }
         if buttons.isEmpty {
             buttons.append(SubtaskButton(label: "Invia richiesta", action: { sendPrescriptionRequest(for: medicine) }, icon: "paperplane.fill"))
@@ -634,16 +643,59 @@ struct TodayView: View {
 
     private func sendPrescriptionEmail(for medicine: Medicine) {
         let doctor = prescriptionDoctorContact(for: medicine)
-        guard !doctor.email!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard let email = doctor.email?.trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty else { return }
         let formattedName = formattedMedicineName(medicine.nome)
         let subject = "Richiesta ricetta per \(formattedName)"
         let body = prescriptionEmailBody(for: [medicine], doctorName: doctor.name)
-        if let url = CommunicationService.makeMailtoURL(email: doctor.email!, subject: subject, body: body),
-           UIApplication.shared.canOpenURL(url) {
-            openURL(url)
-        } else {
+
+        if MFMailComposeViewController.canSendMail() {
+            mailComposeData = MailComposeData(
+                recipients: [email],
+                subject: subject,
+                body: body
+            )
+            return
+        }
+
+        guard let url = CommunicationService.makeMailtoURL(email: email, subject: subject, body: body) else {
             UIPasteboard.general.string = body
             print("Impossibile aprire Mail. Testo copiato negli appunti.")
+            return
+        }
+
+        openURL(url) { success in
+            if success { return }
+
+            UIApplication.shared.open(url, options: [:]) { secondAttempt in
+                if !secondAttempt {
+                    UIPasteboard.general.string = body
+                    print("Impossibile aprire Mail. Testo copiato negli appunti.")
+                }
+            }
+        }
+    }
+
+    private func sendPrescriptionMessage(for medicine: Medicine) {
+        guard let phone = prescriptionDoctorPhoneInternational(for: medicine)?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !phone.isEmpty else { return }
+        let number = phone.hasPrefix("+") ? phone : "+\(phone)"
+        let doctor = prescriptionDoctorContact(for: medicine)
+        let body = prescriptionEmailBody(for: [medicine], doctorName: doctor.name)
+
+        if MFMessageComposeViewController.canSendText() {
+            messageComposeData = MessageComposeData(
+                recipients: [number],
+                body: body
+            )
+            return
+        }
+
+        let encodedBody = body.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let smsURL = URL(string: "sms:\(number)&body=\(encodedBody)") {
+            openURL(smsURL)
+        } else {
+            UIPasteboard.general.string = body
+            print("Impossibile aprire Messaggi. Testo copiato negli appunti.")
         }
     }
 
@@ -721,42 +773,52 @@ struct TodayView: View {
         prescriptionMedicine: Medicine?,
         iconName: String,
         isEnabled: Bool,
-        onSend: @escaping () -> Void
+        isCompleted: Bool,
+        onSend: @escaping () -> Void,
+        onToggle: @escaping () -> Void
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: iconName)
-                    .font(.system(size: 18, weight: .regular))
-                    .foregroundStyle(titleColor)
-                Text(prescriptionMainText(for: item, medicine: prescriptionMedicine))
-                    .font(.title3)
-                    .foregroundStyle(titleColor)
-                    .multilineTextAlignment(.leading)
-            }
-            Button {
-                onSend()
-            } label: {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
-                    Image(systemName: "paperplane.fill")
-                    Text("Invia richiesta")
+                    Image(systemName: iconName)
+                        .font(.system(size: 18, weight: .regular))
+                        .foregroundStyle(titleColor)
+                    Text(prescriptionMainText(for: item, medicine: prescriptionMedicine))
+                        .font(.title3)
+                        .foregroundStyle(titleColor)
+                        .multilineTextAlignment(.leading)
                 }
-                .font(.callout)
-                .foregroundStyle(isEnabled ? Color.accentColor : .secondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill((isEnabled ? Color.accentColor.opacity(0.12) : Color(.systemGray6)))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(isEnabled ? Color.accentColor.opacity(0.35) : Color(.systemGray4), lineWidth: 1)
-                )
+                Button {
+                    onSend()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "paperplane.fill")
+                        Text("Invia richiesta")
+                    }
+                    .font(.callout)
+                    .foregroundStyle(isEnabled ? Color.accentColor : .secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill((isEnabled ? Color.accentColor.opacity(0.12) : Color(.systemGray6)))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(isEnabled ? Color.accentColor.opacity(0.35) : Color(.systemGray4), lineWidth: 1)
+                    )
+                }
+                .disabled(!isEnabled)
+                .buttonStyle(.plain)
             }
-            .disabled(!isEnabled)
+            Spacer(minLength: 8)
+            Button(action: onToggle) {
+                Image(systemName: isCompleted ? "circle.fill" : "circle")
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(Color.primary)
+            }
             .buttonStyle(.plain)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func actionIcon(for item: TodayTodoItem) -> String {
@@ -1037,14 +1099,57 @@ struct TodayView: View {
     }
 
     private func stockSubtitle(for medicine: Medicine) -> String? {
+        let unitLabel = medicineUnitLabel(for: medicine)
+        var lines: [String] = []
+
         if let therapies = medicine.therapies, !therapies.isEmpty {
             let totalLeft = therapies.reduce(0.0) { $0 + Double($1.leftover()) }
-            return "Scorte: \(Int(max(0, totalLeft))) u"
+            lines.append(stockLine(count: Int(max(0, totalLeft)), unit: unitLabel))
+            if totalLeft <= 0, let nextDose = earliestDoseToday(for: medicine) {
+                lines.append("Prossima dose scoperta: \(TodayFormatters.time.string(from: nextDose))")
+            }
+            return lines.joined(separator: "\n")
         }
         if let remaining = medicine.remainingUnitsWithoutTherapy() {
-            return "Scorte: \(max(0, remaining)) u"
+            lines.append(stockLine(count: max(0, remaining), unit: unitLabel))
+            if remaining <= 0, let nextDose = earliestDoseToday(for: medicine) {
+                lines.append("Prossima dose scoperta: \(TodayFormatters.time.string(from: nextDose))")
+            }
+            return lines.joined(separator: "\n")
         }
         return nil
+    }
+
+    private func stockLine(count: Int, unit: String) -> String {
+        let isSingular = count == 1
+        let unitText = pluralizedUnit(unit, count: count)
+        let verb = isSingular ? "rimasta" : "rimaste"
+        return "\(count) \(unitText) \(verb)"
+    }
+
+    private func medicineUnitLabel(for medicine: Medicine) -> String {
+        if let pkg = medicine.therapies?.first?.package {
+            let candidate = pkg.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !candidate.isEmpty { return candidate.lowercased() }
+            let unit = pkg.unita.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !unit.isEmpty { return unit.lowercased() }
+        }
+        if let pkg = medicine.packages.first {
+            let candidate = pkg.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !candidate.isEmpty { return candidate.lowercased() }
+            let unit = pkg.unita.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !unit.isEmpty { return unit.lowercased() }
+        }
+        return "unità"
+    }
+
+    private func pluralizedUnit(_ unit: String, count: Int) -> String {
+        guard count != 1 else { return unit }
+        let lower = unit.lowercased()
+        if lower.hasSuffix("à") || lower.hasSuffix("è") { return unit } // invariant plural (es. unità)
+        if lower.hasSuffix("e") { return unit }
+        if lower.hasSuffix("a") { return unit.dropLast() + "e" }
+        return unit + "e"
     }
 
     private func purchaseSubtitle(for medicine: Medicine, awaitingRx: Bool, doctorName: String) -> String? {
@@ -1548,4 +1653,91 @@ struct TodayView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 24)
     }
+}
+
+// MARK: - Mail composer helpers
+private struct MailComposeData: Identifiable {
+    let id = UUID()
+    let recipients: [String]
+    let subject: String
+    let body: String
+}
+
+private struct MailComposeView: UIViewControllerRepresentable {
+    @Environment(\.dismiss) private var dismiss
+
+    let data: MailComposeData
+    let onFinish: (MFMailComposeResult) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    final class Coordinator: NSObject, MFMailComposeViewControllerDelegate {
+        let parent: MailComposeView
+
+        init(_ parent: MailComposeView) {
+            self.parent = parent
+        }
+
+        func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
+            controller.dismiss(animated: true) {
+                self.parent.onFinish(result)
+                self.parent.dismiss()
+            }
+        }
+    }
+
+    func makeUIViewController(context: Context) -> MFMailComposeViewController {
+        let vc = MFMailComposeViewController()
+        vc.setToRecipients(data.recipients)
+        vc.setSubject(data.subject)
+        vc.setMessageBody(data.body, isHTML: false)
+        vc.mailComposeDelegate = context.coordinator
+        return vc
+    }
+
+    func updateUIViewController(_ uiViewController: MFMailComposeViewController, context: Context) {}
+}
+
+private struct MessageComposeData: Identifiable {
+    let id = UUID()
+    let recipients: [String]
+    let body: String
+}
+
+private struct MessageComposeView: UIViewControllerRepresentable {
+    @Environment(\.dismiss) private var dismiss
+
+    let data: MessageComposeData
+    let onFinish: (MessageComposeResult) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    final class Coordinator: NSObject, MFMessageComposeViewControllerDelegate {
+        let parent: MessageComposeView
+
+        init(_ parent: MessageComposeView) {
+            self.parent = parent
+        }
+
+        func messageComposeViewController(_ controller: MFMessageComposeViewController, didFinishWith result: MessageComposeResult) {
+            controller.dismiss(animated: true) {
+                self.parent.onFinish(result)
+                self.parent.dismiss()
+            }
+        }
+    }
+
+    func makeUIViewController(context: Context) -> MFMessageComposeViewController {
+        let vc = MFMessageComposeViewController()
+        vc.recipients = data.recipients
+        vc.body = data.body
+        vc.messageComposeDelegate = context.coordinator
+        return vc
+    }
+
+    func updateUIViewController(_ uiViewController: MFMessageComposeViewController, context: Context) {}
 }

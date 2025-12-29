@@ -85,8 +85,16 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
 
             let sorted = self.sorted(items, from: location)
             let updatedFallback = fallback ?? sorted.first
-            if let (best, isOpen) = self.bestCandidate(from: sorted, location: location) {
-                self.applySelection(for: best, userLocation: location, assumedOpen: isOpen)
+            if let nearest = sorted.first {
+                let status = self.openingStatus(forName: nearest.name)
+                let assumedOpen: Bool? = {
+                    switch status {
+                    case .open: return true
+                    case .closed: return false
+                    case .unknown: return isOpenQuery ? true : nil
+                    }
+                }()
+                self.applySelection(for: nearest, userLocation: location, assumedOpen: assumedOpen)
                 return
             }
 
@@ -123,27 +131,6 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
             let rDistance = rhs.placemark.location?.distance(from: location) ?? .greatestFiniteMagnitude
             return lDistance < rDistance
         }
-    }
-
-    private func bestCandidate(from items: [MKMapItem], location: CLLocation) -> (MKMapItem, Bool?)? {
-        let annotated: [(MKMapItem, OpeningStatus)] = items.map { item in
-            let status = openingStatus(forName: item.name)
-            return (item, status)
-        }
-        if let open = annotated
-            .filter({ $0.1 == .open })
-            .min(by: { ($0.0.placemark.location?.distance(from: location) ?? .greatestFiniteMagnitude) < ($1.0.placemark.location?.distance(from: location) ?? .greatestFiniteMagnitude) }) {
-            return (open.0, true)
-        }
-        if let unknown = annotated
-            .filter({ $0.1 == .unknown })
-            .min(by: { ($0.0.placemark.location?.distance(from: location) ?? .greatestFiniteMagnitude) < ($1.0.placemark.location?.distance(from: location) ?? .greatestFiniteMagnitude) }) {
-            return (unknown.0, nil)
-        }
-        if let closed = annotated.min(by: { ($0.0.placemark.location?.distance(from: location) ?? .greatestFiniteMagnitude) < ($1.0.placemark.location?.distance(from: location) ?? .greatestFiniteMagnitude) }) {
-            return (closed.0, false)
-        }
-        return nil
     }
 
     private func applySelection(for chosen: MKMapItem, userLocation location: CLLocation, assumedOpen: Bool?) {

@@ -36,11 +36,12 @@ struct TodayTodoRowView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+            Image(systemName: iconName)
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(labelColor)
+
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: iconName)
-                        .font(.system(size: 18, weight: .regular))
-                        .foregroundStyle(labelColor)
                     if let actionText, !actionText.isEmpty {
                         Text(actionText)
                             .font(.system(size: 20, weight: .regular))
@@ -58,6 +59,7 @@ struct TodayTodoRowView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .layoutPriority(1)
                 }
+
                 VStack(alignment: .leading, spacing: 2) {
                     if let subtitle {
                         Text(subtitle)
@@ -74,7 +76,6 @@ struct TodayTodoRowView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .padding(.leading, 24)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -87,7 +88,9 @@ struct TodayTodoRowView: View {
                         .font(.callout)
                         .foregroundStyle(badge.1)
                 }
-            } else if showToggle {
+            }
+
+            if showToggle {
                 Button(action: onToggle) {
                     Image(systemName: isCompleted ? "circle.fill" : "circle")
                         .font(.system(size: 20, weight: .regular))

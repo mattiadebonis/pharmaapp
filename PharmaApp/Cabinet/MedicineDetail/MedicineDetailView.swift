@@ -759,13 +759,6 @@ struct MedicineDetailView: View {
 extension MedicineDetailView {
     private var stockSection: some View {
         Section {
-            if let stockStatusLine {
-                Text(stockStatusLine)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 2)
-            }
-
             if let action = primaryAction, action.label == "Richiedi ricetta" {
                 Button {
                     handlePrimaryAction(action)
@@ -833,12 +826,16 @@ extension MedicineDetailView {
                     .tint(.blue)
                 }
             }
-
-            Text("Modificando questi valori aggiorni direttamente le scorte.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
         } header: {
-            Text("Scorte")
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Scorte")
+                    .font(.body.weight(.semibold))
+                if let stockStatusLine {
+                    Text(stockStatusLine)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .textCase(nil)
     }
