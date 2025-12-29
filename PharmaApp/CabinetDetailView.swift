@@ -30,6 +30,7 @@ struct CabinetDetailView: View {
         }
         .listStyle(.insetGrouped)
         .listRowSeparator(.hidden)
+        .listRowSeparator(.hidden, edges: .all)
         .scrollContentBackground(.hidden)
         .navigationTitle(cabinet.name)
         .navigationBarTitleDisplayMode(.inline)
@@ -95,6 +96,7 @@ struct CabinetDetailView: View {
             onRequestPrescription: shouldShowRx ? { viewModel.actionService.requestPrescription(for: medicine) } : nil,
             onMove: { medicineToMove = medicine }
         )
+        .listRowSeparator(.hidden, edges: .all)
     }
     
     private func shouldShowPrescriptionAction(for medicine: Medicine) -> Bool {

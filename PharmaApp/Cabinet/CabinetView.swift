@@ -75,6 +75,7 @@ struct CabinetView: View {
         }
         .listRowSeparator(.hidden)
         .listSectionSeparator(.hidden)
+        .listRowSeparator(.hidden, edges: .all)
         .listSectionSpacing(0)
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
@@ -159,6 +160,7 @@ struct CabinetView: View {
             onMove: { medicineToMove = medicine }
         )
         .accessibilityIdentifier("MedicineRow_\(medicine.objectID)")
+        .listRowSeparator(.hidden, edges: .all)
     }
 
     // MARK: - Banner

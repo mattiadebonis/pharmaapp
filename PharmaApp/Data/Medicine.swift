@@ -165,6 +165,36 @@ extension Medicine {
         return purchaseLogsAfterPrescription.isEmpty
     }
 
+    /// Restituisce la prossima assunzione programmata a partire da `date`, calcolata sulle terapie e sulle regole di ricorrenza.
+    func nextIntakeDate(from date: Date = Date(), recurrenceManager: RecurrenceManager) -> Date? {
+        guard let therapies = therapies, !therapies.isEmpty else { return nil }
+        let candidates: [Date] = therapies.compactMap { therapy in
+            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+            let start = therapy.start_date ?? date
+            return recurrenceManager.nextOccurrence(
+                rule: rule,
+                startDate: start,
+                after: date,
+                doses: therapy.doses as NSSet?
+            )
+        }
+        return candidates.sorted().first
+    }
+
+    /// True se esiste un'assunzione prevista oggi (a partire da `date`).
+    func hasIntakeToday(from date: Date = Date(), recurrenceManager: RecurrenceManager) -> Bool {
+        guard let next = nextIntakeDate(from: date, recurrenceManager: recurrenceManager) else { return false }
+        return Calendar.current.isDateInToday(next)
+    }
+
+    /// True se esiste già un log di assunzione registrato nella giornata corrente.
+    func hasIntakeLoggedToday(calendar: Calendar = .current) -> Bool {
+        guard let logs = logs, !logs.isEmpty else { return false }
+        return logs.contains { log in
+            log.type == "intake" && calendar.isDateInToday(log.timestamp)
+        }
+    }
+
 
     /// Calcolo di un punteggio complessivo ("weight") che deriva da:
     /// - Scorte rimanenti (coverage)

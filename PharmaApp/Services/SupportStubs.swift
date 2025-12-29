@@ -1,51 +1,6 @@
 import SwiftUI
 import MapKit
 
-// Placeholder per la ricerca farmacia (sostituisce l'implementazione completa).
-final class LocationSearchViewModel: ObservableObject {
-    struct PinWrapper {
-        let mapItem: MKMapItem
-        var title: String { mapItem.name ?? "Farmacia" }
-    }
-
-    @Published var pinItem: PinWrapper?
-    @Published var distanceString: String?
-    @Published var distanceMeters: Double?
-    @Published var closingTimeText: String?
-    @Published var isLikelyOpen: Bool?
-    @Published var todayOpeningText: String?
-
-    func ensureStarted() { /* no-op placeholder */ }
-
-    func openInMaps() {
-        guard let item = pinItem?.mapItem else { return }
-        item.openInMaps()
-    }
-}
-
-// Placeholder per la finestra orari farmacia.
-enum OpeningHoursParser {
-    static func activeInterval(from: String, now: Date) -> String? { nil }
-}
-
-// Placeholder per il dettaglio di una mappa inline.
-struct MapItemDetailInlineView: View {
-    let mapItem: MKMapItem
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Text(mapItem.name ?? "Posizione")
-                .font(.headline)
-            if let address = mapItem.placemark.title {
-                Text(address)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding()
-    }
-}
-
 // Placeholder per la conferma richiesta ricetta.
 struct PrescriptionRequestConfirmationSheet: View {
     let medicineName: String
@@ -97,7 +52,7 @@ struct PrescriptionEmailSheet: View {
     }
 }
 
-// Placeholder del contesto usato per generare insight e todo.
+// Contesto usato per generare insight e todo.
 struct AIInsightsContext {
     let purchaseHighlights: [String]
     let therapyHighlights: [String]

@@ -201,17 +201,8 @@ struct MedicineRowView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             leadingIcon
-            VStack(alignment: .leading, spacing: 8) {
-                Text(displayName)
-                    .font(.title3)
-                    .lineLimit(2)
-                // Temporaneamente nascosto su richiesta: descrizione confezione sotto al titolo
-                // if let pkg = primaryPackageLabel {
-                //     Text(pkg)
-                //         .font(.callout)
-                //         .foregroundStyle(.secondary)
-                //         .lineLimit(2)
-                // }
+            VStack(alignment: .leading, spacing: 6) {
+                titleLine
                 infoPills
                 if hasBadges {
                     badgesRow
@@ -231,13 +222,24 @@ struct MedicineRowView: View {
     }
     
     private var hasTherapiesFlag: Bool { !therapies.isEmpty }
-    private var displayName: String {
+    private var titleLine: some View {
         let trimmed = medicine.nome.trimmingCharacters(in: .whitespacesAndNewlines)
         let base = trimmed.isEmpty ? "Medicinale" : trimmed
-        if let dosage = primaryPackageDosage {
-            return "\(camelCase(base)) • \(dosage)"
+        let name = camelCase(base)
+        let dosage = primaryPackageDosage
+        return HStack(alignment: .bottom, spacing: 4) {
+            Text(name)
+                .font(.title3)
+                .bold()
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+            if let dosage {
+                Text(" \(dosage)")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
-        return camelCase(base)
     }
 
     private var firstPackageInfo: String? {
@@ -436,8 +438,8 @@ struct MedicineRowView: View {
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
     
-    private var therapyChipIconColor: Color { .indigo }
-    private var stockChipIconColor: Color { .cyan }
+    private var therapyChipIconColor: Color { .gray }
+    private var stockChipIconColor: Color { .gray }
 
     private struct InfoChip: Identifiable {
         let id = UUID()
@@ -448,9 +450,9 @@ struct MedicineRowView: View {
 
     private var infoPills: some View {
         let therapyChips = therapyInfoChips
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 4) {
             if !therapyChips.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
                     ForEach(therapyChips) { chip in
                         pill(for: chip)
                     }

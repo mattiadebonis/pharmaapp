@@ -45,9 +45,12 @@ struct TodayView: View {
             if item.category == .prescription, let med = medicine(for: item) {
                 return !viewModel.needsPrescriptionBeforePurchase(med, option: options.first, recurrenceManager: rec)
             }
+            if item.category == .therapy, let med = medicine(for: item) {
+                return med.hasIntakeToday(recurrenceManager: rec) && !med.hasIntakeLoggedToday()
+            }
             return true
         }
-        let pendingItems = filtered.filter { !completedTodoIDs.contains($0.id) }
+        let pendingItems = filtered.filter { !completedTodoIDs.contains(completionKey(for: $0)) }
         let timeGroups = viewModel.timeGroups(from: pendingItems, medicines: Array(medicines), options: options.first)
 
         let content = List {
@@ -58,7 +61,7 @@ struct TodayView: View {
                     if !isCollapsed {
                         if shouldShowPharmacyCard(for: group) {
                             pharmacySuggestionCard()
-                                .listRowInsets(EdgeInsets(top: 6, leading: 48, bottom: 8, trailing: 16))
+                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 8, trailing: 16))
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
                         }
@@ -68,6 +71,7 @@ struct TodayView: View {
                                 isCompleted: completedTodoIDs.contains(item.id)
                             )
                         }
+                        .padding(.top, -6)
                     }
                 } header: {
                     Button {
@@ -89,12 +93,8 @@ struct TodayView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .padding(.top, group.label == "Rifornimenti" ? 6 : 12)
-                    .padding(.bottom, group.label == "Rifornimenti" ? 4 : 0)
-                    Divider()
-                        .padding(.leading, 48)
-                        .padding(.trailing, 16)
-                        .opacity(0.35)
+                    .padding(.top, group.label == "Rifornimenti" ? 2 : 6)
+                    .padding(.bottom, -4)
                 }
             }
         }
@@ -105,6 +105,8 @@ struct TodayView: View {
         }
         .listStyle(.plain)
         .listSectionSeparator(.hidden)
+        .listSectionSpacing(4)
+        .listRowSpacing(2)
         .safeAreaInset(edge: .bottom) {
             if completionToastItemID != nil {
                 completionToastView
@@ -330,58 +332,19 @@ struct TodayView: View {
                         }
                     )
                 } else {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Image(systemName: iconName)
-                                .font(.system(size: 18, weight: .regular))
-                                .foregroundStyle(actionLabelColor)
-                            Text(actionText)
-                                .font(.system(size: 16, weight: .regular))
-                                .foregroundStyle(actionLabelColor)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                                .layoutPriority(2)
-
-                            Text(title)
-                                .font(.system(size: 16, weight: .regular))
-                                .foregroundStyle(titleColor)
-                                .multilineTextAlignment(.leading)
-                                .lineLimit(nil)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .layoutPriority(1)
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            if let subtitle {
-                                Text(subtitle)
-                                    .font(.callout)
-                                    .foregroundStyle(.secondary)
-                                    .multilineTextAlignment(.leading)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            if let auxiliaryLine {
-                                auxiliaryLine
-                                    .font(.callout)
-                                    .foregroundStyle(.secondary)
-                                    .multilineTextAlignment(.leading)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                        .padding(.leading, 24)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    TodayTodoRowView(
+                        iconName: iconName,
+                        actionText: actionText,
+                        title: title,
+                        subtitle: subtitle,
+                        auxiliaryLine: auxiliaryLine,
+                        isCompleted: isCompleted,
+                        onToggle: { toggleCompletion(for: item) }
+                    )
                 }
-
-                Button {
-                    toggleCompletion(for: item)
-                } label: {
-                    Image(systemName: isCompleted ? "circle.fill" : "circle")
-                        .font(.system(size: 20, weight: .regular))
-                        .foregroundStyle(Color.primary)
-                }
-                .buttonStyle(.plain)
             }
-            .padding(.vertical, 12)
-            .listRowInsets(EdgeInsets(top: 4, leading: 48, bottom: 4, trailing: 16))
+            .padding(.vertical, 6)
+            .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 14))
             .listRowSeparator(.hidden)
             .opacity(rowOpacity)
         }
@@ -444,6 +407,7 @@ struct TodayView: View {
         let medicine: Medicine
         let needsPrescription: Bool
         let isOutOfStock: Bool
+        let isDepleted: Bool
         let doctor: DoctorContact?
         let timeLabel: String?
         let personName: String?
@@ -454,6 +418,16 @@ struct TodayView: View {
         let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
         let needsRx = viewModel.needsPrescriptionBeforePurchase(medicine, option: options.first, recurrenceManager: rec)
         let outOfStock = viewModel.isOutOfStock(medicine, option: options.first, recurrenceManager: rec)
+        let depleted: Bool = {
+            if let therapies = medicine.therapies, !therapies.isEmpty {
+                let totalLeft = therapies.reduce(0.0) { $0 + Double($1.leftover()) }
+                return totalLeft <= 0
+            }
+            if let remaining = medicine.remainingUnitsWithoutTherapy() {
+                return remaining <= 0
+            }
+            return false
+        }()
         guard needsRx || outOfStock else { return nil }
         let contact = prescriptionDoctorContact(for: medicine)
         let timeLabel = timeLabel(for: item)
@@ -462,6 +436,7 @@ struct TodayView: View {
             medicine: medicine,
             needsPrescription: needsRx,
             isOutOfStock: outOfStock,
+            isDepleted: depleted,
             doctor: contact,
             timeLabel: timeLabel,
             personName: personName
@@ -481,13 +456,13 @@ struct TodayView: View {
                 subtitleColor: .secondary,
                 subtitleAsBadge: false,
                 iconName: "pills",
-                trailingBadge: info.isOutOfStock ? ("Da rifornire", .orange) : nil,
+                trailingBadge: (info.isOutOfStock && info.isDepleted) ? ("Da rifornire", .orange) : nil,
                 showCircle: true,
                 isDone: isBlockedSubtaskDone(type: "intake", medicine: info.medicine),
                 onCheck: { completeBlockedIntake(for: info) }
             )
 
-            if info.needsPrescription || info.isOutOfStock {
+            if info.isOutOfStock && info.isDepleted {
                 ZStack(alignment: .leading) {
                     Rectangle()
                         .fill(Color.secondary.opacity(0.25))
@@ -523,7 +498,8 @@ struct TodayView: View {
                 }
             }
         }
-        .listRowInsets(EdgeInsets(top: 8, leading: 48, bottom: 8, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        .padding(.vertical, 4)
         .listRowSeparator(.hidden)
     }
 
@@ -569,7 +545,8 @@ struct TodayView: View {
                 }
             }
         }
-        .listRowInsets(EdgeInsets(top: 8, leading: 48, bottom: 8, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        .padding(.vertical, 4)
         .listRowSeparator(.hidden)
     }
 
@@ -636,9 +613,9 @@ struct TodayView: View {
 
     private func prescriptionButtons(for medicine: Medicine) -> [SubtaskButton] {
         var buttons: [SubtaskButton] = []
-        if let email = prescriptionDoctorEmail(for: medicine), let url = URL(string: "mailto:\(email)") {
+        if prescriptionDoctorEmail(for: medicine) != nil {
             buttons.append(
-                SubtaskButton(label: "Email", action: { openURL(url) }, icon: "envelope.fill")
+                SubtaskButton(label: "Email", action: { sendPrescriptionEmail(for: medicine) }, icon: "envelope.fill")
             )
         }
         if let phone = prescriptionDoctorPhoneInternational(for: medicine) {
@@ -655,119 +632,66 @@ struct TodayView: View {
         return buttons
     }
 
+    private func sendPrescriptionEmail(for medicine: Medicine) {
+        let doctor = prescriptionDoctorContact(for: medicine)
+        guard !doctor.email!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let formattedName = formattedMedicineName(medicine.nome)
+        let subject = "Richiesta ricetta per \(formattedName)"
+        let body = prescriptionEmailBody(for: [medicine], doctorName: doctor.name)
+        if let url = CommunicationService.makeMailtoURL(email: doctor.email!, subject: subject, body: body),
+           UIApplication.shared.canOpenURL(url) {
+            openURL(url)
+        } else {
+            UIPasteboard.general.string = body
+            print("Impossibile aprire Mail. Testo copiato negli appunti.")
+        }
+    }
+
     @ViewBuilder
     private func blockedStepRow(title: String, status: String? = nil, subtitle: String? = nil, subtitleColor: Color = .secondary, subtitleAsBadge: Bool = false, iconName: String? = nil, buttons: [SubtaskButton] = [], trailingBadge: (String, Color)? = nil, showCircle: Bool = true, isDone: Bool = false, onCheck: (() -> Void)? = nil) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    if let iconName {
-                        Image(systemName: iconName)
-                            .font(.system(size: 16, weight: .regular))
-                            .foregroundStyle(.primary)
-                    }
-                    Text(title)
-                        .font(.system(size: 16, weight: .regular))
-                        .foregroundStyle(.primary)
-                        .lineLimit(nil)
-                    if let status {
-                        Text(status)
-                            .font(.caption)
-                            .foregroundStyle(Color.orange)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule().fill(Color.orange.opacity(0.1))
-                            )
-                            .overlay(
-                                Capsule().stroke(Color.orange.opacity(0.7), lineWidth: 1)
-                            )
-                    }
-                }
-                if let subtitle {
-                    HStack(alignment: .top, spacing: 8) {
-                        if iconName != nil {
-                            Spacer()
-                                .frame(width: 24)
-                        }
-                        if subtitleAsBadge {
-                            Text(subtitle)
-                                .font(.callout)
-                                .foregroundStyle(subtitleColor)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(
-                                    Capsule().fill(subtitleColor.opacity(0.15))
-                                )
-                        } else {
-                            Text(subtitle)
-                                .font(.callout)
-                                .foregroundStyle(subtitleColor)
-                                .lineLimit(nil)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            TodayTodoRowView(
+                iconName: iconName ?? "circle",
+                actionText: title,
+                title: "",
+                subtitle: subtitle,
+                auxiliaryLine: status.map { Text($0).foregroundColor(.orange) },
+                isCompleted: isDone,
+                showToggle: showCircle && onCheck != nil,
+                trailingBadge: trailingBadge,
+                onToggle: { onCheck?() }
+            )
 
-                if !buttons.isEmpty {
-                    HStack(spacing: 10) {
-                        if iconName != nil {
-                            Spacer()
-                                .frame(width: 24)
-                        }
-                        ForEach(Array(buttons.enumerated()), id: \.offset) { entry in
-                            let button = entry.element
-                            Button(action: button.action) {
-                                if let icon = button.icon {
-                                    Image(systemName: icon)
-                                        .font(.system(size: 16, weight: .semibold))
-                                        .foregroundStyle(Color.accentColor)
-                                } else {
-                                    Text(button.label)
-                                        .font(.callout)
-                                        .foregroundStyle(Color.primary)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .fill(Color(.systemGray5))
-                                        )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .stroke(Color(.systemGray4), lineWidth: 1)
-                                        )
-                                }
+            if !buttons.isEmpty {
+                HStack(spacing: 10) {
+                    ForEach(Array(buttons.enumerated()), id: \.offset) { entry in
+                        let button = entry.element
+                        Button(action: button.action) {
+                            if let icon = button.icon {
+                                Image(systemName: icon)
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(Color.accentColor)
+                            } else {
+                                Text(button.label)
+                                    .font(.callout)
+                                    .foregroundStyle(Color.primary)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .fill(Color(.systemGray5))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .stroke(Color(.systemGray4), lineWidth: 1)
+                                    )
                             }
-                            .buttonStyle(.plain)
                         }
-                        Spacer(minLength: 0)
+                        .buttonStyle(.plain)
                     }
+                    Spacer(minLength: 0)
                 }
-            }
-
-            Spacer(minLength: 0)
-
-            if let badge = trailingBadge {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(badge.1)
-                    Text(badge.0)
-                        .font(.callout)
-                        .foregroundStyle(badge.1)
-                }
-            } else if showCircle {
-                let circle = Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20, weight: .regular))
-                    .foregroundStyle(Color.primary)
-
-                if let onCheck {
-                    Button(action: onCheck) {
-                        circle
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    circle
-                }
+                .padding(.leading, 24)
             }
         }
         .padding(.vertical, 8)
@@ -1169,17 +1093,20 @@ struct TodayView: View {
             }
         }
 
-        if completedTodoIDs.contains(item.id) {
+        let key = completionKey(for: item)
+        if completedTodoIDs.contains(key) {
             _ = withAnimation(.easeInOut(duration: 0.2)) {
-                completedTodoIDs.remove(item.id)
+                completedTodoIDs.remove(key)
             }
             return
         }
 
-        _ = withAnimation(.easeInOut(duration: 0.2)) {
-            completedTodoIDs.insert(item.id)
-        }
+        // Prova a registrare il log; anche se fallisce (es. manca la confezione) continuiamo con il completamento UI.
         recordLogCompletion(for: item)
+
+        _ = withAnimation(.easeInOut(duration: 0.2)) {
+            completedTodoIDs.insert(key)
+        }
         showCompletionToast(for: item)
     }
 
@@ -1215,10 +1142,11 @@ struct TodayView: View {
         completionUndoLogID = nil
     }
 
-    private func recordLogCompletion(for item: TodayTodoItem) {
+    @discardableResult
+    private func recordLogCompletion(for item: TodayTodoItem) -> Bool {
         guard let medicine = medicine(for: item) else {
             completionUndoLogID = nil
-            return
+            return true // Nessun log richiesto (es. task generico)
         }
         let log: Log?
         switch item.category {
@@ -1237,9 +1165,22 @@ struct TodayView: View {
                 log = viewModel.actionService.requestPrescription(for: medicine)
             }
         case .upcoming, .pharmacy:
-            log = nil
+            log = nil // Nessun log previsto, ma consideriamo successo
         }
         completionUndoLogID = log?.objectID
+        if let log {
+            print("✅ log creato \(log.type) per \(medicine.nome)")
+        } else {
+            print("⚠️ recordLogCompletion: log non creato per \(item.id)")
+        }
+        return true
+    }
+
+    private func completionKey(for item: TodayTodoItem) -> String {
+        if let medID = item.medicineID {
+            return "\(item.category.rawValue)|\(medID)"
+        }
+        return item.id
     }
 
     private var completionToastView: some View {
