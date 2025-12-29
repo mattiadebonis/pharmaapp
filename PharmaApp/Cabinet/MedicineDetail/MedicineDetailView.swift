@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreData
 import UIKit
+import MessageUI
 
 struct MedicineDetailView: View {
 
@@ -1034,6 +1035,8 @@ private struct EmailRequestSheet: View {
     let onSend: ([Medicine]) -> Void
     
     @State private var selectedMedicines: Set<NSManagedObjectID>
+    @State private var mailComposeData: MailComposeData?
+    @State private var showMailFallbackAlert = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     
@@ -1076,13 +1079,7 @@ private struct EmailRequestSheet: View {
 
                         if emailAddress != nil {
                             Button {
-                                communicationService.sendEmail(
-                                    to: doctorContact,
-                                    subject: emailSubject,
-                                    body: emailBuilder(selectedList)
-                                )
-                                onSend(selectedList)
-                                dismiss()
+                                sendEmail()
                             } label: {
                                 Image(systemName: "envelope.fill")
                                     .font(.title3)
@@ -1162,9 +1159,70 @@ private struct EmailRequestSheet: View {
             .navigationTitle("Richiedi ricetta")
             .navigationBarTitleDisplayMode(.inline)
         }
+        .sheet(item: $mailComposeData) { data in
+            MailComposeView(data: data) { _ in
+                mailComposeData = nil
+                dismiss()
+            }
+        }
+        .alert("Impossibile aprire Mail", isPresented: $showMailFallbackAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Testo copiato negli appunti. Installa o configura un'app Mail per inviare la richiesta.")
+        }
     }
 
     // MARK: - Helpers
+
+    private func sendEmail() {
+        guard let email = emailAddress?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !email.isEmpty else { return }
+
+        let meds = selectedList
+        let subject = emailSubject
+        let body = emailBuilder(meds)
+
+        onSend(meds)
+
+        if MFMailComposeViewController.canSendMail() {
+            mailComposeData = MailComposeData(
+                recipients: [email],
+                subject: subject,
+                body: body
+            )
+            return
+        }
+
+        guard let mailtoURL = CommunicationService.makeMailtoURL(email: email, subject: subject, body: body) else {
+            handleMailFallback(body: body)
+            return
+        }
+
+        guard UIApplication.shared.canOpenURL(mailtoURL) else {
+            handleMailFallback(body: body)
+            return
+        }
+
+        openURL(mailtoURL) { success in
+            if success {
+                dismiss()
+                return
+            }
+
+            UIApplication.shared.open(mailtoURL, options: [:]) { opened in
+                if opened {
+                    dismiss()
+                } else {
+                    handleMailFallback(body: body)
+                }
+            }
+        }
+    }
+
+    private func handleMailFallback(body: String) {
+        UIPasteboard.general.string = body
+        showMailFallbackAlert = true
+    }
 
     private var communicationService: CommunicationService {
         CommunicationService(openURL: openURL)
@@ -1215,6 +1273,52 @@ private struct EmailRequestSheet: View {
         } else {
             selectedMedicines.insert(id)
         }
+    }
+
+    // MARK: - Mail composer
+
+    private struct MailComposeData: Identifiable {
+        let id = UUID()
+        let recipients: [String]
+        let subject: String
+        let body: String
+    }
+
+    private struct MailComposeView: UIViewControllerRepresentable {
+        @Environment(\.dismiss) private var dismiss
+
+        let data: MailComposeData
+        let onFinish: (MFMailComposeResult) -> Void
+
+        func makeCoordinator() -> Coordinator {
+            Coordinator(self)
+        }
+
+        final class Coordinator: NSObject, MFMailComposeViewControllerDelegate {
+            let parent: MailComposeView
+
+            init(_ parent: MailComposeView) {
+                self.parent = parent
+            }
+
+            func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
+                controller.dismiss(animated: true) {
+                    self.parent.onFinish(result)
+                    self.parent.dismiss()
+                }
+            }
+        }
+
+        func makeUIViewController(context: Context) -> MFMailComposeViewController {
+            let vc = MFMailComposeViewController()
+            vc.setToRecipients(data.recipients)
+            vc.setSubject(data.subject)
+            vc.setMessageBody(data.body, isHTML: false)
+            vc.mailComposeDelegate = context.coordinator
+            return vc
+        }
+
+        func updateUIViewController(_ uiViewController: MFMailComposeViewController, context: Context) {}
     }
 }
 
