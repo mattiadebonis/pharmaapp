@@ -47,7 +47,13 @@ extension Therapy {
     func leftover() -> Int32 {
         // Recuperiamo i log relativi a questo package
         guard let allLogs = medicine.logs else { return 0 }
-        let relevantLogs = allLogs.filter { $0.package == self.package }
+        let therapyCount = medicine.therapies?.count ?? 0
+        let relevantLogs = allLogs.filter { log in
+            if log.therapy == self { return true }
+            if log.package == self.package { return true }
+            if log.package == nil && therapyCount == 1 { return true }
+            return false
+        }
         
         // Quanti acquisti e quante assunzioni
         let purchaseCount = relevantLogs.filter { $0.type == "purchase" }.count

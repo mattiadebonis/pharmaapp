@@ -36,15 +36,24 @@ struct TodayTodoRowView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: iconName)
-                .font(.system(size: 18, weight: .regular))
-                .foregroundStyle(labelColor)
+            Button(action: onToggle) {
+                ZStack {
+                    Circle()
+                        .fill(isCompleted ? circleStrokeColor.opacity(0.2) : .clear)
+                    Circle()
+                        .stroke(circleStrokeColor, lineWidth: 1.3)
+                }
+                .frame(width: 18, height: 18)
+                .accessibilityLabel(Text(iconName))
+            }
+            .buttonStyle(.plain)
+            .disabled(!showToggle)
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     if let actionText, !actionText.isEmpty {
                         Text(actionText)
-                            .font(.system(size: 20, weight: .regular))
+                            .font(.system(size: 16, weight: .regular))
                             .foregroundStyle(labelColor)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
@@ -52,55 +61,50 @@ struct TodayTodoRowView: View {
                     }
 
                     Text(title)
-                        .font(.system(size: 20, weight: .regular))
+                        .font(.system(size: 16, weight: .regular))
                         .foregroundStyle(titleColor)
                         .multilineTextAlignment(.leading)
-                        .lineLimit(nil)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
                         .layoutPriority(1)
                 }
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     if let subtitle {
-                        Text(subtitle)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(alignment: .firstTextBaseline, spacing: 0) {
+                            Text(subtitle)
+                                .font(.system(size: 14))
+                                .foregroundStyle(secondaryTextColor)
+                                .multilineTextAlignment(.leading)
+                                .lineLimit(2)
+                                .truncationMode(.tail)
+                                .layoutPriority(1)
+                            if let badge = trailingBadge {
+                                badgeView(text: badge.0, color: badge.1)
+                            }
+                        }
+                    } else if let badge = trailingBadge {
+                        badgeView(text: badge.0, color: badge.1)
                     }
                     if let auxiliaryLine {
                         auxiliaryLine
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 14))
+                            .foregroundStyle(secondaryTextColor)
                             .multilineTextAlignment(.leading)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if let badge = trailingBadge {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(badge.1)
-                    Text(badge.0)
-                        .font(.callout)
-                        .foregroundStyle(badge.1)
-                }
-            }
-
             if showToggle {
-                Button(action: onToggle) {
-                    Image(systemName: isCompleted ? "circle.fill" : "circle")
-                        .font(.system(size: 20, weight: .regular))
-                        .foregroundStyle(Color.primary)
-                }
-                .buttonStyle(.plain)
+                // Toggle handled by leading circle
             }
         }
         .contentShape(Rectangle())
-        .onTapGesture { onToggle() }
+        .onTapGesture { if showToggle { onToggle() } }
     }
 
     private var titleColor: Color {
@@ -109,5 +113,21 @@ struct TodayTodoRowView: View {
 
     private var labelColor: Color {
         isCompleted ? .secondary : .primary
+    }
+
+    private var secondaryTextColor: Color {
+        Color.primary.opacity(0.45)
+    }
+
+    private var circleStrokeColor: Color {
+        Color.primary.opacity(0.25)
+    }
+
+    private func badgeView(text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 14, weight: .regular))
+            .foregroundStyle(color)
+            .fixedSize(horizontal: true, vertical: true)
+            .padding(.horizontal, 2)
     }
 }

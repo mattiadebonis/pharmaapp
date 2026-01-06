@@ -61,14 +61,17 @@ struct TodayView: View {
                     if !isCollapsed {
                         if shouldShowPharmacyCard(for: group) {
                             pharmacySuggestionCard()
-                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 8, trailing: 16))
+                                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
                         }
-                        ForEach(group.items) { item in
+                        ForEach(Array(group.items.enumerated()), id: \.element.id) { rowEntry in
+                            let item = rowEntry.element
+                            let isLast = rowEntry.offset == group.items.count - 1
                             todoListRow(
                                 for: item,
-                                isCompleted: completedTodoIDs.contains(item.id)
+                                isCompleted: completedTodoIDs.contains(item.id),
+                                isLast: isLast
                             )
                         }
                         .padding(.top, -6)
@@ -79,8 +82,8 @@ struct TodayView: View {
                     } label: {
                         HStack(spacing: 8) {
                             Text(sectionTitle(for: group))
-                                .font(.headline.weight(.semibold))
-                                .foregroundStyle(.primary)
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.black)
                                 .textCase(nil)
                             Text("\(group.items.count)")
                                 .font(.callout)
@@ -258,28 +261,28 @@ struct TodayView: View {
     private func pharmacyHeader(primaryLine: String, statusLine: String?) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "location.fill")
-                .font(.caption)
+                .font(.system(size: 16, design: .rounded))
                 .foregroundStyle(.secondary)
             HStack(spacing: 4) {
                 Text(primaryLine)
-                    .font(.callout)
+                    .font(.system(size: 14, design: .rounded))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 if let statusLine {
                     Text("·")
-                        .font(.callout)
+                        .font(.system(size: 14, design: .rounded))
                         .foregroundStyle(.secondary)
                     Text(statusLine)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 14, design: .rounded))
+        .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
             }
-            .lineLimit(1)
-            Spacer(minLength: 0)
         }
+        .lineLimit(1)
+        Spacer(minLength: 0)
     }
 
     private func pharmacyStatusText() -> String? {
@@ -309,14 +312,18 @@ struct TodayView: View {
     }
 
     // MARK: - Todo rows
+    private var nestedRowIndent: CGFloat { 38 }
+
     @ViewBuilder
-    private func todoListRow(for item: TodayTodoItem, isCompleted: Bool) -> some View {
+    private func todoListRow(for item: TodayTodoItem, isCompleted: Bool, isLast: Bool) -> some View {
+        let med = medicine(for: item)
+
         if let blocked = blockedTherapyInfo(for: item) {
-            blockedTherapyCard(for: item, info: blocked)
+            blockedTherapyCard(for: item, info: blocked, isLast: isLast)
         } else if item.category == .purchase,
-                  let med = medicine(for: item),
+                  let med,
                   needsPrescriptionBeforePurchase(med, recurrenceManager: RecurrenceManager(context: PersistenceController.shared.container.viewContext)) {
-            purchaseWithPrescriptionRow(for: item, medicine: med, isCompleted: isCompleted)
+            purchaseWithPrescriptionRow(for: item, medicine: med, isCompleted: isCompleted, isLast: isLast)
         } else {
             let rowOpacity: Double = isCompleted ? 0.55 : 1
             let title = mainLineText(for: item)
@@ -325,40 +332,77 @@ struct TodayView: View {
             let actionText = actionText(for: item, isCompleted: isCompleted)
             let titleColor: Color = isCompleted ? .secondary : .primary
             let actionLabelColor: Color = isCompleted ? .secondary : .primary
-            let prescriptionMedicine = medicine(for: item)
-            let isPrescriptionActionEnabled = item.category == .prescription && prescriptionTaskState(for: prescriptionMedicine, item: item) != .waitingResponse
+            let prescriptionMedicine = med
+            let isPrescriptionActionEnabled = item.category == .prescription
             let iconName = actionIcon(for: item)
+            let swipeButtons = (item.category == .prescription && prescriptionMedicine != nil) ? prescriptionButtons(for: prescriptionMedicine!) : []
 
-            HStack(alignment: .center, spacing: 12) {
+            let baseContent: AnyView = {
                 if item.category == .prescription {
-                    prescriptionRowContent(
-                        item: item,
-                        titleColor: titleColor,
-                        prescriptionMedicine: prescriptionMedicine,
-                        iconName: iconName,
-                        isEnabled: isPrescriptionActionEnabled,
-                        isCompleted: isCompleted,
-                        onSend: {
-                            handlePrescriptionTap(for: item, medicine: prescriptionMedicine, isEnabled: isPrescriptionActionEnabled)
-                        },
-                        onToggle: { toggleCompletion(for: item) }
+                    return AnyView(
+                        prescriptionRowContent(
+                            item: item,
+                            titleColor: titleColor,
+                            prescriptionMedicine: prescriptionMedicine,
+                            iconName: iconName,
+                            isEnabled: isPrescriptionActionEnabled,
+                            isCompleted: isCompleted,
+                            onSend: {
+                                handlePrescriptionTap(for: item, medicine: prescriptionMedicine, isEnabled: isPrescriptionActionEnabled)
+                            },
+                            onToggle: { toggleCompletion(for: item) }
+                        )
                     )
                 } else {
-                    TodayTodoRowView(
-                        iconName: iconName,
-                        actionText: actionText,
-                        title: title,
-                        subtitle: subtitle,
-                        auxiliaryLine: auxiliaryLine,
-                        isCompleted: isCompleted,
-                        onToggle: { toggleCompletion(for: item) }
+                    return AnyView(
+                        TodayTodoRowView(
+                            iconName: iconName,
+                            actionText: actionText,
+                            title: title,
+                            subtitle: subtitle,
+                            auxiliaryLine: auxiliaryLine,
+                            isCompleted: isCompleted,
+                            onToggle: { toggleCompletion(for: item) }
+                        )
                     )
                 }
-            }
+            }()
+
+            let rowContent: AnyView = {
+                if item.category == .prescription && !swipeButtons.isEmpty {
+                    return AnyView(applyPrescriptionSwipe(baseContent, buttons: swipeButtons))
+                }
+                return baseContent
+            }()
+
+            rowContent
             .padding(.vertical, 6)
             .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 14))
             .listRowSeparator(.hidden)
             .opacity(rowOpacity)
+        }
+    }
+
+    @ViewBuilder
+    private func applyPrescriptionSwipe<Content: View>(_ content: Content, buttons: [SubtaskButton]) -> some View {
+        if buttons.isEmpty {
+            content
+        } else {
+            content
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    ForEach(Array(buttons.enumerated()), id: \.offset) { entry in
+                        let button = entry.element
+                        Button {
+                            button.action()
+                        } label: {
+                            if let icon = button.icon {
+                                Label(button.label, systemImage: icon)
+                            } else {
+                                Text(button.label)
+                            }
+                        }
+                    }
+                }
         }
     }
 
@@ -456,7 +500,7 @@ struct TodayView: View {
     }
 
     @ViewBuilder
-    private func blockedTherapyCard(for item: TodayTodoItem, info: BlockedTherapyInfo) -> some View {
+    private func blockedTherapyCard(for item: TodayTodoItem, info: BlockedTherapyInfo, isLast: Bool) -> some View {
         let medName = formattedMedicineName(info.medicine.nome)
         let awaitingRx = isAwaitingPrescription(info.medicine) || isBlockedSubtaskDone(type: "prescription", medicine: info.medicine)
         let doctorName = info.doctor?.name ?? "medico"
@@ -471,42 +515,33 @@ struct TodayView: View {
                 trailingBadge: (info.isOutOfStock && info.isDepleted) ? ("Da rifornire", .orange) : nil,
                 showCircle: true,
                 isDone: isBlockedSubtaskDone(type: "intake", medicine: info.medicine),
-                onCheck: { completeBlockedIntake(for: info) }
-            )
+                        onCheck: { completeBlockedIntake(for: info) }
+                    )
 
             if info.isOutOfStock && info.isDepleted {
-                ZStack(alignment: .leading) {
-                    Rectangle()
-                        .fill(Color.secondary.opacity(0.25))
-                        .frame(width: 1)
-                        .padding(.leading, 10)
-                        .padding(.vertical, 10)
-
-                    VStack(spacing: 10) {
-                        if info.needsPrescription && !awaitingRx {
-                            blockedStepRow(
-                                title: awaitingRx ? "In attesa della ricetta da \(doctorName)" : "Chiedi ricetta al medico \(doctorName)",
-                                status: nil,
-                                iconName: "heart.text.square",
-                                buttons: prescriptionButtons(for: info.medicine),
-                                showCircle: !awaitingRx,
-                                isDone: isBlockedSubtaskDone(type: "prescription", medicine: info.medicine),
-                                onCheck: awaitingRx ? nil : { completeBlockedPrescription(for: info) }
-                            )
-                            .padding(.leading, 28)
-                        }
-
+                VStack(spacing: 10) {
+                    if info.needsPrescription && !awaitingRx {
                         blockedStepRow(
-                            title: "Compra \(medName)",
+                            title: awaitingRx ? "In attesa della ricetta da \(doctorName)" : "Chiedi ricetta al medico \(doctorName)",
                             status: nil,
-                            subtitle: purchaseSubtitle(for: info.medicine, awaitingRx: awaitingRx, doctorName: doctorName),
-                            subtitleColor: .secondary,
-                            iconName: "cart",
-                            isDone: isBlockedSubtaskDone(type: "purchase", medicine: info.medicine),
-                            onCheck: { completeBlockedPurchase(for: info) }
+                            iconName: "heart.text.square",
+                            showCircle: !awaitingRx,
+                            isDone: isBlockedSubtaskDone(type: "prescription", medicine: info.medicine),
+                            onCheck: awaitingRx ? nil : { completeBlockedPrescription(for: info) }
                         )
-                        .padding(.leading, 28)
+                        .padding(.leading, nestedRowIndent)
                     }
+
+                    blockedStepRow(
+                        title: "Compra \(medName)",
+                        status: nil,
+                        subtitle: purchaseSubtitle(for: info.medicine, awaitingRx: awaitingRx, doctorName: doctorName),
+                        subtitleColor: .secondary,
+                        iconName: "cart",
+                        isDone: isBlockedSubtaskDone(type: "purchase", medicine: info.medicine),
+                        onCheck: { completeBlockedPurchase(for: info) }
+                    )
+                    .padding(.leading, nestedRowIndent)
                 }
             }
         }
@@ -516,7 +551,7 @@ struct TodayView: View {
     }
 
     @ViewBuilder
-    private func purchaseWithPrescriptionRow(for item: TodayTodoItem, medicine: Medicine, isCompleted: Bool) -> some View {
+    private func purchaseWithPrescriptionRow(for item: TodayTodoItem, medicine: Medicine, isCompleted: Bool, isLast: Bool) -> some View {
         let medName = formattedMedicineName(medicine.nome)
         let awaitingRx = isAwaitingPrescription(medicine)
         let doctorName = prescriptionDoctor(for: medicine).map(doctorFullName) ?? "medico"
@@ -534,26 +569,17 @@ struct TodayView: View {
                 onCheck: { toggleCompletion(for: item) }
             )
 
-            ZStack(alignment: .leading) {
-                Rectangle()
-                    .fill(Color.secondary.opacity(0.25))
-                    .frame(width: 1)
-                    .padding(.leading, 10)
-                    .padding(.vertical, 8)
-
-                VStack(spacing: 10) {
-                    if !awaitingRx {
-                        blockedStepRow(
-                            title: "Chiedi ricetta al medico \(doctorName)",
-                            status: nil,
-                            iconName: "heart.text.square",
-                            buttons: prescriptionButtons(for: medicine),
-                            showCircle: true,
-                            isDone: isBlockedSubtaskDone(type: "prescription", medicine: medicine),
-                            onCheck: { sendPrescriptionRequest(for: medicine) }
-                        )
-                        .padding(.leading, 36)
-                    }
+            VStack(spacing: 10) {
+                if !awaitingRx {
+                    blockedStepRow(
+                        title: "Chiedi ricetta al medico \(doctorName)",
+                        status: nil,
+                        iconName: "heart.text.square",
+                        showCircle: true,
+                        isDone: isBlockedSubtaskDone(type: "prescription", medicine: medicine),
+                        onCheck: { sendPrescriptionRequest(for: medicine) }
+                    )
+                    .padding(.leading, nestedRowIndent)
                 }
             }
         }
@@ -622,6 +648,7 @@ struct TodayView: View {
         let action: () -> Void
         let icon: String?
     }
+
 
     private func prescriptionButtons(for medicine: Medicine) -> [SubtaskButton] {
         var buttons: [SubtaskButton] = []
@@ -701,7 +728,7 @@ struct TodayView: View {
 
     @ViewBuilder
     private func blockedStepRow(title: String, status: String? = nil, subtitle: String? = nil, subtitleColor: Color = .secondary, subtitleAsBadge: Bool = false, iconName: String? = nil, buttons: [SubtaskButton] = [], trailingBadge: (String, Color)? = nil, showCircle: Bool = true, isDone: Bool = false, onCheck: (() -> Void)? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             TodayTodoRowView(
                 iconName: iconName ?? "circle",
                 actionText: title,
@@ -743,10 +770,10 @@ struct TodayView: View {
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(.leading, 24)
+                .padding(.leading, nestedRowIndent)
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
     }
 
     private func openPrescription(for medicine: Medicine) {
@@ -777,17 +804,24 @@ struct TodayView: View {
         onSend: @escaping () -> Void,
         onToggle: @escaping () -> Void
     ) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Image(systemName: iconName)
-                        .font(.system(size: 18, weight: .regular))
-                        .foregroundStyle(titleColor)
-                    Text(prescriptionMainText(for: item, medicine: prescriptionMedicine))
-                        .font(.title3)
-                        .foregroundStyle(titleColor)
-                        .multilineTextAlignment(.leading)
+        let toggleColor = Color.primary.opacity(0.6)
+        return HStack(alignment: .center, spacing: 12) {
+            Button(action: onToggle) {
+                ZStack {
+                    Circle()
+                        .fill(isCompleted ? toggleColor.opacity(0.2) : .clear)
+                    Circle()
+                        .stroke(toggleColor, lineWidth: 1.3)
                 }
+                .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(prescriptionMainText(for: item, medicine: prescriptionMedicine))
+                    .font(.title3)
+                    .foregroundStyle(titleColor)
+                    .multilineTextAlignment(.leading)
                 Button {
                     onSend()
                 } label: {
@@ -812,12 +846,6 @@ struct TodayView: View {
                 .buttonStyle(.plain)
             }
             Spacer(minLength: 8)
-            Button(action: onToggle) {
-                Image(systemName: isCompleted ? "circle.fill" : "circle")
-                    .font(.system(size: 20, weight: .regular))
-                    .foregroundStyle(Color.primary)
-            }
-            .buttonStyle(.plain)
         }
     }
 
@@ -1099,19 +1127,19 @@ struct TodayView: View {
     }
 
     private func stockSubtitle(for medicine: Medicine) -> String? {
-        let unitLabel = medicineUnitLabel(for: medicine)
+        let unitForm = medicineUnitForm(for: medicine)
         var lines: [String] = []
 
         if let therapies = medicine.therapies, !therapies.isEmpty {
             let totalLeft = therapies.reduce(0.0) { $0 + Double($1.leftover()) }
-            lines.append(stockLine(count: Int(max(0, totalLeft)), unit: unitLabel))
+            lines.append(stockLine(count: Int(max(0, totalLeft)), unitForm: unitForm))
             if totalLeft <= 0, let nextDose = earliestDoseToday(for: medicine) {
                 lines.append("Prossima dose scoperta: \(TodayFormatters.time.string(from: nextDose))")
             }
             return lines.joined(separator: "\n")
         }
         if let remaining = medicine.remainingUnitsWithoutTherapy() {
-            lines.append(stockLine(count: max(0, remaining), unit: unitLabel))
+            lines.append(stockLine(count: max(0, remaining), unitForm: unitForm))
             if remaining <= 0, let nextDose = earliestDoseToday(for: medicine) {
                 lines.append("Prossima dose scoperta: \(TodayFormatters.time.string(from: nextDose))")
             }
@@ -1120,36 +1148,71 @@ struct TodayView: View {
         return nil
     }
 
-    private func stockLine(count: Int, unit: String) -> String {
+    private func stockLine(count: Int, unitForm: UnitForm) -> String {
         let isSingular = count == 1
-        let unitText = pluralizedUnit(unit, count: count)
+        let unitText = isSingular ? unitForm.singular : unitForm.plural
         let verb = isSingular ? "rimasta" : "rimaste"
         return "\(count) \(unitText) \(verb)"
     }
 
-    private func medicineUnitLabel(for medicine: Medicine) -> String {
-        if let pkg = medicine.therapies?.first?.package {
-            let candidate = pkg.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !candidate.isEmpty { return candidate.lowercased() }
-            let unit = pkg.unita.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !unit.isEmpty { return unit.lowercased() }
-        }
-        if let pkg = medicine.packages.first {
-            let candidate = pkg.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !candidate.isEmpty { return candidate.lowercased() }
-            let unit = pkg.unita.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !unit.isEmpty { return unit.lowercased() }
-        }
-        return "unità"
+    private struct UnitForm {
+        let singular: String
+        let plural: String
+        let aliases: [String]
     }
 
-    private func pluralizedUnit(_ unit: String, count: Int) -> String {
-        guard count != 1 else { return unit }
-        let lower = unit.lowercased()
-        if lower.hasSuffix("à") || lower.hasSuffix("è") { return unit } // invariant plural (es. unità)
-        if lower.hasSuffix("e") { return unit }
-        if lower.hasSuffix("a") { return unit.dropLast() + "e" }
-        return unit + "e"
+    private static let unitForms: [UnitForm] = [
+        UnitForm(singular: "compressa", plural: "compresse", aliases: ["compressa", "compresse"]),
+        UnitForm(singular: "capsula", plural: "capsule", aliases: ["capsula", "capsule"]),
+        UnitForm(singular: "fiala", plural: "fiale", aliases: ["fiala", "fiale"]),
+        UnitForm(singular: "bustina", plural: "bustine", aliases: ["bustina", "bustine"]),
+        UnitForm(singular: "goccia", plural: "gocce", aliases: ["goccia", "gocce"]),
+        UnitForm(singular: "cerotto", plural: "cerotti", aliases: ["cerotto", "cerotti"]),
+        UnitForm(singular: "ovulo", plural: "ovuli", aliases: ["ovulo", "ovuli"]),
+        UnitForm(singular: "supposta", plural: "supposte", aliases: ["supposta", "supposte"]),
+        UnitForm(singular: "flaconcino", plural: "flaconcini", aliases: ["flaconcino", "flaconcini"]),
+        UnitForm(singular: "flacone", plural: "flaconi", aliases: ["flacone", "flaconi"]),
+        UnitForm(singular: "siringa", plural: "siringhe", aliases: ["siringa", "siringhe"]),
+        UnitForm(singular: "pipetta", plural: "pipette", aliases: ["pipetta", "pipette"]),
+        UnitForm(singular: "boccetta", plural: "boccette", aliases: ["boccetta", "boccette"]),
+        UnitForm(singular: "sacca", plural: "sacche", aliases: ["sacca", "sacche"]),
+        UnitForm(singular: "garza", plural: "garze", aliases: ["garza", "garze"]),
+        UnitForm(singular: "pastiglia", plural: "pastiglie", aliases: ["pastiglia", "pastiglie"]),
+        UnitForm(singular: "pillola", plural: "pillole", aliases: ["pillola", "pillole"]),
+        UnitForm(singular: "spray", plural: "spray", aliases: ["spray"]),
+        UnitForm(singular: "pezzo", plural: "pezzi", aliases: ["pezzo", "pezzi", "pz"]),
+        UnitForm(singular: "unità", plural: "unità", aliases: ["unità"])
+    ]
+
+    private static let fallbackUnitForm = UnitForm(
+        singular: "unità",
+        plural: "unità",
+        aliases: []
+    )
+
+    private func medicineUnitForm(for medicine: Medicine) -> UnitForm {
+        let package = medicine.therapies?.first?.package ?? medicine.packages.first
+        if let form = unitForm(from: package?.tipologia) { return form }
+        if let form = unitForm(from: package?.unita) { return form }
+        return Self.fallbackUnitForm
+    }
+
+    private func unitForm(from raw: String?) -> UnitForm? {
+        guard let raw else { return nil }
+        let normalized = raw.lowercased().replacingOccurrences(
+            of: #"[^\p{L}]+"#,
+            with: " ",
+            options: .regularExpression
+        )
+        let tokens = normalized.split(separator: " ").map(String.init)
+        for token in tokens {
+            if let match = Self.unitForms.first(where: { form in
+                form.aliases.contains(where: { token.hasPrefix($0) })
+            }) {
+                return match
+            }
+        }
+        return nil
     }
 
     private func purchaseSubtitle(for medicine: Medicine, awaitingRx: Bool, doctorName: String) -> String? {
