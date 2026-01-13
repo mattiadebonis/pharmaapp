@@ -61,7 +61,7 @@ struct ContentView: View {
                         .navigationTitle("Armadio dei farmaci")
                         .navigationBarTitleDisplayMode(.large)
                         .toolbar {
-                            ToolbarItem(placement: .navigationBarTrailing) {
+                            ToolbarItem(placement: .primaryAction) {
                                 Button {
                                     isSettingsPresented = true
                                 } label: {

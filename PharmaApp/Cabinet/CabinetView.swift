@@ -20,6 +20,8 @@ struct CabinetView: View {
     @State private var activeCabinetID: NSManagedObjectID?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.66)
     @State private var medicineToMove: Medicine?
+    @State private var isNewCabinetPresented = false
+    @State private var newCabinetName = ""
 
     var body: some View {
         let entries = viewModel.shelfEntries(
@@ -70,14 +72,19 @@ struct CabinetView: View {
                         .hidden()
                     }
                     .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden, edges: .all)
+                    .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
                 }
             }
         }
         .listRowSeparator(.hidden)
         .listSectionSeparator(.hidden)
         .listRowSeparator(.hidden, edges: .all)
-        .listSectionSpacing(0)
-        .listStyle(.insetGrouped)
+        .listSectionSpacing(4)
+        .listRowSpacing(8)
+        .listStyle(.plain)
+        .padding(.top, 12)
+        .padding(.leading, 5)
         .scrollContentBackground(.hidden)
         .scrollIndicators(.hidden)
         .id(logs.count)
@@ -125,11 +132,58 @@ struct CabinetView: View {
                 viewModel.clearSelection()
             }
         }
+        .sheet(isPresented: $isNewCabinetPresented, onDismiss: { newCabinetName = "" }) {
+            NavigationStack {
+                Form {
+                    Section("Nome armadietto") {
+                        TextField("Es. Casa", text: $newCabinetName)
+                            .textInputAutocapitalization(.words)
+                    }
+                }
+                .navigationTitle("Nuovo armadietto")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Annulla") { isNewCabinetPresented = false }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Crea") {
+                            createCabinet()
+                            isNewCabinetPresented = false
+                        }
+                        .disabled(trimmedCabinetName.isEmpty)
+                    }
+                }
+            }
+        }
         .navigationTitle("Armadio dei farmaci")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    isNewCabinetPresented = true
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                }
+                .accessibilityLabel("Nuovo armadietto")
+            }
+        }
     }
 
     // MARK: - Helpers
+    private var trimmedCabinetName: String {
+        newCabinetName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func createCabinet() {
+        let name = trimmedCabinetName
+        guard !name.isEmpty else { return }
+        let cabinet = Cabinet(context: managedObjectContext)
+        cabinet.id = UUID()
+        cabinet.name = name
+        saveContext()
+        newCabinetName = ""
+    }
+
     private func saveContext() {
         try? managedObjectContext.save()
     }
@@ -161,6 +215,7 @@ struct CabinetView: View {
         )
         .accessibilityIdentifier("MedicineRow_\(medicine.objectID)")
         .listRowSeparator(.hidden, edges: .all)
+        .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
     }
 
     // MARK: - Banner

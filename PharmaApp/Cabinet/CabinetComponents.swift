@@ -26,17 +26,26 @@ struct MedicineSwipeRow: View {
         .onTapGesture { onTap() }
         .onLongPressGesture { onLongPress() }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if let move = onMove {
+                Button {
+                    move()
+                } label: {
+                    swipeLabel("Sposta", systemImage: "tray.and.arrow.up.fill")
+                }
+                .tint(.indigo)
+            }
+
             Button {
                 onMarkTaken()
             } label: {
-                Label("Assunto", systemImage: "checkmark.circle.fill")
+                swipeLabel("Assunto", systemImage: "checkmark.circle.fill")
             }
             .tint(.green)
 
             Button {
                 onMarkPurchased()
             } label: {
-                Label("Acquistato", systemImage: "cart.fill")
+                swipeLabel("Acquistato", systemImage: "cart.fill")
             }
             .tint(.blue)
 
@@ -44,21 +53,12 @@ struct MedicineSwipeRow: View {
                 Button {
                     action()
                 } label: {
-                    Label("Ricetta", systemImage: "doc.text.fill")
+                    swipeLabel("Ricetta", systemImage: "doc.text.fill")
                 }
                 .tint(.orange)
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
-            if let move = onMove {
-                Button {
-                    move()
-                } label: {
-                    Label("Sposta", systemImage: "tray.and.arrow.up.fill")
-                }
-                .tint(.indigo)
-            }
-
             Button {
                 if isInSelectionMode {
                     onToggleSelection()
@@ -66,10 +66,23 @@ struct MedicineSwipeRow: View {
                     onEnterSelection()
                 }
             } label: {
-                Label(isSelected ? "Deseleziona" : "Seleziona", systemImage: isSelected ? "minus.circle" : "plus.circle")
+                swipeLabel(
+                    isSelected ? "Deseleziona" : "Seleziona",
+                    systemImage: isSelected ? "minus.circle" : "plus.circle"
+                )
             }
             .tint(.accentColor)
         }
+    }
+
+    private func swipeLabel(_ text: String, systemImage: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+            Text(text)
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .foregroundStyle(.white)
     }
 }
 

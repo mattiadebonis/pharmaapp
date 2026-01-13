@@ -210,8 +210,8 @@ struct MedicineRowView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 4)
+        .padding(.vertical, 6)
+        .padding(.trailing, 4)
         .contentShape(Rectangle())
         .overlay {
             if isInSelectionMode {
@@ -229,13 +229,12 @@ struct MedicineRowView: View {
         let dosage = primaryPackageDosage
         return HStack(alignment: .bottom, spacing: 4) {
             Text(name)
-                .font(.title3)
-                .bold()
+                .font(.system(size: 16, weight: .regular))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
             if let dosage {
                 Text(" \(dosage)")
-                    .font(.title3)
+                    .font(.system(size: 16, weight: .regular))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -261,7 +260,7 @@ struct MedicineRowView: View {
     }
 
     private var leadingIconName: String {
-        stockLevel == .empty ? "pills.fill" : "pills.fill"
+        stockLevel == .empty ? "pills" : "pills"
     }
 
     private var leadingIconColor: Color {
@@ -305,9 +304,9 @@ struct MedicineRowView: View {
 
     private var leadingIcon: some View {
         Image(systemName: leadingIconName)
-            .font(.system(size: 18, weight: .semibold))
+            .font(.system(size: 16, weight: .regular))
             .foregroundStyle(leadingIconColor)
-            .frame(width: 28, height: 28, alignment: .center)
+            .frame(width: 20, height: 20, alignment: .center)
     }
     
     private func packageQuantityLabel(_ pkg: Package) -> String? {
@@ -474,7 +473,7 @@ struct MedicineRowView: View {
             Text(data.text)
                 .foregroundStyle(.secondary)
         }
-        .font(.callout)
+        .font(.system(size: 14))
         .multilineTextAlignment(.leading)
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -532,7 +531,7 @@ struct MedicineRowView: View {
             Text(data.text)
                 .foregroundStyle(.secondary)
         }
-        .font(.callout)
+        .font(.system(size: 14))
     }
     
     private var therapyBadgeData: BadgeData? {

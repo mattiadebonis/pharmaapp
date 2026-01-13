@@ -28,9 +28,11 @@ struct CabinetDetailView: View {
                 row(for: med)
             }
         }
-        .listStyle(.insetGrouped)
+        .listStyle(.plain)
         .listRowSeparator(.hidden)
         .listRowSeparator(.hidden, edges: .all)
+        .listSectionSpacing(4)
+        .listRowSpacing(8)
         .scrollContentBackground(.hidden)
         .navigationTitle(cabinet.name)
         .navigationBarTitleDisplayMode(.inline)
@@ -97,6 +99,7 @@ struct CabinetDetailView: View {
             onMove: { medicineToMove = medicine }
         )
         .listRowSeparator(.hidden, edges: .all)
+        .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
     }
     
     private func shouldShowPrescriptionAction(for medicine: Medicine) -> Bool {

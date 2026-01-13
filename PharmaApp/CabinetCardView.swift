@@ -14,25 +14,38 @@ struct CabinetCardView: View {
         HStack(alignment: .top, spacing: 12) {
             leadingIcon
             VStack(alignment: .leading, spacing: 6) {
-                Text(cabinet.name)
-                    .font(.title3.weight(.semibold))
-                    .lineLimit(2)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(cabinet.name)
+                        .font(.system(size: 16, weight: .regular))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .layoutPriority(1)
+                    Spacer(minLength: 8)
+                    HStack(spacing: 6) {
+                        Text("\(medicineCount)")
+                            .font(.system(size: 16, weight: .regular))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 16, weight: .regular))
+                            .padding(.leading)
+                    }
+                    .foregroundStyle(Color.primary.opacity(0.45))
+                }
                 infoRow(for: stockLine)
                 infoRow(for: therapyLine)
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 4)
+        .padding(.vertical, 6)
+        .padding(.trailing, 4)
         .contentShape(Rectangle())
         .background(Color.clear)
     }
     
     private var leadingIcon: some View {
         Image(systemName: "cross.case")
-            .font(.system(size: 20, weight: .semibold))
+            .font(.system(size: 16, weight: .regular))
             .foregroundStyle(baseAccentColor)
-            .frame(width: 28, height: 28, alignment: .topLeading)
+            .frame(width: 18, height: 18, alignment: .center)
     }
     
     // MARK: - Info rows
@@ -52,7 +65,7 @@ struct CabinetCardView: View {
                 .foregroundStyle(line.color ?? .secondary)
                 .lineLimit(2)
         }
-        .font(.callout)
+        .font(.system(size: 14))
     }
     
     // MARK: - Stock summary
