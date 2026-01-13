@@ -4,6 +4,7 @@ import CoreData
 /// Servizio che incapsula le azioni di dominio sui medicinali (log di assunzione, acquisto, ricetta).
 final class MedicineActionService {
     private let context: NSManagedObjectContext
+    private lazy var stockService = StockService(context: context)
 
     init(context: NSManagedObjectContext = PersistenceController.shared.container.viewContext) {
         self.context = context
@@ -80,21 +81,6 @@ final class MedicineActionService {
 
     @discardableResult
     private func addLog(for medicine: Medicine, package: Package, type: String, therapy: Therapy? = nil) -> Log? {
-        let newLog = Log(context: context)
-        newLog.id = UUID()
-        newLog.type = type
-        newLog.timestamp = Date()
-        newLog.medicine = medicine
-        newLog.package = package
-        newLog.therapy = therapy
-
-        do {
-            try context.save()
-            return newLog
-        } catch {
-            context.delete(newLog)
-            print("❌ Error saving log: \(error.localizedDescription)")
-            return nil
-        }
+        return stockService.createLog(type: type, medicine: medicine, package: package, therapy: therapy)
     }
 }

@@ -45,26 +45,9 @@ extension Therapy {
     }
     
     func leftover() -> Int32 {
-        // Recuperiamo i log relativi a questo package
-        guard let allLogs = medicine.logs else { return 0 }
-        let therapyCount = medicine.therapies?.count ?? 0
-        let relevantLogs = allLogs.filter { log in
-            if log.therapy == self { return true }
-            if log.package == self.package { return true }
-            if log.package == nil && therapyCount == 1 { return true }
-            return false
-        }
-        
-        // Quanti acquisti e quante assunzioni
-        let purchaseCount = relevantLogs.filter { $0.type == "purchase" }.count
-        let incrementCount = relevantLogs.filter { $0.type == "stock_increment" }.count
-        let intakeCount = relevantLogs.filter { $0.type == "intake" || $0.type == "stock_adjustment" }.count
-        
-        // Quante unità contiene *ognuna* di queste confezioni?
-        let confezioneValore = package.numero
-        
-        // Scorte = (#purchase * confezioneValore) + incrementi - decrementi
-        return (Int32(purchaseCount) * confezioneValore) + Int32(incrementCount) - Int32(intakeCount)
+        guard let context = medicine.managedObjectContext ?? package.managedObjectContext else { return 0 }
+        let stockService = StockService(context: context)
+        return Int32(stockService.units(for: package))
     }
 
     /// Stima il consumo giornaliero in base a rrule e al numero di dosi (orari).

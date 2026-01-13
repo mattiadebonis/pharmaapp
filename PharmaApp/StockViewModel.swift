@@ -25,12 +25,15 @@ class StockRowViewModel: ObservableObject {
     }
 
     func saveIntakeLog() {
+        guard let package = resolvePackage(for: medicine) else { return }
         do {
-            let log = Log(context: managedObjectContext)
-            log.id = UUID()
-            log.timestamp = Date()
-            log.medicine = medicine
-            log.type = "intake"
+            let stockService = StockService(context: managedObjectContext)
+            _ = stockService.createLog(
+                type: "intake",
+                medicine: medicine,
+                package: package,
+                save: false
+            )
 
             try managedObjectContext.save()
         } catch {
@@ -39,28 +42,31 @@ class StockRowViewModel: ObservableObject {
     }
 
     func calculateRemainingUnits() {
-        if let package = medicine.packages.first {
-            let purchaseLogs = fetchLogs(type: "purchase")
-            let intakeLogs = fetchLogs(type: "intake")
-            
-            let totalNumberOfUnitsPurchased = Int(package.numero) * purchaseLogs
-            let totalIntakes = intakeLogs
-            
-            self.remainingUnits = totalNumberOfUnitsPurchased - totalIntakes
-            self.isAvailable = remainingUnits > 0
+        guard let package = resolvePackage(for: medicine) else {
+            remainingUnits = 0
+            isAvailable = false
+            return
         }
+        let stockService = StockService(context: managedObjectContext)
+        let units = stockService.units(for: package)
+        self.remainingUnits = units
+        self.isAvailable = units > 0
     }
 
-    private func fetchLogs(type: String) -> Int {
-        let fetchRequest = NSFetchRequest<Log>(entityName: "Log")
-        fetchRequest.predicate = NSPredicate(format: "type == %@ AND medicine == %@", type, medicine)
-
-        do {
-            let results = try managedObjectContext.fetch(fetchRequest)
-            return results.count
-        } catch let error {
-            print("Error fetching logs: \(error)")
-            return 0
+    private func resolvePackage(for medicine: Medicine) -> Package? {
+        if let therapies = medicine.therapies, let therapy = therapies.first {
+            return therapy.package
         }
+        if let logs = medicine.logs {
+            if let package = logs.filter({ $0.type == "purchase" })
+                .sorted(by: { $0.timestamp > $1.timestamp })
+                .first?.package {
+                return package
+            }
+        }
+        if !medicine.packages.isEmpty {
+            return medicine.packages.sorted(by: { $0.numero > $1.numero }).first
+        }
+        return nil
     }
 }

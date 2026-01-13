@@ -19,6 +19,7 @@ public class Medicine: NSManagedObject, Identifiable {
     @NSManaged public var prescribingDoctor: Doctor?
     @NSManaged public var therapies: Set<Therapy>?
     @NSManaged public var packages: Set<Package>
+    @NSManaged public var stocks: Set<Stock>?
     @NSManaged public var logs: Set<Log>?
     @NSManaged public var cabinet: Cabinet?
     
@@ -33,6 +34,10 @@ public class Medicine: NSManagedObject, Identifiable {
     
     func addToPackages(_ package: Package) {
         self.mutableSetValue(forKey: "packages").add(package)
+    }
+
+    func addToStocks(_ stock: Stock) {
+        self.mutableSetValue(forKey: "stocks").add(stock)
     }
 }
 
@@ -89,30 +94,12 @@ extension Medicine {
         return coverageDays < Double(stockThreshold(option: option))
     }
 
-    /// Calcola il numero totale di unità disponibili quando la medicina non è legata a terapie.
-    /// Somma tutte le confezioni acquistate (moltiplicando per `numero`) e sottrae le assunzioni.
-    /// Restituisce `0` se non ci sono log associati.
+    /// Numero totale di unità disponibili quando la medicina non è legata a terapie.
+    /// Usa il saldo persistito delle scorte (default context).
     func remainingUnitsWithoutTherapy() -> Int? {
-        let logs = self.logs ?? []
-        if logs.isEmpty {
-            return 0
-        }
-        var total = 0
-        for log in logs {
-            switch log.type {
-            case "purchase":
-                if let pkg = log.package {
-                    total += Int(pkg.numero)
-                }
-            case "stock_increment":
-                total += 1
-            case "intake", "stock_adjustment":
-                total -= 1
-            default:
-                continue
-            }
-        }
-        return total
+        guard let context = managedObjectContext else { return 0 }
+        let stockService = StockService(context: context)
+        return stockService.units(for: self)
     }
 
     /// Restituisce `true` se esiste almeno un log di tipo "new_prescription"

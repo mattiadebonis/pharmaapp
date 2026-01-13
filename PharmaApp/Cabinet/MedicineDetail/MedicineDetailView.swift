@@ -294,21 +294,10 @@ struct MedicineDetailView: View {
         max(1, Int(package.numero))
     }
 
-    private func matchesSelectedPackage(_ log: Log) -> Bool {
-        if let pkg = log.package {
-            return pkg.objectID == package.objectID
-        }
-        return medicine.packages.count == 1
-    }
-
     private var stockUnitsForSelectedPackage: Int {
-        guard let logs = medicine.logs else { return 0 }
-        let purchases = logs.filter { $0.type == "purchase" && matchesSelectedPackage($0) }.count
-        let increments = logs.filter { $0.type == "stock_increment" && matchesSelectedPackage($0) }.count
-        let intakes = logs.filter { $0.type == "intake" && matchesSelectedPackage($0) }.count
-        let adjustments = logs.filter { $0.type == "stock_adjustment" && matchesSelectedPackage($0) }.count
-        let units = purchases * packageUnitSize + increments - intakes - adjustments
-        return max(0, units)
+        guard let context = medicine.managedObjectContext ?? package.managedObjectContext else { return 0 }
+        let stockService = StockService(context: context)
+        return max(0, stockService.units(for: package))
     }
 
     private var stockPackagesForSelectedPackage: Int {

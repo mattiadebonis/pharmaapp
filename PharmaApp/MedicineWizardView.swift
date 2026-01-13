@@ -497,18 +497,9 @@ struct MedicineWizardView: View {
     }
 
     private func currentUnits(for medicine: Medicine, package: Package) -> Int {
-        let logs = medicine.logs ?? []
-        let packSize = max(1, Int(package.numero))
-        let matchesPackage: (Log) -> Bool = { log in
-            if let pkg = log.package { return pkg == package }
-            return medicine.packages.count == 1
-        }
-        let purchases = logs.filter { $0.type == "purchase" && matchesPackage($0) }.count
-        let increments = logs.filter { $0.type == "stock_increment" && matchesPackage($0) }.count
-        let decrements = logs.filter {
-            ($0.type == "intake" || $0.type == "stock_adjustment") && matchesPackage($0)
-        }.count
-        return max(0, purchases * packSize + increments - decrements)
+        guard let context = medicine.managedObjectContext ?? package.managedObjectContext else { return 0 }
+        let stockService = StockService(context: context)
+        return max(0, stockService.units(for: package))
     }
 
     private func applyPrefillIfNeeded() {

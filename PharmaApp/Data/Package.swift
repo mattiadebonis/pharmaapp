@@ -17,6 +17,7 @@ public class Package: NSManagedObject {
     @NSManaged public var volume: String
     @NSManaged public var medicine: Medicine
     @NSManaged public var therapies: Set<Therapy>?
+    @NSManaged public var stocks: Set<Stock>?
 }
 
 extension Package{
@@ -30,5 +31,8 @@ extension Package{
         return request
 
     }
-}
 
+    func addToStocks(_ stock: Stock) {
+        self.mutableSetValue(forKey: "stocks").add(stock)
+    }
+}

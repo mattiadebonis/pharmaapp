@@ -18,14 +18,16 @@ class MedicineRowViewModel: ObservableObject {
     
     /// Funzione generica per salvare un log per una determinata medicina e tipo
     func addLog(for medicine: Medicine, type: String, package: Package? = nil, therapy: Therapy? = nil) {
-        let newLog = Log(context: managedObjectContext)
-        newLog.id = UUID()
-        newLog.type = type
-        newLog.timestamp = Date()
-        newLog.medicine = medicine
-        if let pkg = package { newLog.package = pkg }
-        if let t = therapy { newLog.therapy = t }
-        
+        let resolvedPackage = resolvePackage(for: medicine, fallback: package, therapy: therapy)
+        let stockService = StockService(context: managedObjectContext)
+        _ = stockService.createLog(
+            type: type,
+            medicine: medicine,
+            package: resolvedPackage,
+            therapy: therapy,
+            save: false
+        )
+
         do {
             try managedObjectContext.save()
             print("Log salvato: \(type) per \(medicine.nome)")
@@ -77,6 +79,16 @@ class MedicineRowViewModel: ObservableObject {
         return logs.filter { $0.type == "purchase" }
             .sorted(by: { $0.timestamp > $1.timestamp })
             .first?.package
+    }
+
+    private func resolvePackage(for medicine: Medicine, fallback: Package?, therapy: Therapy?) -> Package? {
+        if let fallback { return fallback }
+        if let therapy { return therapy.package }
+        if let lastPurchased = getLastPurchasedPackage(for: medicine) { return lastPurchased }
+        if !medicine.packages.isEmpty {
+            return medicine.packages.sorted(by: { $0.numero > $1.numero }).first
+        }
+        return nil
     }
 
     func prescriptionStatus(medicine : Medicine, currentOption : Option) -> String? {

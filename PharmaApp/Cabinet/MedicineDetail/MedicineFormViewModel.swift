@@ -17,14 +17,15 @@ class MedicineFormViewModel: ObservableObject {
     // Funzione esistente per salvare le scorte
     func saveForniture(medicine: Medicine, package: Package) {
         do {
-            let log = Log(context: context)
-            log.id = UUID()
-            log.timestamp = Date()
-            log.medicine = medicine
-            log.package = package
-            log.type = "purchase"
+            let stockService = StockService(context: context)
+            _ = stockService.createLog(
+                type: "purchase",
+                medicine: medicine,
+                package: package,
+                save: false
+            )
             // Non creare automaticamente una Therapy: l'acquisto scorte non implica una pianificazione
-            
+
             try context.save()
             successMessage = "Salvataggio scorte riuscito!"
             DispatchQueue.main.async {
@@ -53,13 +54,14 @@ class MedicineFormViewModel: ObservableObject {
 
     func addPurchases(for medicine: Medicine, for package: Package, count: Int) {
         guard count > 0 else { return }
+        let stockService = StockService(context: context)
         for _ in 0..<count {
-            let log = Log(context: context)
-            log.id = UUID()
-            log.type = "purchase"
-            log.timestamp = Date()
-            log.medicine = medicine
-            log.package = package
+            _ = stockService.createLog(
+                type: "purchase",
+                medicine: medicine,
+                package: package,
+                save: false
+            )
         }
         do {
             try context.save()
@@ -81,40 +83,42 @@ class MedicineFormViewModel: ObservableObject {
         let delta = desired - current
         guard delta != 0 else { return }
         let packSize = max(1, Int(package.numero))
+        let stockService = StockService(context: context)
 
         if delta > 0 {
             let fullPackages = delta / packSize
             let remainingUnits = delta % packSize
 
             for _ in 0..<fullPackages {
-                let log = Log(context: context)
-                log.id = UUID()
-                log.type = "purchase"
-                log.timestamp = Date()
-                log.medicine = medicine
-                log.package = package
+                _ = stockService.createLog(
+                    type: "purchase",
+                    medicine: medicine,
+                    package: package,
+                    save: false
+                )
             }
 
             if remainingUnits > 0 {
                 for _ in 0..<remainingUnits {
-                    let log = Log(context: context)
-                    log.id = UUID()
-                    log.type = "stock_increment"
-                    log.timestamp = Date()
-                    log.medicine = medicine
-                    log.package = package
+                    _ = stockService.createLog(
+                        type: "stock_increment",
+                        medicine: medicine,
+                        package: package,
+                        save: false
+                    )
                 }
             }
         } else {
             for _ in 0..<abs(delta) {
-                let log = Log(context: context)
-                log.id = UUID()
-                log.type = "stock_adjustment"
-                log.timestamp = Date()
-                log.medicine = medicine
-                log.package = package
+                _ = stockService.createLog(
+                    type: "stock_adjustment",
+                    medicine: medicine,
+                    package: package,
+                    save: false
+                )
             }
         }
+        stockService.setUnits(desired, for: package)
 
         do {
             try context.save()
@@ -127,13 +131,14 @@ class MedicineFormViewModel: ObservableObject {
     }
     
     private func addLog(for medicine: Medicine, for package: Package, for therapy: Therapy?, type: String) {
-        let newLog = Log(context: context)
-        newLog.id = UUID()
-        newLog.type = type
-        newLog.timestamp = Date()
-        newLog.medicine = medicine
-        newLog.package = package
-        newLog.therapy = therapy
+        let stockService = StockService(context: context)
+        _ = stockService.createLog(
+            type: type,
+            medicine: medicine,
+            package: package,
+            therapy: therapy,
+            save: false
+        )
         do {
             try context.save()
             successMessage = "Log salvato: \(type)"
@@ -145,17 +150,8 @@ class MedicineFormViewModel: ObservableObject {
     }
 
     private static func currentUnits(for medicine: Medicine, package: Package) -> Int {
-        let logs = medicine.logs ?? []
-        let packSize = max(1, Int(package.numero))
-        let matchesPackage: (Log) -> Bool = { log in
-            if let pkg = log.package { return pkg == package }
-            return medicine.packages.count == 1
-        }
-        let purchases = logs.filter { $0.type == "purchase" && matchesPackage($0) }.count
-        let increments = logs.filter { $0.type == "stock_increment" && matchesPackage($0) }.count
-        let decrements = logs.filter {
-            ($0.type == "intake" || $0.type == "stock_adjustment") && matchesPackage($0)
-        }.count
-        return max(0, purchases * packSize + increments - decrements)
+        guard let context = medicine.managedObjectContext ?? package.managedObjectContext else { return 0 }
+        let stockService = StockService(context: context)
+        return max(0, stockService.units(for: package))
     }
 }
