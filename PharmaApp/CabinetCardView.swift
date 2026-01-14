@@ -9,8 +9,7 @@ struct CabinetCardView: View {
     private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
     
     var body: some View {
-        let stockLine = stockSummary
-        let therapyLine = therapySummary
+        let subtitle = makeDrawerSubtitle(drawer: cabinet, now: Date())
         HStack(alignment: .top, spacing: 12) {
             leadingIcon
             VStack(alignment: .leading, spacing: 6) {
@@ -30,8 +29,16 @@ struct CabinetCardView: View {
                     }
                     .foregroundStyle(Color.primary.opacity(0.45))
                 }
-                infoRow(for: stockLine)
-                infoRow(for: therapyLine)
+                Text(subtitle.line1)
+                    .font(.system(size: 14))
+                    .foregroundStyle(subtitleColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text(subtitle.line2)
+                    .font(.system(size: 14))
+                    .foregroundStyle(subtitleColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
             Spacer(minLength: 0)
         }
@@ -48,24 +55,8 @@ struct CabinetCardView: View {
             .frame(width: 18, height: 18, alignment: .center)
     }
     
-    // MARK: - Info rows
-    private struct InfoLine {
-        let icon: String?
-        let text: String
-        let color: Color?
-    }
-    
-    private func infoRow(for line: InfoLine) -> some View {
-        HStack(spacing: 8) {
-            if let icon = line.icon {
-                Image(systemName: icon)
-                    .foregroundStyle(line.color ?? .secondary)
-            }
-            Text(line.text)
-                .foregroundStyle(line.color ?? .secondary)
-                .lineLimit(2)
-        }
-        .font(.system(size: 14))
+    private var subtitleColor: Color {
+        Color.primary.opacity(0.45)
     }
     
     // MARK: - Stock summary
@@ -80,36 +71,6 @@ struct CabinetCardView: View {
         let coverageDays: Int?
     }
     
-    private var stockSummary: InfoLine {
-        let evaluations = medicines.compactMap { evaluateStock(for: $0) }
-        if let worst = lowestCoverageMedicine() {
-            let daysText = worst.days == 1 ? "1 giorno" : "\(worst.days) giorni"
-            let prefix: String
-            switch worst.evaluation.level {
-            case .empty:
-                prefix = "Scorte esaurite"
-            case .low:
-                prefix = "Scorte basse"
-            case .ok:
-                prefix = "Scorte minime"
-            }
-            return InfoLine(icon: nil, text: "\(prefix): \(daysText)", color: .secondary)
-        }
-
-        if let empty = firstEmptyMedicine {
-            return InfoLine(icon: nil, text: "Scorte esaurite", color: .secondary)
-        }
-        if let low = firstLowMedicine {
-            let eval = evaluateStock(for: low)
-            let days = eval?.coverageDays ?? 0
-            let daysText = days == 1 ? "1 giorno" : "\(max(0, days)) giorni"
-            return InfoLine(icon: nil, text: "Scorte basse: \(daysText)", color: .secondary)
-        }
-        if medicines.isEmpty {
-            return InfoLine(icon: nil, text: "Nessun medicinale nel cassetto", color: .secondary)
-        }
-        return InfoLine(icon: nil, text: "Scorte ok", color: .secondary)
-    }
     
     private var baseAccentColor: Color {
         if medicines.isEmpty {
@@ -166,15 +127,6 @@ struct CabinetCardView: View {
             return .low
         }
         return .ok
-    }
-    
-    // MARK: - Therapy summary
-    private var therapySummary: InfoLine {
-        let activeTherapies = therapiesInCabinet.count
-        if activeTherapies == 0 {
-            return InfoLine(icon: nil, text: "Nessuna terapia attiva", color: .secondary)
-        }
-        return InfoLine(icon: nil, text: "\(activeTherapies) terapie attive", color: .secondary)
     }
     
     private var overdueInfo: (count: Int, earliest: Date?) {

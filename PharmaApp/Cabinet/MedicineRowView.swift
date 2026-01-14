@@ -203,10 +203,7 @@ struct MedicineRowView: View {
             leadingIcon
             VStack(alignment: .leading, spacing: 6) {
                 titleLine
-                infoPills
-                if hasBadges {
-                    badgesRow
-                }
+                subtitleBlock
             }
             Spacer(minLength: 0)
         }
@@ -221,7 +218,46 @@ struct MedicineRowView: View {
         }
     }
     
-    private var hasTherapiesFlag: Bool { !therapies.isEmpty }
+    private var subtitle: MedicineAggregateSubtitle {
+        makeMedicineSubtitle(medicine: medicine, now: Date())
+    }
+
+    private var subtitleBlock: some View {
+        let value = subtitle
+        return VStack(alignment: .leading, spacing: 3) {
+            Text(value.line1)
+                .font(.system(size: 14))
+                .foregroundStyle(subtitleColor)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(value.line2)
+                    .font(.system(size: 14))
+                    .foregroundStyle(subtitleColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if let chip = value.chip {
+                    chipView(text: chip)
+                }
+            }
+        }
+    }
+
+    private var subtitleColor: Color {
+        Color.primary.opacity(0.45)
+    }
+
+    private func chipView(text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                Capsule()
+                    .fill(Color.secondary.opacity(0.12))
+            )
+    }
     private var titleLine: some View {
         let trimmed = medicine.nome.trimmingCharacters(in: .whitespacesAndNewlines)
         let base = trimmed.isEmpty ? "Medicinale" : trimmed
@@ -437,109 +473,6 @@ struct MedicineRowView: View {
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
     
-    private var therapyChipIconColor: Color { .gray }
-    private var stockChipIconColor: Color { .gray }
-
-    private struct InfoChip: Identifiable {
-        let id = UUID()
-        let icon: String?
-        let text: String
-        let color: Color
-    }
-
-    private var infoPills: some View {
-        let therapyChips = therapyInfoChips
-        return VStack(alignment: .leading, spacing: 4) {
-            if !therapyChips.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(therapyChips) { chip in
-                        pill(for: chip)
-                    }
-                }
-            }
-            HStack(spacing: 8) {
-                pill(for: stockChip)
-            }
-        }
-    }
-
-    private func pill(for data: InfoChip) -> some View {
-        HStack(alignment: .center, spacing: 6) {
-            if let icon = data.icon {
-                Image(systemName: icon)
-                    .foregroundStyle(data.color)
-                    .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] }
-            }
-            Text(data.text)
-                .foregroundStyle(.secondary)
-        }
-        .font(.system(size: 14))
-        .multilineTextAlignment(.leading)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var therapyInfoChips: [InfoChip] {
-        guard !therapies.isEmpty else { return [] }
-        let therapyCount = therapies.count
-        let text = therapyCount == 1 ? "1 terapia" : "\(therapyCount) terapie"
-        return [InfoChip(icon: nil, text: text, color: therapyChipIconColor)]
-    }
-
-    private var stockChip: InfoChip {
-        let text: String = {
-            if let days = autonomyDays {
-                let clamped = max(0, days)
-                let suffix = clamped == 1 ? "per 1 giorno" : "per \(clamped) giorni"
-                if let label = stockTypeLabel {
-                    return "\(label) \(suffix)"
-                }
-                return "Scorte \(suffix)"
-            }
-            if let units = remainingUnits {
-                let clamped = max(0, units)
-                return "\(clamped) \(stockUnitLabel)"
-            }
-            let display = stockDisplay
-            return "\(display.primary) · \(display.secondary)"
-        }()
-        return InfoChip(icon: nil, text: text, color: stockChipIconColor)
-    }
-    
-    private var badgesRow: some View {
-        HStack(spacing: 8) {
-            if let therapyBadge = therapyBadgeData {
-                badge(for: therapyBadge)
-            }
-            Spacer()
-        }
-    }
-    
-    private struct BadgeData {
-        let icon: String
-        let text: String
-        let color: Color
-    }
-
-    private var hasBadges: Bool {
-        therapyBadgeData != nil
-    }
-    
-    private func badge(for data: BadgeData) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: data.icon)
-                .foregroundStyle(data.color)
-            Text(data.text)
-                .foregroundStyle(.secondary)
-        }
-        .font(.system(size: 14))
-    }
-    
-    private var therapyBadgeData: BadgeData? {
-        if let overdue = earliestOverdueDoseTime {
-            return BadgeData(icon: "bell.badge.fill", text: "Dose saltata \(time(overdue))", color: .red)
-        }
-        return nil
-    }
 
     private var therapyPersonSummary: String? {
         let rawNames = therapies.compactMap { therapyPersonName($0) }.filter { !$0.isEmpty }
