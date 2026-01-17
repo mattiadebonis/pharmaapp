@@ -1,6 +1,16 @@
 import Foundation
 import CoreData
 
+struct IntakeGuardrailWarning {
+    let title: String
+    let message: String
+}
+
+enum IntakeGuardrailResult {
+    case allowed(Log?)
+    case requiresConfirmation(IntakeGuardrailWarning, therapy: Therapy?)
+}
+
 /// Servizio che incapsula le azioni di dominio sui medicinali (log di assunzione, acquisto, ricetta).
 final class MedicineActionService {
     private let context: NSManagedObjectContext
@@ -31,35 +41,28 @@ final class MedicineActionService {
 
     @discardableResult
     func markAsTaken(for medicine: Medicine) -> Log? {
-        if let therapies = medicine.therapies, !therapies.isEmpty {
-            let recurrenceManager = RecurrenceManager(context: context)
-            let now = Date()
-
-            let candidates: [(therapy: Therapy, date: Date)] = therapies.compactMap { therapy in
-                let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-                let start = therapy.start_date ?? now
-                guard let next = recurrenceManager.nextOccurrence(rule: rule, startDate: start, after: now, doses: therapy.doses as NSSet?) else {
-                    return nil
-                }
-                return (therapy, next)
-            }
-
-            if let chosen = candidates.min(by: { $0.date < $1.date }) {
-                return addLog(for: medicine, package: chosen.therapy.package, type: "intake", therapy: chosen.therapy)
-            }
-
-            if let fallback = therapies.first {
-                return addLog(for: medicine, package: fallback.package, type: "intake", therapy: fallback)
-            }
-        }
-
-        guard let package = package(for: medicine) else { return nil }
-        return addLog(for: medicine, package: package, type: "intake")
+        let therapy = resolveTherapyCandidate(for: medicine, now: Date())
+        return addIntakeLog(for: medicine, therapy: therapy)
     }
 
     @discardableResult
     func markAsTaken(for therapy: Therapy) -> Log? {
-        addLog(for: therapy.medicine, package: therapy.package, type: "intake", therapy: therapy)
+        addIntakeLog(for: therapy.medicine, therapy: therapy)
+    }
+
+    func guardedMarkAsTaken(for medicine: Medicine, now: Date = Date()) -> IntakeGuardrailResult {
+        let therapy = resolveTherapyCandidate(for: medicine, now: now)
+        if let warning = intakeGuardrailWarning(for: medicine, therapy: therapy, now: now) {
+            return .requiresConfirmation(warning, therapy: therapy)
+        }
+        return .allowed(addIntakeLog(for: medicine, therapy: therapy))
+    }
+
+    func guardedMarkAsTaken(for therapy: Therapy, now: Date = Date()) -> IntakeGuardrailResult {
+        if let warning = intakeGuardrailWarning(for: therapy.medicine, therapy: therapy, now: now) {
+            return .requiresConfirmation(warning, therapy: therapy)
+        }
+        return .allowed(addIntakeLog(for: therapy.medicine, therapy: therapy))
     }
 
     // MARK: - Helpers
@@ -77,6 +80,106 @@ final class MedicineActionService {
             return medicine.packages.sorted(by: { $0.numero > $1.numero }).first
         }
         return nil
+    }
+
+    private func resolveTherapyCandidate(for medicine: Medicine, now: Date) -> Therapy? {
+        guard let therapies = medicine.therapies, !therapies.isEmpty else { return nil }
+        let recurrenceManager = RecurrenceManager(context: context)
+
+        let candidates: [(therapy: Therapy, date: Date)] = therapies.compactMap { therapy in
+            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+            let start = therapy.start_date ?? now
+            guard let next = recurrenceManager.nextOccurrence(rule: rule, startDate: start, after: now, doses: therapy.doses as NSSet?) else {
+                return nil
+            }
+            return (therapy, next)
+        }
+
+        if let chosen = candidates.min(by: { $0.date < $1.date }) {
+            return chosen.therapy
+        }
+
+        return therapies.first
+    }
+
+    private func addIntakeLog(for medicine: Medicine, therapy: Therapy?) -> Log? {
+        if let therapy {
+            return addLog(for: medicine, package: therapy.package, type: "intake", therapy: therapy)
+        }
+        guard let package = package(for: medicine) else { return nil }
+        return addLog(for: medicine, package: package, type: "intake")
+    }
+
+    private func intakeGuardrailWarning(for medicine: Medicine, therapy: Therapy?, now: Date) -> IntakeGuardrailWarning? {
+        let fallbackSafeties = (medicine.therapies ?? []).compactMap { therapy in
+            ClinicalRules.decode(from: therapy.clinicalRules)?.safety
+        }
+        let fallbackMaxPerDay = fallbackSafeties.compactMap { $0.maxPerDay }.min()
+        let fallbackMinInterval = fallbackSafeties.compactMap { $0.minIntervalHours }.max()
+
+        let maxPerDay: Int? = medicine.safety_max_per_day > 0
+            ? Int(medicine.safety_max_per_day)
+            : fallbackMaxPerDay
+        let minInterval: Int? = medicine.safety_min_interval_hours > 0
+            ? Int(medicine.safety_min_interval_hours)
+            : fallbackMinInterval
+
+        if maxPerDay == nil && minInterval == nil {
+            return nil
+        }
+
+        if let maxPerDay {
+            let count = intakeCountToday(for: nil, medicine: medicine, now: now)
+            if count >= maxPerDay {
+                let title = "Limite giornaliero raggiunto"
+                let message = "Hai gia registrato \(count) assunzioni oggi. Limite: \(maxPerDay)/giorno."
+                return IntakeGuardrailWarning(title: title, message: message)
+            }
+        }
+
+        if let minInterval {
+            if let lastLog = lastIntakeLog(for: nil, medicine: medicine) {
+                let hours = now.timeIntervalSince(lastLog.timestamp) / 3600
+                if hours < Double(minInterval) {
+                    let title = "Intervallo troppo breve"
+                    let hoursText = String(format: "%.1f", hours)
+                    let message = "Ultima assunzione \(hoursText)h fa. Intervallo minimo: \(minInterval)h."
+                    return IntakeGuardrailWarning(title: title, message: message)
+                }
+            }
+        }
+
+        return nil
+    }
+
+    private func intakeCountToday(for therapy: Therapy?, medicine: Medicine, now: Date) -> Int {
+        let calendar = Calendar.current
+        let logsToday = (medicine.logs ?? []).filter { $0.type == "intake" && calendar.isDate($0.timestamp, inSameDayAs: now) }
+        guard let therapy else { return logsToday.count }
+        let assigned = logsToday.filter { $0.therapy == therapy }.count
+        if assigned > 0 { return assigned }
+
+        let unassigned = logsToday.filter { $0.therapy == nil }
+        let therapyCount = medicine.therapies?.count ?? 0
+        if therapyCount == 1 { return unassigned.count }
+        return unassigned.filter { $0.package == therapy.package }.count
+    }
+
+    private func lastIntakeLog(for therapy: Therapy?, medicine: Medicine) -> Log? {
+        let logs = (medicine.logs ?? []).filter { $0.type == "intake" }
+        guard let therapy else {
+            return logs.max(by: { $0.timestamp < $1.timestamp })
+        }
+        let assigned = logs.filter { $0.therapy == therapy }
+        if let lastAssigned = assigned.max(by: { $0.timestamp < $1.timestamp }) {
+            return lastAssigned
+        }
+        let unassigned = logs.filter { $0.therapy == nil }
+        let therapyCount = medicine.therapies?.count ?? 0
+        if therapyCount == 1 {
+            return unassigned.max(by: { $0.timestamp < $1.timestamp })
+        }
+        return unassigned.filter { $0.package == therapy.package }.max(by: { $0.timestamp < $1.timestamp })
     }
 
     @discardableResult

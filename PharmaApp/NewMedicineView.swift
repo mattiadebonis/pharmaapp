@@ -391,6 +391,7 @@ struct NewMedicineView: View {
         medicine.obbligo_ricetta = obbligoRicetta
         medicine.in_cabinet = true
         medicine.custom_stock_threshold = Int32(customThreshold)
+        medicine.manual_intake_registration = true
         medicine.prescribingDoctor = selectedDoctor
 
         let package = Package(context: context)
@@ -418,6 +419,7 @@ struct NewMedicineView: View {
         medicine.obbligo_ricetta = obbligoRicetta
         medicine.in_cabinet = true
         medicine.custom_stock_threshold = Int32(customThreshold)
+        medicine.manual_intake_registration = true
         if let doc = selectedDoctor {
             medicine.prescribingDoctor = child.object(with: doc.objectID) as? Doctor
         }
@@ -505,7 +507,7 @@ struct NewMedicineView: View {
         therapy.package = pkg
         therapy.start_date = Date()
         therapy.importance = Therapy.importanceValues.last
-        therapy.manual_intake_registration = true
+        therapy.manual_intake_registration = med.manual_intake_registration
         let parentPerson = draft.person ?? persons.first
         if let parentPerson,
            let childPerson = child.object(with: parentPerson.objectID) as? Person {

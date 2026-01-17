@@ -36,6 +36,7 @@ struct TodayView: View {
     @State private var pendingPrescriptionMedIDs: Set<NSManagedObjectID> = []
     @State private var mailComposeData: MailComposeData?
     @State private var messageComposeData: MessageComposeData?
+    @State private var intakeGuardrailPrompt: IntakeGuardrailPrompt?
 
     var body: some View {
         let sections = computeSections(for: Array(medicines), logs: Array(logs), option: options.first)
@@ -154,6 +155,15 @@ struct TodayView: View {
             MailComposeView(data: data) { _ in
                 mailComposeData = nil
             }
+        }
+        .sheet(item: $intakeGuardrailPrompt) { prompt in
+            IntakeGuardrailSheet(
+                title: prompt.warning.title,
+                message: prompt.warning.message,
+                onCancel: { intakeGuardrailPrompt = nil },
+                onConfirm: { confirmGuardrailOverride(prompt) }
+            )
+            .presentationDetents([.medium])
         }
         .sheet(isPresented: Binding(
             get: { selectedMedicine != nil },
@@ -427,6 +437,9 @@ struct TodayView: View {
         if item.category == .therapy, let med = medicine(for: item) {
             return personNameForTherapy(med)
         }
+        if item.category == .monitoring {
+            return item.detail
+        }
         return nil
     }
 
@@ -467,6 +480,14 @@ struct TodayView: View {
         let doctor: DoctorContact?
         let timeLabel: String?
         let personName: String?
+    }
+
+    private struct IntakeGuardrailPrompt: Identifiable {
+        let id = UUID()
+        let warning: IntakeGuardrailWarning
+        let item: TodayTodoItem
+        let medicine: Medicine
+        let therapy: Therapy?
     }
 
     private func blockedTherapyInfo(for item: TodayTodoItem) -> BlockedTherapyInfo? {
@@ -853,6 +874,10 @@ struct TodayView: View {
         switch item.category {
         case .therapy:
             return "pills"
+        case .monitoring:
+            return "waveform.path.ecg"
+        case .missedDose:
+            return "exclamationmark.triangle"
         case .purchase:
             return "cart"
         case .prescription:
@@ -889,57 +914,27 @@ struct TodayView: View {
         return calendar.date(from: mergedComponents)
     }
 
-    private func occursToday(_ therapy: Therapy, now: Date, recurrenceManager: RecurrenceManager) -> Bool {
-        let calendar = Calendar.current
-        let endOfDay: Date = {
-            let start = calendar.startOfDay(for: now)
-            return calendar.date(byAdding: DateComponents(day: 1, second: -1), to: start) ?? now
-        }()
+    private func allowedEvents(on day: Date, for therapy: Therapy, recurrenceManager: RecurrenceManager) -> Int {
         let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-        let start = therapy.start_date ?? now
+        let start = therapy.start_date ?? day
+        let perDay = max(1, therapy.doses?.count ?? 0)
+        return recurrenceManager.allowedEvents(on: day, rule: rule, startDate: start, dosesPerDay: perDay)
+    }
 
-        if start > endOfDay { return false }
-        if let until = rule.until, calendar.startOfDay(for: until) < calendar.startOfDay(for: now) { return false }
-
-        let freq = rule.freq.uppercased()
-        let interval = max(1, rule.interval)
-
-        func icsCode(for date: Date) -> String {
-            let weekday = calendar.component(.weekday, from: date)
-            switch weekday { case 1: return "SU"; case 2: return "MO"; case 3: return "TU"; case 4: return "WE"; case 5: return "TH"; case 6: return "FR"; case 7: return "SA"; default: return "MO" }
-        }
-
-        switch freq {
-        case "DAILY":
-            let startSOD = calendar.startOfDay(for: start)
-            let todaySOD = calendar.startOfDay(for: now)
-            if let days = calendar.dateComponents([.day], from: startSOD, to: todaySOD).day, days >= 0 {
-                return days % max(1, interval) == 0
-            }
-            return false
-        case "WEEKLY":
-            let todayCode = icsCode(for: now)
-            let byDays = rule.byDay.isEmpty ? ["MO","TU","WE","TH","FR","SA","SU"] : rule.byDay
-            guard byDays.contains(todayCode) else { return false }
-
-            let startWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: start)) ?? start
-            let todayWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
-            if let weeks = calendar.dateComponents([.weekOfYear], from: startWeek, to: todayWeek).weekOfYear, weeks >= 0 {
-                return weeks % max(1, interval) == 0
-            }
-            return false
-        default:
-            return false
-        }
+    private func occursToday(_ therapy: Therapy, now: Date, recurrenceManager: RecurrenceManager) -> Bool {
+        return allowedEvents(on: now, for: therapy, recurrenceManager: recurrenceManager) > 0
     }
 
     private func scheduledTimesToday(for therapy: Therapy, now: Date, recurrenceManager: RecurrenceManager) -> [Date] {
-        guard occursToday(therapy, now: now, recurrenceManager: recurrenceManager) else { return [] }
-        guard let doseSet = therapy.doses, !doseSet.isEmpty else { return [] }
         let today = Calendar.current.startOfDay(for: now)
-        return doseSet.compactMap { dose in
+        let allowed = allowedEvents(on: today, for: therapy, recurrenceManager: recurrenceManager)
+        guard allowed > 0 else { return [] }
+        guard let doseSet = therapy.doses, !doseSet.isEmpty else { return [] }
+        let sortedDoses = doseSet.sorted { $0.time < $1.time }
+        let limitedDoses = sortedDoses.prefix(min(allowed, sortedDoses.count))
+        return limitedDoses.compactMap { dose in
             combine(day: today, withTime: dose.time)
-        }.sorted()
+        }
     }
 
     private func intakeCountToday(for therapy: Therapy, medicine: Medicine, now: Date) -> Int {
@@ -1071,6 +1066,12 @@ struct TodayView: View {
         switch item.category {
         case .therapy:
             return isCompleted ? "Assunto" : "Assumi"
+        case .monitoring:
+            if isCompleted { return "Misurato" }
+            let kind = monitoringKindLabel(for: item)?.lowercased()
+            return kind.map { "Misura \($0)" } ?? "Misura"
+        case .missedDose:
+            return isCompleted ? "Letto" : "Dose mancata"
         case .purchase:
             if let med {
                 let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
@@ -1099,9 +1100,22 @@ struct TodayView: View {
         }
     }
 
+    private func monitoringKindLabel(for item: TodayTodoItem) -> String? {
+        guard item.category == .monitoring else { return nil }
+        let parts = item.id.split(separator: "|")
+        guard parts.count >= 3 else { return nil }
+        let raw = String(parts[2])
+        if let kind = MonitoringKind(rawValue: raw) {
+            return kind.label
+        }
+        return raw.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
     private func groupTitle(for category: TodayTodoItem.Category) -> String {
         switch category {
         case .therapy: return "Assumi"
+        case .monitoring: return "Misura"
+        case .missedDose: return "Dose mancata"
         case .purchase: return "Compra"
         case .prescription: return "Ricette"
         case .upcoming: return "Promemoria"
@@ -1269,13 +1283,52 @@ struct TodayView: View {
             return
         }
 
-        // Prova a registrare il log; anche se fallisce (es. manca la confezione) continuiamo con il completamento UI.
-        recordLogCompletion(for: item)
+        if item.category == .missedDose, let medicine = medicine(for: item) {
+            selectedMedicine = medicine
+        }
 
+        if item.category == .therapy, let medicine = medicine(for: item) {
+            let result: IntakeGuardrailResult
+            if let info = nextDoseTodayInfo(for: medicine) {
+                result = viewModel.actionService.guardedMarkAsTaken(for: info.therapy)
+            } else {
+                result = viewModel.actionService.guardedMarkAsTaken(for: medicine)
+            }
+            switch result {
+            case .allowed(let log):
+                completeItem(item, log: log)
+            case .requiresConfirmation(let warning, let therapy):
+                intakeGuardrailPrompt = IntakeGuardrailPrompt(
+                    warning: warning,
+                    item: item,
+                    medicine: medicine,
+                    therapy: therapy
+                )
+            }
+            return
+        }
+
+        let log = recordLogCompletion(for: item)
+        completeItem(item, log: log)
+    }
+
+    private func completeItem(_ item: TodayTodoItem, log: Log?) {
+        completionUndoLogID = log?.objectID
         _ = withAnimation(.easeInOut(duration: 0.2)) {
-            completedTodoIDs.insert(key)
+            completedTodoIDs.insert(completionKey(for: item))
         }
         showCompletionToast(for: item)
+    }
+
+    private func confirmGuardrailOverride(_ prompt: IntakeGuardrailPrompt) {
+        let log: Log?
+        if let therapy = prompt.therapy {
+            log = viewModel.actionService.markAsTaken(for: therapy)
+        } else {
+            log = viewModel.actionService.markAsTaken(for: prompt.medicine)
+        }
+        intakeGuardrailPrompt = nil
+        completeItem(prompt.item, log: log)
     }
 
     private func showCompletionToast(for item: TodayTodoItem) {
@@ -1310,11 +1363,9 @@ struct TodayView: View {
         completionUndoLogID = nil
     }
 
-    @discardableResult
-    private func recordLogCompletion(for item: TodayTodoItem) -> Bool {
+    private func recordLogCompletion(for item: TodayTodoItem) -> Log? {
         guard let medicine = medicine(for: item) else {
-            completionUndoLogID = nil
-            return true // Nessun log richiesto (es. task generico)
+            return nil // Nessun log richiesto (es. task generico)
         }
         let log: Log?
         switch item.category {
@@ -1324,6 +1375,8 @@ struct TodayView: View {
             } else {
                 log = viewModel.actionService.markAsTaken(for: medicine)
             }
+        case .monitoring, .missedDose:
+            log = nil
         case .purchase:
             log = viewModel.actionService.markAsPurchased(for: medicine)
         case .prescription:
@@ -1333,18 +1386,20 @@ struct TodayView: View {
                 log = viewModel.actionService.requestPrescription(for: medicine)
             }
         case .upcoming, .pharmacy:
-            log = nil // Nessun log previsto, ma consideriamo successo
+            log = nil // Nessun log previsto
         }
-        completionUndoLogID = log?.objectID
         if let log {
             print("✅ log creato \(log.type) per \(medicine.nome)")
         } else {
             print("⚠️ recordLogCompletion: log non creato per \(item.id)")
         }
-        return true
+        return log
     }
 
     private func completionKey(for item: TodayTodoItem) -> String {
+        if item.category == .monitoring || item.category == .missedDose {
+            return item.id
+        }
         if let medID = item.medicineID {
             return "\(item.category.rawValue)|\(medID)"
         }
@@ -1373,6 +1428,31 @@ struct TodayView: View {
             .foregroundStyle(Color.accentColor)
             .buttonStyle(.plain)
             Spacer()
+        }
+    }
+
+    private struct IntakeGuardrailSheet: View {
+        let title: String
+        let message: String
+        let onCancel: () -> Void
+        let onConfirm: () -> Void
+
+        var body: some View {
+            VStack(spacing: 16) {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+                Text(message)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                HStack(spacing: 12) {
+                    Button("Annulla") { onCancel() }
+                        .buttonStyle(.bordered)
+                    Button("Registra comunque") { onConfirm() }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding()
         }
     }
 

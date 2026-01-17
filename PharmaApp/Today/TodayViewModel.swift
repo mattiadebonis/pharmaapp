@@ -60,62 +60,66 @@ class TodayViewModel: ObservableObject {
         urgentIDs: Set<NSManagedObjectID>,
         option: Option?
     ) -> [TodayTodoItem] {
-        guard let context else { return [] }
-        var items = TodayTodoBuilder.makeTodos(from: context, medicines: medicines, urgentIDs: urgentIDs)
-        items = items.filter { [.therapy, .purchase, .prescription].contains($0.category) }
-        let blockedMedicineIDs: Set<NSManagedObjectID> = Set(
-            items.compactMap { item in
-                guard let info = blockedTherapyInfo(for: item, medicines: medicines, option: option) else { return nil }
-                return info.objectID
+        var baseItems: [TodayTodoItem] = []
+        if let context {
+            baseItems = TodayTodoBuilder.makeTodos(from: context, medicines: medicines, urgentIDs: urgentIDs)
+            baseItems = baseItems.filter { [.therapy, .purchase, .prescription].contains($0.category) }
+            let blockedMedicineIDs: Set<NSManagedObjectID> = Set(
+                baseItems.compactMap { item in
+                    guard let info = blockedTherapyInfo(for: item, medicines: medicines, option: option) else { return nil }
+                    return info.objectID
+                }
+            )
+            let rec = RecurrenceManager(context: viewContext)
+            if !blockedMedicineIDs.isEmpty {
+                baseItems = baseItems.filter { item in
+                    guard let medID = item.medicineID else { return true }
+                    guard blockedMedicineIDs.contains(medID) else { return true }
+                    if item.category == .prescription { return false }
+                    return true
+                }
             }
-        )
-        let rec = RecurrenceManager(context: viewContext)
-        if !blockedMedicineIDs.isEmpty {
-            items = items.filter { item in
-                guard let medID = item.medicineID else { return true }
-                guard blockedMedicineIDs.contains(medID) else { return true }
-                if item.category == .prescription { return false }
-                return true
+            // Se esiste un todo di acquisto per un medicinale, rimuovi il todo di ricetta duplicato:
+            let purchaseIDs: Set<NSManagedObjectID> = Set(baseItems.compactMap { item in
+                item.category == .purchase ? item.medicineID : nil
+            })
+            if !purchaseIDs.isEmpty {
+                baseItems = baseItems.filter { item in
+                    if item.category == .prescription, let medID = item.medicineID {
+                        return !purchaseIDs.contains(medID)
+                    }
+                    return true
+                }
             }
-        }
-        // Se esiste un todo di acquisto per un medicinale, rimuovi il todo di ricetta duplicato:
-        let purchaseIDs: Set<NSManagedObjectID> = Set(items.compactMap { item in
-            item.category == .purchase ? item.medicineID : nil
-        })
-        if !purchaseIDs.isEmpty {
-            items = items.filter { item in
-                if item.category == .prescription, let medID = item.medicineID {
-                    return !purchaseIDs.contains(medID)
+            baseItems = baseItems.map { item in
+                if item.category == .prescription,
+                   let med = medicine(for: item, medicines: medicines),
+                   needsPrescriptionBeforePurchase(med, option: option, recurrenceManager: rec) {
+                    return TodayTodoItem(
+                        id: "purchase|rx|\(item.id)",
+                        title: item.title,
+                        detail: item.detail,
+                        category: .purchase,
+                        medicineID: item.medicineID
+                    )
+                }
+                return item
+            }
+            // Evita di duplicare il farmaco sia nella sezione oraria (terapia) sia nei rifornimenti
+            baseItems = baseItems.filter { item in
+                if item.category == .purchase,
+                   let med = medicine(for: item, medicines: medicines),
+                   med.hasIntakeToday(recurrenceManager: rec),
+                   !med.hasIntakeLoggedToday(),
+                   isOutOfStock(med, option: option, recurrenceManager: rec) {
+                    return false
                 }
                 return true
             }
         }
-        items = items.map { item in
-            if item.category == .prescription,
-               let med = medicine(for: item, medicines: medicines),
-               needsPrescriptionBeforePurchase(med, option: option, recurrenceManager: rec) {
-                return TodayTodoItem(
-                    id: "purchase|rx|\(item.id)",
-                    title: item.title,
-                    detail: item.detail,
-                    category: .purchase,
-                    medicineID: item.medicineID
-                )
-            }
-            return item
-        }
-        // Evita di duplicare il farmaco sia nella sezione oraria (terapia) sia nei rifornimenti
-        items = items.filter { item in
-            if item.category == .purchase,
-               let med = medicine(for: item, medicines: medicines),
-               med.hasIntakeToday(recurrenceManager: rec),
-               !med.hasIntakeLoggedToday(),
-               isOutOfStock(med, option: option, recurrenceManager: rec) {
-                return false
-            }
-            return true
-        }
-        return items
+
+        let clinicalContext = ClinicalContextBuilder(context: viewContext).build(for: medicines)
+        return baseItems + clinicalContext.allTodos
     }
 
     func sortTodos(_ items: [TodayTodoItem]) -> [TodayTodoItem] {
@@ -249,17 +253,37 @@ class TodayViewModel: ObservableObject {
     }
 
     private func timeSortValue(for item: TodayTodoItem) -> Int? {
+        if (item.category == .monitoring || item.category == .missedDose),
+           let date = timestampFromID(item) {
+            let comps = Calendar.current.dateComponents([.hour, .minute], from: date)
+            return (comps.hour ?? 0) * 60 + (comps.minute ?? 0)
+        }
         guard let detail = item.detail, let match = timeComponents(from: detail) else { return nil }
         return (match.hour * 60) + match.minute
     }
 
     private func todoTimeDate(for item: TodayTodoItem, medicines: [Medicine], options: Option?) -> Date? {
+        if item.category == .monitoring || item.category == .missedDose {
+            if let date = timestampFromID(item) {
+                return date
+            }
+            if let detail = item.detail, let match = timeComponents(from: detail) {
+                let now = Date()
+                return Calendar.current.date(bySettingHour: match.hour, minute: match.minute, second: 0, of: now)
+            }
+        }
         if let medicine = medicine(for: item, medicines: medicines), let date = earliestDoseToday(for: medicine, recurrenceManager: RecurrenceManager(context: viewContext)) {
             return date
         }
         guard let detail = item.detail, let match = timeComponents(from: detail) else { return nil }
         let now = Date()
         return Calendar.current.date(bySettingHour: match.hour, minute: match.minute, second: 0, of: now)
+    }
+
+    private func timestampFromID(_ item: TodayTodoItem) -> Date? {
+        let parts = item.id.split(separator: "|")
+        guard let last = parts.last, let seconds = TimeInterval(String(last)) else { return nil }
+        return Date(timeIntervalSince1970: seconds)
     }
 
     private func timeComponents(from detail: String) -> (hour: Int, minute: Int)? {

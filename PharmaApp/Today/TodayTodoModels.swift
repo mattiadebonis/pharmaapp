@@ -6,6 +6,8 @@ import CoreData
 struct TodayTodoItem: Identifiable, Hashable {
     enum Category: String, CaseIterable, Hashable {
         case therapy
+        case monitoring
+        case missedDose
         case purchase
         case prescription
         case upcoming
@@ -14,6 +16,8 @@ struct TodayTodoItem: Identifiable, Hashable {
         var label: String {
             switch self {
             case .therapy: return "Terapie di oggi"
+            case .monitoring: return "Monitoraggi"
+            case .missedDose: return "Dose mancate"
             case .purchase: return "Acquisti"
             case .prescription: return "Ricette"
             case .upcoming: return "Prossimi giorni"
@@ -24,6 +28,8 @@ struct TodayTodoItem: Identifiable, Hashable {
         var icon: String {
             switch self {
             case .therapy: return "pills.circle"
+            case .monitoring: return "waveform.path.ecg"
+            case .missedDose: return "exclamationmark.triangle"
             case .purchase: return "cart.badge.plus"
             case .prescription: return "doc.text.magnifyingglass"
             case .upcoming: return "calendar"
@@ -34,6 +40,8 @@ struct TodayTodoItem: Identifiable, Hashable {
         var tint: Color {
             switch self {
             case .therapy: return .blue
+            case .monitoring: return .indigo
+            case .missedDose: return .red
             case .purchase: return .green
             case .prescription: return .orange
             case .upcoming: return .purple
@@ -42,7 +50,7 @@ struct TodayTodoItem: Identifiable, Hashable {
         }
 
         static var displayOrder: [Category] {
-            [.therapy, .purchase, .prescription, .upcoming, .pharmacy]
+            [.monitoring, .therapy, .missedDose, .purchase, .prescription, .upcoming, .pharmacy]
         }
     }
 
@@ -198,68 +206,27 @@ enum TodayTodoBuilder {
         return calendar.date(from: mergedComponents)
     }
 
-    private static func icsCode(for date: Date, calendar: Calendar) -> String {
-        let weekday = calendar.component(.weekday, from: date)
-        switch weekday {
-        case 1: return "SU"
-        case 2: return "MO"
-        case 3: return "TU"
-        case 4: return "WE"
-        case 5: return "TH"
-        case 6: return "FR"
-        case 7: return "SA"
-        default: return "MO"
-        }
+    private static func allowedEvents(on day: Date, for therapy: Therapy, recurrenceManager: RecurrenceManager) -> Int {
+        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+        let start = therapy.start_date ?? day
+        let perDay = max(1, therapy.doses?.count ?? 0)
+        return recurrenceManager.allowedEvents(on: day, rule: rule, startDate: start, dosesPerDay: perDay)
     }
 
     private static func occursToday(_ therapy: Therapy, now: Date, recurrenceManager: RecurrenceManager) -> Bool {
-        let calendar = Calendar.current
-        let endOfDay: Date = {
-            let start = calendar.startOfDay(for: now)
-            return calendar.date(byAdding: DateComponents(day: 1, second: -1), to: start) ?? now
-        }()
-        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-        let start = therapy.start_date ?? now
-
-        if start > endOfDay { return false }
-        if let until = rule.until, calendar.startOfDay(for: until) < calendar.startOfDay(for: now) { return false }
-
-        let freq = rule.freq.uppercased()
-        let interval = rule.interval ?? 1
-
-        switch freq {
-        case "DAILY":
-            let startSOD = calendar.startOfDay(for: start)
-            let todaySOD = calendar.startOfDay(for: now)
-            if let days = calendar.dateComponents([.day], from: startSOD, to: todaySOD).day, days >= 0 {
-                return days % max(1, interval) == 0
-            }
-            return false
-
-        case "WEEKLY":
-            let todayCode = icsCode(for: now, calendar: calendar)
-            let byDays = rule.byDay.isEmpty ? ["MO", "TU", "WE", "TH", "FR", "SA", "SU"] : rule.byDay
-            guard byDays.contains(todayCode) else { return false }
-
-            let startWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: start)) ?? start
-            let todayWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
-            if let weeks = calendar.dateComponents([.weekOfYear], from: startWeek, to: todayWeek).weekOfYear, weeks >= 0 {
-                return weeks % max(1, interval) == 0
-            }
-            return false
-
-        default:
-            return false
-        }
+        return allowedEvents(on: now, for: therapy, recurrenceManager: recurrenceManager) > 0
     }
 
     private static func scheduledTimesToday(for therapy: Therapy, now: Date, recurrenceManager: RecurrenceManager) -> [Date] {
-        guard occursToday(therapy, now: now, recurrenceManager: recurrenceManager) else { return [] }
-        guard let doseSet = therapy.doses, !doseSet.isEmpty else { return [] }
         let today = Calendar.current.startOfDay(for: now)
-        return doseSet.compactMap { dose in
+        let allowed = allowedEvents(on: today, for: therapy, recurrenceManager: recurrenceManager)
+        guard allowed > 0 else { return [] }
+        guard let doseSet = therapy.doses, !doseSet.isEmpty else { return [] }
+        let sortedDoses = doseSet.sorted { $0.time < $1.time }
+        let limitedDoses = sortedDoses.prefix(min(allowed, sortedDoses.count))
+        return limitedDoses.compactMap { dose in
             combine(day: today, withTime: dose.time)
-        }.sorted()
+        }
     }
 
     private static func intakeCountToday(for therapy: Therapy, medicine: Medicine, now: Date) -> Int {

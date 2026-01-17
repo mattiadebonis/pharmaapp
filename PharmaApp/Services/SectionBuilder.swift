@@ -37,53 +37,18 @@ func computeSections(for medicines: [Medicine], logs: [Log], option: Option?) ->
         return best
     }
 
-    func icsCode(for date: Date) -> String {
-        let weekday = cal.component(.weekday, from: date)
-        switch weekday {
-        case 1: return "SU"
-        case 2: return "MO"
-        case 3: return "TU"
-        case 4: return "WE"
-        case 5: return "TH"
-        case 6: return "FR"
-        case 7: return "SA"
-        default: return "MO"
-        }
-    }
-
     func occursToday(_ t: Therapy) -> Bool {
         let rule = rec.parseRecurrenceString(t.rrule ?? "")
         let start = t.start_date ?? now
-        if start > endOfDay { return false }
-        if let until = rule.until, cal.startOfDay(for: until) < cal.startOfDay(for: now) { return false }
-
-        let freq = rule.freq.uppercased()
-        let interval = rule.interval ?? 1
-
-        switch freq {
-        case "DAILY":
-            let startSOD = cal.startOfDay(for: start)
-            let todaySOD = cal.startOfDay(for: now)
-            if let days = cal.dateComponents([.day], from: startSOD, to: todaySOD).day, days >= 0 {
-                return days % max(1, interval) == 0
-            }
-            return false
-
-        case "WEEKLY":
-            let todayCode = icsCode(for: now)
-            let byDays = rule.byDay.isEmpty ? ["MO","TU","WE","TH","FR","SA","SU"] : rule.byDay
-            guard byDays.contains(todayCode) else { return false }
-
-            let startWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: start)) ?? start
-            let todayWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
-            if let weeks = cal.dateComponents([.weekOfYear], from: startWeek, to: todayWeek).weekOfYear, weeks >= 0 {
-                return weeks % max(1, interval) == 0
-            }
-            return false
-
-        default:
-            return false
-        }
+        let perDay = max(1, t.doses?.count ?? 0)
+        let allowed = rec.allowedEvents(
+            on: now,
+            rule: rule,
+            startDate: start,
+            dosesPerDay: perDay,
+            calendar: cal
+        )
+        return allowed > 0
     }
 
     func stockStatus(for m: Medicine) -> StockStatus {

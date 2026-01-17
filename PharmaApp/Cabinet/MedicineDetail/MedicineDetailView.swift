@@ -17,11 +17,21 @@ struct MedicineDetailView: View {
     @State private var detailDetent: PresentationDetent = .fraction(0.66)
     @State private var emailDetent: PresentationDetent = .fraction(0.55)
     @State private var customThresholdValue: Int = 7
+    @State private var intakeConfirmationEnabled: Bool = false
+    @State private var missedDosePreset: MissedDosePreset = .none
+    @State private var safetyMaxEnabled: Bool = false
+    @State private var safetyMaxPerDay: Int = 3
+    @State private var safetyIntervalEnabled: Bool = false
+    @State private var safetyIntervalHours: Int = 6
     @State private var selectedDoctorID: NSManagedObjectID? = nil
     @State private var showTherapySheet = false
     @State private var selectedTherapy: Therapy?
     @State private var newTherapySheetID = UUID()
     @State private var showThresholdSheet = false
+    @State private var showMaxPerDaySheet = false
+    @State private var showMinIntervalSheet = false
+    @State private var showIntakeConfirmationSheet = false
+    @State private var showMissedDoseSheet = false
     @State private var showDoctorSheet = false
     
     @ObservedObject var medicine: Medicine
@@ -92,6 +102,26 @@ struct MedicineDetailView: View {
                         } label: {
                             Label("Soglia scorte", systemImage: "bell.badge")
                         }
+                        Button {
+                            showIntakeConfirmationSheet = true
+                        } label: {
+                            Label("Conferma assunzione", systemImage: "checkmark.circle")
+                        }
+                        Button {
+                            showMissedDoseSheet = true
+                        } label: {
+                            Label("Dose mancata", systemImage: "exclamationmark.triangle")
+                        }
+                        Button {
+                            showMaxPerDaySheet = true
+                        } label: {
+                            Label("Limite massimo al giorno", systemImage: "calendar.badge.exclamationmark")
+                        }
+                        Button {
+                            showMinIntervalSheet = true
+                        } label: {
+                            Label("Intervallo minimo tra le dosi", systemImage: "hourglass")
+                        }
                         if medicine.obbligo_ricetta {
                             Button {
                                 showDoctorSheet = true
@@ -118,6 +148,38 @@ struct MedicineDetailView: View {
             detailDetent = .fraction(0.66)
             let current = Int(medicine.custom_stock_threshold)
             customThresholdValue = current > 0 ? current : 7
+            let fallbackSafeties = therapies.compactMap { $0.clinicalRulesValue?.safety }
+            let fallbackMaxPerDay = fallbackSafeties.compactMap { $0.maxPerDay }.min()
+            let fallbackMinInterval = fallbackSafeties.compactMap { $0.minIntervalHours }.max()
+
+            let maxPerDay = Int(medicine.safety_max_per_day)
+            let resolvedMaxPerDay = maxPerDay > 0 ? maxPerDay : (fallbackMaxPerDay ?? 0)
+            safetyMaxEnabled = resolvedMaxPerDay > 0
+            safetyMaxPerDay = resolvedMaxPerDay > 0 ? resolvedMaxPerDay : 3
+
+            let minInterval = Int(medicine.safety_min_interval_hours)
+            let resolvedMinInterval = minInterval > 0 ? minInterval : (fallbackMinInterval ?? 0)
+            safetyIntervalEnabled = resolvedMinInterval > 0
+            safetyIntervalHours = resolvedMinInterval > 0 ? resolvedMinInterval : 6
+
+            let fallbackConfirmation = therapies.contains(where: { $0.manual_intake_registration })
+            let resolvedConfirmation = medicine.manual_intake_registration || fallbackConfirmation
+            intakeConfirmationEnabled = resolvedConfirmation
+            let needsConfirmationSync = medicine.manual_intake_registration != resolvedConfirmation ||
+                therapies.contains(where: { $0.manual_intake_registration != resolvedConfirmation })
+            if needsConfirmationSync {
+                medicine.manual_intake_registration = resolvedConfirmation
+                persistIntakeConfirmation()
+            }
+
+            if let raw = medicine.missed_dose_preset,
+               let preset = MissedDosePreset(rawValue: raw) {
+                missedDosePreset = preset
+            } else if let policy = therapies.compactMap({ $0.clinicalRulesValue?.missedDosePolicy }).first {
+                missedDosePreset = MissedDosePreset.from(policy: policy)
+            } else {
+                missedDosePreset = .none
+            }
             selectedDoctorID = medicine.prescribingDoctor?.objectID
         }
         .presentationDetents([.fraction(0.66), .large], selection: $detailDetent)
@@ -128,6 +190,42 @@ struct MedicineDetailView: View {
                     medicine.custom_stock_threshold = Int32(newValue)
                     saveContext()
                 }
+            )
+        }
+        .sheet(isPresented: $showIntakeConfirmationSheet) {
+            IntakeConfirmationSheet(
+                isEnabled: $intakeConfirmationEnabled,
+                onPersist: persistIntakeConfirmation
+            )
+        }
+        .sheet(isPresented: $showMissedDoseSheet) {
+            MissedDoseSheet(
+                preset: $missedDosePreset,
+                onPersist: persistMissedDosePolicy
+            )
+        }
+        .sheet(isPresented: $showMaxPerDaySheet) {
+            DoseLimitSheet(
+                title: "Limite massimo al giorno",
+                toggleLabel: "Attiva limite massimo",
+                stepperLabel: { value in "Max \(value) dosi/dì" },
+                footer: "Valido per tutte le terapie di questo farmaco.",
+                range: 1...10,
+                isEnabled: $safetyMaxEnabled,
+                value: $safetyMaxPerDay,
+                onPersist: persistDoseLimits
+            )
+        }
+        .sheet(isPresented: $showMinIntervalSheet) {
+            DoseLimitSheet(
+                title: "Intervallo minimo",
+                toggleLabel: "Attiva intervallo minimo",
+                stepperLabel: { value in "Almeno \(value) ore" },
+                footer: "Valido per tutte le terapie di questo farmaco.",
+                range: 1...24,
+                isEnabled: $safetyIntervalEnabled,
+                value: $safetyIntervalHours,
+                onPersist: persistDoseLimits
             )
         }
         .sheet(isPresented: $showDoctorSheet) {
@@ -186,7 +284,7 @@ struct MedicineDetailView: View {
                 editingTherapy: selectedTherapy
             )
             .id(therapySheetIdentity)
-            .presentationDetents([.medium, .large])
+            .presentationDetents([.large])
         }
         .onChange(of: selectedDoctorID) { newValue in
             if let newValue, let doc = doctors.first(where: { $0.objectID == newValue }) {
@@ -395,57 +493,27 @@ struct MedicineDetailView: View {
         return calendar.date(from: mergedComponents)
     }
 
-    private func icsCode(for date: Date) -> String {
-        let weekday = Calendar.current.component(.weekday, from: date)
-        switch weekday { case 1: return "SU"; case 2: return "MO"; case 3: return "TU"; case 4: return "WE"; case 5: return "TH"; case 6: return "FR"; case 7: return "SA"; default: return "MO" }
+    private func allowedEvents(on day: Date, for therapy: Therapy) -> Int {
+        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+        let start = therapy.start_date ?? day
+        let perDay = max(1, therapy.doses?.count ?? 0)
+        return recurrenceManager.allowedEvents(on: day, rule: rule, startDate: start, dosesPerDay: perDay)
     }
 
     private func occursToday(_ therapy: Therapy, now: Date) -> Bool {
-        let calendar = Calendar.current
-        let endOfDay: Date = {
-            let start = calendar.startOfDay(for: now)
-            return calendar.date(byAdding: DateComponents(day: 1, second: -1), to: start) ?? now
-        }()
-        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-        let start = therapy.start_date ?? now
-
-        if start > endOfDay { return false }
-        if let until = rule.until, calendar.startOfDay(for: until) < calendar.startOfDay(for: now) { return false }
-
-        let freq = rule.freq.uppercased()
-        let interval = rule.interval ?? 1
-
-        switch freq {
-        case "DAILY":
-            let startSOD = calendar.startOfDay(for: start)
-            let todaySOD = calendar.startOfDay(for: now)
-            if let days = calendar.dateComponents([.day], from: startSOD, to: todaySOD).day, days >= 0 {
-                return days % max(1, interval) == 0
-            }
-            return false
-        case "WEEKLY":
-            let todayCode = icsCode(for: now)
-            let byDays = rule.byDay.isEmpty ? ["MO","TU","WE","TH","FR","SA","SU"] : rule.byDay
-            guard byDays.contains(todayCode) else { return false }
-
-            let startWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: start)) ?? start
-            let todayWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
-            if let weeks = calendar.dateComponents([.weekOfYear], from: startWeek, to: todayWeek).weekOfYear, weeks >= 0 {
-                return weeks % max(1, interval) == 0
-            }
-            return false
-        default:
-            return false
-        }
+        return allowedEvents(on: now, for: therapy) > 0
     }
 
     private func scheduledTimesToday(for therapy: Therapy, now: Date) -> [Date] {
-        guard occursToday(therapy, now: now) else { return [] }
-        guard let doseSet = therapy.doses as? Set<Dose>, !doseSet.isEmpty else { return [] }
         let today = Calendar.current.startOfDay(for: now)
-        return doseSet.compactMap { dose in
+        let allowed = allowedEvents(on: today, for: therapy)
+        guard allowed > 0 else { return [] }
+        guard let doseSet = therapy.doses as? Set<Dose>, !doseSet.isEmpty else { return [] }
+        let sortedDoses = doseSet.sorted { $0.time < $1.time }
+        let limitedDoses = sortedDoses.prefix(min(allowed, sortedDoses.count))
+        return limitedDoses.compactMap { dose in
             combine(day: today, withTime: dose.time)
-        }.sorted()
+        }
     }
 
     private func intakeCountToday(for therapy: Therapy, now: Date) -> Int {
@@ -881,7 +949,171 @@ extension MedicineDetailView {
         }
         .textCase(nil)
     }
-    
+
+    private func persistDoseLimits() {
+        medicine.safety_max_per_day = safetyMaxEnabled ? Int32(safetyMaxPerDay) : 0
+        medicine.safety_min_interval_hours = safetyIntervalEnabled ? Int32(safetyIntervalHours) : 0
+        saveContext()
+    }
+
+    private func persistIntakeConfirmation() {
+        medicine.manual_intake_registration = intakeConfirmationEnabled
+        for therapy in therapies {
+            therapy.manual_intake_registration = intakeConfirmationEnabled
+        }
+        saveContext()
+    }
+
+    private func persistMissedDosePolicy() {
+        medicine.missed_dose_preset = missedDosePreset.rawValue
+        for therapy in therapies {
+            let updated = updateMissedDosePolicy(missedDosePreset.policy, for: therapy.clinicalRulesValue)
+            therapy.clinicalRulesValue = updated
+        }
+        saveContext()
+    }
+
+    private func updateMissedDosePolicy(_ policy: MissedDosePolicy?, for current: ClinicalRules?) -> ClinicalRules? {
+        var updated = current ?? ClinicalRules(
+            safety: nil,
+            course: nil,
+            taper: nil,
+            interactions: nil,
+            monitoring: nil,
+            missedDosePolicy: nil
+        )
+        updated.missedDosePolicy = policy
+        let hasAnyRule = updated.safety != nil ||
+            updated.course != nil ||
+            updated.taper != nil ||
+            updated.interactions != nil ||
+            (updated.monitoring?.isEmpty == false) ||
+            updated.missedDosePolicy != nil
+        return hasAnyRule ? updated : nil
+    }
+
+    private struct MissedDoseSheet: View {
+        @Binding var preset: MissedDosePreset
+        let onPersist: () -> Void
+        @Environment(\.dismiss) private var dismiss
+
+        var body: some View {
+            NavigationStack {
+                Form {
+                    Section(
+                        header: Text("Dose mancata"),
+                        footer: Text("Questa indicazione viene mostrata quando una dose non risulta registrata.")
+                    ) {
+                        Picker("Se salti una dose", selection: $preset) {
+                            ForEach(MissedDosePreset.allCases) { item in
+                                Text(item.label).tag(item)
+                            }
+                        }
+                        .onChange(of: preset) { _ in
+                            onPersist()
+                        }
+
+                        if let policy = preset.policy, case let .info(title, text) = policy {
+                            VStack(alignment: .leading, spacing: 4) {
+                                if let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Text(title)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Text(text)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("Dose mancata")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Chiudi") { dismiss() }
+                    }
+                }
+            }
+            .presentationDetents([.fraction(0.3), .medium])
+        }
+    }
+
+    private struct IntakeConfirmationSheet: View {
+        @Binding var isEnabled: Bool
+        let onPersist: () -> Void
+        @Environment(\.dismiss) private var dismiss
+
+        var body: some View {
+            NavigationStack {
+                Form {
+                    Section(
+                        footer: Text("Valido per tutte le terapie di questo farmaco.")
+                    ) {
+                        Toggle(isOn: $isEnabled) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Chiedi conferma assunzione")
+                                Text("Quando ricevi il promemoria, conferma manualmente l'assunzione.")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .onChange(of: isEnabled) { _ in
+                            onPersist()
+                        }
+                    }
+                }
+                .navigationTitle("Conferma assunzione")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Chiudi") { dismiss() }
+                    }
+                }
+            }
+            .presentationDetents([.fraction(0.3), .medium])
+        }
+    }
+
+    private struct DoseLimitSheet: View {
+        let title: String
+        let toggleLabel: String
+        let stepperLabel: (Int) -> String
+        let footer: String
+        let range: ClosedRange<Int>
+        @Binding var isEnabled: Bool
+        @Binding var value: Int
+        let onPersist: () -> Void
+        @Environment(\.dismiss) private var dismiss
+
+        var body: some View {
+            NavigationStack {
+                Form {
+                    Section(footer: Text(footer)) {
+                        Toggle(toggleLabel, isOn: $isEnabled)
+                            .onChange(of: isEnabled) { _ in
+                                onPersist()
+                            }
+                        if isEnabled {
+                            Stepper(stepperLabel(value), value: $value, in: range)
+                                .onChange(of: value) { _ in
+                                    onPersist()
+                                }
+                        }
+                    }
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Chiudi") { dismiss() }
+                    }
+                }
+            }
+            .presentationDetents([.fraction(0.3), .medium])
+        }
+    }
+
     private struct ThresholdSheet: View {
         @Binding var value: Int
         let onChange: (Int) -> Void
@@ -1676,7 +1908,7 @@ private struct StockManagementView: View {
                 editingTherapy: selectedTherapy
             )
             .id(selectedTherapy?.id ?? UUID())
-            .presentationDetents([.medium, .large])
+            .presentationDetents([.large])
             }
         }
         

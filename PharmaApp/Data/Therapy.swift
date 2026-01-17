@@ -27,6 +27,7 @@ public class Therapy: NSManagedObject, Identifiable {
     @NSManaged public var importance: String?
     @NSManaged public var logs: Set<Log>?
     @NSManaged public var manual_intake_registration: Bool
+    @NSManaged public var clinicalRules: Data?
 
     // Aggiunta relazione: ogni Therapy appartiene a una Person
     @NSManaged public var person: Person
@@ -36,6 +37,11 @@ public class Therapy: NSManagedObject, Identifiable {
 extension Therapy {
     
     static let importanceValues = ["vital", "essential", "standard"]
+
+    var clinicalRulesValue: ClinicalRules? {
+        get { ClinicalRules.decode(from: clinicalRules) }
+        set { clinicalRules = newValue?.encoded() }
+    }
 
     static func extractTherapies() -> NSFetchRequest<Therapy> {
         let request: NSFetchRequest<Therapy> = Therapy.fetchRequest() as! NSFetchRequest<Therapy>

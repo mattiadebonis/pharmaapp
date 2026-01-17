@@ -28,11 +28,15 @@
         <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package"/>
         <relationship name="therapy" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Therapy" inverseName="logs" inverseEntity="Therapy"/>
     </entity>
-    <entity name="Medicine" representedClassName=".Medicine" syncable="YES">
-        <attribute name="custom_stock_threshold" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
-        <attribute name="in_cabinet" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="nome" optional="YES" attributeType="String"/>
+		    <entity name="Medicine" representedClassName=".Medicine" syncable="YES">
+		        <attribute name="custom_stock_threshold" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+		        <attribute name="manual_intake_registration" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+		        <attribute name="missed_dose_preset" optional="YES" attributeType="String"/>
+		        <attribute name="safety_max_per_day" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+		        <attribute name="safety_min_interval_hours" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+		        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+		        <attribute name="in_cabinet" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+	        <attribute name="nome" optional="YES" attributeType="String"/>
         <attribute name="obbligo_ricetta" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
         <attribute name="principio_attivo" optional="YES" attributeType="String"/>
         <relationship name="cabinet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Cabinet" inverseName="medicines" inverseEntity="Cabinet"/>
@@ -91,6 +95,7 @@
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="importance" optional="YES" attributeType="String"/>
         <attribute name="manual_intake_registration" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="clinicalRules" optional="YES" attributeType="Transformable"/>
         <attribute name="rrule" optional="YES" attributeType="String"/>
         <attribute name="start_date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="doses" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Dose" inverseName="therapy" inverseEntity="Dose"/>

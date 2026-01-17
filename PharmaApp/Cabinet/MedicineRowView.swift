@@ -70,49 +70,25 @@ struct MedicineRowView: View {
         comps.second = dcTime.second
         return cal.date(from: comps)
     }
-    // Helper per verificare se una therapy ricorre oggi
-    private func icsCode(for date: Date) -> String {
-        let wd = Calendar.current.component(.weekday, from: date)
-        switch wd { case 1: return "SU"; case 2: return "MO"; case 3: return "TU"; case 4: return "WE"; case 5: return "TH"; case 6: return "FR"; case 7: return "SA"; default: return "MO" }
+    private func allowedEvents(on day: Date, for therapy: Therapy) -> Int {
+        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+        let start = therapy.start_date ?? day
+        let perDay = max(1, therapy.doses?.count ?? 0)
+        return recurrenceManager.allowedEvents(on: day, rule: rule, startDate: start, dosesPerDay: perDay)
     }
+
     private func occursToday(_ t: Therapy) -> Bool {
         let now = Date()
-        let cal = Calendar.current
-        let rule = recurrenceManager.parseRecurrenceString(t.rrule ?? "")
-        let start = t.start_date ?? now
-        let endOfDay = cal.date(byAdding: DateComponents(day: 1, second: -1), to: cal.startOfDay(for: now)) ?? now
-        if start > endOfDay { return false }
-        if let until = rule.until, cal.startOfDay(for: until) < cal.startOfDay(for: now) { return false }
-        let interval = rule.interval ?? 1
-        switch rule.freq.uppercased() {
-        case "DAILY":
-            let startSOD = cal.startOfDay(for: start)
-            let todaySOD = cal.startOfDay(for: now)
-            if let days = cal.dateComponents([.day], from: startSOD, to: todaySOD).day, days >= 0 {
-                return days % max(1, interval) == 0
-            }
-            return false
-        case "WEEKLY":
-            let byDays = rule.byDay
-            let allowed = byDays.isEmpty ? ["MO","TU","WE","TH","FR","SA","SU"] : byDays
-            guard allowed.contains(icsCode(for: now)) else { return false }
-            let startWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: start)) ?? start
-            let todayWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
-            if let weeks = cal.dateComponents([.weekOfYear], from: startWeek, to: todayWeek).weekOfYear, weeks >= 0 {
-                return weeks % max(1, interval) == 0
-            }
-            return false
-        default:
-            return false
-        }
+        return allowedEvents(on: now, for: t) > 0
     }
     // MARK: - New computed helpers for UI
     private var nextDate: Date? { nextOcc?.date }
     // Dosi odierne pianificate vs assunte
     private var scheduledDosesToday: Int {
         guard !therapies.isEmpty else { return 0 }
+        let now = Date()
         return therapies.reduce(0) { acc, t in
-            acc + (occursToday(t) ? max(1, t.doses?.count ?? 1) : 0)
+            acc + allowedEvents(on: now, for: t)
         }
     }
     private var intakeLogsToday: Int {
@@ -128,9 +104,12 @@ struct MedicineRowView: View {
         guard !therapies.isEmpty else { return [] }
         var times: [Date] = []
         for t in therapies {
-            guard occursToday(t) else { continue }
+            let allowed = allowedEvents(on: today, for: t)
+            guard allowed > 0 else { continue }
             if let doseSet = t.doses as? Set<Dose> {
-                for d in doseSet {
+                let sortedDoses = doseSet.sorted { $0.time < $1.time }
+                let limitedDoses = sortedDoses.prefix(min(allowed, sortedDoses.count))
+                for d in limitedDoses {
                     if let dt = combine(day: today, withTime: d.time) {
                         times.append(dt)
                     }
@@ -435,12 +414,15 @@ struct MedicineRowView: View {
     }
 
     private func scheduledTimesToday(for therapy: Therapy, now: Date) -> [Date] {
-        guard occursToday(therapy) else { return [] }
         let today = Calendar.current.startOfDay(for: now)
+        let allowed = allowedEvents(on: today, for: therapy)
+        guard allowed > 0 else { return [] }
         guard let doseSet = therapy.doses as? Set<Dose>, !doseSet.isEmpty else { return [] }
-        return doseSet.compactMap { dose in
+        let sortedDoses = doseSet.sorted { $0.time < $1.time }
+        let limitedDoses = sortedDoses.prefix(min(allowed, sortedDoses.count))
+        return limitedDoses.compactMap { dose in
             combine(day: today, withTime: dose.time)
-        }.sorted()
+        }
     }
 
     private func nextUpcomingDoseDate(for therapy: Therapy, now: Date) -> Date? {

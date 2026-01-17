@@ -191,6 +191,34 @@ struct RecurrenceManager {
         return description
     }
 
+    func allowedEvents(
+        on day: Date,
+        rule: RecurrenceRule,
+        startDate: Date,
+        dosesPerDay: Int,
+        calendar: Calendar = .current
+    ) -> Int {
+        let perDay = max(1, dosesPerDay)
+        let startDay = calendar.startOfDay(for: startDate)
+        let targetDay = calendar.startOfDay(for: day)
+
+        if targetDay < startDay { return 0 }
+        if let until = rule.until, calendar.startOfDay(for: until) < targetDay { return 0 }
+        guard matchesPattern(day: targetDay, rule: rule, startDate: startDate, calendar: calendar) else { return 0 }
+
+        guard let count = rule.count else { return perDay }
+        if count <= 0 { return 0 }
+
+        guard let occurrenceIndex = occurrenceDayIndex(on: targetDay, rule: rule, startDate: startDate, calendar: calendar) else {
+            return 0
+        }
+
+        let startEventIndex = occurrenceIndex * perDay
+        let remaining = count - startEventIndex
+        if remaining <= 0 { return 0 }
+        return min(perDay, remaining)
+    }
+
     /// Convert day codes to Italian day names
     private func dayCodeToItalian(_ code: String) -> String {
         switch code {
@@ -202,6 +230,64 @@ struct RecurrenceManager {
         case "SA": return "sabato"
         case "SU": return "domenica"
         default: return code
+        }
+    }
+
+    private func occurrenceDayIndex(
+        on day: Date,
+        rule: RecurrenceRule,
+        startDate: Date,
+        calendar: Calendar
+    ) -> Int? {
+        let startDay = calendar.startOfDay(for: startDate)
+        let targetDay = calendar.startOfDay(for: day)
+        if targetDay < startDay { return nil }
+
+        var index = 0
+        var cursor = startDay
+        while cursor <= targetDay {
+            if matchesPattern(day: cursor, rule: rule, startDate: startDate, calendar: calendar) {
+                if cursor == targetDay { return index }
+                index += 1
+            }
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+
+        return nil
+    }
+
+    private func matchesPattern(
+        day: Date,
+        rule: RecurrenceRule,
+        startDate: Date,
+        calendar: Calendar
+    ) -> Bool {
+        let freq = rule.freq.uppercased()
+        let interval = rule.interval ?? 1
+
+        switch freq {
+        case "DAILY":
+            let startSOD = calendar.startOfDay(for: startDate)
+            let daySOD = calendar.startOfDay(for: day)
+            if let days = calendar.dateComponents([.day], from: startSOD, to: daySOD).day, days >= 0 {
+                return days % max(1, interval) == 0
+            }
+            return false
+
+        case "WEEKLY":
+            let byDays = rule.byDay.isEmpty ? ["MO","TU","WE","TH","FR","SA","SU"] : rule.byDay
+            guard byDays.contains(weekdayToICS(day)) else { return false }
+
+            let startWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: startDate)) ?? startDate
+            let dayWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: day)) ?? day
+            if let weeks = calendar.dateComponents([.weekOfYear], from: startWeek, to: dayWeek).weekOfYear, weeks >= 0 {
+                return weeks % max(1, interval) == 0
+            }
+            return false
+
+        default:
+            return false
         }
     }
     
@@ -237,7 +323,40 @@ struct RecurrenceManager {
         // Se la freq è "DAILY" o "WEEKLY", ci comportiamo in maniera semplificata.
         // Altrimenti, potresti aggiungere ulteriori casi come MONTHLY, YEARLY, etc.
         let freq = rule.freq.uppercased()
-        
+
+        if let countLimit = rule.count {
+            let calendar = Calendar.current
+            guard freq == "DAILY" || freq == "WEEKLY" else { return nil }
+            let maxCount = max(0, countLimit)
+            guard maxCount > 0 else { return nil }
+
+            var day = calendar.startOfDay(for: startDate)
+            var eventIndex = 0
+
+            while eventIndex < maxCount {
+                if let until = rule.until, calendar.startOfDay(for: until) < calendar.startOfDay(for: day) {
+                    break
+                }
+
+                if matchesPattern(day: day, rule: rule, startDate: startDate, calendar: calendar) {
+                    for dose in sortedDoses {
+                        eventIndex += 1
+                        if eventIndex > maxCount { return nil }
+                        if let combinedDate = combine(day: day, withTime: dose.time),
+                           combinedDate > now {
+                            return combinedDate
+                        }
+                        if eventIndex >= maxCount { break }
+                    }
+                }
+
+                guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+                day = next
+            }
+
+            return nil
+        }
+
         // Limitiamoci, per esempio, a generare le prossime 30 occorrenze massime
         // (o i prossimi 30 giorni, se "DAILY") e vediamo quale cade dopo "now".
         

@@ -24,6 +24,36 @@ enum FrequencyType: String, CaseIterable {
     }
 }
 
+private enum TaperDosePreset: String, CaseIterable, Identifiable {
+    case full
+    case reduce25
+    case reduce50
+    case reduce75
+    case stop
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .full: return "Dose piena"
+        case .reduce25: return "Riduci 25%"
+        case .reduce50: return "Riduci 50%"
+        case .reduce75: return "Riduci 75%"
+        case .stop: return "Sospendi"
+        }
+    }
+
+    static func from(label: String) -> TaperDosePreset {
+        Self.allCases.first(where: { $0.label == label }) ?? .full
+    }
+}
+
+private struct TaperStepDraft: Identifiable, Equatable {
+    let id: UUID
+    var durationDays: Int
+    var dosagePreset: TaperDosePreset
+}
+
 struct TherapyFormView: View {
     
     // MARK: - Environment
@@ -58,23 +88,37 @@ struct TherapyFormView: View {
     // byDay è utile solo per “in giorni specifici”
     @State private var byDay: [String] = ["MO"]  // Lunedì di default
     
-    // Se vuoi mantenere la possibilità di interrompere la terapia in una data,
-    // tieni useUntil e useCount. Altrimenti puoi rimuoverli se non servono.
+    // useUntil: durata in giorni (course). useCount: numero assunzioni.
     @State private var useUntil: Bool = false
     @State private var untilDate: Date = Date().addingTimeInterval(60 * 60 * 24 * 30)
     @State private var useCount: Bool = false
     @State private var countNumber: Int = 1
     @State private var interval: Int = 1
-    // Data di inizio
-    @State private var startDate: Date = Date()
-    @State private var manualIntakeRegistration: Bool = true
     @State private var therapyDescriptionText: String = ""
+    @State private var lastAutoDescriptionText: String = ""
     @State private var doseAmount: Double = 1
     @State private var doseUnit: String = "compressa"
+
+    // MARK: - Clinical rules (optional)
+    @State private var courseEnabled: Bool = false
+    @State private var courseTotalDays: Int = 7
+    @State private var taperEnabled: Bool = false
+    @State private var taperSteps: [TaperStepDraft] = []
+    @State private var showTaperEditor: Bool = false
+
+    @State private var interactionsEnabled: Bool = false
+    @State private var spacingSubstances: Set<SpacingSubstance> = []
+    @State private var spacingHours: Int = 2
+
+    @State private var monitoringEnabled: Bool = false
+    @State private var monitoringKind: MonitoringKind = .bloodPressure
+    @State private var monitoringLeadMinutes: Int = 30
     
     // Sezione Orari: con pulsante + per aggiungere e - per rimuovere
-        @State private var times: [Date] = [Date()]
+    @State private var times: [Date] = [Date()]
     @State private var isShowingFrequencySheet = false
+    @State private var isShowingDurationSheet = false
+    @State private var isShowingMonitoringSheet = false
     
     // MARK: - Init
     init(
@@ -94,33 +138,31 @@ struct TherapyFormView: View {
     var body: some View {
         NavigationView {
             Form {
-                therapyDescriptionSection
-                Section(header: Text("Persona")) {
-                    Picker("Seleziona Persona", selection: $selectedPerson) {
-                        ForEach(persons, id: \.self) { person in
-                            Text("\(person.nome ?? "") \(person.cognome ?? "")")
-                                .tag(person as Person?)
-                        }
-                    }
-                    .accessibilityIdentifier("PersonPicker")
-                }
-                
-                // Sezione Frequenza
-                Section(header: Text("Frequenza")) {
+                Section(header: Text("Frequenza e durata")) {
                     Button {
                         isShowingFrequencySheet = true
                     } label: {
                         HStack {
-                            Text("Frequenza")
+                            Text("Ripetizione")
                             Spacer()
                             Text(frequencyDescription())
                                 .foregroundColor(.blue)
                         }
                     }
                     .accessibilityLabel("Seleziona frequenza")
+                    Button {
+                        isShowingDurationSheet = true
+                    } label: {
+                        HStack {
+                            Text("Fine")
+                            Spacer()
+                            Text(durationSummaryText)
+                                .foregroundColor(.blue)
+                        }
+                    }
+                    .accessibilityLabel("Seleziona fine terapia")
                 }
-                
-                // Sezione Orari
+
                 Section(header: Text("Orari")) {
                     VStack {
                         ForEach(times.indices, id: \.self) { index in
@@ -143,16 +185,20 @@ struct TherapyFormView: View {
                         }
                     }
                 }
-                Section(header: Text("Promemoria")) {
-                    Toggle(isOn: $manualIntakeRegistration) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Chiedi conferma assunzione")
-                            Text("Quando ricevi il promemoria, conferma manualmente l'assunzione.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+
+                Section(header: Text("Persona")) {
+                    Picker("Seleziona Persona", selection: $selectedPerson) {
+                        ForEach(persons, id: \.self) { person in
+                            Text("\(person.nome ?? "") \(person.cognome ?? "")")
+                                .tag(person as Person?)
                         }
                     }
+                    .accessibilityIdentifier("PersonPicker")
                 }
+
+                taperSection
+
+                monitoringOverviewSection
             }
             .navigationTitle("\(medicine.nome) • \(package.numero) unità/conf.")
             .onAppear {
@@ -179,15 +225,43 @@ struct TherapyFormView: View {
                         selectedFrequencyType: $selectedFrequencyType,
                         freq: $freq,
                         byDay: $byDay,
-                        useUntil: $useUntil,
-                        untilDate: $untilDate,
-                        useCount: $useCount,
-                        countNumber: $countNumber,
-                        startDate: $startDate,
                         interval: $interval
                     ) {
                         isShowingFrequencySheet = false
                     }
+                }
+            }
+            .sheet(isPresented: $isShowingDurationSheet) {
+                NavigationView {
+                    DurationSelectionView(
+                        courseEnabled: $courseEnabled,
+                        courseTotalDays: $courseTotalDays,
+                        useUntil: $useUntil,
+                        untilDate: $untilDate,
+                        useCount: $useCount,
+                        countNumber: $countNumber
+                    ) {
+                        isShowingDurationSheet = false
+                    }
+                }
+            }
+            .sheet(isPresented: $isShowingMonitoringSheet) {
+                NavigationStack {
+                    Form {
+                        monitoringSection
+                    }
+                    .navigationTitle("Monitoraggi")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Chiudi") { isShowingMonitoringSheet = false }
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showTaperEditor) {
+                NavigationStack {
+                    TaperStepEditorView(steps: $taperSteps)
                 }
             }
             .toolbar {
@@ -212,6 +286,48 @@ struct TherapyFormView: View {
         guard let _ = selectedPerson else { return false }
         // In edit sempre abilitato; in creazione abilitiamo comunque perché la logica di save evita duplicati aggiornando.
         return true
+    }
+
+    private var monitoringStatusText: String {
+        monitoringEnabled ? "Attivi" : "Non richiesti"
+    }
+
+    private var monitoringDetailsText: String {
+        guard monitoringEnabled else { return "Nessun monitoraggio richiesto." }
+        return "\(monitoringKind.label) • \(monitoringLeadMinutes) min prima"
+    }
+
+    @ViewBuilder
+    private func clinicalRuleRow(
+        title: String,
+        subtitle: String,
+        status: String,
+        statusColor: Color,
+        details: String
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .foregroundStyle(.primary)
+                Text(subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text(details)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(status)
+                    .font(.subheadline)
+                    .foregroundStyle(statusColor)
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.vertical, 2)
     }
     
     private func frequencyDescription() -> String {
@@ -272,35 +388,113 @@ struct TherapyFormView: View {
             .onChange(of: therapyDescriptionText) { newValue in
                 applyTherapyDescription(newValue)
             }
+        }
+        .onAppear {
+            updateTherapyDescriptionIfNeeded(force: true)
+        }
+        .onChange(of: therapyDescriptionSummaryText) { _ in
+            updateTherapyDescriptionIfNeeded(force: false)
+        }
+    }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(therapySummaryPills, id: \.self) { token in
-                        Text(token)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Color(.secondarySystemBackground), in: Capsule())
-                    }
+    private var durationSection: some View {
+        Section(header: Text("Durata")) {
+            Button {
+                isShowingDurationSheet = true
+            } label: {
+                HStack {
+                    Text("Fine")
+                    Spacer()
+                    Text(durationSummaryText)
+                        .foregroundColor(.blue)
                 }
-                .padding(.vertical, 4)
+            }
+            .accessibilityLabel("Seleziona fine terapia")
+        }
+    }
+
+    private var monitoringOverviewSection: some View {
+        Section(
+            header: Text("Monitoraggi"),
+            footer: Text("Se attivi, crea un promemoria prima di ogni dose.")
+        ) {
+            Button {
+                isShowingMonitoringSheet = true
+            } label: {
+                clinicalRuleRow(
+                    title: "Monitoraggi",
+                    subtitle: "Controlli prima della dose (es. pressione, glicemia).",
+                    status: monitoringStatusText,
+                    statusColor: monitoringEnabled ? .blue : .secondary,
+                    details: monitoringDetailsText
+                )
             }
         }
     }
 
-    private var therapySummaryPills: [String] {
-        var parts: [String] = []
-        if let personName = selectedPersonName {
-            parts.append("👤 \(personName)")
+    private var taperSection: some View {
+        Section(header: Text("Scala")) {
+            Toggle("Scala (taper)", isOn: $taperEnabled)
+            if taperEnabled {
+                Button("Configura step") { showTaperEditor = true }
+                    .buttonStyle(.bordered)
+                if !taperSteps.isEmpty {
+                    Text("Step configurati: \(taperSteps.count)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
-        parts.append("💊 \(doseDisplayText)")
-        parts.append("🔁 \(frequencySummaryText)")
-        if let timesText = timesSummaryText {
-            parts.append("⏰ \(timesText)")
+    }
+
+    private var interactionsSection: some View {
+        Section(header: Text("Interazioni operative")) {
+            Toggle("Distanza da…", isOn: $interactionsEnabled)
+            if interactionsEnabled {
+                ForEach(SpacingSubstance.allCases, id: \.self) { substance in
+                    Toggle(substance.label, isOn: spacingBinding(for: substance))
+                }
+                Stepper("Distanza \(spacingHours) ore", value: $spacingHours, in: 1...24)
+            }
         }
-        parts.append(manualIntakeRegistration ? "✅ Conferma" : "Senza conferma")
-        return parts
+    }
+
+    private var monitoringSection: some View {
+        Section(
+            header: Text("Monitoraggi"),
+            footer: Text("Se attivi, crea un promemoria prima di ogni dose.")
+        ) {
+            Toggle("Richiedi un monitoraggio prima della dose", isOn: $monitoringEnabled)
+            if monitoringEnabled {
+                Picker("Cosa controllare", selection: $monitoringKind) {
+                    ForEach(MonitoringKind.allCases, id: \.self) { kind in
+                        Text(kind.label).tag(kind)
+                    }
+                }
+                Picker("Quanto prima", selection: $monitoringLeadMinutes) {
+                    Text("15 min").tag(15)
+                    Text("30 min").tag(30)
+                    Text("60 min").tag(60)
+                }
+                .pickerStyle(.segmented)
+                Text("Promemoria: \(monitoringLeadMinutes) min prima della dose.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func spacingBinding(for substance: SpacingSubstance) -> Binding<Bool> {
+        Binding(
+            get: { spacingSubstances.contains(substance) },
+            set: { isSelected in
+                if isSelected {
+                    spacingSubstances.insert(substance)
+                } else {
+                    spacingSubstances.remove(substance)
+                }
+            }
+        )
     }
 
     private var selectedPersonName: String? {
@@ -323,14 +517,83 @@ struct TherapyFormView: View {
         }
     }
 
-    private var timesSummaryText: String? {
+    private var durationSummaryText: String {
+        if useCount {
+            let unit = countNumber == 1 ? "assunzione" : "assunzioni"
+            return "Dopo \(countNumber) \(unit)"
+        }
+        if courseEnabled, let endDate = courseEndDate(from: startDateToday, totalDays: courseTotalDays) {
+            if Calendar.current.isDateInToday(endDate) {
+                return "Oggi"
+            }
+            return endDate.formatted(date: .abbreviated, time: .omitted)
+        }
+        return "Mai"
+    }
+
+    private var timesDescriptionText: String? {
         guard !times.isEmpty else { return nil }
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         return times
             .sorted()
-            .map { formatter.string(from: $0) }
+            .map { "alle \(formatter.string(from: $0))" }
             .joined(separator: ", ")
+    }
+
+    private var therapyDescriptionSummaryText: String {
+        var parts: [String] = []
+        if let personName = selectedPersonName, !personName.isEmpty {
+            parts.append("Per \(personName)")
+        }
+        parts.append(doseDisplayText)
+        parts.append(frequencySummaryText)
+        if let timesText = timesDescriptionText {
+            parts.append(timesText)
+        }
+        let confirmation = medicine.manual_intake_registration ? "chiedi conferma" : "senza conferma"
+        if parts.isEmpty {
+            return confirmation
+        }
+        return "\(parts.joined(separator: " ")), \(confirmation)"
+    }
+
+    private func updateTherapyDescriptionIfNeeded(force: Bool) {
+        let summary = therapyDescriptionSummaryText
+        let trimmed = therapyDescriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if summary.isEmpty { return }
+        if force || trimmed.isEmpty || therapyDescriptionText == lastAutoDescriptionText {
+            if therapyDescriptionText != summary {
+                therapyDescriptionText = summary
+            }
+            lastAutoDescriptionText = summary
+        }
+    }
+
+    private var startDateToday: Date {
+        Calendar.current.startOfDay(for: Date())
+    }
+
+    private func inclusiveDayCount(from start: Date, to end: Date) -> Int {
+        let calendar = Calendar.current
+        let startDay = calendar.startOfDay(for: start)
+        let endDay = calendar.startOfDay(for: end)
+        let diff = calendar.dateComponents([.day], from: startDay, to: endDay).day ?? 0
+        return max(1, diff + 1)
+    }
+
+    private func courseEndDate(from start: Date, totalDays: Int) -> Date? {
+        let offset = max(0, totalDays - 1)
+        return Calendar.current.date(byAdding: .day, value: offset, to: start)
+    }
+
+    private func syncCourseUntilFromCourse() {
+        guard courseEnabled else { return }
+        useUntil = true
+        useCount = false
+        if let endDate = courseEndDate(from: startDateToday, totalDays: courseTotalDays) {
+            untilDate = endDate
+        }
     }
 
     private func applyTherapyDescription(_ text: String) {
@@ -363,27 +626,126 @@ struct TherapyFormView: View {
             times = parsedTimes
         }
 
-        if let requiresConfirmation = parsed.requiresConfirmation {
-            manualIntakeRegistration = requiresConfirmation
-        }
-
         if let duration = parsed.duration {
-            useUntil = true
-            useCount = false
-            let base = startDate
-            let until: Date?
+            let calendar = Calendar.current
+            let base = startDateToday
+            var totalDays = 0
             switch duration.unit {
             case .days:
-                until = Calendar.current.date(byAdding: .day, value: duration.value, to: base)
+                totalDays = duration.value
             case .weeks:
-                until = Calendar.current.date(byAdding: .day, value: duration.value * 7, to: base)
+                totalDays = duration.value * 7
             case .months:
-                until = Calendar.current.date(byAdding: .month, value: duration.value, to: base)
+                if let until = calendar.date(byAdding: .month, value: duration.value, to: base) {
+                    totalDays = inclusiveDayCount(from: base, to: until)
+                }
             }
-            if let until {
-                untilDate = until
+            if totalDays > 0 {
+                courseEnabled = true
+                courseTotalDays = totalDays
+                syncCourseUntilFromCourse()
             }
         }
+    }
+
+    private func buildClinicalRules() -> ClinicalRules? {
+        let course: CoursePlan? = (courseEnabled && !useCount) ? CoursePlan(totalDays: courseTotalDays) : nil
+
+        let taper: TaperPlan? = {
+            guard taperEnabled, !taperSteps.isEmpty else { return nil }
+            let steps = taperSteps.map { draft in
+                TaperStep(startDate: nil, durationDays: draft.durationDays, dosageLabel: draft.dosagePreset.label)
+            }
+            return steps.isEmpty ? nil : TaperPlan(steps: steps)
+        }()
+
+        let interactions: InteractionRules? = {
+            guard interactionsEnabled, !spacingSubstances.isEmpty else { return nil }
+            let rules = spacingSubstances.sorted(by: { $0.rawValue < $1.rawValue }).map { substance in
+                SpacingRule(substance: substance, hours: spacingHours, direction: nil)
+            }
+            return InteractionRules(spacing: rules)
+        }()
+
+        let monitoring: [MonitoringAction]? = monitoringEnabled ? [
+            MonitoringAction(
+                kind: monitoringKind,
+                requiredBeforeDose: true,
+                schedule: nil,
+                leadMinutes: monitoringLeadMinutes
+            )
+        ] : nil
+
+        let missedDosePolicy: MissedDosePolicy? = {
+            if let raw = medicine.missed_dose_preset,
+               let preset = MissedDosePreset(rawValue: raw) {
+                return preset.policy
+            }
+            let existingPolicies = (medicine.therapies ?? []).compactMap { $0.clinicalRulesValue?.missedDosePolicy }
+            return existingPolicies.first
+        }()
+
+        let rules = ClinicalRules(
+            safety: nil,
+            course: course,
+            taper: taper,
+            interactions: interactions,
+            monitoring: monitoring,
+            missedDosePolicy: missedDosePolicy
+        )
+
+        let hasAnyRule = course != nil ||
+            taper != nil ||
+            interactions != nil ||
+            monitoring != nil ||
+            missedDosePolicy != nil
+
+        return hasAnyRule ? rules : nil
+    }
+
+    private func applyClinicalRules(_ rules: ClinicalRules?) {
+        guard let rules else {
+            resetClinicalState()
+            return
+        }
+
+        courseEnabled = rules.course != nil
+        courseTotalDays = rules.course?.totalDays ?? courseTotalDays
+
+        taperEnabled = rules.taper != nil
+        taperSteps = rules.taper?.steps.map { step in
+            TaperStepDraft(
+                id: UUID(),
+                durationDays: step.durationDays ?? 7,
+                dosagePreset: TaperDosePreset.from(label: step.dosageLabel)
+            )
+        } ?? []
+
+        let spacing = rules.interactions?.spacing ?? []
+        interactionsEnabled = !spacing.isEmpty
+        spacingSubstances = Set(spacing.map { $0.substance })
+        spacingHours = spacing.first?.hours ?? spacingHours
+
+        if let action = rules.monitoring?.first(where: { $0.requiredBeforeDose }) {
+            monitoringEnabled = true
+            monitoringKind = action.kind
+            monitoringLeadMinutes = action.leadMinutes ?? monitoringLeadMinutes
+        } else {
+            monitoringEnabled = false
+        }
+    }
+
+    private func resetClinicalState() {
+        courseEnabled = false
+        courseTotalDays = 7
+        taperEnabled = false
+        taperSteps = []
+        interactionsEnabled = false
+        spacingSubstances = []
+        spacingHours = 2
+        monitoringEnabled = false
+        monitoringKind = .bloodPressure
+        monitoringLeadMinutes = 30
     }
 }
 
@@ -392,7 +754,13 @@ struct TherapyFormView: View {
 extension TherapyFormView {
     
     private func saveTherapy() {
+        if courseEnabled && !useCount {
+            syncCourseUntilFromCourse()
+        }
+
+        let effectiveStartDate = startDateToday
         let effectiveImportance = editingTherapy?.importance ?? "standard"
+        let clinicalRules = buildClinicalRules()
 
         // Persona associata: in modifica usa quella della therapy; altrimenti usa selezione/first/crea
         let effectivePerson: Person = {
@@ -416,12 +784,13 @@ extension TherapyFormView {
                     until: useUntil ? untilDate : nil,
                     count: useCount ? countNumber : nil,
                     byDay: [],
-                    startDate: startDate,
+                    startDate: effectiveStartDate,
                     times: times,
                     package: package,
                     importance: effectiveImportance,
                     person: effectivePerson,
-                    manualIntake: manualIntakeRegistration
+                    manualIntake: medicine.manual_intake_registration,
+                    clinicalRules: clinicalRules
                 )
             } else {
                 therapyFormViewModel.updateTherapy(
@@ -431,12 +800,13 @@ extension TherapyFormView {
                     until: useUntil ? untilDate : nil,
                     count: useCount ? countNumber : nil,
                     byDay: byDay,
-                    startDate: startDate,
+                    startDate: effectiveStartDate,
                     times: times,
                     package: package,
                     importance: effectiveImportance,
                     person: effectivePerson,
-                    manualIntake: manualIntakeRegistration
+                    manualIntake: medicine.manual_intake_registration,
+                    clinicalRules: clinicalRules
                 )
             }
         } else {
@@ -449,12 +819,13 @@ extension TherapyFormView {
                     until: useUntil ? untilDate : nil,
                     count: useCount ? countNumber : nil,
                     byDay: [],
-                    startDate: startDate,
+                    startDate: effectiveStartDate,
                     times: times,
                     package: package,
                     importance: "standard",
                     person: effectivePerson,
-                    manualIntake: manualIntakeRegistration
+                    manualIntake: medicine.manual_intake_registration,
+                    clinicalRules: clinicalRules
                 )
             } else {
                 therapyFormViewModel.saveTherapy(
@@ -464,16 +835,17 @@ extension TherapyFormView {
                     until: useUntil ? untilDate : nil,
                     count: useCount ? countNumber : nil,
                     byDay: byDay,
-                    startDate: startDate,
+                    startDate: effectiveStartDate,
                     times: times,
                     package: package,
                     importance: "standard",
                     person: effectivePerson,
-                    manualIntake: manualIntakeRegistration
+                    manualIntake: medicine.manual_intake_registration,
+                    clinicalRules: clinicalRules
                 )
             }
         }
-        
+
         appViewModel.isSearchIndexPresented = false
         dismiss()
         
@@ -504,17 +876,18 @@ extension TherapyFormView {
             freq = parsedRule.freq
             byDay = parsedRule.byDay
             
-            if let until = parsedRule.until {
-                useUntil = true
-                untilDate = until
-            } else {
-                useUntil = false
-            }
             if let count = parsedRule.count {
                 useCount = true
                 countNumber = count
+                useUntil = false
             } else {
                 useCount = false
+                if let until = parsedRule.until {
+                    useUntil = true
+                    untilDate = until
+                } else {
+                    useUntil = false
+                }
             }
             
             if freq == "DAILY" {
@@ -528,17 +901,24 @@ extension TherapyFormView {
             freq = "DAILY"
         }
         
-        if let start = therapy.value(forKey: "start_date") as? Date {
-            startDate = start
-        }
-        
         if let existingDoses = therapy.doses as? Set<Dose> {
             let sortedDoses = existingDoses.sorted { $0.time < $1.time }
             self.times = sortedDoses.map { $0.time }
         } else {
             self.times = []
         }
-        self.manualIntakeRegistration = therapy.manual_intake_registration
+        applyClinicalRules(therapy.clinicalRulesValue)
+
+        if useCount {
+            courseEnabled = false
+            useUntil = false
+        } else if courseEnabled {
+            syncCourseUntilFromCourse()
+        } else if useUntil {
+            courseEnabled = true
+            courseTotalDays = inclusiveDayCount(from: startDateToday, to: untilDate)
+            syncCourseUntilFromCourse()
+        }
     }
 
     private func saveContext() {
@@ -548,6 +928,7 @@ extension TherapyFormView {
             print("Errore durante il salvataggio del contesto: \(error.localizedDescription)")
         }
     }
+
 }
 
 // MARK: - Seconda Vista: FrequencySelectionView
@@ -557,11 +938,6 @@ struct FrequencySelectionView: View {
     @Binding var selectedFrequencyType: FrequencyType
     @Binding var freq: String
     @Binding var byDay: [String]
-    @Binding var useUntil: Bool
-    @Binding var untilDate: Date
-    @Binding var useCount: Bool
-    @Binding var countNumber: Int
-    @Binding var startDate: Date
     @Binding var interval: Int
 
     var onClose: () -> Void
@@ -580,22 +956,6 @@ struct FrequencySelectionView: View {
             
             if selectedFrequencyType == .specificDays {
                 specificDaysSectionView
-            }
-            Section{
-                DatePicker("Inizio", selection: $startDate, displayedComponents: .date)
-
-                Toggle("Termina il", isOn: $useUntil)
-                if useUntil {
-                    DatePicker("Data di fine", selection: $untilDate, displayedComponents: .date)
-                }
-                
-                Toggle("Numero ripetizioni massime", isOn: $useCount)
-                if useCount {
-                    Stepper("Numero ripetizioni: \(countNumber)",
-                            value: $countNumber,
-                            in: 1...100)
-                }
-            
             }
         }
         .navigationTitle("Frequenza")
@@ -681,7 +1041,205 @@ struct FrequencySelectionView: View {
             byDay.append(day)
         }
     }
+    
+    
+}
 
-    
-    
+private struct DurationSelectionView: View {
+    @Binding var courseEnabled: Bool
+    @Binding var courseTotalDays: Int
+    @Binding var useUntil: Bool
+    @Binding var untilDate: Date
+    @Binding var useCount: Bool
+    @Binding var countNumber: Int
+
+    var onClose: () -> Void
+
+    private enum DurationMode: String, CaseIterable, Identifiable {
+        case none
+        case days
+        case count
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .none:
+                return "Mai"
+            case .days:
+                return "Giorni"
+            case .count:
+                return "Numero assunzioni"
+            }
+        }
+    }
+
+    private var selectedMode: DurationMode {
+        if useCount { return .count }
+        if courseEnabled { return .days }
+        return .none
+    }
+
+    var body: some View {
+        Form {
+            Section("Fine") {
+                durationRow(.none)
+                durationRow(.days)
+                durationRow(.count)
+            }
+
+            if selectedMode == .days {
+                daysSectionView
+            }
+
+            if selectedMode == .count {
+                countSectionView
+            }
+        }
+        .navigationTitle("Durata")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Annulla") {
+                    onClose()
+                }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Fine") {
+                    onClose()
+                }
+            }
+        }
+        .onChange(of: courseTotalDays) { _ in
+            syncCourseUntilIfNeeded()
+        }
+    }
+
+    private var daysSectionView: some View {
+        let dayLabel = courseTotalDays == 1 ? "giorno" : "giorni"
+        return Section("Giorni") {
+            Stepper("Durata: \(courseTotalDays) \(dayLabel)", value: $courseTotalDays, in: 1...365)
+            if let endDate = courseEndDate {
+                Text("Fine il \(endDate.formatted(date: .long, time: .omitted))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            Text("Calcolato da oggi.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var countSectionView: some View {
+        return Section("Numero assunzioni") {
+            Stepper("Numero assunzioni: \(countNumber)", value: $countNumber, in: 1...100)
+            Text("Totale assunzioni pianificate.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func durationRow(_ mode: DurationMode) -> some View {
+        Button {
+            applyMode(mode)
+        } label: {
+            HStack {
+                Text(mode.label)
+                Spacer()
+                if selectedMode == mode {
+                    Image(systemName: "checkmark")
+                        .foregroundColor(.blue)
+                }
+            }
+        }
+    }
+
+    private func applyMode(_ mode: DurationMode) {
+        switch mode {
+        case .none:
+            courseEnabled = false
+            useUntil = false
+            useCount = false
+        case .days:
+            courseEnabled = true
+            syncCourseUntil()
+        case .count:
+            courseEnabled = false
+            useUntil = false
+            useCount = true
+        }
+    }
+
+    private var courseEndDate: Date? {
+        let startDate = Calendar.current.startOfDay(for: Date())
+        let offset = max(0, courseTotalDays - 1)
+        return Calendar.current.date(byAdding: .day, value: offset, to: startDate)
+    }
+
+    private func syncCourseUntilIfNeeded() {
+        guard selectedMode == .days else { return }
+        syncCourseUntil()
+    }
+
+    private func syncCourseUntil() {
+        useUntil = true
+        useCount = false
+        if let endDate = courseEndDate {
+            untilDate = endDate
+        }
+    }
+}
+
+private struct TaperStepEditorView: View {
+    @Binding var steps: [TaperStepDraft]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Form {
+            Section(header: Text("Step")) {
+                if steps.isEmpty {
+                    Text("Nessuno step configurato.")
+                        .foregroundStyle(.secondary)
+                        .font(.footnote)
+                } else {
+                    ForEach($steps) { $step in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Stepper("Durata: \(step.durationDays) giorni", value: $step.durationDays, in: 1...30)
+                            Picker("Dose", selection: $step.dosagePreset) {
+                                ForEach(TaperDosePreset.allCases) { preset in
+                                    Text(preset.label).tag(preset)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .onDelete { offsets in
+                        steps.remove(atOffsets: offsets)
+                    }
+                }
+            }
+
+            Section {
+                Button("Aggiungi step") {
+                    steps.append(
+                        TaperStepDraft(
+                            id: UUID(),
+                            durationDays: 7,
+                            dosagePreset: .full
+                        )
+                    )
+                }
+            }
+        }
+        .navigationTitle("Scala terapeutica")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Chiudi") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                EditButton()
+            }
+        }
+    }
 }
