@@ -195,6 +195,16 @@ struct TodayView: View {
         }
         .navigationTitle("Oggi")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    appVM.isSettingsPresented = true
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .accessibilityLabel("Impostazioni")
+            }
+        }
         .onAppear { locationVM.ensureStarted() }
 
         mapItemWrappedView(content)

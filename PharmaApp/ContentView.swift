@@ -20,7 +20,6 @@ struct ContentView: View {
     @EnvironmentObject private var appVM: AppViewModel
     @State private var isNewMedicinePresented = false
     @State private var showMedicineWizard: Bool = false
-    @State private var isSettingsPresented: Bool = false
     @State private var catalogSelection: CatalogSelection?
 
     enum AppTab: Hashable {
@@ -63,7 +62,7 @@ struct ContentView: View {
                         .toolbar {
                             ToolbarItem(placement: .primaryAction) {
                                 Button {
-                                    isSettingsPresented = true
+                                    appVM.isSettingsPresented = true
                                 } label: {
                                     Image(systemName: "gearshape")
                                 }
@@ -82,7 +81,10 @@ struct ContentView: View {
                 }
             }
         }
-        .sheet(isPresented: $isSettingsPresented) {
+        .sheet(isPresented: Binding(
+            get: { appVM.isSettingsPresented },
+            set: { appVM.isSettingsPresented = $0 }
+        )) {
             NavigationStack { OptionsView() }
         }
         .sheet(isPresented: $showMedicineWizard) {
@@ -135,6 +137,7 @@ struct TodayCalendarIcon: View {
 
 // Placeholder ricerca catalogo se non è presente un componente dedicato.
 struct CatalogSearchScreen: View {
+    @EnvironmentObject private var appVM: AppViewModel
     var onSelect: (CatalogSelection) -> Void
     @State private var searchText: String = ""
     @FocusState private var isSearching: Bool
@@ -181,6 +184,17 @@ struct CatalogSearchScreen: View {
         .scrollContentBackground(.hidden)
         .background(Color.white)
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Cerca il farmaco")
+        .navigationTitle("Cerca")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    appVM.isSettingsPresented = true
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .accessibilityLabel("Impostazioni")
+            }
+        }
         .onAppear { isSearching = true }
         .focused($isSearching)
         .task { loadCatalogIfNeeded() }

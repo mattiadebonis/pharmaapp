@@ -386,6 +386,72 @@ struct MedicineDetailView: View {
         let description = recurrenceManager.describeRecurrence(rule: rule)
         return description.capitalized
     }
+    
+    /// Builds the same style of text as the "Descrizione terapia" in TherapyForm: "Per [person] [dose] [frequency] [times], [confirmation]"
+    private func therapyDescriptionText(for therapy: Therapy) -> String {
+        var parts: [String] = []
+        if let personName = personDisplayName(for: therapy.person), !personName.isEmpty {
+            parts.append("Per \(personName)")
+        }
+        parts.append(doseDisplayText(for: therapy))
+        parts.append(frequencySummaryText(for: therapy))
+        if let timesText = timesDescriptionText(for: therapy) {
+            parts.append(timesText)
+        }
+        
+        return "\(parts.joined(separator: " "))"
+    }
+    
+    private func personDisplayName(for person: Person?) -> String? {
+        guard let person else { return nil }
+        let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let components = [first, last].filter { !$0.isEmpty }
+        return components.isEmpty ? nil : components.joined(separator: " ")
+    }
+    
+    private func doseDisplayText(for therapy: Therapy) -> String {
+        let pkg = therapy.package
+        let tipologia = (pkg.tipologia).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let unit: String = tipologia.contains("capsul") ? "capsula" : "compressa"
+        return "1 \(unit)"
+    }
+    
+    private func frequencySummaryText(for therapy: Therapy) -> String {
+        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+        if rule.freq == "DAILY" {
+            if rule.interval <= 1 { return "Ogni giorno" }
+            return "Ogni \(rule.interval) giorni"
+        }
+        if !rule.byDay.isEmpty {
+            let names = rule.byDay.map { dayCodeToItalian($0) }
+            return names.joined(separator: ", ")
+        }
+        return "Ogni giorno"
+    }
+    
+    private func dayCodeToItalian(_ code: String) -> String {
+        switch code {
+        case "MO": return "Lunedì"
+        case "TU": return "Martedì"
+        case "WE": return "Mercoledì"
+        case "TH": return "Giovedì"
+        case "FR": return "Venerdì"
+        case "SA": return "Sabato"
+        case "SU": return "Domenica"
+        default: return code
+        }
+    }
+    
+    private func timesDescriptionText(for therapy: Therapy) -> String? {
+        guard let doseSet = therapy.doses as? Set<Dose>, !doseSet.isEmpty else { return nil }
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return doseSet
+            .sorted { $0.time < $1.time }
+            .map { "alle \(formatter.string(from: $0.time))" }
+            .joined(separator: ", ")
+    }
 
     private func combine(day: Date, withTime time: Date) -> Date? {
         let calendar = Calendar.current
@@ -736,74 +802,34 @@ extension MedicineDetailView {
                 .tint(action.color)
             }
 
-            HStack {
-                Text("Confezioni")
-                Spacer()
-                HStack(spacing: 14) {
-                    Button {
-                        let target = max(0, stockUnitsForSelectedPackage - packageUnitSize)
-                        viewModel.setStockUnits(medicine: medicine, package: package, targetUnits: target)
-                    } label: {
-                        Image(systemName: "minus.circle.fill")
-                    }
-                    .buttonStyle(.borderless)
-                    .tint(.blue)
-                    .disabled(stockUnitsForSelectedPackage <= 0)
+            Stepper(
+                stockPackagesText,
+                value: Binding(
+                    get: { stockPackagesForSelectedPackage },
+                    set: { viewModel.setStockUnits(medicine: medicine, package: package, targetUnits: $0 * packageUnitSize) }
+                ),
+                in: 0...999
+            )
 
-                    Text("\(stockPackagesForSelectedPackage)")
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                        .frame(minWidth: 40, alignment: .center)
-
-                    Button {
-                        viewModel.addPurchase(for: medicine, for: package)
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                    }
-                    .buttonStyle(.borderless)
-                    .tint(.blue)
-                }
-            }
-
-            HStack {
-                Text("Unità")
-                Spacer()
-                HStack(spacing: 14) {
-                    Button {
-                        let target = max(0, stockUnitsForSelectedPackage - 1)
-                        viewModel.setStockUnits(medicine: medicine, package: package, targetUnits: target)
-                    } label: {
-                        Image(systemName: "minus.circle.fill")
-                    }
-                    .buttonStyle(.borderless)
-                    .tint(.blue)
-                    .disabled(stockUnitsForSelectedPackage <= 0)
-
-                    Text("\(stockUnitsForSelectedPackage)")
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                        .frame(minWidth: 40, alignment: .center)
-
-                    Button {
-                        let target = stockUnitsForSelectedPackage + 1
-                        viewModel.setStockUnits(medicine: medicine, package: package, targetUnits: target)
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                    }
-                    .buttonStyle(.borderless)
-                    .tint(.blue)
+            Stepper(
+                stockUnitsText,
+                value: Binding(
+                    get: { stockUnitsForSelectedPackage },
+                    set: { viewModel.setStockUnits(medicine: medicine, package: package, targetUnits: $0) }
+                ),
+                in: 0...9999
+            )
+            
+            if let statusText = stockStatusLine {
+                HStack {
+                    Text(statusText)
+                        .font(.subheadline)
+                        .foregroundStyle(stockStatus == .low ? .orange : (stockStatus == .empty ? .red : .secondary))
                 }
             }
         } header: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Scorte")
-                    .font(.body.weight(.semibold))
-                if let stockStatusLine {
-                    Text(stockStatusLine)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
+            Text("Scorte")
+                .font(.body.weight(.semibold))
         }
         .textCase(nil)
     }
@@ -822,7 +848,7 @@ extension MedicineDetailView {
                         openTherapyForm(for: therapy)
                     } label: {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(recurrenceDescription(for: therapy))
+                            Text(therapyDescriptionText(for: therapy))
                                 .font(.subheadline)
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)

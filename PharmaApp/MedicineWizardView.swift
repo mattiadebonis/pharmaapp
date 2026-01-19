@@ -94,14 +94,19 @@ struct MedicineWizardView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 ForEach(Step.allCases, id: \.self) { item in
-                    Text(item.label)
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(step == item ? .white : .secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule().fill(step == item ? Color.accentColor : Color(.secondarySystemBackground))
-                        )
+                    Button {
+                        step = item
+                    } label: {
+                        Text(item.label)
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(step == item ? .white : .secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                Capsule().fill(step == item ? Color.accentColor : Color(.secondarySystemBackground))
+                            )
+                    }
+                    .buttonStyle(.plain)
                 }
                 Spacer(minLength: 0)
             }

@@ -10,6 +10,7 @@ import CoreData
 
 struct OptionsView: View {
     @Environment(\.managedObjectContext) private var managedObjectContext
+    @EnvironmentObject private var appVM: AppViewModel
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
     @FetchRequest(fetchRequest: Doctor.extractDoctors()) private var doctors: FetchedResults<Doctor>
     @FetchRequest(fetchRequest: Person.extractPersons()) private var persons: FetchedResults<Person>
@@ -62,6 +63,14 @@ struct OptionsView: View {
             }
         }
         .navigationTitle("Impostazioni")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Fine") {
+                    appVM.isSettingsPresented = false
+                }
+            }
+        }
     }
     
     private func saveContext() {
