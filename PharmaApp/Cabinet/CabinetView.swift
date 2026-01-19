@@ -35,7 +35,7 @@ struct CabinetView: View {
             if appVM.suggestNearestPharmacies {
                 Section {
                     smartBannerCard
-                        .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 12, trailing: 0))
+                        .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 16, trailing: 0))
                         .listRowBackground(Color.clear)
                 }
                 .listSectionSeparator(.hidden)
@@ -81,9 +81,9 @@ struct CabinetView: View {
         .listSectionSeparator(.hidden)
         .listRowSeparator(.hidden, edges: .all)
         .listSectionSpacing(4)
-        .listRowSpacing(8)
+        .listRowSpacing(12)
         .listStyle(.plain)
-        .padding(.top, 12)
+        .padding(.top, 16)
         .padding(.leading, 5)
         .scrollContentBackground(.hidden)
         .scrollIndicators(.hidden)
@@ -223,11 +223,11 @@ struct CabinetView: View {
         Button {
             appVM.isStocksIndexPresented = true
         } label: {
-            HStack(alignment: .center, spacing: 14) {
+            HStack(alignment: .center, spacing: 12) {
                 Image(systemName: "shippingbox.fill")
-                    .font(.system(size: 26, weight: .semibold))
+                    .font(.system(size: 28, weight: .semibold))
                     .foregroundStyle(.white)
-                    .padding(12)
+                    .padding(14)
                     .background(Circle().fill(Color.white.opacity(0.2)))
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Rifornisci i farmaci in esaurimento")
@@ -242,7 +242,7 @@ struct CabinetView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.8))
             }
-            .padding()
+            .padding(18)
             .background(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(LinearGradient(colors: [.accentColor, .accentColor.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing))

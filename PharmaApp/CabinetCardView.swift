@@ -42,7 +42,7 @@ struct CabinetCardView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
         .padding(.trailing, 4)
         .contentShape(Rectangle())
         .background(Color.clear)
@@ -50,9 +50,9 @@ struct CabinetCardView: View {
     
     private var leadingIcon: some View {
         Image(systemName: "cross.case")
-            .font(.system(size: 16, weight: .regular))
+            .font(.system(size: 18, weight: .regular))
             .foregroundStyle(baseAccentColor)
-            .frame(width: 18, height: 18, alignment: .center)
+            .frame(width: 22, height: 22, alignment: .center)
     }
     
     private var subtitleColor: Color {
