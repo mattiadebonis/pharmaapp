@@ -11,28 +11,19 @@ struct MedicineDetailView: View {
     @StateObject private var viewModel = MedicineFormViewModel(
         context: PersistenceController.shared.container.viewContext
     )
-    @StateObject private var actionsViewModel = MedicineRowViewModel(
-        managedObjectContext: PersistenceController.shared.container.viewContext
-    )
-    @State private var detailDetent: PresentationDetent = .fraction(0.66)
-    @State private var emailDetent: PresentationDetent = .fraction(0.55)
-    @State private var customThresholdValue: Int = 7
-    @State private var intakeConfirmationEnabled: Bool = false
-    @State private var missedDosePreset: MissedDosePreset = .none
-    @State private var safetyMaxEnabled: Bool = false
-    @State private var safetyMaxPerDay: Int = 3
-    @State private var safetyIntervalEnabled: Bool = false
-    @State private var safetyIntervalHours: Int = 6
+	    @StateObject private var actionsViewModel = MedicineRowViewModel(
+	        managedObjectContext: PersistenceController.shared.container.viewContext
+	    )
+	    @State private var emailDetent: PresentationDetent = .fraction(0.55)
+	    @State private var customThresholdValue: Int = 7
+	    @State private var intakeConfirmationEnabled: Bool = false
     @State private var selectedDoctorID: NSManagedObjectID? = nil
     @State private var showTherapySheet = false
-    @State private var selectedTherapy: Therapy?
-    @State private var newTherapySheetID = UUID()
-    @State private var showThresholdSheet = false
-    @State private var showMaxPerDaySheet = false
-    @State private var showMinIntervalSheet = false
-    @State private var showIntakeConfirmationSheet = false
-    @State private var showMissedDoseSheet = false
-    @State private var showDoctorSheet = false
+	    @State private var selectedTherapy: Therapy?
+	    @State private var newTherapySheetID = UUID()
+	    @State private var showThresholdSheet = false
+	    @State private var showIntakeConfirmationSheet = false
+	    @State private var showDoctorSheet = false
     
     @ObservedObject var medicine: Medicine
     let package: Package
@@ -83,9 +74,6 @@ struct MedicineDetailView: View {
             .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Chiudi") { dismiss() }
-                }
                 ToolbarItem(placement: .principal) {
                     Text(medicine.nome.isEmpty ? "Dettagli" : medicine.nome)
                         .font(.headline)
@@ -106,21 +94,6 @@ struct MedicineDetailView: View {
                             showIntakeConfirmationSheet = true
                         } label: {
                             Label("Conferma assunzione", systemImage: "checkmark.circle")
-                        }
-                        Button {
-                            showMissedDoseSheet = true
-                        } label: {
-                            Label("Dose mancata", systemImage: "exclamationmark.triangle")
-                        }
-                        Button {
-                            showMaxPerDaySheet = true
-                        } label: {
-                            Label("Limite massimo al giorno", systemImage: "calendar.badge.exclamationmark")
-                        }
-                        Button {
-                            showMinIntervalSheet = true
-                        } label: {
-                            Label("Intervallo minimo tra le dosi", systemImage: "hourglass")
                         }
                         if medicine.obbligo_ricetta {
                             Button {
@@ -145,44 +118,11 @@ struct MedicineDetailView: View {
             }
         }
         .onAppear {
-            detailDetent = .fraction(0.66)
             let current = Int(medicine.custom_stock_threshold)
             customThresholdValue = current > 0 ? current : 7
-            let fallbackSafeties = therapies.compactMap { $0.clinicalRulesValue?.safety }
-            let fallbackMaxPerDay = fallbackSafeties.compactMap { $0.maxPerDay }.min()
-            let fallbackMinInterval = fallbackSafeties.compactMap { $0.minIntervalHours }.max()
-
-            let maxPerDay = Int(medicine.safety_max_per_day)
-            let resolvedMaxPerDay = maxPerDay > 0 ? maxPerDay : (fallbackMaxPerDay ?? 0)
-            safetyMaxEnabled = resolvedMaxPerDay > 0
-            safetyMaxPerDay = resolvedMaxPerDay > 0 ? resolvedMaxPerDay : 3
-
-            let minInterval = Int(medicine.safety_min_interval_hours)
-            let resolvedMinInterval = minInterval > 0 ? minInterval : (fallbackMinInterval ?? 0)
-            safetyIntervalEnabled = resolvedMinInterval > 0
-            safetyIntervalHours = resolvedMinInterval > 0 ? resolvedMinInterval : 6
-
-            let fallbackConfirmation = therapies.contains(where: { $0.manual_intake_registration })
-            let resolvedConfirmation = medicine.manual_intake_registration || fallbackConfirmation
-            intakeConfirmationEnabled = resolvedConfirmation
-            let needsConfirmationSync = medicine.manual_intake_registration != resolvedConfirmation ||
-                therapies.contains(where: { $0.manual_intake_registration != resolvedConfirmation })
-            if needsConfirmationSync {
-                medicine.manual_intake_registration = resolvedConfirmation
-                persistIntakeConfirmation()
-            }
-
-            if let raw = medicine.missed_dose_preset,
-               let preset = MissedDosePreset(rawValue: raw) {
-                missedDosePreset = preset
-            } else if let policy = therapies.compactMap({ $0.clinicalRulesValue?.missedDosePolicy }).first {
-                missedDosePreset = MissedDosePreset.from(policy: policy)
-            } else {
-                missedDosePreset = .none
-            }
+            loadRulesState()
             selectedDoctorID = medicine.prescribingDoctor?.objectID
         }
-        .presentationDetents([.fraction(0.66), .large], selection: $detailDetent)
         .sheet(isPresented: $showThresholdSheet) {
             ThresholdSheet(
                 value: $customThresholdValue,
@@ -198,40 +138,10 @@ struct MedicineDetailView: View {
                 onPersist: persistIntakeConfirmation
             )
         }
-        .sheet(isPresented: $showMissedDoseSheet) {
-            MissedDoseSheet(
-                preset: $missedDosePreset,
-                onPersist: persistMissedDosePolicy
-            )
-        }
-        .sheet(isPresented: $showMaxPerDaySheet) {
-            DoseLimitSheet(
-                title: "Limite massimo al giorno",
-                toggleLabel: "Attiva limite massimo",
-                stepperLabel: { value in "Max \(value) dosi/dì" },
-                footer: "Valido per tutte le terapie di questo farmaco.",
-                range: 1...10,
-                isEnabled: $safetyMaxEnabled,
-                value: $safetyMaxPerDay,
-                onPersist: persistDoseLimits
-            )
-        }
-        .sheet(isPresented: $showMinIntervalSheet) {
-            DoseLimitSheet(
-                title: "Intervallo minimo",
-                toggleLabel: "Attiva intervallo minimo",
-                stepperLabel: { value in "Almeno \(value) ore" },
-                footer: "Valido per tutte le terapie di questo farmaco.",
-                range: 1...24,
-                isEnabled: $safetyIntervalEnabled,
-                value: $safetyIntervalHours,
-                onPersist: persistDoseLimits
-            )
-        }
-        .sheet(isPresented: $showDoctorSheet) {
-            DoctorSheet(
-                selectedDoctorID: $selectedDoctorID,
-                doctors: doctors,
+	        .sheet(isPresented: $showDoctorSheet) {
+	            DoctorSheet(
+	                selectedDoctorID: $selectedDoctorID,
+	                doctors: doctors,
                 onChange: { newID in
                     selectedDoctorID = newID
                     medicine.prescribingDoctor = doctors.first(where: { $0.objectID == newID })
@@ -450,7 +360,7 @@ struct MedicineDetailView: View {
         }
     }
 
-    private var stockStatusLine: String? {
+	    private var stockStatusLine: String? {
         switch stockStatus {
         case .empty:
             return "Scorte esaurite"
@@ -464,12 +374,12 @@ struct MedicineDetailView: View {
             }
             let days = Int(coverage.rounded(.down))
             return "Scorte per ~\(daysText(days)) · \(statusText)"
-        }
-    }
+	        }
+	    }
 
-    private var currentTherapiesSet: Set<Therapy> {
-        medicine.therapies ?? []
-    }
+	    private var currentTherapiesSet: Set<Therapy> {
+	        medicine.therapies ?? []
+	    }
 
     private func recurrenceDescription(for therapy: Therapy) -> String {
         let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
@@ -950,93 +860,24 @@ extension MedicineDetailView {
         .textCase(nil)
     }
 
-    private func persistDoseLimits() {
-        medicine.safety_max_per_day = safetyMaxEnabled ? Int32(safetyMaxPerDay) : 0
-        medicine.safety_min_interval_hours = safetyIntervalEnabled ? Int32(safetyIntervalHours) : 0
-        saveContext()
+    private func loadRulesState() {
+        let fallbackConfirmation = therapies.contains(where: { $0.manual_intake_registration })
+        let resolvedConfirmation = medicine.manual_intake_registration || fallbackConfirmation
+        intakeConfirmationEnabled = resolvedConfirmation
+        let needsConfirmationSync = medicine.manual_intake_registration != resolvedConfirmation ||
+            therapies.contains(where: { $0.manual_intake_registration != resolvedConfirmation })
+        if needsConfirmationSync {
+            medicine.manual_intake_registration = resolvedConfirmation
+            persistIntakeConfirmation()
+        }
     }
-
+    
     private func persistIntakeConfirmation() {
         medicine.manual_intake_registration = intakeConfirmationEnabled
         for therapy in therapies {
             therapy.manual_intake_registration = intakeConfirmationEnabled
         }
         saveContext()
-    }
-
-    private func persistMissedDosePolicy() {
-        medicine.missed_dose_preset = missedDosePreset.rawValue
-        for therapy in therapies {
-            let updated = updateMissedDosePolicy(missedDosePreset.policy, for: therapy.clinicalRulesValue)
-            therapy.clinicalRulesValue = updated
-        }
-        saveContext()
-    }
-
-    private func updateMissedDosePolicy(_ policy: MissedDosePolicy?, for current: ClinicalRules?) -> ClinicalRules? {
-        var updated = current ?? ClinicalRules(
-            safety: nil,
-            course: nil,
-            taper: nil,
-            interactions: nil,
-            monitoring: nil,
-            missedDosePolicy: nil
-        )
-        updated.missedDosePolicy = policy
-        let hasAnyRule = updated.safety != nil ||
-            updated.course != nil ||
-            updated.taper != nil ||
-            updated.interactions != nil ||
-            (updated.monitoring?.isEmpty == false) ||
-            updated.missedDosePolicy != nil
-        return hasAnyRule ? updated : nil
-    }
-
-    private struct MissedDoseSheet: View {
-        @Binding var preset: MissedDosePreset
-        let onPersist: () -> Void
-        @Environment(\.dismiss) private var dismiss
-
-        var body: some View {
-            NavigationStack {
-                Form {
-                    Section(
-                        header: Text("Dose mancata"),
-                        footer: Text("Questa indicazione viene mostrata quando una dose non risulta registrata.")
-                    ) {
-                        Picker("Se salti una dose", selection: $preset) {
-                            ForEach(MissedDosePreset.allCases) { item in
-                                Text(item.label).tag(item)
-                            }
-                        }
-                        .onChange(of: preset) { _ in
-                            onPersist()
-                        }
-
-                        if let policy = preset.policy, case let .info(title, text) = policy {
-                            VStack(alignment: .leading, spacing: 4) {
-                                if let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    Text(title)
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Text(text)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-                .navigationTitle("Dose mancata")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Chiudi") { dismiss() }
-                    }
-                }
-            }
-            .presentationDetents([.fraction(0.3), .medium])
-        }
     }
 
     private struct IntakeConfirmationSheet: View {
@@ -1075,50 +916,11 @@ extension MedicineDetailView {
         }
     }
 
-    private struct DoseLimitSheet: View {
-        let title: String
-        let toggleLabel: String
-        let stepperLabel: (Int) -> String
-        let footer: String
-        let range: ClosedRange<Int>
-        @Binding var isEnabled: Bool
-        @Binding var value: Int
-        let onPersist: () -> Void
-        @Environment(\.dismiss) private var dismiss
-
-        var body: some View {
-            NavigationStack {
-                Form {
-                    Section(footer: Text(footer)) {
-                        Toggle(toggleLabel, isOn: $isEnabled)
-                            .onChange(of: isEnabled) { _ in
-                                onPersist()
-                            }
-                        if isEnabled {
-                            Stepper(stepperLabel(value), value: $value, in: range)
-                                .onChange(of: value) { _ in
-                                    onPersist()
-                                }
-                        }
-                    }
-                }
-                .navigationTitle(title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Chiudi") { dismiss() }
-                    }
-                }
-            }
-            .presentationDetents([.fraction(0.3), .medium])
-        }
-    }
-
     private struct ThresholdSheet: View {
         @Binding var value: Int
         let onChange: (Int) -> Void
         @Environment(\.dismiss) private var dismiss
-        
+
         var body: some View {
             NavigationStack {
                 Form {

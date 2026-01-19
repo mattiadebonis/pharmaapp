@@ -102,22 +102,6 @@ struct MedicineSummaryBuilder {
             return (therapy, decoded)
         }
 
-        let fallbackMaxPerDay = rules.compactMap({ $0.1.safety?.maxPerDay }).min()
-        let fallbackMinInterval = rules.compactMap({ $0.1.safety?.minIntervalHours }).max()
-        let maxPerDay: Int? = medicine.safety_max_per_day > 0
-            ? Int(medicine.safety_max_per_day)
-            : fallbackMaxPerDay
-        let minInterval: Int? = medicine.safety_min_interval_hours > 0
-            ? Int(medicine.safety_min_interval_hours)
-            : fallbackMinInterval
-
-        if let maxPerDay {
-            return "Max \(maxPerDay)/d"
-        }
-        if let minInterval {
-            return "Min \(minInterval)h"
-        }
-
         if !rules.isEmpty {
             if let courseChip = courseChip(from: rules, now: now) {
                 return courseChip

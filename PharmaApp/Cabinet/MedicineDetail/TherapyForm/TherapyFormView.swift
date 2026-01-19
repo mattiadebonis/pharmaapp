@@ -113,6 +113,7 @@ struct TherapyFormView: View {
     @State private var monitoringEnabled: Bool = false
     @State private var monitoringKind: MonitoringKind = .bloodPressure
     @State private var monitoringLeadMinutes: Int = 30
+    @State private var missedDosePreset: MissedDosePreset = .none
     
     // Sezione Orari: con pulsante + per aggiungere e - per rimuovere
     @State private var times: [Date] = [Date()]
@@ -197,8 +198,8 @@ struct TherapyFormView: View {
                 }
 
                 taperSection
-
                 monitoringOverviewSection
+                missedDoseSection
             }
             .navigationTitle("\(medicine.nome) • \(package.numero) unità/conf.")
             .onAppear {
@@ -459,6 +460,34 @@ struct TherapyFormView: View {
         }
     }
 
+    private var missedDoseSection: some View {
+        Section(
+            header: Text("Dose mancata"),
+            footer: Text("Questa indicazione viene mostrata quando una dose non risulta registrata.")
+        ) {
+            Picker("Se salti una dose", selection: $missedDosePreset) {
+                ForEach(MissedDosePreset.allCases) { preset in
+                    Text(preset.label).tag(preset)
+                }
+            }
+            .pickerStyle(.menu)
+
+            if let policy = missedDosePreset.policy, case let .info(title, text) = policy {
+                VStack(alignment: .leading, spacing: 4) {
+                    if let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(title)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(text)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 4)
+            }
+        }
+    }
+
     private var monitoringSection: some View {
         Section(
             header: Text("Monitoraggi"),
@@ -667,23 +696,21 @@ struct TherapyFormView: View {
             return InteractionRules(spacing: rules)
         }()
 
-        let monitoring: [MonitoringAction]? = monitoringEnabled ? [
-            MonitoringAction(
-                kind: monitoringKind,
-                requiredBeforeDose: true,
-                schedule: nil,
-                leadMinutes: monitoringLeadMinutes
+        var monitoringActions = (editingTherapy?.clinicalRulesValue?.monitoring ?? [])
+        monitoringActions.removeAll(where: { $0.requiredBeforeDose })
+        if monitoringEnabled {
+            monitoringActions.append(
+                MonitoringAction(
+                    kind: monitoringKind,
+                    requiredBeforeDose: true,
+                    schedule: nil,
+                    leadMinutes: monitoringLeadMinutes
+                )
             )
-        ] : nil
+        }
+        let monitoring: [MonitoringAction]? = monitoringActions.isEmpty ? nil : monitoringActions
 
-        let missedDosePolicy: MissedDosePolicy? = {
-            if let raw = medicine.missed_dose_preset,
-               let preset = MissedDosePreset(rawValue: raw) {
-                return preset.policy
-            }
-            let existingPolicies = (medicine.therapies ?? []).compactMap { $0.clinicalRulesValue?.missedDosePolicy }
-            return existingPolicies.first
-        }()
+        let missedDosePolicy: MissedDosePolicy? = missedDosePreset.policy
 
         let rules = ClinicalRules(
             safety: nil,
@@ -733,6 +760,8 @@ struct TherapyFormView: View {
         } else {
             monitoringEnabled = false
         }
+
+        missedDosePreset = MissedDosePreset.from(policy: rules.missedDosePolicy)
     }
 
     private func resetClinicalState() {
@@ -746,6 +775,7 @@ struct TherapyFormView: View {
         monitoringEnabled = false
         monitoringKind = .bloodPressure
         monitoringLeadMinutes = 30
+        missedDosePreset = .none
     }
 }
 

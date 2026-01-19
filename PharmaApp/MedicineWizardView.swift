@@ -59,10 +59,6 @@ struct MedicineWizardView: View {
     @State private var therapySheetID = UUID()
     @State private var stockUnits: Int = 0
     @State private var wizardDetent: PresentationDetent = .fraction(0.5)
-    @State private var safetyMaxEnabled: Bool = false
-    @State private var safetyMaxPerDay: Int = 3
-    @State private var safetyIntervalEnabled: Bool = false
-    @State private var safetyIntervalHours: Int = 6
 
     init(prefill: CatalogSelection? = nil) {
         self.prefill = prefill
@@ -186,20 +182,6 @@ struct MedicineWizardView: View {
                             Text(packageSummary(pkg))
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Section(
-                        header: Text("Limiti dose"),
-                        footer: Text("Valgono per tutte le terapie di questo farmaco.")
-                    ) {
-                        Toggle("Limite massimo al giorno", isOn: $safetyMaxEnabled)
-                        if safetyMaxEnabled {
-                            Stepper("Max \(safetyMaxPerDay) dosi/dì", value: $safetyMaxPerDay, in: 1...10)
-                        }
-                        Toggle("Intervallo minimo tra le dosi", isOn: $safetyIntervalEnabled)
-                        if safetyIntervalEnabled {
-                            Stepper("Almeno \(safetyIntervalHours) ore", value: $safetyIntervalHours, in: 1...24)
                         }
                     }
 
@@ -350,8 +332,6 @@ struct MedicineWizardView: View {
         let option = options.first
         medicine.custom_stock_threshold = option?.day_threeshold_stocks_alarm ?? Int32(7)
         medicine.manual_intake_registration = true
-        medicine.safety_max_per_day = safetyMaxEnabled ? Int32(safetyMaxPerDay) : 0
-        medicine.safety_min_interval_hours = safetyIntervalEnabled ? Int32(safetyIntervalHours) : 0
 
         let package = Package(context: context)
         package.id = UUID()

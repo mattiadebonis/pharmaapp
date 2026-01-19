@@ -111,45 +111,7 @@ final class MedicineActionService {
     }
 
     private func intakeGuardrailWarning(for medicine: Medicine, therapy: Therapy?, now: Date) -> IntakeGuardrailWarning? {
-        let fallbackSafeties = (medicine.therapies ?? []).compactMap { therapy in
-            ClinicalRules.decode(from: therapy.clinicalRules)?.safety
-        }
-        let fallbackMaxPerDay = fallbackSafeties.compactMap { $0.maxPerDay }.min()
-        let fallbackMinInterval = fallbackSafeties.compactMap { $0.minIntervalHours }.max()
-
-        let maxPerDay: Int? = medicine.safety_max_per_day > 0
-            ? Int(medicine.safety_max_per_day)
-            : fallbackMaxPerDay
-        let minInterval: Int? = medicine.safety_min_interval_hours > 0
-            ? Int(medicine.safety_min_interval_hours)
-            : fallbackMinInterval
-
-        if maxPerDay == nil && minInterval == nil {
-            return nil
-        }
-
-        if let maxPerDay {
-            let count = intakeCountToday(for: nil, medicine: medicine, now: now)
-            if count >= maxPerDay {
-                let title = "Limite giornaliero raggiunto"
-                let message = "Hai gia registrato \(count) assunzioni oggi. Limite: \(maxPerDay)/giorno."
-                return IntakeGuardrailWarning(title: title, message: message)
-            }
-        }
-
-        if let minInterval {
-            if let lastLog = lastIntakeLog(for: nil, medicine: medicine) {
-                let hours = now.timeIntervalSince(lastLog.timestamp) / 3600
-                if hours < Double(minInterval) {
-                    let title = "Intervallo troppo breve"
-                    let hoursText = String(format: "%.1f", hours)
-                    let message = "Ultima assunzione \(hoursText)h fa. Intervallo minimo: \(minInterval)h."
-                    return IntakeGuardrailWarning(title: title, message: message)
-                }
-            }
-        }
-
-        return nil
+        nil
     }
 
     private func intakeCountToday(for therapy: Therapy?, medicine: Medicine, now: Date) -> Int {
