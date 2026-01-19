@@ -38,15 +38,7 @@ struct CabinetView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 12) { // medium spacing
-                        Button {
-                            appVM.isSettingsPresented = true
-                        } label: {
-                            Image(systemName: "gearshape")
-                                .foregroundStyle(Color.accentColor)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(ToolbarIconButtonStyle())
-                        .accessibilityLabel("Impostazioni")
+                        
 
                         Button {
                             isNewCabinetPresented = true
@@ -57,10 +49,16 @@ struct CabinetView: View {
                                     .font(.system(size: 9, weight: .bold))
                                     .offset(x: 6, y: -6)
                             }
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(ToolbarIconButtonStyle())
                         .accessibilityLabel("Nuovo armadietto")
+                        
+                        Button {
+                            appVM.isSettingsPresented = true
+                        } label: {
+                            Image(systemName: "person")
+                                .foregroundStyle(Color.accentColor)
+                        }
+                        .accessibilityLabel("Profilo")
                     }
                 }
             }
