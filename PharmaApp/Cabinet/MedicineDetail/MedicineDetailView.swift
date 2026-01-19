@@ -103,6 +103,11 @@ struct MedicineDetailView: View {
                             }
                         }
                         Button(role: .destructive) {
+                            deletePackage()
+                        } label: {
+                            Label("Rimuovi confezione", systemImage: "minus.circle")
+                        }
+                        Button(role: .destructive) {
                             deleteMedicine()
                         } label: {
                             Label("Elimina", systemImage: "trash")
@@ -116,6 +121,13 @@ struct MedicineDetailView: View {
                     .contentShape(Rectangle())
                 }
             }
+        }
+        .safeAreaInset(edge: .bottom) {
+            actionButtonsView
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+                .background(Color(.systemGroupedBackground))
         }
         .onAppear {
             let current = Int(medicine.custom_stock_threshold)
@@ -308,6 +320,10 @@ struct MedicineDetailView: View {
         return max(0, stockService.units(for: package))
     }
 
+    private var stockUnitsText: String {
+        stockUnitsForSelectedPackage == 1 ? "1 unità" : "\(stockUnitsForSelectedPackage) unità"
+    }
+
     private var stockPackagesForSelectedPackage: Int {
         let units = stockUnitsForSelectedPackage
         guard units > 0 else { return 0 }
@@ -316,10 +332,6 @@ struct MedicineDetailView: View {
 
     private var stockPackagesText: String {
         stockPackagesForSelectedPackage == 1 ? "1 confezione" : "\(stockPackagesForSelectedPackage) confezioni"
-    }
-
-    private var stockUnitsText: String {
-        stockUnitsForSelectedPackage == 1 ? "1 unità" : "\(stockUnitsForSelectedPackage) unità"
     }
 
     private var estimatedCoverageDaysForSelectedPackage: Double? {
@@ -333,49 +345,14 @@ struct MedicineDetailView: View {
         return Double(stockUnitsForSelectedPackage) / totalDaily
     }
 
-    private enum StockStatus {
-        case ok
-        case low
-        case empty
-        case unknown
-    }
-
-    private var stockStatus: StockStatus {
-        guard stockUnitsForSelectedPackage > 0 else { return .empty }
-        guard let coverage = estimatedCoverageDaysForSelectedPackage else { return .unknown }
-        let threshold = Double(medicine.stockThreshold(option: currentOption))
-        return coverage < threshold ? .low : .ok
-    }
-
-    private var stockIndicatorColor: Color {
-        switch stockStatus {
-        case .ok:
-            return .green
-        case .low:
-            return .orange
-        case .empty:
-            return .red
-        case .unknown:
-            return .green
+    private var stockEstimateInlineText: String {
+        guard let coverage = estimatedCoverageDaysForSelectedPackage else { return "N/D" }
+        if coverage < 1 {
+            return "<1g"
         }
+        let days = Int(coverage.rounded(.down))
+        return days == 1 ? "~1g" : "~\(days)g"
     }
-
-	    private var stockStatusLine: String? {
-        switch stockStatus {
-        case .empty:
-            return "Scorte esaurite"
-        case .unknown:
-            return "Scorte disponibili · Ok"
-        case .ok, .low:
-            guard let coverage = estimatedCoverageDaysForSelectedPackage else { return nil }
-            let statusText = (stockStatus == .low) ? "In esaurimento" : "Ok"
-            if coverage < 1 {
-                return "Scorte per meno di 1 giorno · \(statusText)"
-            }
-            let days = Int(coverage.rounded(.down))
-            return "Scorte per ~\(daysText(days)) · \(statusText)"
-	        }
-	    }
 
 	    private var currentTherapiesSet: Set<Therapy> {
 	        medicine.therapies ?? []
@@ -678,6 +655,43 @@ struct MedicineDetailView: View {
             print("Errore aggiornamento medico: \(error.localizedDescription)")
         }
     }
+
+    private func deletePackage() {
+        let relatedLogs = (medicine.logs ?? []).filter { $0.package?.objectID == package.objectID }
+        let relatedTherapies = package.therapies ?? []
+        let relatedStocks = package.stocks ?? []
+
+        for log in relatedLogs {
+            context.delete(log)
+        }
+
+        for therapy in relatedTherapies {
+            if let doses = therapy.doses as? Set<Dose> {
+                for dose in doses {
+                    context.delete(dose)
+                }
+            }
+            if let logs = therapy.logs {
+                for log in logs {
+                    context.delete(log)
+                }
+            }
+            context.delete(therapy)
+        }
+
+        for stock in relatedStocks {
+            context.delete(stock)
+        }
+
+        context.delete(package)
+
+        do {
+            try context.save()
+            dismiss()
+        } catch {
+            print("Errore eliminazione confezione: \(error.localizedDescription)")
+        }
+    }
     
     private func deleteMedicine() {
         // Core Data has required relationships (e.g., Log.medicine, Therapy.medicine, Package.medicine),
@@ -740,10 +754,6 @@ struct MedicineDetailView: View {
         }
     }
     
-    private func daysText(_ value: Int) -> String {
-        value == 1 ? "1 giorno" : "\(value) giorni"
-    }
-    
     private func doctorFullName(_ doctor: Doctor?) -> String {
         guard let doctor else { return "" }
         let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -793,38 +803,19 @@ struct MedicineDetailView: View {
 extension MedicineDetailView {
     private var stockSection: some View {
         Section {
-            if let action = primaryAction, action.label == "Richiedi ricetta" {
-                Button {
-                    handlePrimaryAction(action)
-                } label: {
-                    Label(action.label, systemImage: action.icon)
-                }
-                .tint(action.color)
-            }
-
             Stepper(
-                stockPackagesText,
-                value: Binding(
-                    get: { stockPackagesForSelectedPackage },
-                    set: { viewModel.setStockUnits(medicine: medicine, package: package, targetUnits: $0 * packageUnitSize) }
-                ),
-                in: 0...999
-            )
-
-            Stepper(
-                stockUnitsText,
                 value: Binding(
                     get: { stockUnitsForSelectedPackage },
                     set: { viewModel.setStockUnits(medicine: medicine, package: package, targetUnits: $0) }
                 ),
                 in: 0...9999
-            )
-            
-            if let statusText = stockStatusLine {
-                HStack {
-                    Text(statusText)
+            ) {
+                HStack(spacing: 8) {
+                    Text(stockUnitsText)
+                    Spacer()
+                    Text(stockEstimateInlineText)
                         .font(.subheadline)
-                        .foregroundStyle(stockStatus == .low ? .orange : (stockStatus == .empty ? .red : .secondary))
+                        .foregroundStyle(.secondary)
                 }
             }
         } header: {
@@ -832,6 +823,42 @@ extension MedicineDetailView {
                 .font(.body.weight(.semibold))
         }
         .textCase(nil)
+    }
+
+    private var actionButtonsView: some View {
+        VStack(spacing: 12) {
+            if let action = primaryAction, action.label == "Richiedi ricetta" {
+                Button {
+                    handlePrimaryAction(action)
+                } label: {
+                    Label(action.label, systemImage: action.icon)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .tint(action.color)
+            }
+
+            Button {
+                actionsViewModel.addIntake(for: medicine, package: package)
+            } label: {
+                Label("Assunto", systemImage: "checkmark.circle.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .tint(.green)
+
+            Button {
+                viewModel.addPurchase(for: medicine, for: package)
+            } label: {
+                Label("Acquistato", systemImage: "cart.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .tint(.blue)
+        }
+        .frame(maxWidth: .infinity)
     }
     
     private var therapiesInlineSection: some View {
