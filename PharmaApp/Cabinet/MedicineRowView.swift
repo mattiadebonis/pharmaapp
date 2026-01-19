@@ -204,20 +204,26 @@ struct MedicineRowView: View {
     private var subtitleBlock: some View {
         let value = subtitle
         return VStack(alignment: .leading, spacing: 3) {
-            Text(value.line1)
-                .font(.system(size: 14))
-                .foregroundStyle(subtitleColor)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            if !value.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(value.line1)
+                    .font(.system(size: 14))
+                    .foregroundStyle(subtitleColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(value.line2)
                     .font(.system(size: 14))
                     .foregroundStyle(subtitleColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                if let chip = value.chip {
-                    chipView(text: chip)
-                }
+            }
+            if let indicator = deadlineIndicator {
+                Text(indicator.label)
+                    .font(.system(size: 14))
+                    .foregroundStyle(subtitleColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
         }
     }
@@ -237,17 +243,6 @@ struct MedicineRowView: View {
         }
     }
 
-    private func chipView(text: String) -> some View {
-        Text(text)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(
-                Capsule()
-                    .fill(Color.secondary.opacity(0.12))
-            )
-    }
     private var titleLine: some View {
         let trimmed = medicine.nome.trimmingCharacters(in: .whitespacesAndNewlines)
         let base = trimmed.isEmpty ? "Medicinale" : trimmed
@@ -263,12 +258,6 @@ struct MedicineRowView: View {
                     .font(.system(size: 16, weight: .regular))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-            }
-            if let indicator = deadlineIndicator {
-                Image(systemName: indicator.symbol)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(indicator.color)
-                    .accessibilityLabel(indicator.label)
             }
         }
     }

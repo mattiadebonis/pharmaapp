@@ -31,7 +31,9 @@ struct MedicineSummaryBuilder {
         let hasScheduledWindow = hasScheduledToday || hasUpcoming
 
         let line1: String
-        if hasScheduledToday {
+        if therapies.isEmpty {
+            line1 = ""
+        } else if hasScheduledToday {
             let doseText = formatCount(dosesToday, singular: "dose", plural: "dosi")
             if let nextScheduledDose {
                 let timeText = timeFormatter.string(from: nextScheduledDose)

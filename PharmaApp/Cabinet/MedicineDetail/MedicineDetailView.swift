@@ -69,8 +69,7 @@ struct MedicineDetailView: View {
     var body: some View {
         NavigationStack {
             Form {
-                stockSection
-                deadlineSection
+                stockManagementSection
                 therapiesInlineSection
             }
             .scrollContentBackground(.hidden)
@@ -83,6 +82,13 @@ struct MedicineDetailView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        if medicine.obbligo_ricetta {
+                            Button {
+                                showDoctorSheet = true
+                            } label: {
+                                Label("Medico prescrittore", systemImage: "stethoscope")
+                            }
+                        }
                         Button {
                             showLogsSheet = true
                         } label: {
@@ -97,13 +103,6 @@ struct MedicineDetailView: View {
                             showIntakeConfirmationSheet = true
                         } label: {
                             Label("Conferma assunzione", systemImage: "checkmark.circle")
-                        }
-                        if medicine.obbligo_ricetta {
-                            Button {
-                                showDoctorSheet = true
-                            } label: {
-                                Label("Medico prescrittore", systemImage: "stethoscope")
-                            }
                         }
                         Button(role: .destructive) {
                             deletePackage()
@@ -353,8 +352,8 @@ struct MedicineDetailView: View {
         return Double(stockUnitsForSelectedPackage) / totalDaily
     }
 
-    private var stockEstimateInlineText: String {
-        guard let coverage = estimatedCoverageDaysForSelectedPackage else { return "N/D" }
+    private var stockEstimateInlineText: String? {
+        guard let coverage = estimatedCoverageDaysForSelectedPackage else { return nil }
         if coverage < 1 {
             return "<1g"
         }
@@ -803,7 +802,7 @@ struct MedicineDetailView: View {
 
 // MARK: - Decorative sections
 extension MedicineDetailView {
-    private var stockSection: some View {
+    private var stockManagementSection: some View {
         Section {
             Stepper(
                 value: Binding(
@@ -815,61 +814,55 @@ extension MedicineDetailView {
                 HStack(spacing: 8) {
                     Text(stockUnitsText)
                     Spacer()
-                    Text(stockEstimateInlineText)
-                        .font(.subheadline)
+                    if let estimate = stockEstimateInlineText {
+                        Text(estimate)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text("Scadenza")
                         .foregroundStyle(.secondary)
+                    TextField("MM", text: Binding(
+                        get: { deadlineMonthInput },
+                        set: { newValue in
+                            let sanitized = sanitizeMonthInput(newValue)
+                            if sanitized != deadlineMonthInput {
+                                deadlineMonthInput = sanitized
+                            }
+                            updateDeadlineFromInputs()
+                        }
+                    ))
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 50)
+
+                    Text("/")
+                        .foregroundStyle(.secondary)
+
+                    TextField("YYYY", text: Binding(
+                        get: { deadlineYearInput },
+                        set: { newValue in
+                            let sanitized = sanitizeYearInput(newValue)
+                            if sanitized != deadlineYearInput {
+                                deadlineYearInput = sanitized
+                            }
+                            updateDeadlineFromInputs()
+                        }
+                    ))
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 70)
+
+                    Spacer()
                 }
             }
         } header: {
-            Text("Scorte")
+            Text("Scorte e prescrizione")
                 .font(.body.weight(.semibold))
-        }
-        .textCase(nil)
-    }
-
-    private var deadlineSection: some View {
-        Section {
-            HStack(spacing: 8) {
-                TextField("MM", text: Binding(
-                    get: { deadlineMonthInput },
-                    set: { newValue in
-                        let sanitized = sanitizeMonthInput(newValue)
-                        if sanitized != deadlineMonthInput {
-                            deadlineMonthInput = sanitized
-                        }
-                        updateDeadlineFromInputs()
-                    }
-                ))
-                .keyboardType(.numberPad)
-                .multilineTextAlignment(.center)
-                .frame(width: 50)
-
-                Text("/")
-                    .foregroundStyle(.secondary)
-
-                TextField("YYYY", text: Binding(
-                    get: { deadlineYearInput },
-                    set: { newValue in
-                        let sanitized = sanitizeYearInput(newValue)
-                        if sanitized != deadlineYearInput {
-                            deadlineYearInput = sanitized
-                        }
-                        updateDeadlineFromInputs()
-                    }
-                ))
-                .keyboardType(.numberPad)
-                .multilineTextAlignment(.center)
-                .frame(width: 70)
-
-                Spacer()
-            }
-        } header: {
-            Text("Scadenza")
-                .font(.body.weight(.semibold))
-        } footer: {
-            Text("Attuale: \(deadlineSummaryText)")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
         }
         .textCase(nil)
     }
@@ -945,8 +938,8 @@ extension MedicineDetailView {
                 Button {
                     openTherapyForm(for: nil)
                 } label: {
-                    Text("Aggiungi")
-                        .font(.callout.weight(.semibold))
+                    Label("",systemImage: "plus")
+                        .foregroundStyle(.blue)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Aggiungi terapia")

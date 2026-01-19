@@ -54,11 +54,13 @@ struct MedicineWizardView: View {
     @State private var selectedPackage: CatalogPackage?
     @State private var createdMedicine: Medicine?
     @State private var createdPackage: Package?
-    @State private var showTherapySheet = false
     @State private var selectedTherapy: Therapy?
     @State private var therapySheetID = UUID()
     @State private var stockUnits: Int = 0
     @State private var wizardDetent: PresentationDetent = .fraction(0.5)
+    @State private var stayOnTherapiesAfterSave = false
+    @State private var deadlineMonthInput: String = ""
+    @State private var deadlineYearInput: String = ""
 
     init(prefill: CatalogSelection? = nil) {
         self.prefill = prefill
@@ -83,9 +85,6 @@ struct MedicineWizardView: View {
         .onAppear { applyPrefillIfNeeded() }
         .onChange(of: step) { newStep in
             wizardDetent = defaultDetent(for: newStep)
-        }
-        .sheet(isPresented: $showTherapySheet, onDismiss: refreshCreatedMedicine) {
-            therapySheet
         }
         .presentationDetents(Set(detentsForCurrentStep), selection: $wizardDetent)
     }
@@ -217,42 +216,20 @@ struct MedicineWizardView: View {
     private var therapiesStep: some View {
         Group {
             if let medicine = createdMedicine, let package = createdPackage {
-                Form {
-                    Section(header: therapiesHeader) {
-                        let therapies = currentTherapies
-                        if therapies.isEmpty {
-                            Text("Nessuna terapia aggiunta.")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(therapies, id: \.objectID) { therapy in
-                                Button {
-                                    openTherapyForm(for: therapy)
-                                } label: {
-                                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                        Text(recurrenceDescription(for: therapy))
-                                            .font(.subheadline)
-                                        Spacer(minLength: 8)
-                                        if let next = nextDose(for: therapy) {
-                                            Text(formattedDate(next))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-
-                    Section {
-                        Button {
-                            step = .stock
-                        } label: {
-                            Label("Prosegui alle confezioni", systemImage: "arrow.right.circle.fill")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(CapsuleActionButtonStyle(fill: .blue, textColor: .white))
-                    }
+                VStack(spacing: 0) {
+                    therapiesPicker
+                    TherapyFormView(
+                        medicine: medicine,
+                        package: package,
+                        context: context,
+                        editingTherapy: selectedTherapy,
+                        onSave: handleTherapySaved,
+                        isEmbedded: true
+                    )
+                    .id(therapySheetID)
+                }
+                .safeAreaInset(edge: .bottom) {
+                    therapiesFooter
                 }
             } else {
                 placeholderForMissingCreation
@@ -276,6 +253,48 @@ struct MedicineWizardView: View {
                             .foregroundStyle(.secondary)
                     }
 
+                    Section(header: Text("Scadenza")) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 8) {
+                                TextField("MM", text: Binding(
+                                    get: { deadlineMonthInput },
+                                    set: { newValue in
+                                        let sanitized = sanitizeMonthInput(newValue)
+                                        if sanitized != deadlineMonthInput {
+                                            deadlineMonthInput = sanitized
+                                        }
+                                        updateDeadlineFromInputs(for: medicine)
+                                    }
+                                ))
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.center)
+                                .frame(width: 50)
+
+                                Text("/")
+                                    .foregroundStyle(.secondary)
+
+                                TextField("YYYY", text: Binding(
+                                    get: { deadlineYearInput },
+                                    set: { newValue in
+                                        let sanitized = sanitizeYearInput(newValue)
+                                        if sanitized != deadlineYearInput {
+                                            deadlineYearInput = sanitized
+                                        }
+                                        updateDeadlineFromInputs(for: medicine)
+                                    }
+                                ))
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.center)
+                                .frame(width: 70)
+
+                                Spacer()
+                            }
+                            Text("Scadenza attuale: \(deadlineSummaryText(for: medicine))")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
                     Section {
                         Button {
                             dismiss()
@@ -288,6 +307,7 @@ struct MedicineWizardView: View {
                 }
                 .onAppear {
                     stockUnits = currentUnits(for: medicine, package: package)
+                    syncDeadlineInputs(from: medicine)
                 }
             } else {
                 placeholderForMissingCreation
@@ -295,19 +315,70 @@ struct MedicineWizardView: View {
         }
     }
 
-    private var therapiesHeader: some View {
-        HStack(spacing: 8) {
-            Text("Terapie")
-                .font(.body.weight(.semibold))
-            Spacer()
-            Button {
-                openTherapyForm(for: nil)
-            } label: {
-                Text("Aggiungi")
-                    .font(.callout.weight(.semibold))
+    private var therapiesPicker: some View {
+        let therapies = currentTherapies
+        return Group {
+            if therapies.isEmpty {
+                EmptyView()
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        Button {
+                            selectTherapy(nil)
+                        } label: {
+                            Text("Nuova terapia")
+                                .font(.callout.weight(.semibold))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Capsule().fill(selectedTherapy == nil ? Color.accentColor : Color(.secondarySystemBackground)))
+                                .foregroundStyle(selectedTherapy == nil ? .white : .primary)
+                        }
+                        .buttonStyle(.plain)
+
+                        ForEach(therapies, id: \.objectID) { therapy in
+                            Button {
+                                selectTherapy(therapy)
+                            } label: {
+                                Text(recurrenceDescription(for: therapy))
+                                    .font(.callout.weight(.semibold))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Capsule().fill(selectedTherapy?.objectID == therapy.objectID ? Color.accentColor : Color(.secondarySystemBackground)))
+                                    .foregroundStyle(selectedTherapy?.objectID == therapy.objectID ? .white : .primary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                }
+                .background(Color(.systemBackground))
             }
-            .buttonStyle(.plain)
         }
+    }
+
+    private var therapiesFooter: some View {
+        VStack(spacing: 12) {
+            Toggle("Resta su Terapie dopo il salvataggio", isOn: $stayOnTherapiesAfterSave)
+                .toggleStyle(.switch)
+            Button {
+                step = .stock
+            } label: {
+                Label("Prosegui alle confezioni", systemImage: "arrow.right.circle.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(CapsuleActionButtonStyle(fill: .blue, textColor: .white))
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+        .background(Color(.systemBackground))
+        .overlay(
+            Rectangle()
+                .frame(height: 1)
+                .foregroundStyle(Color(.separator)),
+            alignment: .top
+        )
     }
 
     private var placeholderForMissingCreation: some View {
@@ -354,6 +425,8 @@ struct MedicineWizardView: View {
             createdMedicine = medicine
             createdPackage = package
             stockUnits = currentUnits(for: medicine, package: package)
+            selectedTherapy = nil
+            therapySheetID = UUID()
             step = .therapies
         } catch {
             print("Errore nel salvataggio del medicinale: \(error)")
@@ -402,10 +475,9 @@ struct MedicineWizardView: View {
         return formatter.string(from: date)
     }
 
-    private func openTherapyForm(for therapy: Therapy?) {
+    private func selectTherapy(_ therapy: Therapy?) {
         selectedTherapy = therapy
         therapySheetID = UUID()
-        showTherapySheet = true
     }
 
     private func refreshCreatedMedicine() {
@@ -424,28 +496,68 @@ struct MedicineWizardView: View {
         }
     }
 
-    private var therapySheet: some View {
-        Group {
-            if let medicine = createdMedicine, let package = createdPackage {
-                TherapyFormView(
-                    medicine: medicine,
-                    package: package,
-                    context: context,
-                    editingTherapy: selectedTherapy
-                )
-                .id(therapySheetID)
-                .presentationDetents([.large])
-            } else {
-                VStack(spacing: 12) {
-                    Text("Crea il farmaco per aggiungere una terapia.")
-                        .font(.headline)
-                        .multilineTextAlignment(.center)
-                    Button("Chiudi") { showTherapySheet = false }
-                        .buttonStyle(.bordered)
-                }
-                .padding()
-            }
+    private func handleTherapySaved() {
+        refreshCreatedMedicine()
+        if selectedTherapy == nil && !stayOnTherapiesAfterSave {
+            step = .stock
+        } else if selectedTherapy == nil {
+            therapySheetID = UUID()
         }
+    }
+
+    private func deadlineSummaryText(for medicine: Medicine) -> String {
+        medicine.deadlineLabel ?? "Non impostata"
+    }
+
+    private func syncDeadlineInputs(from medicine: Medicine) {
+        if let info = medicine.deadlineMonthYear {
+            deadlineMonthInput = String(format: "%02d", info.month)
+            deadlineYearInput = String(info.year)
+        } else {
+            deadlineMonthInput = ""
+            deadlineYearInput = ""
+        }
+    }
+
+    private func sanitizeMonthInput(_ value: String) -> String {
+        let digits = value.filter { $0.isNumber }
+        return String(digits.prefix(2))
+    }
+
+    private func sanitizeYearInput(_ value: String) -> String {
+        let digits = value.filter { $0.isNumber }
+        return String(digits.prefix(4))
+    }
+
+    private func clearDeadline(for medicine: Medicine) {
+        deadlineMonthInput = ""
+        deadlineYearInput = ""
+        medicine.updateDeadline(month: nil, year: nil)
+        saveContext()
+    }
+
+    private func updateDeadlineFromInputs(for medicine: Medicine) {
+        let monthText = deadlineMonthInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let yearText = deadlineYearInput.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if monthText.isEmpty && yearText.isEmpty {
+            clearDeadline(for: medicine)
+            return
+        }
+
+        guard let month = Int(monthText),
+              let year = Int(yearText),
+              (1...12).contains(month),
+              (2000...2100).contains(year) else {
+            return
+        }
+
+        medicine.updateDeadline(month: month, year: year)
+        saveContext()
+    }
+
+    private func saveContext() {
+        try? context.save()
     }
     private func prescriptionFlag(in package: [String: Any]) -> Bool {
         if let intFlag = package["flagPrescrizione"] as? Int, intFlag != 0 {

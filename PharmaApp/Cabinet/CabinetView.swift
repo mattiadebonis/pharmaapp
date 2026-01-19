@@ -36,27 +36,32 @@ struct CabinetView: View {
             .navigationTitle("Armadio dei farmaci")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        appVM.isSettingsPresented = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                            .foregroundStyle(Color.accentColor)
-                    }
-                    .accessibilityLabel("Impostazioni")
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        isNewCabinetPresented = true
-                    } label: {
-                        ZStack(alignment: .topTrailing) {
-                            Image(systemName: "cross.case")
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 9, weight: .bold))
-                                .offset(x: 6, y: -6)
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 12) { // medium spacing
+                        Button {
+                            appVM.isSettingsPresented = true
+                        } label: {
+                            Image(systemName: "gearshape")
+                                .foregroundStyle(Color.accentColor)
+                                .contentShape(Rectangle())
                         }
+                        .buttonStyle(ToolbarIconButtonStyle())
+                        .accessibilityLabel("Impostazioni")
+
+                        Button {
+                            isNewCabinetPresented = true
+                        } label: {
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: "cross.case")
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .offset(x: 6, y: -6)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(ToolbarIconButtonStyle())
+                        .accessibilityLabel("Nuovo armadietto")
                     }
-                    .accessibilityLabel("Nuovo armadietto")
                 }
             }
     }
@@ -323,5 +328,24 @@ struct CabinetView: View {
             return remaining <= medicine.stockThreshold(option: options.first)
         }
         return false
+    }
+}
+
+private struct ToolbarIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(6)
+            .background(
+                Circle()
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                Circle()
+                    .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+            )
+            .overlay(
+                Circle()
+                    .fill(configuration.isPressed ? Color.primary.opacity(0.12) : Color.clear)
+            )
     }
 }

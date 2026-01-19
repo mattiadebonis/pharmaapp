@@ -126,7 +126,7 @@ class TodayViewModel: ObservableObject {
     private func deadlineTodoItems(from medicines: [Medicine]) -> [TodayTodoItem] {
         let candidates: [(Medicine, Int, String, Date)] = medicines.compactMap { medicine in
             guard let months = medicine.monthsUntilDeadline,
-                  months <= 1,
+                  months < 0,
                   let label = medicine.deadlineLabel,
                   let date = medicine.deadlineMonthStartDate else {
                 return nil
@@ -139,14 +139,14 @@ class TodayViewModel: ObservableObject {
                 if lhs.3 != rhs.3 { return lhs.3 < rhs.3 }
                 return lhs.0.nome.localizedCaseInsensitiveCompare(rhs.0.nome) == .orderedAscending
             }
-            .map { medicine, months, label, _ in
-                let detail = months < 0 ? "Scaduto \(label)" : "Scade \(label)"
-                let id = "deadline|\(medicine.objectID.uriRepresentation().absoluteString)|\(label)"
+            .map { medicine, _, label, _ in
+                let detail = "Scaduto \(label)"
+                let id = "purchase|deadline|\(medicine.objectID.uriRepresentation().absoluteString)|\(label)"
                 return TodayTodoItem(
                     id: id,
                     title: medicine.nome,
                     detail: detail,
-                    category: .deadline,
+                    category: .purchase,
                     medicineID: medicine.objectID
                 )
             }
@@ -369,6 +369,12 @@ class TodayViewModel: ObservableObject {
 
     private func todoTimeDate(for item: TodayTodoItem, medicines: [Medicine], options: Option?) -> Date? {
         if item.category == .deadline,
+           let medicine = medicine(for: item, medicines: medicines),
+           let date = medicine.deadlineMonthStartDate {
+            return date
+        }
+        if item.category == .purchase,
+           item.id.hasPrefix("purchase|deadline|"),
            let medicine = medicine(for: item, medicines: medicines),
            let date = medicine.deadlineMonthStartDate {
             return date

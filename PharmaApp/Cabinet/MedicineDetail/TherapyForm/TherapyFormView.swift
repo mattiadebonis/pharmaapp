@@ -74,6 +74,8 @@ struct TherapyFormView: View {
     
     // Aggiunta per supportare la modifica: se valorizzata, la vista si popola con questa terapia
     var editingTherapy: Therapy?
+    var onSave: (() -> Void)?
+    var isEmbedded: Bool = false
     
     // MARK: - ViewModel
     @StateObject var therapyFormViewModel: TherapyFormViewModel
@@ -126,158 +128,186 @@ struct TherapyFormView: View {
         medicine: Medicine,
         package: Package,
         context: NSManagedObjectContext,
-        editingTherapy: Therapy? = nil
+        editingTherapy: Therapy? = nil,
+        onSave: (() -> Void)? = nil,
+        isEmbedded: Bool = false
     ) {
         self.medicine = medicine
         self.package = package
         self.editingTherapy = editingTherapy
+        self.onSave = onSave
+        self.isEmbedded = isEmbedded
         _therapyFormViewModel = StateObject(
             wrappedValue: TherapyFormViewModel(context: context)
         )
     }
     
     var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("Frequenza e durata")) {
-                    Button {
-                        isShowingFrequencySheet = true
-                    } label: {
-                        HStack {
-                            Text("Ripetizione")
-                            Spacer()
-                            Text(frequencyDescription())
-                                .foregroundColor(.blue)
-                        }
-                    }
-                    .accessibilityLabel("Seleziona frequenza")
-                    Button {
-                        isShowingDurationSheet = true
-                    } label: {
-                        HStack {
-                            Text("Fine")
-                            Spacer()
-                            Text(durationSummaryText)
-                                .foregroundColor(.blue)
-                        }
-                    }
-                    .accessibilityLabel("Seleziona fine terapia")
-                }
-
-                Section(header: Text("Orari")) {
-                    VStack {
-                        ForEach(times.indices, id: \.self) { index in
-                            HStack {
-                                DatePicker("", selection: $times[index], displayedComponents: .hourAndMinute)
-                                    .labelsHidden()
-                                Text(doseDisplayText)
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                                Button { times.remove(at: index) } label: {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundColor(.red)
+        Group {
+            if isEmbedded {
+                therapyForm
+            } else {
+                NavigationView {
+                    therapyForm
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Annulla") {
+                                    dismiss()
                                 }
                             }
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Salva") {
+                                    applyTherapyDescription(therapyDescriptionText)
+                                    saveTherapy()
+                                }
+                                .disabled(!canSave)
+                            }
                         }
-                        Button {
-                            times.append(Date())
-                        } label: {
-                            Label("Aggiungi un orario", systemImage: "plus.circle")
-                        }
-                    }
                 }
+            }
+        }
+    }
 
-                Section(header: Text("Persona")) {
-                    Picker("Seleziona Persona", selection: $selectedPerson) {
-                        ForEach(persons, id: \.self) { person in
-                            Text(person.nome ?? "")
-                                .tag(person as Person?)
-                        }
+    private var therapyForm: some View {
+        Form {
+            Section(header: Text("Frequenza e durata")) {
+                Button {
+                    isShowingFrequencySheet = true
+                } label: {
+                    HStack {
+                        Text("Ripetizione")
+                        Spacer()
+                        Text(frequencyDescription())
+                            .foregroundColor(.blue)
                     }
-                    .accessibilityIdentifier("PersonPicker")
                 }
+                .accessibilityLabel("Seleziona frequenza")
+                Button {
+                    isShowingDurationSheet = true
+                } label: {
+                    HStack {
+                        Text("Fine")
+                        Spacer()
+                        Text(durationSummaryText)
+                            .foregroundColor(.blue)
+                    }
+                }
+                .accessibilityLabel("Seleziona fine terapia")
+            }
 
-                taperSection
-                monitoringOverviewSection
-                missedDoseSection
-            }
-            .navigationTitle("\(medicine.nome) • \(package.numero) unità/conf.")
-            .onAppear {
-                // Edit: popola dai dati della therapy
-                if let therapy = editingTherapy {
-                    populateFromTherapy(therapy)
-                    selectedPerson = therapy.person
-                } else {
-                    // Edge case: se esiste una sola therapy per questa medicina, assumiamo modalità "edit" implicita
-                    if selectedPerson == nil {
-                        let set = medicine.therapies as? Set<Therapy> ?? []
-                        if set.count == 1, let only = set.first {
-                            populateFromTherapy(only)
-                            selectedPerson = only.person
-                        } else {
-                            selectedPerson = persons.first
+            Section(header: Text("Orari")) {
+                VStack {
+                    ForEach(times.indices, id: \.self) { index in
+                        HStack {
+                            DatePicker("", selection: $times[index], displayedComponents: .hourAndMinute)
+                                .labelsHidden()
+                            Text(doseDisplayText)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Button { times.remove(at: index) } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundColor(.red)
+                            }
                         }
                     }
-                }
-            }
-            .sheet(isPresented: $isShowingFrequencySheet) {
-                NavigationView {
-                    FrequencySelectionView(
-                        selectedFrequencyType: $selectedFrequencyType,
-                        freq: $freq,
-                        byDay: $byDay,
-                        interval: $interval
-                    ) {
-                        isShowingFrequencySheet = false
+                    Button {
+                        times.append(Date())
+                    } label: {
+                        Label("Aggiungi un orario", systemImage: "plus.circle")
                     }
                 }
             }
-            .sheet(isPresented: $isShowingDurationSheet) {
-                NavigationView {
-                    DurationSelectionView(
-                        courseEnabled: $courseEnabled,
-                        courseTotalDays: $courseTotalDays,
-                        useUntil: $useUntil,
-                        untilDate: $untilDate,
-                        useCount: $useCount,
-                        countNumber: $countNumber
-                    ) {
-                        isShowingDurationSheet = false
+
+            Section(header: Text("Persona")) {
+                Picker("Seleziona Persona", selection: $selectedPerson) {
+                    ForEach(persons, id: \.self) { person in
+                        Text(person.nome ?? "")
+                            .tag(person as Person?)
                     }
                 }
+                .accessibilityIdentifier("PersonPicker")
             }
-            .sheet(isPresented: $isShowingMonitoringSheet) {
-                NavigationStack {
-                    Form {
-                        monitoringSection
-                    }
-                    .navigationTitle("Monitoraggi")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Chiudi") { isShowingMonitoringSheet = false }
-                        }
-                    }
-                }
-            }
-            .sheet(isPresented: $showTaperEditor) {
-                NavigationStack {
-                    TaperStepEditorView(steps: $taperSteps)
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Annulla") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Salva") {
+
+            taperSection
+            monitoringOverviewSection
+            missedDoseSection
+
+            if isEmbedded {
+                Section {
+                    Button {
                         applyTherapyDescription(therapyDescriptionText)
                         saveTherapy()
+                    } label: {
+                        Label("Salva terapia", systemImage: "checkmark.circle.fill")
+                            .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(CapsuleActionButtonStyle(fill: .green, textColor: .white))
                     .disabled(!canSave)
                 }
+            }
+        }
+        .navigationTitle("\(medicine.nome) • \(package.numero) unità/conf.")
+        .onAppear {
+            // Edit: popola dai dati della therapy
+            if let therapy = editingTherapy {
+                populateFromTherapy(therapy)
+                selectedPerson = therapy.person
+            } else {
+                // Edge case: se esiste una sola therapy per questa medicina, assumiamo modalità "edit" implicita
+                if selectedPerson == nil {
+                    let set = medicine.therapies as? Set<Therapy> ?? []
+                    if set.count == 1, let only = set.first {
+                        populateFromTherapy(only)
+                        selectedPerson = only.person
+                    } else {
+                        selectedPerson = persons.first
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $isShowingFrequencySheet) {
+            NavigationView {
+                FrequencySelectionView(
+                    selectedFrequencyType: $selectedFrequencyType,
+                    freq: $freq,
+                    byDay: $byDay,
+                    interval: $interval
+                ) {
+                    isShowingFrequencySheet = false
+                }
+            }
+        }
+        .sheet(isPresented: $isShowingDurationSheet) {
+            NavigationView {
+                DurationSelectionView(
+                    courseEnabled: $courseEnabled,
+                    courseTotalDays: $courseTotalDays,
+                    useUntil: $useUntil,
+                    untilDate: $untilDate,
+                    useCount: $useCount,
+                    countNumber: $countNumber
+                ) {
+                    isShowingDurationSheet = false
+                }
+            }
+        }
+        .sheet(isPresented: $isShowingMonitoringSheet) {
+            NavigationStack {
+                Form {
+                    monitoringSection
+                }
+                .navigationTitle("Monitoraggi")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Chiudi") { isShowingMonitoringSheet = false }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showTaperEditor) {
+            NavigationStack {
+                TaperStepEditorView(steps: $taperSteps)
             }
         }
     }
@@ -874,7 +904,10 @@ extension TherapyFormView {
         }
 
         appViewModel.isSearchIndexPresented = false
-        dismiss()
+        onSave?()
+        if !isEmbedded {
+            dismiss()
+        }
         
         if let success = therapyFormViewModel.successMessage {
             print("Success: \(success)")

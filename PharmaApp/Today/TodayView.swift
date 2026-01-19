@@ -465,13 +465,16 @@ struct TodayView: View {
     private func auxiliaryLineText(for item: TodayTodoItem) -> Text? {
         if item.category == .purchase, let med = medicine(for: item) {
             var parts: [String] = []
+            if item.id.hasPrefix("purchase|deadline|"), let detail = item.detail, !detail.isEmpty {
+                parts.append(detail)
+            }
             if isAwaitingPrescription(med) {
                 let doctor = prescriptionDoctor(for: med)
                 let docName = doctor.map(doctorFullName) ?? "medico"
                 parts.append("Richiesta ricetta inviata a \(docName)")
             }
-            if let stock = stockSubtitle(for: med) {
-                parts.append(stock)
+            if let status = purchaseStockStatusLabel(for: med) {
+                parts.append(status)
             }
             guard !parts.isEmpty else { return nil }
             return Text(parts.joined(separator: "\n"))
@@ -1255,10 +1258,35 @@ struct TodayView: View {
         if awaitingRx {
             parts.append("Richiesta ricetta inviata a \(doctorName)")
         }
-        if let stock = stockSubtitle(for: medicine) {
-            parts.append(stock)
+        if let status = purchaseStockStatusLabel(for: medicine) {
+            parts.append(status)
         }
         return parts.isEmpty ? nil : parts.joined(separator: " • ")
+    }
+
+    private func purchaseStockStatusLabel(for medicine: Medicine) -> String? {
+        let threshold = medicine.stockThreshold(option: options.first)
+        if let therapies = medicine.therapies, !therapies.isEmpty {
+            var totalLeft: Double = 0
+            var dailyUsage: Double = 0
+            for therapy in therapies {
+                totalLeft += Double(therapy.leftover())
+                dailyUsage += therapy.stimaConsumoGiornaliero(recurrenceManager: RecurrenceManager(context: PersistenceController.shared.container.viewContext))
+            }
+            if totalLeft <= 0 {
+                return "Scorte finite"
+            }
+            guard dailyUsage > 0 else { return nil }
+            let days = totalLeft / dailyUsage
+            return days < Double(threshold) ? "Scorte in esaurimento" : nil
+        }
+        if let remaining = medicine.remainingUnitsWithoutTherapy() {
+            if remaining <= 0 {
+                return "Scorte finite"
+            }
+            return remaining < threshold ? "Scorte in esaurimento" : nil
+        }
+        return nil
     }
 
     private func dueLabel(for medicine: Medicine) -> String? {
