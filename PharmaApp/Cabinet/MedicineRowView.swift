@@ -226,6 +226,17 @@ struct MedicineRowView: View {
         Color.primary.opacity(0.45)
     }
 
+    private var deadlineIndicator: (symbol: String, color: Color, label: String)? {
+        switch medicine.deadlineStatus {
+        case .expired:
+            return ("alarm.fill", .red, "Scaduto")
+        case .expiringSoon:
+            return ("alarm", .orange, "Scadenza vicina")
+        case .ok, .none:
+            return nil
+        }
+    }
+
     private func chipView(text: String) -> some View {
         Text(text)
             .font(.system(size: 11, weight: .semibold))
@@ -252,6 +263,12 @@ struct MedicineRowView: View {
                     .font(.system(size: 16, weight: .regular))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+            }
+            if let indicator = deadlineIndicator {
+                Image(systemName: indicator.symbol)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(indicator.color)
+                    .accessibilityLabel(indicator.label)
             }
         }
     }
@@ -449,10 +466,8 @@ struct MedicineRowView: View {
     private func personName(for therapy: Therapy) -> String? {
         let person = therapy.person
         let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if last.isEmpty, first.lowercased() == "persona" { return nil }
-        let parts = [first, last].filter { !$0.isEmpty }
-        return parts.isEmpty ? nil : parts.joined(separator: " ")
+        if first.lowercased() == "persona" { return nil }
+        return first.isEmpty ? nil : first
     }
     
 
@@ -472,10 +487,8 @@ struct MedicineRowView: View {
 
     private func therapyPersonName(_ therapy: Therapy) -> String? {
         let first = (therapy.person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (therapy.person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if last.isEmpty, first.lowercased() == "persona" { return nil }
-        let components = [first, last].filter { !$0.isEmpty }
-        return components.joined(separator: " ")
+        if first.lowercased() == "persona" { return nil }
+        return first.isEmpty ? nil : first
     }
     
     private var packageDescriptor: String? {

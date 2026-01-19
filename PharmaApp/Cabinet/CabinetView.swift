@@ -24,6 +24,89 @@ struct CabinetView: View {
     @State private var newCabinetName = ""
 
     var body: some View {
+        cabinetRootView
+    }
+
+    private var cabinetRootView: some View {
+        cabinetListWithNavigation
+    }
+
+    private var cabinetListWithNavigation: some View {
+        cabinetListWithNewCabinetSheet
+            .navigationTitle("Armadio dei farmaci")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        appVM.isSettingsPresented = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .accessibilityLabel("Impostazioni")
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        isNewCabinetPresented = true
+                    } label: {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "cross.case")
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 9, weight: .bold))
+                                .offset(x: 6, y: -6)
+                        }
+                    }
+                    .accessibilityLabel("Nuovo armadietto")
+                }
+            }
+    }
+
+    private var cabinetListWithNewCabinetSheet: some View {
+        cabinetListWithDetailSheet
+            .sheet(isPresented: $isNewCabinetPresented, onDismiss: { newCabinetName = "" }) {
+                newCabinetSheet
+            }
+    }
+
+    private var cabinetListWithDetailSheet: some View {
+        cabinetListStyled
+            .id(logs.count)
+            .sheet(isPresented: isDetailSheetPresented) {
+                medicineDetailSheet
+            }
+            .sheet(item: $medicineToMove) { medicine in
+                MoveToCabinetSheet(
+                    medicine: medicine,
+                    cabinets: Array(cabinets),
+                    onSelect: { cabinet in
+                        medicine.cabinet = cabinet
+                        saveContext()
+                    }
+                )
+                .presentationDetents([.medium, .large])
+            }
+            .onChange(of: selectedMedicine) { newValue in
+                if newValue == nil {
+                    viewModel.clearSelection()
+                }
+            }
+    }
+
+    private var cabinetListStyled: some View {
+        cabinetListView
+            .listRowSeparator(.hidden)
+            .listSectionSeparator(.hidden)
+            .listRowSeparator(.hidden, edges: .all)
+            .listSectionSpacing(4)
+            .listRowSpacing(12)
+            .listStyle(.plain)
+            .padding(.top, 16)
+            .padding(.leading, 5)
+            .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
+    }
+
+    private var cabinetListView: AnyView {
         let entries = viewModel.shelfEntries(
             medicines: Array(medicines),
             logs: Array(logs),
@@ -31,7 +114,7 @@ struct CabinetView: View {
             cabinets: Array(cabinets)
         )
 
-        List {
+        return AnyView(List {
             if appVM.suggestNearestPharmacies {
                 Section {
                     smartBannerCard
@@ -76,100 +159,68 @@ struct CabinetView: View {
                     .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
                 }
             }
-        }
-        .listRowSeparator(.hidden)
-        .listSectionSeparator(.hidden)
-        .listRowSeparator(.hidden, edges: .all)
-        .listSectionSpacing(4)
-        .listRowSpacing(12)
-        .listStyle(.plain)
-        .padding(.top, 16)
-        .padding(.leading, 5)
-        .scrollContentBackground(.hidden)
-        .scrollIndicators(.hidden)
-        .id(logs.count)
-        .sheet(isPresented: Binding(
+        })
+    }
+
+    // MARK: - Helpers
+    private var isDetailSheetPresented: Binding<Bool> {
+        Binding(
             get: { selectedMedicine != nil },
             set: { newValue in
                 if !newValue { selectedMedicine = nil }
             }
-        )) {
-            if let medicine = selectedMedicine {
-                if let package = viewModel.package(for: medicine) {
-                    MedicineDetailView(
-                        medicine: medicine,
-                        package: package
-                    )
-                    .presentationDetents([.fraction(0.66), .large], selection: $detailSheetDetent)
-                    .presentationDragIndicator(.visible)
-                } else {
-                    VStack(spacing: 12) {
-                        Text("Completa i dati del medicinale")
-                            .font(.headline)
-                        Text("Aggiungi una confezione dalla schermata dettaglio per utilizzare le funzioni avanzate.")
-                            .multilineTextAlignment(.center)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding()
-                    .presentationDetents([.medium])
+        )
+    }
+
+    @ViewBuilder
+    private var medicineDetailSheet: some View {
+        if let medicine = selectedMedicine {
+            if let package = viewModel.package(for: medicine) {
+                MedicineDetailView(
+                    medicine: medicine,
+                    package: package
+                )
+                .presentationDetents([.fraction(0.66), .large], selection: $detailSheetDetent)
+                .presentationDragIndicator(.visible)
+            } else {
+                VStack(spacing: 12) {
+                    Text("Completa i dati del medicinale")
+                        .font(.headline)
+                    Text("Aggiungi una confezione dalla schermata dettaglio per utilizzare le funzioni avanzate.")
+                        .multilineTextAlignment(.center)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
-            }
-        }
-        .sheet(item: $medicineToMove) { medicine in
-            MoveToCabinetSheet(
-                medicine: medicine,
-                cabinets: Array(cabinets),
-                onSelect: { cabinet in
-                    medicine.cabinet = cabinet
-                    saveContext()
-                }
-            )
-            .presentationDetents([.medium, .large])
-        }
-        .onChange(of: selectedMedicine) { newValue in
-            if newValue == nil {
-                viewModel.clearSelection()
-            }
-        }
-        .sheet(isPresented: $isNewCabinetPresented, onDismiss: { newCabinetName = "" }) {
-            NavigationStack {
-                Form {
-                    Section("Nome armadietto") {
-                        TextField("Es. Casa", text: $newCabinetName)
-                            .textInputAutocapitalization(.words)
-                    }
-                }
-                .navigationTitle("Nuovo armadietto")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Annulla") { isNewCabinetPresented = false }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Crea") {
-                            createCabinet()
-                            isNewCabinetPresented = false
-                        }
-                        .disabled(trimmedCabinetName.isEmpty)
-                    }
-                }
-            }
-        }
-        .navigationTitle("Armadio dei farmaci")
-        .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    isNewCabinetPresented = true
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                }
-                .accessibilityLabel("Nuovo armadietto")
+                .padding()
+                .presentationDetents([.medium])
             }
         }
     }
 
-    // MARK: - Helpers
+    private var newCabinetSheet: some View {
+        NavigationStack {
+            Form {
+                Section("Nome armadietto") {
+                    TextField("Es. Casa", text: $newCabinetName)
+                        .textInputAutocapitalization(.words)
+                }
+            }
+            .navigationTitle("Nuovo armadietto")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annulla") { isNewCabinetPresented = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Crea") {
+                        createCabinet()
+                        isNewCabinetPresented = false
+                    }
+                    .disabled(trimmedCabinetName.isEmpty)
+                }
+            }
+        }
+    }
+
     private var trimmedCabinetName: String {
         newCabinetName.trimmingCharacters(in: .whitespacesAndNewlines)
     }

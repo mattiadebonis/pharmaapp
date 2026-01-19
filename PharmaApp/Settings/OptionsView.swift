@@ -17,14 +17,7 @@ struct OptionsView: View {
     
     var body: some View {
         Form {
-            // SECTION 1: Impostazioni generali
-            Section(header: Text("Opzioni")) {
-                Text("Le impostazioni di soglia e registrazione assunzioni ora si configurano per singolo farmaco.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            
-            // SECTION 2: Gestione Dottori
+            // SECTION 1: Gestione Dottori
             Section(header: HStack {
                 Text("Gestione Dottori")
                 Spacer()
@@ -33,20 +26,24 @@ struct OptionsView: View {
                 }
             }) {
                 ForEach(doctors) { doctor in
-                    VStack(alignment: .leading) {
-                        Text("\(doctor.nome ?? "") \(doctor.cognome ?? "")")
-                            .font(.headline)
-                        if let mail = doctor.mail {
-                            Text("Email: \(mail)")
-                        }
-                        if let telefono = doctor.telefono {
-                            Text("Telefono: \(telefono)")
+                    NavigationLink {
+                        DoctorDetailView(doctor: doctor)
+                    } label: {
+                        VStack(alignment: .leading) {
+                            Text(doctor.nome ?? "")
+                                .font(.headline)
+                            if let mail = doctor.mail {
+                                Text("Email: \(mail)")
+                            }
+                            if let telefono = doctor.telefono {
+                                Text("Telefono: \(telefono)")
+                            }
                         }
                     }
                 }
             }
             
-            // SECTION 3: Gestione Persone
+            // SECTION 2: Gestione Persone
             Section(header: HStack {
                 Text("Gestione Persone")
                 Spacer()
@@ -55,9 +52,13 @@ struct OptionsView: View {
                 }
             }) {
                 ForEach(persons) { person in
-                    VStack(alignment: .leading) {
-                        Text("\(person.nome ?? "") \(person.cognome ?? "")")
-                            .font(.headline)
+                    NavigationLink {
+                        PersonDetailView(person: person)
+                    } label: {
+                        VStack(alignment: .leading) {
+                            Text(person.nome ?? "")
+                                .font(.headline)
+                        }
                     }
                 }
             }

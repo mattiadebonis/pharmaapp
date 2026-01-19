@@ -15,6 +15,8 @@ public class Medicine: NSManagedObject, Identifiable {
     @NSManaged public var principio_attivo: String
     @NSManaged public var obbligo_ricetta: Bool
     @NSManaged public var custom_stock_threshold: Int32
+    @NSManaged public var deadline_month: Int32
+    @NSManaged public var deadline_year: Int32
     @NSManaged public var manual_intake_registration: Bool
     @NSManaged public var missed_dose_preset: String?
     @NSManaged public var safety_max_per_day: Int32
@@ -222,6 +224,60 @@ extension Medicine {
         let custom = Int(custom_stock_threshold)
         return custom > 0 ? custom : 7
     }
+
+    enum DeadlineStatus {
+        case none
+        case ok
+        case expiringSoon
+        case expired
+    }
+
+    var deadlineMonthYear: (month: Int, year: Int)? {
+        guard let month = normalizedDeadlineMonth,
+              let year = normalizedDeadlineYear else {
+            return nil
+        }
+        return (month, year)
+    }
+
+    var deadlineLabel: String? {
+        guard let info = deadlineMonthYear else { return nil }
+        return String(format: "%02d/%04d", info.month, info.year)
+    }
+
+    var deadlineMonthStartDate: Date? {
+        guard let info = deadlineMonthYear else { return nil }
+        var comps = DateComponents()
+        comps.year = info.year
+        comps.month = info.month
+        comps.day = 1
+        return Calendar.current.date(from: comps)
+    }
+
+    var monthsUntilDeadline: Int? {
+        guard let deadlineStart = deadlineMonthStartDate else { return nil }
+        let calendar = Calendar.current
+        let now = Date()
+        let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
+        return calendar.dateComponents([.month], from: monthStart, to: deadlineStart).month
+    }
+
+    var deadlineStatus: DeadlineStatus {
+        guard let months = monthsUntilDeadline else { return .none }
+        if months < 0 { return .expired }
+        if months <= 1 { return .expiringSoon }
+        return .ok
+    }
+
+    func updateDeadline(month: Int?, year: Int?) {
+        if let month, let year, isValidDeadline(month: month, year: year) {
+            deadline_month = Int32(month)
+            deadline_year = Int32(year)
+        } else {
+            deadline_month = 0
+            deadline_year = 0
+        }
+    }
     
     
     /// Calcola il punteggio (score) per **una** Therapy, usando RecurrenceManager
@@ -318,6 +374,24 @@ extension Medicine {
         
         // Se non esistono acquisti dopo l'ultima ricetta, restituisce true
         return purchaseLogsAfterPrescription.isEmpty
+    }
+}
+
+private extension Medicine {
+    static let deadlineYearRange = 2000...2100
+
+    var normalizedDeadlineMonth: Int? {
+        let month = Int(deadline_month)
+        return (1...12).contains(month) ? month : nil
+    }
+
+    var normalizedDeadlineYear: Int? {
+        let year = Int(deadline_year)
+        return Self.deadlineYearRange.contains(year) ? year : nil
+    }
+
+    func isValidDeadline(month: Int, year: Int) -> Bool {
+        (1...12).contains(month) && Self.deadlineYearRange.contains(year)
     }
 }
 

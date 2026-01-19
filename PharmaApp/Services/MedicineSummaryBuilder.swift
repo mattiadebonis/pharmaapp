@@ -75,6 +75,10 @@ struct MedicineSummaryBuilder {
             } else {
                 line2 = "Scorte: \(stockDays) gg"
             }
+        } else if therapies.isEmpty, let remainingUnits = medicine.remainingUnitsWithoutTherapy() {
+            let clamped = max(0, remainingUnits)
+            let unitsText = formatCount(clamped, singular: "unità", plural: "unità")
+            line2 = "Scorte: \(unitsText)"
         } else {
             line2 = "Scorte: —"
         }

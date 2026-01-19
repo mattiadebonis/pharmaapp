@@ -41,6 +41,8 @@
     </entity>
 		    <entity name="Medicine" representedClassName=".Medicine" syncable="YES">
 		        <attribute name="custom_stock_threshold" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+		        <attribute name="deadline_month" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+		        <attribute name="deadline_year" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
 		        <attribute name="manual_intake_registration" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
 		        <attribute name="missed_dose_preset" optional="YES" attributeType="String"/>
 		        <attribute name="safety_max_per_day" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>

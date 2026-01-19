@@ -24,6 +24,8 @@ struct MedicineDetailView: View {
 	    @State private var showThresholdSheet = false
 	    @State private var showIntakeConfirmationSheet = false
 	    @State private var showDoctorSheet = false
+    @State private var deadlineMonthInput: String = ""
+    @State private var deadlineYearInput: String = ""
     
     @ObservedObject var medicine: Medicine
     let package: Package
@@ -68,6 +70,7 @@ struct MedicineDetailView: View {
         NavigationStack {
             Form {
                 stockSection
+                deadlineSection
                 therapiesInlineSection
             }
             .scrollContentBackground(.hidden)
@@ -134,6 +137,7 @@ struct MedicineDetailView: View {
             customThresholdValue = current > 0 ? current : 7
             loadRulesState()
             selectedDoctorID = medicine.prescribingDoctor?.objectID
+            syncDeadlineInputs()
         }
         .sheet(isPresented: $showThresholdSheet) {
             ThresholdSheet(
@@ -286,6 +290,10 @@ struct MedicineDetailView: View {
     private var therapyCount: Int {
         therapies.count
     }
+
+    private var deadlineSummaryText: String {
+        medicine.deadlineLabel ?? "Non impostata"
+    }
     
     private var therapySummarySubtitle: String {
         guard let therapy = therapies.first else {
@@ -382,9 +390,7 @@ struct MedicineDetailView: View {
     private func personDisplayName(for person: Person?) -> String? {
         guard let person else { return nil }
         let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let components = [first, last].filter { !$0.isEmpty }
-        return components.isEmpty ? nil : components.joined(separator: " ")
+        return first.isEmpty ? nil : first
     }
     
     private func doseDisplayText(for therapy: Therapy) -> String {
@@ -597,9 +603,7 @@ struct MedicineDetailView: View {
             return assignedName
         }
         let first = doctorWithEmail?.nome?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let last = doctorWithEmail?.cognome?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let components = [first, last].filter { !$0.isEmpty }
-        return components.isEmpty ? "Dottore" : components.joined(separator: " ")
+        return first.isEmpty ? "Dottore" : first
     }
     
     private var suggestionMedicines: [Medicine] {
@@ -757,9 +761,7 @@ struct MedicineDetailView: View {
     private func doctorFullName(_ doctor: Doctor?) -> String {
         guard let doctor else { return "" }
         let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let components = [first, last].filter { !$0.isEmpty }
-        return components.joined(separator: " ")
+        return first
     }
     
     private func coverageDays(for med: Medicine, recurrenceManager: RecurrenceManager) -> Double? {
@@ -825,6 +827,53 @@ extension MedicineDetailView {
         .textCase(nil)
     }
 
+    private var deadlineSection: some View {
+        Section {
+            HStack(spacing: 8) {
+                TextField("MM", text: Binding(
+                    get: { deadlineMonthInput },
+                    set: { newValue in
+                        let sanitized = sanitizeMonthInput(newValue)
+                        if sanitized != deadlineMonthInput {
+                            deadlineMonthInput = sanitized
+                        }
+                        updateDeadlineFromInputs()
+                    }
+                ))
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.center)
+                .frame(width: 50)
+
+                Text("/")
+                    .foregroundStyle(.secondary)
+
+                TextField("YYYY", text: Binding(
+                    get: { deadlineYearInput },
+                    set: { newValue in
+                        let sanitized = sanitizeYearInput(newValue)
+                        if sanitized != deadlineYearInput {
+                            deadlineYearInput = sanitized
+                        }
+                        updateDeadlineFromInputs()
+                    }
+                ))
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.center)
+                .frame(width: 70)
+
+                Spacer()
+            }
+        } header: {
+            Text("Scadenza")
+                .font(.body.weight(.semibold))
+        } footer: {
+            Text("Attuale: \(deadlineSummaryText)")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .textCase(nil)
+    }
+
     private var actionButtonsView: some View {
         VStack(spacing: 12) {
             if let action = primaryAction, action.label == "Richiedi ricetta" {
@@ -834,7 +883,8 @@ extension MedicineDetailView {
                     Label(action.label, systemImage: action.icon)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
                 .tint(action.color)
             }
 
@@ -844,9 +894,7 @@ extension MedicineDetailView {
                 Label("Assunto", systemImage: "checkmark.circle.fill")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .tint(.green)
+            .buttonStyle(CapsuleActionButtonStyle(fill: .green, textColor: .white))
 
             Button {
                 viewModel.addPurchase(for: medicine, for: package)
@@ -854,9 +902,7 @@ extension MedicineDetailView {
                 Label("Acquistato", systemImage: "cart.fill")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .tint(.blue)
+            .buttonStyle(CapsuleActionButtonStyle(fill: .blue, textColor: .white))
         }
         .frame(maxWidth: .infinity)
     }
@@ -874,20 +920,16 @@ extension MedicineDetailView {
                     Button {
                         openTherapyForm(for: therapy)
                     } label: {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(therapyDescriptionText(for: therapy))
                                 .font(.subheadline)
                                 .foregroundStyle(.primary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                            Spacer(minLength: 8)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
                             if let next = nextDose(for: therapy) {
                                 Text("Prossima: \(formattedDate(next))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                    .layoutPriority(1)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -930,6 +972,53 @@ extension MedicineDetailView {
         for therapy in therapies {
             therapy.manual_intake_registration = intakeConfirmationEnabled
         }
+        saveContext()
+    }
+
+    private func syncDeadlineInputs() {
+        if let info = medicine.deadlineMonthYear {
+            deadlineMonthInput = String(format: "%02d", info.month)
+            deadlineYearInput = String(info.year)
+        } else {
+            deadlineMonthInput = ""
+            deadlineYearInput = ""
+        }
+    }
+
+    private func sanitizeMonthInput(_ value: String) -> String {
+        let digits = value.filter { $0.isNumber }
+        return String(digits.prefix(2))
+    }
+
+    private func sanitizeYearInput(_ value: String) -> String {
+        let digits = value.filter { $0.isNumber }
+        return String(digits.prefix(4))
+    }
+
+    private func clearDeadline() {
+        deadlineMonthInput = ""
+        deadlineYearInput = ""
+        medicine.updateDeadline(month: nil, year: nil)
+        saveContext()
+    }
+
+    private func updateDeadlineFromInputs() {
+        let monthText = deadlineMonthInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let yearText = deadlineYearInput.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if monthText.isEmpty && yearText.isEmpty {
+            clearDeadline()
+            return
+        }
+
+        guard let month = Int(monthText),
+              let year = Int(yearText),
+              (1...12).contains(month),
+              (2000...2100).contains(year) else {
+            return
+        }
+
+        medicine.updateDeadline(month: month, year: year)
         saveContext()
     }
 
@@ -1028,9 +1117,7 @@ extension MedicineDetailView {
         
         private func doctorFullName(_ doctor: Doctor) -> String {
             let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let parts = [first, last].filter { !$0.isEmpty }
-            return parts.isEmpty ? "Medico" : parts.joined(separator: " ")
+            return first.isEmpty ? "Medico" : first
         }
     }
     
@@ -1675,12 +1762,7 @@ private struct StockManagementView: View {
     private func doctorFullName(_ doctor: Doctor?) -> String? {
         guard let doctor else { return nil }
         let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = [first, last].filter { !$0.isEmpty }
-        if parts.isEmpty {
-            return "Medico"
-        }
-        return parts.joined(separator: " ")
+        return first.isEmpty ? "Medico" : first
     }
     
     private var selectedDoctor: Doctor? {
@@ -1802,9 +1884,7 @@ private struct StockManagementView: View {
         
         private func personName(for therapy: Therapy) -> String? {
             let first = (therapy.person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let last = (therapy.person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let components = [first, last].filter { !$0.isEmpty }
-        return components.joined(separator: " ")
+            return first.isEmpty ? nil : first
     }
     
 }

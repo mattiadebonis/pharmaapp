@@ -12,7 +12,6 @@ struct AddDoctorView: View {
     @Environment(\.dismiss) var dismiss
     
     @State private var nome: String = ""
-    @State private var cognome: String = ""
     @State private var mail: String = ""
     @State private var telefono: String = ""
     @State private var indirizzo: String = ""
@@ -22,7 +21,6 @@ struct AddDoctorView: View {
         Form {
             Section(header: Text("Dettagli Dottore")) {
                 TextField("Nome", text: $nome)
-                TextField("Cognome", text: $cognome)
                 TextField("Email", text: $mail)
                     .keyboardType(.emailAddress)
                 TextField("Telefono", text: $telefono)
@@ -45,7 +43,7 @@ struct AddDoctorView: View {
         let nuovoDottore = Doctor(context: managedObjectContext)
         nuovoDottore.id = UUID()
         nuovoDottore.nome = nome
-        nuovoDottore.cognome = cognome
+        nuovoDottore.cognome = nil
         nuovoDottore.mail = mail
         nuovoDottore.telefono = telefono
         nuovoDottore.indirizzo = indirizzo
@@ -60,7 +58,7 @@ struct AddDoctorView: View {
     }
 }
 
-private struct DoctorScheduleEditor: View {
+struct DoctorScheduleEditor: View {
     @Binding var schedule: DoctorScheduleDTO
     
     var body: some View {
@@ -117,7 +115,7 @@ private struct DoctorScheduleEditor: View {
     }
 }
 
-private struct TimeSlotRow: View {
+struct TimeSlotRow: View {
     let title: String
     @Binding var slot: DoctorScheduleDTO.TimeSlot
     

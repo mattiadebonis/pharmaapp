@@ -11,13 +11,11 @@ struct AddPersonView: View {
     @Environment(\.dismiss) var dismiss
     
     @State private var nome: String = ""
-    @State private var cognome: String = ""
     
     var body: some View {
         Form {
             Section(header: Text("Dettagli Persona")) {
                 TextField("Nome", text: $nome)
-                TextField("Cognome", text: $cognome)
             }
             
             Button("Salva") {
@@ -31,7 +29,7 @@ struct AddPersonView: View {
         let nuovaPersona = Person(context: managedObjectContext)
         nuovaPersona.id = UUID()
         nuovaPersona.nome = nome
-        nuovaPersona.cognome = cognome
+        nuovaPersona.cognome = nil
         
         do {
             try managedObjectContext.save()

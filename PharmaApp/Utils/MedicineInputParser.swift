@@ -181,15 +181,11 @@ final class MedicineInputParser {
     
     private func doctorFullName(_ doctor: Doctor) -> String {
         let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = [first, last].filter { !$0.isEmpty }
-        return parts.joined(separator: " ")
+        return first
     }
     
     private func personFullName(_ person: Person) -> String {
         let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = [first, last].filter { !$0.isEmpty }
-        return parts.joined(separator: " ")
+        return first
     }
 }

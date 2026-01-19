@@ -247,9 +247,7 @@ struct NewMedicineView: View {
     
     private func doctorFullName(_ doctor: Doctor) -> String {
         let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let comps = [first, last].filter { !$0.isEmpty }
-        return comps.isEmpty ? "Medico" : comps.joined(separator: " ")
+        return first.isEmpty ? "Medico" : first
     }
     
     private var recipeSheet: some View {
@@ -529,7 +527,7 @@ struct NewMedicineView: View {
         let person = Person(context: context)
         person.id = UUID()
         person.nome = "Persona"
-        person.cognome = ""
+        person.cognome = nil
         return person
     }
     

@@ -190,7 +190,7 @@ struct TherapyFormView: View {
                 Section(header: Text("Persona")) {
                     Picker("Seleziona Persona", selection: $selectedPerson) {
                         ForEach(persons, id: \.self) { person in
-                            Text("\(person.nome ?? "") \(person.cognome ?? "")")
+                            Text(person.nome ?? "")
                                 .tag(person as Person?)
                         }
                     }
@@ -529,10 +529,7 @@ struct TherapyFormView: View {
     private var selectedPersonName: String? {
         guard let selectedPerson else { return nil }
         let first = (selectedPerson.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (selectedPerson.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let components = [first, last].filter { !$0.isEmpty }
-        let full = components.joined(separator: " ")
-        return full.isEmpty ? nil : full
+        return first.isEmpty ? nil : first
     }
 
     private var frequencySummaryText: String {
@@ -800,7 +797,7 @@ extension TherapyFormView {
             let newPerson = Person(context: context)
             newPerson.id = UUID()
             newPerson.nome = ""
-            newPerson.cognome = ""
+            newPerson.cognome = nil
             return newPerson
         }()
 

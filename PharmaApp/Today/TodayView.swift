@@ -456,6 +456,9 @@ struct TodayView: View {
         if item.category == .monitoring {
             return item.detail
         }
+        if item.category == .deadline {
+            return item.detail
+        }
         return nil
     }
 
@@ -896,6 +899,8 @@ struct TodayView: View {
             return "exclamationmark.triangle"
         case .purchase:
             return "cart"
+        case .deadline:
+            return "calendar.badge.exclamationmark"
         case .prescription:
             return "heart.text.square"
         case .upcoming, .pharmacy:
@@ -1014,10 +1019,7 @@ struct TodayView: View {
 
     private func displayName(for person: Person) -> String? {
         let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = [first, last].filter { !$0.isEmpty }
-        let joined = parts.joined(separator: " ")
-        return joined.isEmpty ? nil : joined
+        return first.isEmpty ? nil : first
     }
 
     private func therapyVerb(for medicine: Medicine) -> String {
@@ -1099,6 +1101,8 @@ struct TodayView: View {
                 }
             }
             return isCompleted ? "Comprato" : "Compra"
+        case .deadline:
+            return isCompleted ? "Controllata" : "Scadenza"
         case .prescription:
             if med?.hasNewPrescritpionRequest() == true {
                 return "In attesa della ricetta"
@@ -1133,6 +1137,7 @@ struct TodayView: View {
         case .monitoring: return "Misura"
         case .missedDose: return "Dose mancata"
         case .purchase: return "Compra"
+        case .deadline: return "Scadenze"
         case .prescription: return "Ricette"
         case .upcoming: return "Promemoria"
         case .pharmacy: return "Farmacia"
@@ -1395,6 +1400,8 @@ struct TodayView: View {
             log = nil
         case .purchase:
             log = viewModel.actionService.markAsPurchased(for: medicine)
+        case .deadline:
+            log = nil
         case .prescription:
             if prescriptionTaskState(for: medicine, item: item) == .waitingResponse {
                 log = viewModel.actionService.markPrescriptionReceived(for: medicine)
@@ -1706,9 +1713,7 @@ struct TodayView: View {
     private func prescriptionDoctorName(for medicine: Medicine) -> String {
         let doctor = prescriptionDoctor(for: medicine)
         let first = (doctor?.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (doctor?.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = [first, last].filter { !$0.isEmpty }
-        return parts.isEmpty ? "Dottore" : parts.joined(separator: " ")
+        return first.isEmpty ? "Dottore" : first
     }
 
     private func prescriptionDoctorEmail(for medicine: Medicine) -> String? {
@@ -1743,9 +1748,7 @@ struct TodayView: View {
     private func doctorFullName(_ doctor: Doctor?) -> String {
         guard let doctor else { return "Dottore" }
         let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let comps = [first, last].filter { !$0.isEmpty }
-        return comps.isEmpty ? "Dottore" : comps.joined(separator: " ")
+        return first.isEmpty ? "Dottore" : first
     }
 
     private func prescriptionEmailBody(for medicines: [Medicine], doctorName: String) -> String {

@@ -78,8 +78,7 @@ final class TherapyDescriptionParser {
 
     private func fullName(for person: Person) -> String {
         let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+        return first
     }
 
     // MARK: - Dose

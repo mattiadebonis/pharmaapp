@@ -59,15 +59,6 @@ struct ContentView: View {
                     CabinetView()
                         .navigationTitle("Armadio dei farmaci")
                         .navigationBarTitleDisplayMode(.large)
-                        .toolbar {
-                            ToolbarItem(placement: .primaryAction) {
-                                Button {
-                                    appVM.isSettingsPresented = true
-                                } label: {
-                                    Image(systemName: "gearshape")
-                                }
-                            }
-                        }
                 }
             }
 

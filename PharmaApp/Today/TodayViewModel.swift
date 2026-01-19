@@ -118,8 +118,38 @@ class TodayViewModel: ObservableObject {
             }
         }
 
+        let deadlineItems = deadlineTodoItems(from: medicines)
         let clinicalContext = ClinicalContextBuilder(context: viewContext).build(for: medicines)
-        return baseItems + clinicalContext.allTodos
+        return baseItems + deadlineItems + clinicalContext.allTodos
+    }
+
+    private func deadlineTodoItems(from medicines: [Medicine]) -> [TodayTodoItem] {
+        let candidates: [(Medicine, Int, String, Date)] = medicines.compactMap { medicine in
+            guard let months = medicine.monthsUntilDeadline,
+                  months <= 1,
+                  let label = medicine.deadlineLabel,
+                  let date = medicine.deadlineMonthStartDate else {
+                return nil
+            }
+            return (medicine, months, label, date)
+        }
+
+        return candidates
+            .sorted { lhs, rhs in
+                if lhs.3 != rhs.3 { return lhs.3 < rhs.3 }
+                return lhs.0.nome.localizedCaseInsensitiveCompare(rhs.0.nome) == .orderedAscending
+            }
+            .map { medicine, months, label, _ in
+                let detail = months < 0 ? "Scaduto \(label)" : "Scade \(label)"
+                let id = "deadline|\(medicine.objectID.uriRepresentation().absoluteString)|\(label)"
+                return TodayTodoItem(
+                    id: id,
+                    title: medicine.nome,
+                    detail: detail,
+                    category: .deadline,
+                    medicineID: medicine.objectID
+                )
+            }
     }
 
     @MainActor
@@ -176,6 +206,11 @@ class TodayViewModel: ObservableObject {
 
     func sortTodos(_ items: [TodayTodoItem]) -> [TodayTodoItem] {
         items.sorted { lhs, rhs in
+            if lhs.category == .deadline, rhs.category == .deadline {
+                let lDate = deadlineDate(for: lhs) ?? .distantFuture
+                let rDate = deadlineDate(for: rhs) ?? .distantFuture
+                if lDate != rDate { return lDate < rDate }
+            }
             let lTime = timeSortValue(for: lhs) ?? Int.max
             let rTime = timeSortValue(for: rhs) ?? Int.max
             if lTime != rTime { return lTime < rTime }
@@ -201,8 +236,9 @@ class TodayViewModel: ObservableObject {
 
         return grouped.map { TimeGroup(label: $0.key, sortValue: $0.value.sort, items: $0.value.items) }
             .sorted { lhs, rhs in
-                if lhs.label == "Rifornimenti", rhs.label != "Rifornimenti" { return false }
-                if rhs.label == "Rifornimenti", lhs.label != "Rifornimenti" { return true }
+                let lhsPriority = groupPriority(lhs.label)
+                let rhsPriority = groupPriority(rhs.label)
+                if lhsPriority != rhsPriority { return lhsPriority < rhsPriority }
                 switch (lhs.sortValue, rhs.sortValue) {
                 case let (l?, r?):
                     return l < r
@@ -216,9 +252,23 @@ class TodayViewModel: ObservableObject {
             }
     }
 
+    private func groupPriority(_ label: String) -> Int {
+        switch label {
+        case "Rifornimenti":
+            return 2
+        case "Scadenze":
+            return 1
+        default:
+            return 0
+        }
+    }
+
     func timeLabel(for item: TodayTodoItem, medicines: [Medicine], options: Option?) -> String? {
         if item.category == .purchase {
             return "Rifornimenti"
+        }
+        if item.category == .deadline {
+            return "Scadenze"
         }
         guard let date = todoTimeDate(for: item, medicines: medicines, options: options) else { return nil }
         return TodayFormatters.time.string(from: date)
@@ -310,11 +360,19 @@ class TodayViewModel: ObservableObject {
             let comps = Calendar.current.dateComponents([.hour, .minute], from: date)
             return (comps.hour ?? 0) * 60 + (comps.minute ?? 0)
         }
+        if item.category == .deadline {
+            return nil
+        }
         guard let detail = item.detail, let match = timeComponents(from: detail) else { return nil }
         return (match.hour * 60) + match.minute
     }
 
     private func todoTimeDate(for item: TodayTodoItem, medicines: [Medicine], options: Option?) -> Date? {
+        if item.category == .deadline,
+           let medicine = medicine(for: item, medicines: medicines),
+           let date = medicine.deadlineMonthStartDate {
+            return date
+        }
         if item.category == .monitoring || item.category == .missedDose {
             if let date = timestampFromID(item) {
                 return date
@@ -348,6 +406,12 @@ class TodayViewModel: ObservableObject {
         let minute = parts[1]
         guard (0...23).contains(hour), (0...59).contains(minute) else { return nil }
         return (hour, minute)
+    }
+
+    private func deadlineDate(for item: TodayTodoItem) -> Date? {
+        guard item.category == .deadline, let id = item.medicineID else { return nil }
+        guard let medicine = try? viewContext.existingObject(with: id) as? Medicine else { return nil }
+        return medicine.deadlineMonthStartDate
     }
 
     private func hasUpcomingTherapyInNextWeek(for medicine: Medicine, recurrenceManager: RecurrenceManager) -> Bool {

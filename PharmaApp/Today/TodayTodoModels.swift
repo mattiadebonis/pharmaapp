@@ -9,6 +9,7 @@ struct TodayTodoItem: Identifiable, Hashable {
         case monitoring
         case missedDose
         case purchase
+        case deadline
         case prescription
         case upcoming
         case pharmacy
@@ -19,6 +20,7 @@ struct TodayTodoItem: Identifiable, Hashable {
             case .monitoring: return "Monitoraggi"
             case .missedDose: return "Dose mancate"
             case .purchase: return "Acquisti"
+            case .deadline: return "Scadenze"
             case .prescription: return "Ricette"
             case .upcoming: return "Prossimi giorni"
             case .pharmacy: return "Farmacia"
@@ -31,6 +33,7 @@ struct TodayTodoItem: Identifiable, Hashable {
             case .monitoring: return "waveform.path.ecg"
             case .missedDose: return "exclamationmark.triangle"
             case .purchase: return "cart.badge.plus"
+            case .deadline: return "calendar.badge.exclamationmark"
             case .prescription: return "doc.text.magnifyingglass"
             case .upcoming: return "calendar"
             case .pharmacy: return "mappin.and.ellipse"
@@ -43,6 +46,7 @@ struct TodayTodoItem: Identifiable, Hashable {
             case .monitoring: return .indigo
             case .missedDose: return .red
             case .purchase: return .green
+            case .deadline: return .orange
             case .prescription: return .orange
             case .upcoming: return .purple
             case .pharmacy: return .teal
@@ -50,7 +54,7 @@ struct TodayTodoItem: Identifiable, Hashable {
         }
 
         static var displayOrder: [Category] {
-            [.monitoring, .therapy, .missedDose, .purchase, .prescription, .upcoming, .pharmacy]
+            [.monitoring, .therapy, .missedDose, .purchase, .deadline, .prescription, .upcoming, .pharmacy]
         }
     }
 

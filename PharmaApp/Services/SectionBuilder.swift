@@ -37,6 +37,10 @@ func computeSections(for medicines: [Medicine], logs: [Log], option: Option?) ->
         return best
     }
 
+    func deadlineDate(for m: Medicine) -> Date {
+        m.deadlineMonthStartDate ?? Date.distantFuture
+    }
+
     func occursToday(_ t: Therapy) -> Bool {
         let rule = rec.parseRecurrenceString(t.rrule ?? "")
         let start = t.start_date ?? now
@@ -98,6 +102,11 @@ func computeSections(for medicines: [Medicine], logs: [Log], option: Option?) ->
             let r1 = remainingUnits(for: m1) ?? Int.max
             let r2 = remainingUnits(for: m2) ?? Int.max
             if r1 == r2 {
+                let deadline1 = deadlineDate(for: m1)
+                let deadline2 = deadlineDate(for: m2)
+                if deadline1 != deadline2 {
+                    return deadline1 < deadline2
+                }
                 return m1.nome.localizedCaseInsensitiveCompare(m2.nome) == .orderedAscending
             }
             return r1 < r2
@@ -112,6 +121,11 @@ func computeSections(for medicines: [Medicine], logs: [Log], option: Option?) ->
         let r1 = remainingUnits(for: m1) ?? Int.max
         let r2 = remainingUnits(for: m2) ?? Int.max
         if r1 == r2 {
+            let deadline1 = deadlineDate(for: m1)
+            let deadline2 = deadlineDate(for: m2)
+            if deadline1 != deadline2 {
+                return deadline1 < deadline2
+            }
             return m1.nome.localizedCaseInsensitiveCompare(m2.nome) == .orderedAscending
         }
         return r1 < r2
@@ -124,6 +138,11 @@ func computeSections(for medicines: [Medicine], logs: [Log], option: Option?) ->
             let r1 = remainingUnits(for: m1) ?? Int.max
             let r2 = remainingUnits(for: m2) ?? Int.max
             if r1 == r2 {
+                let deadline1 = deadlineDate(for: m1)
+                let deadline2 = deadlineDate(for: m2)
+                if deadline1 != deadline2 {
+                    return deadline1 < deadline2
+                }
                 return m1.nome.localizedCaseInsensitiveCompare(m2.nome) == .orderedAscending
             }
             return r1 < r2
