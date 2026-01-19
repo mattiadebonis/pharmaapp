@@ -278,3 +278,14 @@ private extension Medicine {
         return String(Int(lastDate.timeIntervalSince1970))
     }
 }
+
+extension TodayTodoItem {
+    init?(todo: Todo) {
+        guard let category = Category(rawValue: todo.category) else { return nil }
+        self.id = todo.source_id
+        self.title = todo.title
+        self.detail = todo.detail
+        self.category = category
+        self.medicineID = todo.medicine?.objectID
+    }
+}

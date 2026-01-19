@@ -122,6 +122,58 @@ class TodayViewModel: ObservableObject {
         return baseItems + clinicalContext.allTodos
     }
 
+    @MainActor
+    func syncTodos(
+        from items: [TodayTodoItem],
+        medicines: [Medicine],
+        option: Option?
+    ) {
+        let context = viewContext
+        let now = Date()
+        let request: NSFetchRequest<Todo> = Todo.fetchRequest()
+        let existing: [Todo]
+        do {
+            existing = try context.fetch(request)
+        } catch {
+            print("⚠️ syncTodos: fetch failed \(error)")
+            return
+        }
+
+        var bySourceID: [String: Todo] = [:]
+        for todo in existing {
+            bySourceID[todo.source_id] = todo
+        }
+
+        var seen: Set<String> = []
+        for item in items {
+            let sourceID = item.id
+            seen.insert(sourceID)
+            let todo = bySourceID[sourceID] ?? Todo(context: context)
+            if bySourceID[sourceID] == nil {
+                todo.id = UUID()
+                todo.created_at = now
+            }
+            todo.source_id = sourceID
+            todo.title = item.title
+            todo.detail = item.detail
+            todo.category = item.category.rawValue
+            todo.updated_at = now
+            todo.due_at = todoTimeDate(for: item, medicines: medicines, options: option)
+            todo.medicine = medicine(for: item, medicines: medicines)
+        }
+
+        for todo in existing where !seen.contains(todo.source_id) {
+            context.delete(todo)
+        }
+
+        guard context.hasChanges else { return }
+        do {
+            try context.save()
+        } catch {
+            print("⚠️ syncTodos: save failed \(error)")
+        }
+    }
+
     func sortTodos(_ items: [TodayTodoItem]) -> [TodayTodoItem] {
         items.sorted { lhs, rhs in
             let lTime = timeSortValue(for: lhs) ?? Int.max

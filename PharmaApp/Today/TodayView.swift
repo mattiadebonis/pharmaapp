@@ -18,6 +18,8 @@ struct TodayView: View {
     private var logs: FetchedResults<Log>
     @FetchRequest(fetchRequest: Doctor.extractDoctors())
     private var doctors: FetchedResults<Doctor>
+    @FetchRequest(fetchRequest: Todo.extractTodos())
+    private var storedTodos: FetchedResults<Todo>
 
     @StateObject private var viewModel = TodayViewModel()
     @StateObject private var locationVM = LocationSearchViewModel()
@@ -42,8 +44,9 @@ struct TodayView: View {
         let sections = computeSections(for: Array(medicines), logs: Array(logs), option: options.first)
         let insightsContext = viewModel.buildInsightsContext(for: sections, medicines: Array(medicines), option: options.first)
         let urgentIDs = viewModel.urgentMedicineIDs(for: sections)
-        let todos = viewModel.buildTodoItems(from: insightsContext, medicines: Array(medicines), urgentIDs: urgentIDs, option: options.first)
-        let sorted = viewModel.sortTodos(todos)
+        let computedTodos = viewModel.buildTodoItems(from: insightsContext, medicines: Array(medicines), urgentIDs: urgentIDs, option: options.first)
+        let todoItems = storedTodos.compactMap { TodayTodoItem(todo: $0) }
+        let sorted = viewModel.sortTodos(todoItems)
         let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
         let filtered = sorted.filter { item in
             if item.category == .therapy, let med = medicine(for: item) {
@@ -120,6 +123,9 @@ struct TodayView: View {
             }
         }
         .scrollIndicators(.hidden)
+        .task(id: syncToken(for: computedTodos)) {
+            viewModel.syncTodos(from: computedTodos, medicines: Array(medicines), option: options.first)
+        }
         .sheet(item: $prescriptionToConfirm) { medicine in
             let doctor = prescriptionDoctorContact(for: medicine)
             let formattedName = formattedMedicineName(medicine.nome)
@@ -1414,6 +1420,14 @@ struct TodayView: View {
             return "\(item.category.rawValue)|\(medID)"
         }
         return item.id
+    }
+
+    private func syncToken(for items: [TodayTodoItem]) -> String {
+        items.map { item in
+            let detail = item.detail ?? ""
+            let medID = item.medicineID?.uriRepresentation().absoluteString ?? ""
+            return "\(item.id)|\(item.category.rawValue)|\(item.title)|\(detail)|\(medID)"
+        }.joined(separator: "||")
     }
 
     private var completionToastView: some View {
