@@ -18,28 +18,28 @@ struct DoseEventGenerator {
 
     func generateEvents(
         therapies: [Therapy],
-        from start: Date,
+        from rangeStart: Date,
         to end: Date
     ) -> [DoseEvent] {
-        let eligible = therapies.filter { !$0.manual_intake_registration }
-        guard !eligible.isEmpty else { return [] }
+        guard !therapies.isEmpty else { return [] }
 
-        let startDay = calendar.startOfDay(for: start)
+        let startDay = calendar.startOfDay(for: rangeStart)
         let endDay = calendar.startOfDay(for: end)
         var day = startDay
         var events: [DoseEvent] = []
 
         while day <= endDay {
-            for therapy in eligible {
+            for therapy in therapies {
                 guard let doseSet = therapy.doses, !doseSet.isEmpty else { continue }
-                let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-                let start = therapy.start_date ?? day
+                guard let rrule = therapy.rrule, !rrule.isEmpty else { continue }
+                let rule = recurrenceManager.parseRecurrenceString(rrule)
+                let therapyStart = therapy.start_date ?? day
                 let sortedDoses = doseSet.sorted { $0.time < $1.time }
                 let perDay = max(1, sortedDoses.count)
                 let allowed = recurrenceManager.allowedEvents(
                     on: day,
                     rule: rule,
-                    startDate: start,
+                    startDate: therapyStart,
                     dosesPerDay: perDay,
                     calendar: calendar
                 )
@@ -49,7 +49,8 @@ struct DoseEventGenerator {
                 for dose in limitedDoses {
                     let time = dose.time
                     guard let date = combine(day: day, withTime: time) else { continue }
-                    guard date >= start && date <= end else { continue }
+                    guard date >= therapyStart else { continue }
+                    guard date >= rangeStart && date <= end else { continue }
                     events.append(DoseEvent(date: date, therapyId: therapy.objectID, medicineId: therapy.medicine.objectID))
                 }
             }

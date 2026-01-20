@@ -15,7 +15,7 @@ struct CabinetCardView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(cabinet.name)
-                        .font(.system(size: 16, weight: .regular))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(.primary)
                         .lineLimit(2)
                         .layoutPriority(1)
@@ -49,7 +49,7 @@ struct CabinetCardView: View {
     }
     
     private var leadingIcon: some View {
-        Image(systemName: "cross.case")
+        Image(systemName: "cross.case.fill")
             .font(.system(size: 18, weight: .regular))
             .foregroundStyle(baseAccentColor)
             .frame(width: 22, height: 22, alignment: .center)

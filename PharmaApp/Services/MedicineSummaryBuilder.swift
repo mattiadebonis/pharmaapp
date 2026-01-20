@@ -25,7 +25,6 @@ struct MedicineSummaryBuilder {
         let dosesToday = eventsToday.count
         let nextScheduledDose = upcomingEvents.first?.date
 
-        let medicineHasPRN = therapies.contains(where: { $0.manual_intake_registration })
         let hasScheduledToday = dosesToday > 0
         let hasUpcoming = nextScheduledDose != nil
         let hasScheduledWindow = hasScheduledToday || hasUpcoming
@@ -59,8 +58,6 @@ struct MedicineSummaryBuilder {
                 let dayText = dayLabel(for: nextScheduledDose)
                 line1 = "Prossima: \(dayText) \(timeText)"
             }
-        } else if medicineHasPRN {
-            line1 = "Al bisogno (PRN)"
         } else if let frequency = frequencyLabel(for: therapies, recurrenceManager: recurrenceManager) {
             line1 = "Nessuna dose oggi • \(frequency)"
         } else {
@@ -89,8 +86,7 @@ struct MedicineSummaryBuilder {
             for: medicine,
             therapies: therapies,
             now: now,
-            hasScheduledUpcoming: hasScheduledWindow,
-            hasPRN: medicineHasPRN
+            hasScheduledUpcoming: hasScheduledWindow
         )
 
         return MedicineAggregateSubtitle(line1: line1, line2: line2, chip: chip)
@@ -100,8 +96,7 @@ struct MedicineSummaryBuilder {
         for medicine: Medicine,
         therapies: Set<Therapy>,
         now: Date,
-        hasScheduledUpcoming: Bool,
-        hasPRN: Bool
+        hasScheduledUpcoming: Bool
     ) -> String? {
         let rules = therapies.compactMap { therapy -> (Therapy, ClinicalRules)? in
             guard let data = therapy.clinicalRules, let decoded = ClinicalRules.decode(from: data) else { return nil }
@@ -121,10 +116,6 @@ struct MedicineSummaryBuilder {
             if rules.contains(where: { ($0.1.monitoring?.contains(where: { $0.requiredBeforeDose }) == true) }) {
                 return "Misura prima"
             }
-        }
-
-        if hasPRN && hasScheduledUpcoming {
-            return "PRN"
         }
 
         return nil
