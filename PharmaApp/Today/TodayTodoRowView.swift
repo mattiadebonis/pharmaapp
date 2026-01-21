@@ -35,7 +35,7 @@ struct TodayTodoRowView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 14) {
             Button(action: onToggle) {
                 ZStack {
                     Circle()

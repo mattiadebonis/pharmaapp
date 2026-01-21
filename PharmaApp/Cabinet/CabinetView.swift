@@ -47,19 +47,39 @@ struct CabinetView: View {
                                 Image(systemName: "cross.case")
                                 Image(systemName: "plus.circle.fill")
                                     .font(.system(size: 9, weight: .bold))
-                                    .offset(x: 6, y: -6)
+                                    .offset(x: 4, y: -4)
                             }
                         }
                         .accessibilityLabel("Nuovo armadietto")
+
+                        
+                        Menu {
+                            ForEach(CabinetSortOrder.selectableCases) { order in
+                                Button {
+                                    viewModel.sortOrder = order
+                                } label: {
+                                    HStack {
+                                        Text(order.title)
+                                        if viewModel.sortOrder == order {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "arrow.up.arrow.down")
+                        }
+                        .accessibilityLabel("Ordina")
+                        
                         
                         Button {
                             appVM.isSettingsPresented = true
                         } label: {
                             Image(systemName: "person")
-                                .foregroundStyle(Color.accentColor)
                         }
                         .accessibilityLabel("Profilo")
                     }
+                    .foregroundStyle(.primary)
                 }
             }
     }
@@ -132,7 +152,11 @@ struct CabinetView: View {
                 case .medicine(let med):
                     row(for: med)
                 case .cabinet(let cabinet):
-                    let meds = viewModel.sortedMedicines(in: cabinet)
+                    let meds = viewModel.sortedMedicines(
+                        in: cabinet,
+                        logs: Array(logs),
+                        option: options.first
+                    )
                     ZStack {
                         Button {
                             activeCabinetID = cabinet.objectID

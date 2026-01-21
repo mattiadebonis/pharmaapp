@@ -113,11 +113,11 @@ struct TodayView: View {
         .listStyle(.plain)
         .listSectionSeparator(.hidden)
         .listSectionSpacing(4)
-        .listRowSpacing(2)
+        .listRowSpacing(14)
         .safeAreaInset(edge: .bottom) {
             if completionToastItemID != nil {
                 completionToastView
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 14)
                     .padding(.bottom, 8)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -201,16 +201,6 @@ struct TodayView: View {
         }
         .navigationTitle("Oggi")
         .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    appVM.isSettingsPresented = true
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-                .accessibilityLabel("Impostazioni")
-            }
-        }
         .onAppear { locationVM.ensureStarted() }
 
         mapItemWrappedView(content)
