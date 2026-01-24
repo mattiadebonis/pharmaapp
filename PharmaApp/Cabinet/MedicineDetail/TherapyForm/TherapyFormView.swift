@@ -24,7 +24,7 @@ enum FrequencyType: String, CaseIterable {
     }
 }
 
-private enum TaperDosePreset: String, CaseIterable, Identifiable {
+enum TaperDosePreset: String, CaseIterable, Identifiable {
     case full
     case reduce25
     case reduce50
@@ -48,7 +48,7 @@ private enum TaperDosePreset: String, CaseIterable, Identifiable {
     }
 }
 
-private struct TaperStepDraft: Identifiable, Equatable {
+struct TaperStepDraft: Identifiable, Equatable {
     let id: UUID
     var durationDays: Int
     var dosagePreset: TaperDosePreset
@@ -630,6 +630,10 @@ struct TherapyFormView: View {
         Calendar.current.startOfDay(for: Date())
     }
 
+    private var baseStartDate: Date {
+        editingTherapy?.start_date ?? startDateToday
+    }
+
     private func inclusiveDayCount(from start: Date, to end: Date) -> Int {
         let calendar = Calendar.current
         let startDay = calendar.startOfDay(for: start)
@@ -647,7 +651,7 @@ struct TherapyFormView: View {
         guard courseEnabled else { return }
         useUntil = true
         useCount = false
-        if let endDate = courseEndDate(from: startDateToday, totalDays: courseTotalDays) {
+        if let endDate = courseEndDate(from: baseStartDate, totalDays: courseTotalDays) {
             untilDate = endDate
         }
     }
@@ -684,7 +688,7 @@ struct TherapyFormView: View {
 
         if let duration = parsed.duration {
             let calendar = Calendar.current
-            let base = startDateToday
+            let base = baseStartDate
             var totalDays = 0
             switch duration.unit {
             case .days:
@@ -815,14 +819,15 @@ extension TherapyFormView {
             syncCourseUntilFromCourse()
         }
 
-        let effectiveStartDate = startDateToday
+        let effectiveStartDate = baseStartDate
         let effectiveImportance = editingTherapy?.importance ?? "standard"
         let clinicalRules = buildClinicalRules()
+        let effectivePackage = editingTherapy?.package ?? package
 
         // Persona associata: in modifica usa quella della therapy; altrimenti usa selezione/first/crea
         let effectivePerson: Person = {
-            if let t = editingTherapy { return t.person }
             if let sel = selectedPerson { return sel }
+            if let t = editingTherapy { return t.person }
             if let first = persons.first { return first }
             let newPerson = Person(context: context)
             newPerson.id = UUID()
@@ -843,7 +848,7 @@ extension TherapyFormView {
                     byDay: [],
                     startDate: effectiveStartDate,
                     times: times,
-                    package: package,
+                    package: effectivePackage,
                     importance: effectiveImportance,
                     person: effectivePerson,
                     manualIntake: medicine.manual_intake_registration,
@@ -859,7 +864,7 @@ extension TherapyFormView {
                     byDay: byDay,
                     startDate: effectiveStartDate,
                     times: times,
-                    package: package,
+                    package: effectivePackage,
                     importance: effectiveImportance,
                     person: effectivePerson,
                     manualIntake: medicine.manual_intake_registration,
@@ -878,7 +883,7 @@ extension TherapyFormView {
                     byDay: [],
                     startDate: effectiveStartDate,
                     times: times,
-                    package: package,
+                    package: effectivePackage,
                     importance: "standard",
                     person: effectivePerson,
                     manualIntake: medicine.manual_intake_registration,
@@ -894,7 +899,7 @@ extension TherapyFormView {
                     byDay: byDay,
                     startDate: effectiveStartDate,
                     times: times,
-                    package: package,
+                    package: effectivePackage,
                     importance: "standard",
                     person: effectivePerson,
                     manualIntake: medicine.manual_intake_registration,
@@ -935,6 +940,7 @@ extension TherapyFormView {
             
             freq = parsedRule.freq
             byDay = parsedRule.byDay
+            interval = max(1, parsedRule.interval ?? 1)
             
             if let count = parsedRule.count {
                 useCount = true
@@ -976,7 +982,7 @@ extension TherapyFormView {
             syncCourseUntilFromCourse()
         } else if useUntil {
             courseEnabled = true
-            courseTotalDays = inclusiveDayCount(from: startDateToday, to: untilDate)
+            courseTotalDays = inclusiveDayCount(from: baseStartDate, to: untilDate)
             syncCourseUntilFromCourse()
         }
     }
@@ -1105,7 +1111,7 @@ struct FrequencySelectionView: View {
     
 }
 
-private struct DurationSelectionView: View {
+struct DurationSelectionView: View {
     @Binding var courseEnabled: Bool
     @Binding var courseTotalDays: Int
     @Binding var useUntil: Bool
@@ -1250,7 +1256,7 @@ private struct DurationSelectionView: View {
     }
 }
 
-private struct TaperStepEditorView: View {
+struct TaperStepEditorView: View {
     @Binding var steps: [TaperStepDraft]
     @Environment(\.dismiss) private var dismiss
 
