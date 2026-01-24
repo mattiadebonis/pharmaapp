@@ -29,6 +29,7 @@ public class Medicine: NSManagedObject, Identifiable {
     @NSManaged public var logs: Set<Log>?
     @NSManaged public var todos: Set<Todo>?
     @NSManaged public var cabinet: Cabinet?
+    @NSManaged public var medicinePackages: Set<MedicinePackage>?
     
     // MARK: - Relazioni di convenienza
     func addToTherapies(_ therapy: Therapy) {
@@ -45,6 +46,10 @@ public class Medicine: NSManagedObject, Identifiable {
     
     func addToPackages(_ package: Package) {
         self.mutableSetValue(forKey: "packages").add(package)
+    }
+
+    func addToMedicinePackages(_ entry: MedicinePackage) {
+        self.mutableSetValue(forKey: "medicinePackages").add(entry)
     }
 
     func addToStocks(_ stock: Stock) {

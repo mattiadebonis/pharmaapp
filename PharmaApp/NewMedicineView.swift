@@ -49,6 +49,7 @@ struct NewMedicineView: View {
     @State private var showDetail: Bool = false
     @State private var createdMedicine: Medicine?
     @State private var createdPackage: Package?
+    @State private var createdEntry: MedicinePackage?
 
     // Modal flags
     @State private var showRecipeSheet = false
@@ -57,6 +58,7 @@ struct NewMedicineView: View {
     @State private var draftContext: NSManagedObjectContext?
     @State private var draftMedicine: Medicine?
     @State private var draftPackage: Package?
+    @State private var draftEntry: MedicinePackage?
     
     private struct CatalogMedicine: Identifiable, Hashable {
         let id: String
@@ -177,7 +179,7 @@ struct NewMedicineView: View {
         
         .sheet(isPresented: $showDetail, onDismiss: { dismiss() }) {
             if let m = createdMedicine, let p = createdPackage {
-                MedicineDetailView(medicine: m, package: p)
+                MedicineDetailView(medicine: m, package: p, medicinePackage: createdEntry)
                     .presentationDetents([.medium, .large])
             }
         }
@@ -322,7 +324,8 @@ struct NewMedicineView: View {
                 TherapyFormView(
                     medicine: draftMedicine,
                     package: draftPackage,
-                    context: draftContext
+                    context: draftContext,
+                    medicinePackage: draftEntry
                 )
                 .environment(\.managedObjectContext, draftContext)
                 .environmentObject(appViewModel)
@@ -380,6 +383,9 @@ struct NewMedicineView: View {
             pkg.valore = packageValore
             pkg.unita = packageUnita
             pkg.volume = packageVolume
+            if createdEntry == nil {
+                createdEntry = med.medicinePackages?.first(where: { $0.package == pkg })
+            }
             return (med, pkg)
         }
         let medicine = Medicine(context: context)
@@ -401,8 +407,16 @@ struct NewMedicineView: View {
         package.numero = Int32(numeroUnita)
         package.medicine = medicine
         medicine.addToPackages(package)
+        let entry = MedicinePackage(context: context)
+        entry.id = UUID()
+        entry.created_at = Date()
+        entry.medicine = medicine
+        entry.package = package
+        entry.cabinet = nil
+        medicine.addToMedicinePackages(entry)
         createdMedicine = medicine
         createdPackage = package
+        createdEntry = entry
         return (medicine, package)
     }
 
@@ -430,9 +444,17 @@ struct NewMedicineView: View {
         package.numero = Int32(numeroUnita)
         package.medicine = medicine
         medicine.addToPackages(package)
+        let entry = MedicinePackage(context: child)
+        entry.id = UUID()
+        entry.created_at = Date()
+        entry.medicine = medicine
+        entry.package = package
+        entry.cabinet = nil
+        medicine.addToMedicinePackages(entry)
         draftContext = child
         draftMedicine = medicine
         draftPackage = package
+        draftEntry = entry
     }
 
     private func syncDraftWithCurrentFields() {
@@ -470,6 +492,12 @@ struct NewMedicineView: View {
                         createdPackage = pkgParent
                     }
                 }
+                if let draftEntry = draftEntry {
+                    let entryParent = try? context.existingObject(with: draftEntry.objectID) as? MedicinePackage
+                    if let entryParent {
+                        createdEntry = entryParent
+                    }
+                }
             }
             try context.save()
             onAdded?()
@@ -503,6 +531,9 @@ struct NewMedicineView: View {
         therapy.id = UUID()
         therapy.medicine = med
         therapy.package = pkg
+        if let entry = draftEntry {
+            therapy.medicinePackage = entry
+        }
         therapy.start_date = Date()
         therapy.importance = Therapy.importanceValues.last
         therapy.manual_intake_registration = med.manual_intake_registration

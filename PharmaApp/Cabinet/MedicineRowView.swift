@@ -8,13 +8,23 @@ struct MedicineRowView: View {
     // MARK: - Costanti
     // MARK: - Input
     @ObservedObject var medicine: Medicine
+    var medicinePackage: MedicinePackage? = nil
     var isSelected: Bool = false
     var isInSelectionMode: Bool = false
     enum RowSection { case purchase, tuttoOk }
     
     // MARK: - Computed
     private var option: Option? { options.first }
-    private var therapies: Set<Therapy> { medicine.therapies as? Set<Therapy> ?? [] }
+    private var therapies: Set<Therapy> {
+        guard let entry = medicinePackage else {
+            return medicine.therapies as? Set<Therapy> ?? []
+        }
+        if let entryTherapies = entry.therapies, !entryTherapies.isEmpty {
+            return entryTherapies
+        }
+        let all = medicine.therapies as? Set<Therapy> ?? []
+        return Set(all.filter { $0.package == entry.package })
+    }
     private var totalDoseCount: Int {
         guard !therapies.isEmpty else { return 0 }
         return therapies.reduce(0) { $0 + ($1.doses?.count ?? 0) }
@@ -95,7 +105,9 @@ struct MedicineRowView: View {
         let now = Date()
         let cal = Calendar.current
         guard let logs = medicine.logs else { return 0 }
-        return logs.filter { $0.type == "intake" && cal.isDate($0.timestamp, inSameDayAs: now) }.count
+        let filtered = logs.filter { $0.type == "intake" && cal.isDate($0.timestamp, inSameDayAs: now) }
+        guard let entry = medicinePackage else { return filtered.count }
+        return filtered.filter { $0.package == entry.package }.count
     }
     private var scheduledTimesToday: [Date] {
         let now = Date()
@@ -166,6 +178,10 @@ struct MedicineRowView: View {
     // Calcolo unità rimanenti quando non ci sono terapie
     private var remainingUnits: Int? {
         guard therapies.isEmpty else { return nil }
+        if let entry = medicinePackage {
+            let context = medicine.managedObjectContext ?? entry.package.managedObjectContext ?? PersistenceController.shared.container.viewContext
+            return StockService(context: context).units(for: entry.package)
+        }
         return medicine.remainingUnitsWithoutTherapy()
     }
     private var primaryPackageLabel: String? {
@@ -198,7 +214,7 @@ struct MedicineRowView: View {
     }
     
     private var subtitle: MedicineAggregateSubtitle {
-        makeMedicineSubtitle(medicine: medicine, now: Date())
+        makeMedicineSubtitle(medicine: medicine, medicinePackage: medicinePackage, now: Date())
     }
 
     private var subtitleBlock: some View {
@@ -291,7 +307,10 @@ struct MedicineRowView: View {
     }
 
     private var primaryPackage: Package? {
-        medicine.packages.sorted { $0.numero > $1.numero }.first
+        if let entry = medicinePackage {
+            return entry.package
+        }
+        return medicine.packages.sorted { $0.numero > $1.numero }.first
     }
 
     private var primaryPackageDosage: String? {

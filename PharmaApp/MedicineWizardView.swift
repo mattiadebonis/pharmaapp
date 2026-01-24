@@ -677,7 +677,7 @@ struct MedicineWizardView: View {
         return newPerson
     }
 
-    private func saveTherapyDraft(medicine: Medicine, package: Package) {
+    private func saveTherapyDraft(medicine: Medicine, package: Package, medicinePackage: MedicinePackage?) {
         if therapyDraft.courseEnabled && !therapyDraft.useCount {
             syncCourseUntilFromCourse()
         }
@@ -697,6 +697,7 @@ struct MedicineWizardView: View {
             startDate: startDateToday,
             times: therapyDraft.times,
             package: package,
+            medicinePackage: medicinePackage,
             importance: "standard",
             person: effectivePerson,
             manualIntake: medicine.manual_intake_registration,
@@ -729,8 +730,16 @@ struct MedicineWizardView: View {
         package.medicine = medicine
         medicine.addToPackages(package)
 
+        let entry = MedicinePackage(context: context)
+        entry.id = UUID()
+        entry.created_at = Date()
+        entry.medicine = medicine
+        entry.package = package
+        entry.cabinet = nil
+        medicine.addToMedicinePackages(entry)
+
         applyDeadlineInputs(to: medicine)
-        saveTherapyDraft(medicine: medicine, package: package)
+        saveTherapyDraft(medicine: medicine, package: package, medicinePackage: entry)
 
         stockViewModel.addPurchase(for: medicine, for: package)
         stockViewModel.setStockUnits(medicine: medicine, package: package, targetUnits: stockUnits)

@@ -13,6 +13,7 @@ public class Cabinet : NSManagedObject , Identifiable{
     @NSManaged public var id : UUID
     @NSManaged public var name : String
     @NSManaged public var medicines: Set<Medicine>
+    @NSManaged public var medicinePackages: Set<MedicinePackage>?
 
 }
 

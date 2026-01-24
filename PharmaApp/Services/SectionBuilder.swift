@@ -153,6 +153,137 @@ func computeSections(for medicines: [Medicine], logs: [Log], option: Option?) ->
     return (purchase, oggi, ok)
 }
 
+func computeSections(for entries: [MedicinePackage], logs: [Log], option: Option?) -> (purchase: [MedicinePackage], oggi: [MedicinePackage], ok: [MedicinePackage]) {
+    let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+    let now = Date()
+    let cal = Calendar.current
+
+    enum StockStatus {
+        case ok
+        case low
+        case critical
+        case unknown
+    }
+
+    func therapies(for entry: MedicinePackage) -> [Therapy] {
+        if let set = entry.therapies, !set.isEmpty {
+            return Array(set)
+        }
+        let all = entry.medicine.therapies as? Set<Therapy> ?? []
+        return all.filter { $0.package == entry.package }
+    }
+
+    func remainingUnits(for entry: MedicinePackage) -> Int? {
+        let therapies = therapies(for: entry)
+        if !therapies.isEmpty {
+            return therapies.reduce(0) { $0 + Int($1.leftover()) }
+        }
+        let stockService = StockService(context: PersistenceController.shared.container.viewContext)
+        return stockService.units(for: entry.package)
+    }
+
+    func nextOccurrence(for entry: MedicinePackage) -> Date? {
+        let therapies = therapies(for: entry)
+        guard !therapies.isEmpty else { return nil }
+        var best: Date? = nil
+        for t in therapies {
+            let rule = rec.parseRecurrenceString(t.rrule ?? "")
+            let startDate = t.start_date ?? now
+            if let d = rec.nextOccurrence(rule: rule, startDate: startDate, after: now, doses: t.doses as NSSet?) {
+                if best == nil || d < best! { best = d }
+            }
+        }
+        return best
+    }
+
+    func occursToday(_ t: Therapy) -> Bool {
+        let rule = rec.parseRecurrenceString(t.rrule ?? "")
+        let start = t.start_date ?? now
+        let perDay = max(1, t.doses?.count ?? 0)
+        let allowed = rec.allowedEvents(
+            on: now,
+            rule: rule,
+            startDate: start,
+            dosesPerDay: perDay,
+            calendar: cal
+        )
+        return allowed > 0
+    }
+
+    func stockStatus(for entry: MedicinePackage) -> StockStatus {
+        let threshold = entry.medicine.stockThreshold(option: option)
+        let therapies = therapies(for: entry)
+        if !therapies.isEmpty {
+            var totalLeftover: Double = 0
+            var totalDailyUsage: Double = 0
+            for therapy in therapies {
+                totalLeftover += Double(therapy.leftover())
+                totalDailyUsage += therapy.stimaConsumoGiornaliero(recurrenceManager: rec)
+            }
+            if totalDailyUsage <= 0 {
+                return totalLeftover > 0 ? .ok : .unknown
+            }
+            let coverage = totalLeftover / totalDailyUsage
+            if coverage <= 0 { return .critical }
+            return coverage < Double(threshold) ? .low : .ok
+        }
+        let stockService = StockService(context: PersistenceController.shared.container.viewContext)
+        let remaining = stockService.units(for: entry.package)
+        if remaining <= 0 { return .critical }
+        return remaining < threshold ? .low : .ok
+    }
+
+    var purchase: [MedicinePackage] = []
+    var oggi: [MedicinePackage] = []
+    var ok: [MedicinePackage] = []
+
+    for entry in entries {
+        let status = stockStatus(for: entry)
+        if status == .critical || status == .low {
+            purchase.append(entry)
+            continue
+        }
+        let therapies = therapies(for: entry)
+        if !therapies.isEmpty, therapies.contains(where: { occursToday($0) }) {
+            oggi.append(entry)
+        } else {
+            ok.append(entry)
+        }
+    }
+
+    oggi.sort { (e1, e2) in
+        let d1 = nextOccurrence(for: e1) ?? Date.distantFuture
+        let d2 = nextOccurrence(for: e2) ?? Date.distantFuture
+        if d1 == d2 {
+            let r1 = remainingUnits(for: e1) ?? Int.max
+            let r2 = remainingUnits(for: e2) ?? Int.max
+            if r1 == r2 {
+                return e1.medicine.nome.localizedCaseInsensitiveCompare(e2.medicine.nome) == .orderedAscending
+            }
+            return r1 < r2
+        }
+        return d1 < d2
+    }
+
+    purchase.sort { (e1, e2) in
+        let s1 = stockStatus(for: e1)
+        let s2 = stockStatus(for: e2)
+        if s1 != s2 { return (s1 == .critical) && (s2 != .critical) }
+        return e1.medicine.nome.localizedCaseInsensitiveCompare(e2.medicine.nome) == .orderedAscending
+    }
+
+    ok.sort { (e1, e2) in
+        let r1 = remainingUnits(for: e1) ?? Int.max
+        let r2 = remainingUnits(for: e2) ?? Int.max
+        if r1 == r2 {
+            return e1.medicine.nome.localizedCaseInsensitiveCompare(e2.medicine.nome) == .orderedAscending
+        }
+        return r1 < r2
+    }
+
+    return (purchase: purchase, oggi: oggi, ok: ok)
+}
+
 func isOutOfStock(_ medicine: Medicine, recurrenceManager: RecurrenceManager) -> Bool {
     if let therapies = medicine.therapies, !therapies.isEmpty {
         var totalLeft: Double = 0

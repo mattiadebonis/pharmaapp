@@ -18,6 +18,7 @@ public class Package: NSManagedObject {
     @NSManaged public var medicine: Medicine
     @NSManaged public var therapies: Set<Therapy>?
     @NSManaged public var stocks: Set<Stock>?
+    @NSManaged public var medicinePackages: Set<MedicinePackage>?
 }
 
 extension Package{

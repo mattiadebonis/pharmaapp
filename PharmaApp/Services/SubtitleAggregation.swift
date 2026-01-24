@@ -13,34 +13,55 @@ struct DrawerAggregateSubtitle {
 }
 
 
-func makeMedicineSubtitle(medicine: Medicine, now: Date = Date()) -> MedicineAggregateSubtitle {
+func makeMedicineSubtitle(
+    medicine: Medicine,
+    medicinePackage: MedicinePackage? = nil,
+    now: Date = Date()
+) -> MedicineAggregateSubtitle {
     let context = medicine.managedObjectContext ?? PersistenceController.shared.container.viewContext
     let builder = MedicineSummaryBuilder(context: context)
+
+    if let entry = medicinePackage {
+        let entryTherapies = therapies(for: entry)
+        let stockUnits = StockService(context: context).units(for: entry.package)
+        return builder.build(
+            for: entry.medicine,
+            therapies: entryTherapies,
+            stockUnitsFallback: stockUnits,
+            now: now
+        )
+    }
+
     return builder.build(for: medicine, now: now)
 }
 
 func makeDrawerSubtitle(drawer: Cabinet, now: Date = Date()) -> DrawerAggregateSubtitle {
-    let medicines = Array(drawer.medicines)
+    let entries = Array(drawer.medicinePackages ?? [])
     let context = drawer.managedObjectContext ?? PersistenceController.shared.container.viewContext
     let recurrenceManager = RecurrenceManager(context: context)
 
-    let medCount = medicines.count
-    let todayDoseCount = medicines.reduce(0) { total, medicine in
-        let therapies = medicine.therapies as? Set<Therapy> ?? []
+    let todayDoseCount = entries.reduce(0) { total, entry in
+        let therapies = therapies(for: entry)
         return total + dosesTodayCount(for: therapies, now: now, recurrenceManager: recurrenceManager)
     }
 
     var outOfStockCount = 0
     var lowStockCount = 0
-    for medicine in medicines {
-        let therapies = medicine.therapies as? Set<Therapy> ?? []
-        guard let days = stockDays(for: medicine, therapies: therapies, recurrenceManager: recurrenceManager) else {
+    for entry in entries {
+        let therapies = therapies(for: entry)
+        let threshold = entry.medicine.stockThreshold(option: nil)
+        if let days = stockDays(for: entry, therapies: therapies, recurrenceManager: recurrenceManager) {
+            if days <= 0 {
+                outOfStockCount += 1
+            } else if days <= threshold {
+                lowStockCount += 1
+            }
             continue
         }
-        let threshold = medicine.stockThreshold(option: nil)
-        if days <= 0 {
+        let remaining = StockService(context: context).units(for: entry.package)
+        if remaining <= 0 {
             outOfStockCount += 1
-        } else if days <= threshold {
+        } else if remaining <= threshold {
             lowStockCount += 1
         }
     }
@@ -145,6 +166,27 @@ private func frequencyLabel(for therapies: Set<Therapy>, recurrenceManager: Recu
 }
 
 private func stockDays(for medicine: Medicine, therapies: Set<Therapy>, recurrenceManager: RecurrenceManager) -> Int? {
+    guard !therapies.isEmpty else { return nil }
+    var totalLeftover: Double = 0
+    var totalDaily: Double = 0
+    for therapy in therapies {
+        totalLeftover += Double(therapy.leftover())
+        totalDaily += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
+    }
+    guard totalDaily > 0 else { return nil }
+    let days = Int(floor(totalLeftover / totalDaily))
+    return max(0, days)
+}
+
+private func therapies(for entry: MedicinePackage) -> Set<Therapy> {
+    if let set = entry.therapies, !set.isEmpty {
+        return set
+    }
+    let all = entry.medicine.therapies as? Set<Therapy> ?? []
+    return Set(all.filter { $0.package == entry.package })
+}
+
+private func stockDays(for entry: MedicinePackage, therapies: Set<Therapy>, recurrenceManager: RecurrenceManager) -> Int? {
     guard !therapies.isEmpty else { return nil }
     var totalLeftover: Double = 0
     var totalDaily: Double = 0

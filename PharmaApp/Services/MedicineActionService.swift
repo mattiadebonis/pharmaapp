@@ -28,9 +28,19 @@ final class MedicineActionService {
     }
 
     @discardableResult
+    func requestPrescription(for entry: MedicinePackage) -> Log? {
+        addLog(for: entry.medicine, package: entry.package, type: "new_prescription_request")
+    }
+
+    @discardableResult
     func markPrescriptionReceived(for medicine: Medicine) -> Log? {
         guard let package = package(for: medicine) else { return nil }
         return addLog(for: medicine, package: package, type: "new_prescription")
+    }
+
+    @discardableResult
+    func markPrescriptionReceived(for entry: MedicinePackage) -> Log? {
+        addLog(for: entry.medicine, package: entry.package, type: "new_prescription")
     }
 
     @discardableResult
@@ -40,9 +50,23 @@ final class MedicineActionService {
     }
 
     @discardableResult
+    func markAsPurchased(for entry: MedicinePackage) -> Log? {
+        addLog(for: entry.medicine, package: entry.package, type: "purchase")
+    }
+
+    @discardableResult
     func markAsTaken(for medicine: Medicine) -> Log? {
         let therapy = resolveTherapyCandidate(for: medicine, now: Date())
         return addIntakeLog(for: medicine, therapy: therapy)
+    }
+
+    @discardableResult
+    func markAsTaken(for entry: MedicinePackage) -> Log? {
+        let therapy = resolveTherapyCandidate(for: entry, now: Date())
+        if let therapy {
+            return addLog(for: entry.medicine, package: entry.package, type: "intake", therapy: therapy)
+        }
+        return addLog(for: entry.medicine, package: entry.package, type: "intake")
     }
 
     @discardableResult
@@ -56,6 +80,17 @@ final class MedicineActionService {
             return .requiresConfirmation(warning, therapy: therapy)
         }
         return .allowed(addIntakeLog(for: medicine, therapy: therapy))
+    }
+
+    func guardedMarkAsTaken(for entry: MedicinePackage, now: Date = Date()) -> IntakeGuardrailResult {
+        let therapy = resolveTherapyCandidate(for: entry, now: now)
+        if let warning = intakeGuardrailWarning(for: entry.medicine, therapy: therapy, now: now) {
+            return .requiresConfirmation(warning, therapy: therapy)
+        }
+        if let therapy {
+            return .allowed(addLog(for: entry.medicine, package: entry.package, type: "intake", therapy: therapy))
+        }
+        return .allowed(addLog(for: entry.medicine, package: entry.package, type: "intake"))
     }
 
     func guardedMarkAsTaken(for therapy: Therapy, now: Date = Date()) -> IntakeGuardrailResult {
@@ -80,6 +115,35 @@ final class MedicineActionService {
             return medicine.packages.sorted(by: { $0.numero > $1.numero }).first
         }
         return nil
+    }
+
+    private func resolveTherapyCandidate(for entry: MedicinePackage, now: Date) -> Therapy? {
+        let therapies = therapies(for: entry)
+        guard !therapies.isEmpty else { return nil }
+        let recurrenceManager = RecurrenceManager(context: context)
+
+        let candidates: [(therapy: Therapy, date: Date)] = therapies.compactMap { therapy in
+            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+            let start = therapy.start_date ?? now
+            guard let next = recurrenceManager.nextOccurrence(rule: rule, startDate: start, after: now, doses: therapy.doses as NSSet?) else {
+                return nil
+            }
+            return (therapy, next)
+        }
+
+        if let chosen = candidates.min(by: { $0.date < $1.date }) {
+            return chosen.therapy
+        }
+
+        return therapies.first
+    }
+
+    private func therapies(for entry: MedicinePackage) -> [Therapy] {
+        if let set = entry.therapies, !set.isEmpty {
+            return Array(set)
+        }
+        let all = entry.medicine.therapies as? Set<Therapy> ?? []
+        return all.filter { $0.package == entry.package }
     }
 
     private func resolveTherapyCandidate(for medicine: Medicine, now: Date) -> Therapy? {

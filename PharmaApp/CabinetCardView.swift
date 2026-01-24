@@ -73,7 +73,7 @@ struct CabinetCardView: View {
     
     
     private var baseAccentColor: Color {
-        if medicines.isEmpty {
+        if entries.isEmpty {
             return .gray
         }
         switch stockState {
@@ -86,9 +86,10 @@ struct CabinetCardView: View {
         }
     }
     
-    private func evaluateStock(for medicine: Medicine) -> StockEvaluation? {
+    private func evaluateStock(for entry: MedicinePackage) -> StockEvaluation? {
         let option = options.first
-        if let therapies = medicine.therapies, !therapies.isEmpty {
+        let therapies = therapies(for: entry)
+        if !therapies.isEmpty {
             var totalLeftover: Double = 0
             var dailyUsage: Double = 0
             for therapy in therapies {
@@ -100,26 +101,24 @@ struct CabinetCardView: View {
                 return StockEvaluation(level: .empty, coverageDays: 0)
             }
             let days = Int(floor(totalLeftover / dailyUsage))
-            if days < medicine.stockThreshold(option: option) {
+            if days < entry.medicine.stockThreshold(option: option) {
                 return StockEvaluation(level: .low, coverageDays: max(0, days))
             }
             return StockEvaluation(level: .ok, coverageDays: max(0, days))
         }
-        
-        if let remaining = medicine.remainingUnitsWithoutTherapy() {
-            if remaining <= 0 {
-                return StockEvaluation(level: .empty, coverageDays: nil)
-            } else if remaining < 5 {
-                return StockEvaluation(level: .low, coverageDays: nil)
-            } else {
-                return StockEvaluation(level: .ok, coverageDays: nil)
-            }
+        let remaining = StockService(context: PersistenceController.shared.container.viewContext).units(for: entry.package)
+        if remaining <= 0 {
+            return StockEvaluation(level: .empty, coverageDays: nil)
+        } else if remaining < 5 {
+            return StockEvaluation(level: .low, coverageDays: nil)
+        } else {
+            return StockEvaluation(level: .ok, coverageDays: nil)
         }
         return nil
     }
 
     private var stockState: StockLevel {
-        let evaluations = medicines.compactMap { evaluateStock(for: $0) }
+        let evaluations = entries.compactMap { evaluateStock(for: $0) }
         if evaluations.contains(where: { $0.level == .empty }) {
             return .empty
         }
@@ -134,9 +133,9 @@ struct CabinetCardView: View {
         var totalOverdue = 0
         var earliestOverdue: Date?
         
-        for medicine in medicinesWithTherapy {
-            let schedule = scheduleToday(for: medicine)
-            let taken = intakeLogsToday(for: medicine)
+        for entry in entriesWithTherapy {
+            let schedule = scheduleToday(for: entry)
+            let taken = intakeLogsToday(for: entry)
             let pending = Array(schedule.dropFirst(min(taken, schedule.count)))
             let overdue = pending.filter { $0 <= now }
             totalOverdue += overdue.count
@@ -152,9 +151,9 @@ struct CabinetCardView: View {
         var totalPending = 0
         var firstPending: Date?
         
-        for medicine in medicinesWithTherapy {
-            let schedule = scheduleToday(for: medicine)
-            let taken = intakeLogsToday(for: medicine)
+        for entry in entriesWithTherapy {
+            let schedule = scheduleToday(for: entry)
+            let taken = intakeLogsToday(for: entry)
             let pending = Array(schedule.dropFirst(min(taken, schedule.count)))
             totalPending += pending.count
             if let first = pending.filter({ $0 > now }).min() {
@@ -177,50 +176,51 @@ struct CabinetCardView: View {
     }
     
     // MARK: - Helpers
-    private var medicines: [Medicine] {
-        Array(cabinet.medicines)
+    private var entries: [MedicinePackage] {
+        Array(cabinet.medicinePackages ?? [])
     }
     
-    private var medicinesWithTherapy: [Medicine] {
-        medicines.filter { $0.therapies?.isEmpty == false }
+    private var entriesWithTherapy: [MedicinePackage] {
+        entries.filter { !therapies(for: $0).isEmpty }
     }
     
     private var therapiesInCabinet: [Therapy] {
-        medicinesWithTherapy.flatMap { Array($0.therapies ?? []) }
+        entriesWithTherapy.flatMap { therapies(for: $0) }
     }
 
-    private var firstEmptyMedicine: Medicine? {
-        medicines.first { evaluateStock(for: $0)?.level == .empty }
+    private var firstEmptyEntry: MedicinePackage? {
+        entries.first { evaluateStock(for: $0)?.level == .empty }
     }
 
-    private var firstLowMedicine: Medicine? {
-        medicines.first { evaluateStock(for: $0)?.level == .low }
+    private var firstLowEntry: MedicinePackage? {
+        entries.first { evaluateStock(for: $0)?.level == .low }
     }
 
-    private func lowestCoverageMedicine() -> (medicine: Medicine, evaluation: StockEvaluation, days: Int)? {
-        var result: (Medicine, StockEvaluation, Int)?
-        for med in medicines {
-            guard let eval = evaluateStock(for: med), let days = eval.coverageDays else { continue }
+    private func lowestCoverageEntry() -> (entry: MedicinePackage, evaluation: StockEvaluation, days: Int)? {
+        var result: (MedicinePackage, StockEvaluation, Int)?
+        for entry in entries {
+            guard let eval = evaluateStock(for: entry), let days = eval.coverageDays else { continue }
             if let current = result {
                 if days < current.2 {
-                    result = (med, eval, days)
+                    result = (entry, eval, days)
                 }
             } else {
-                result = (med, eval, days)
+                result = (entry, eval, days)
             }
         }
         return result
     }
 
-    private func formattedName(_ medicine: Medicine) -> String {
-        let raw = medicine.nome.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func formattedName(_ entry: MedicinePackage) -> String {
+        let raw = entry.medicine.nome.trimmingCharacters(in: .whitespacesAndNewlines)
         return raw.isEmpty ? "Medicinale" : raw
     }
     
-    private func scheduleToday(for medicine: Medicine) -> [Date] {
+    private func scheduleToday(for entry: MedicinePackage) -> [Date] {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
-        guard let therapies = medicine.therapies, !therapies.isEmpty else { return [] }
+        let therapies = therapies(for: entry)
+        guard !therapies.isEmpty else { return [] }
         var times: [Date] = []
         for therapy in therapies {
             let allowed = allowedEvents(on: today, for: therapy)
@@ -239,11 +239,23 @@ struct CabinetCardView: View {
         return times.sorted()
     }
     
-    private func intakeLogsToday(for medicine: Medicine) -> Int {
+    private func intakeLogsToday(for entry: MedicinePackage) -> Int {
         let cal = Calendar.current
         let today = Date()
-        guard let logs = medicine.logs else { return 0 }
-        return logs.filter { $0.type == "intake" && cal.isDate($0.timestamp, inSameDayAs: today) }.count
+        let logs = entry.medicine.logs ?? []
+        return logs.filter {
+            $0.type == "intake" &&
+            $0.package == entry.package &&
+            cal.isDate($0.timestamp, inSameDayAs: today)
+        }.count
+    }
+
+    private func therapies(for entry: MedicinePackage) -> [Therapy] {
+        if let set = entry.therapies, !set.isEmpty {
+            return Array(set)
+        }
+        let all = entry.medicine.therapies as? Set<Therapy> ?? []
+        return all.filter { $0.package == entry.package }
     }
     
     private func allowedEvents(on day: Date, for therapy: Therapy) -> Int {

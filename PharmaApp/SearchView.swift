@@ -10,7 +10,7 @@ struct SearchView: View {
     @State private var selectedMedicine: Medicine?
 
     private var filtered: [Medicine] {
-        let base = medicines.filter { $0.cabinet == nil }
+        let base = medicines.filter { ($0.medicinePackages?.isEmpty ?? true) }
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return Array(base) }
         return base.filter { $0.nome.localizedCaseInsensitiveContains(q) }

@@ -12,8 +12,13 @@ struct MedicineSummaryBuilder {
         self.recurrenceManager = RecurrenceManager(context: context)
     }
 
-    func build(for medicine: Medicine, now: Date = Date()) -> MedicineAggregateSubtitle {
-        let therapies = medicine.therapies as? Set<Therapy> ?? []
+    func build(
+        for medicine: Medicine,
+        therapies providedTherapies: Set<Therapy>? = nil,
+        stockUnitsFallback: Int? = nil,
+        now: Date = Date()
+    ) -> MedicineAggregateSubtitle {
+        let therapies = providedTherapies ?? (medicine.therapies as? Set<Therapy> ?? [])
         let generator = DoseEventGenerator(context: context, calendar: calendar)
 
         let startOfToday = calendar.startOfDay(for: now)
@@ -74,7 +79,7 @@ struct MedicineSummaryBuilder {
             } else {
                 line2 = "Scorte: \(stockDays) gg"
             }
-        } else if therapies.isEmpty, let remainingUnits = medicine.remainingUnitsWithoutTherapy() {
+        } else if therapies.isEmpty, let remainingUnits = stockUnitsFallback ?? medicine.remainingUnitsWithoutTherapy() {
             let clamped = max(0, remainingUnits)
             let unitsText = formatCount(clamped, singular: "unità", plural: "unità")
             line2 = "Scorte: \(unitsText)"

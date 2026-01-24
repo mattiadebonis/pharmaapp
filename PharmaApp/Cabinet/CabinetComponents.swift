@@ -3,7 +3,7 @@ import CoreData
 
 /// Riga con swipe action per i medicinali nell'armadietto.
 struct MedicineSwipeRow: View {
-    @ObservedObject var medicine: Medicine
+    @ObservedObject var entry: MedicinePackage
     var isSelected: Bool
     var isInSelectionMode: Bool
     var shouldShowPrescription: Bool
@@ -15,10 +15,12 @@ struct MedicineSwipeRow: View {
     var onMarkPurchased: () -> Void
     var onRequestPrescription: (() -> Void)?
     var onMove: (() -> Void)?
+    private var medicine: Medicine { entry.medicine }
 
     var body: some View {
         MedicineRowView(
             medicine: medicine,
+            medicinePackage: entry,
             isSelected: isSelected,
             isInSelectionMode: isInSelectionMode
         )
@@ -88,7 +90,7 @@ struct MedicineSwipeRow: View {
 
 /// Sheet semplificato per spostare un medicinale in un armadietto o nell'armadio dei farmaci.
 struct MoveToCabinetSheet: View {
-    let medicine: Medicine
+    let entry: MedicinePackage
     let cabinets: [Cabinet]
     var onSelect: (Cabinet?) -> Void
 
@@ -110,7 +112,7 @@ struct MoveToCabinetSheet: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            if medicine.cabinet == nil {
+                            if entry.cabinet == nil {
                                 Image(systemName: "checkmark")
                                     .foregroundStyle(Color.accentColor)
                             }
@@ -124,7 +126,7 @@ struct MoveToCabinetSheet: View {
                             HStack {
                                 Text(cabinet.name)
                                 Spacer()
-                                if medicine.cabinet?.objectID == cabinet.objectID {
+                                if entry.cabinet?.objectID == cabinet.objectID {
                                     Image(systemName: "checkmark")
                                         .foregroundStyle(Color.accentColor)
                                 }

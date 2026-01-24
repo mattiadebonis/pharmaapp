@@ -29,6 +29,7 @@ struct MedicineDetailView: View {
     
     @ObservedObject var medicine: Medicine
     let package: Package
+    let medicinePackage: MedicinePackage?
     
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
     @FetchRequest private var therapies: FetchedResults<Therapy>
@@ -55,13 +56,20 @@ struct MedicineDetailView: View {
         }
     }
     
-    init(medicine: Medicine, package: Package) {
+    init(medicine: Medicine, package: Package, medicinePackage: MedicinePackage? = nil) {
         _medicine = ObservedObject(wrappedValue: medicine)
         self.package = package
+        self.medicinePackage = medicinePackage
+        let predicate: NSPredicate
+        if let medicinePackage {
+            predicate = NSPredicate(format: "medicinePackage == %@", medicinePackage)
+        } else {
+            predicate = NSPredicate(format: "medicine == %@", medicine)
+        }
         _therapies = FetchRequest(
             entity: Therapy.entity(),
             sortDescriptors: [NSSortDescriptor(keyPath: \Therapy.start_date, ascending: true)],
-            predicate: NSPredicate(format: "medicine == %@", medicine)
+            predicate: predicate
         )
         _intakeLogs = FetchRequest(fetchRequest: Log.extractIntakeLogsFiltered(medicine: medicine))
     }
@@ -207,6 +215,7 @@ struct MedicineDetailView: View {
                 medicine: medicine,
                 package: package,
                 context: context,
+                medicinePackage: medicinePackage,
                 editingTherapy: selectedTherapy
             )
             .id(therapySheetIdentity)
@@ -362,9 +371,9 @@ struct MedicineDetailView: View {
         return days == 1 ? "~1g" : "~\(days)g"
     }
 
-	    private var currentTherapiesSet: Set<Therapy> {
-	        medicine.therapies ?? []
-	    }
+    private var currentTherapiesSet: Set<Therapy> {
+        Set(therapies)
+    }
 
     private func recurrenceDescription(for therapy: Therapy) -> String {
         let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
@@ -533,12 +542,12 @@ struct MedicineDetailView: View {
     }
     
     private var totalLeftover: Int {
-        if let therapies = medicine.therapies, !therapies.isEmpty {
+        if !therapies.isEmpty {
             return therapies.reduce(0) { total, therapy in
                 total + Int(therapy.leftover())
             }
         }
-        return medicine.remainingUnitsWithoutTherapy() ?? 0
+        return StockService(context: context).units(for: package)
     }
     
     private var leftoverColor: Color {
@@ -664,6 +673,7 @@ struct MedicineDetailView: View {
         let relatedLogs = (medicine.logs ?? []).filter { $0.package?.objectID == package.objectID }
         let relatedTherapies = package.therapies ?? []
         let relatedStocks = package.stocks ?? []
+        let relatedEntries = (package.medicinePackages ?? []).filter { $0.medicine == medicine }
 
         for log in relatedLogs {
             context.delete(log)
@@ -687,6 +697,10 @@ struct MedicineDetailView: View {
             context.delete(stock)
         }
 
+        for entry in relatedEntries {
+            context.delete(entry)
+        }
+
         context.delete(package)
 
         do {
@@ -703,6 +717,7 @@ struct MedicineDetailView: View {
         let relatedLogs = (medicine.logs as? Set<Log>) ?? []
         let relatedTherapies = (medicine.therapies as? Set<Therapy>) ?? []
         let relatedPackages = medicine.packages
+        let relatedEntries = medicine.medicinePackages ?? []
 
         for log in relatedLogs {
             context.delete(log)
@@ -717,6 +732,10 @@ struct MedicineDetailView: View {
         }
         for package in relatedPackages {
             context.delete(package)
+        }
+
+        for entry in relatedEntries {
+            context.delete(entry)
         }
 
         context.delete(medicine)
@@ -1725,13 +1744,22 @@ private struct StockManagementView: View {
         return nil
     }
 
+    private var viewContext: NSManagedObjectContext {
+        medicine.managedObjectContext ?? package.managedObjectContext ?? PersistenceController.shared.container.viewContext
+    }
+
+    private var therapies: [Therapy] {
+        let all = medicine.therapies as? Set<Therapy> ?? []
+        return all.filter { $0.package == package }
+    }
+
     private var totalLeftover: Int {
-        if let therapies = medicine.therapies, !therapies.isEmpty {
+        if !therapies.isEmpty {
             return therapies.reduce(0) { total, therapy in
                 total + Int(therapy.leftover())
             }
         }
-        return medicine.remainingUnitsWithoutTherapy() ?? 0
+        return StockService(context: viewContext).units(for: package)
     }
     
     private func handleThresholdSelection(mode: StockThresholdMode, value: Int) {

@@ -4,6 +4,7 @@
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="name" optional="YES" attributeType="String"/>
         <relationship name="medicines" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Medicine" inverseName="cabinet" inverseEntity="Medicine"/>
+        <relationship name="medicinePackages" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="MedicinePackage" inverseName="cabinet" inverseEntity="MedicinePackage"/>
     </entity>
     <entity name="Doctor" representedClassName="Doctor" syncable="YES">
         <attribute name="cognome" optional="YES" attributeType="String"/>
@@ -59,6 +60,15 @@
         <relationship name="stocks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Stock" inverseName="medicine" inverseEntity="Stock"/>
         <relationship name="prescribingDoctor" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Doctor" inverseName="medicines" inverseEntity="Doctor"/>
         <relationship name="therapies" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Therapy" inverseName="medicine" inverseEntity="Therapy"/>
+        <relationship name="medicinePackages" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="MedicinePackage" inverseName="medicine" inverseEntity="MedicinePackage"/>
+    </entity>
+    <entity name="MedicinePackage" representedClassName=".MedicinePackage" syncable="YES">
+        <attribute name="created_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <relationship name="cabinet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Cabinet" inverseName="medicinePackages" inverseEntity="Cabinet"/>
+        <relationship name="medicine" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="medicinePackages" inverseEntity="Medicine"/>
+        <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package" inverseName="medicinePackages" inverseEntity="Package"/>
+        <relationship name="therapies" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Therapy" inverseName="medicinePackage" inverseEntity="Therapy"/>
     </entity>
     <entity name="OpeningTime" representedClassName=".OpeningTime" syncable="YES">
         <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
@@ -83,6 +93,7 @@
         <relationship name="medicine" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="packages" inverseEntity="Medicine"/>
         <relationship name="stocks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Stock" inverseName="package" inverseEntity="Stock"/>
         <relationship name="therapies" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Therapy" inverseName="package" inverseEntity="Therapy"/>
+        <relationship name="medicinePackages" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="MedicinePackage" inverseName="package" inverseEntity="MedicinePackage"/>
     </entity>
     <entity name="Stock" representedClassName=".Stock" syncable="YES">
         <attribute name="context_key" optional="YES" attributeType="String" defaultValueString="default"/>
@@ -115,6 +126,7 @@
         <relationship name="doses" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Dose" inverseName="therapy" inverseEntity="Dose"/>
         <relationship name="logs" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Log" inverseName="therapy" inverseEntity="Log"/>
         <relationship name="medicine" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="therapies" inverseEntity="Medicine"/>
+        <relationship name="medicinePackage" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="MedicinePackage" inverseName="therapies" inverseEntity="MedicinePackage"/>
         <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package" inverseName="therapies" inverseEntity="Package"/>
         <relationship name="person" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Person" inverseName="therapies" inverseEntity="Person"/>
     </entity>

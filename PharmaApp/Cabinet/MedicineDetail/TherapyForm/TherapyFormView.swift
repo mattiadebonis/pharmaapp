@@ -71,6 +71,7 @@ struct TherapyFormView: View {
     // MARK: - Modello
     var medicine: Medicine
     var package: Package
+    var medicinePackage: MedicinePackage?
     
     // Aggiunta per supportare la modifica: se valorizzata, la vista si popola con questa terapia
     var editingTherapy: Therapy?
@@ -128,12 +129,14 @@ struct TherapyFormView: View {
         medicine: Medicine,
         package: Package,
         context: NSManagedObjectContext,
+        medicinePackage: MedicinePackage? = nil,
         editingTherapy: Therapy? = nil,
         onSave: (() -> Void)? = nil,
         isEmbedded: Bool = false
     ) {
         self.medicine = medicine
         self.package = package
+        self.medicinePackage = medicinePackage
         self.editingTherapy = editingTherapy
         self.onSave = onSave
         self.isEmbedded = isEmbedded
@@ -823,6 +826,7 @@ extension TherapyFormView {
         let effectiveImportance = editingTherapy?.importance ?? "standard"
         let clinicalRules = buildClinicalRules()
         let effectivePackage = editingTherapy?.package ?? package
+        let effectiveMedicinePackage = medicinePackage ?? editingTherapy?.medicinePackage
 
         // Persona associata: in modifica usa quella della therapy; altrimenti usa selezione/first/crea
         let effectivePerson: Person = {
@@ -849,6 +853,7 @@ extension TherapyFormView {
                     startDate: effectiveStartDate,
                     times: times,
                     package: effectivePackage,
+                    medicinePackage: effectiveMedicinePackage,
                     importance: effectiveImportance,
                     person: effectivePerson,
                     manualIntake: medicine.manual_intake_registration,
@@ -865,6 +870,7 @@ extension TherapyFormView {
                     startDate: effectiveStartDate,
                     times: times,
                     package: effectivePackage,
+                    medicinePackage: effectiveMedicinePackage,
                     importance: effectiveImportance,
                     person: effectivePerson,
                     manualIntake: medicine.manual_intake_registration,
@@ -884,6 +890,7 @@ extension TherapyFormView {
                     startDate: effectiveStartDate,
                     times: times,
                     package: effectivePackage,
+                    medicinePackage: effectiveMedicinePackage,
                     importance: "standard",
                     person: effectivePerson,
                     manualIntake: medicine.manual_intake_registration,
@@ -900,6 +907,7 @@ extension TherapyFormView {
                     startDate: effectiveStartDate,
                     times: times,
                     package: effectivePackage,
+                    medicinePackage: effectiveMedicinePackage,
                     importance: "standard",
                     person: effectivePerson,
                     manualIntake: medicine.manual_intake_registration,

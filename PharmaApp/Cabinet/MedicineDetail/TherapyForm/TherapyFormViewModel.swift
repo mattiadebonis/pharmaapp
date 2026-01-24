@@ -47,6 +47,7 @@ class TherapyFormViewModel: ObservableObject {
         startDate: Date,
         times: [Date],
         package: Package,
+        medicinePackage: MedicinePackage?,
         importance: String,
         person: Person,
         manualIntake: Bool,
@@ -57,6 +58,7 @@ class TherapyFormViewModel: ObservableObject {
         therapy.id = UUID()
         therapy.medicine = medicine
         therapy.package = package
+        therapy.medicinePackage = medicinePackage
         therapy.importance = importance
         therapy.person = person  // associa la persona
         therapy.manual_intake_registration = manualIntake
@@ -110,6 +112,7 @@ class TherapyFormViewModel: ObservableObject {
         startDate: Date,
         times: [Date],
         package: Package,
+        medicinePackage: MedicinePackage?,
         importance: String,
         person: Person,
         manualIntake: Bool,
@@ -117,6 +120,9 @@ class TherapyFormViewModel: ObservableObject {
     ) {
         therapy.importance = importance
         therapy.package = package
+        if let medicinePackage {
+            therapy.medicinePackage = medicinePackage
+        }
         therapy.person = person  // aggiorna la persona
         therapy.manual_intake_registration = manualIntake
         therapy.clinicalRulesValue = clinicalRules

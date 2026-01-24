@@ -21,6 +21,7 @@ struct SearchIndex: View {
     @State private var isMedicineSheetPresented: Bool = false
     @State private var createdMedicine: Medicine?
     @State private var createdPackage: Package?
+    @State private var createdEntry: MedicinePackage?
 
     var body: some View {
         Form {
@@ -48,7 +49,7 @@ struct SearchIndex: View {
         }
         .sheet(isPresented: $isMedicineSheetPresented) {
             if let m = createdMedicine, let p = createdPackage {
-                MedicineDetailView(medicine: m, package: p)
+                MedicineDetailView(medicine: m, package: p, medicinePackage: createdEntry)
                     .presentationDetents([.medium, .large])
             } else {
                 Text("Errore creazione medicinale")
@@ -80,11 +81,19 @@ struct SearchIndex: View {
         package.numero = Int32(numeroStr) ?? 0
         package.medicine = medicine
         medicine.addToPackages(package)
+        let entry = MedicinePackage(context: context)
+        entry.id = UUID()
+        entry.created_at = Date()
+        entry.medicine = medicine
+        entry.package = package
+        entry.cabinet = nil
+        medicine.addToMedicinePackages(entry)
 
         do {
             try context.save()
             createdMedicine = medicine
             createdPackage = package
+            createdEntry = entry
             isMedicineSheetPresented = true
         } catch {
             // In un'app reale: mostra un alert. Qui fallback silenzioso.

@@ -30,7 +30,7 @@ enum CabinetSortOrder: String, CaseIterable, Identifiable {
 /// ViewModel dedicato al tab "Armadietto".
 class CabinetViewModel: ObservableObject {
     // Stato di selezione (solo per il tab Armadietto)
-    @Published var selectedMedicines: Set<Medicine> = []
+    @Published var selectedEntries: Set<MedicinePackage> = []
     @Published var isSelecting: Bool = false
     @Published var sortOrder: CabinetSortOrder = .byType
 
@@ -41,30 +41,30 @@ class CabinetViewModel: ObservableObject {
     }
 
     // MARK: - Selection
-    func enterSelectionMode(with medicine: Medicine) {
+    func enterSelectionMode(with entry: MedicinePackage) {
         isSelecting = true
-        selectedMedicines.insert(medicine)
+        selectedEntries.insert(entry)
     }
 
-    func toggleSelection(for medicine: Medicine) {
-        if selectedMedicines.contains(medicine) {
-            selectedMedicines.remove(medicine)
-            if selectedMedicines.isEmpty {
+    func toggleSelection(for entry: MedicinePackage) {
+        if selectedEntries.contains(entry) {
+            selectedEntries.remove(entry)
+            if selectedEntries.isEmpty {
                 isSelecting = false
             }
         } else {
-            selectedMedicines.insert(medicine)
+            selectedEntries.insert(entry)
         }
     }
 
     func cancelSelection() {
-        selectedMedicines.removeAll()
+        selectedEntries.removeAll()
         isSelecting = false
     }
 
     func clearSelection() {
         DispatchQueue.main.async {
-            self.selectedMedicines.removeAll()
+            self.selectedEntries.removeAll()
             self.isSelecting = false
         }
     }
@@ -72,7 +72,7 @@ class CabinetViewModel: ObservableObject {
     struct ShelfEntry: Identifiable {
         enum Kind {
             case cabinet(Cabinet)
-            case medicine(Medicine)
+            case medicinePackage(MedicinePackage)
         }
         let id: NSManagedObjectID
         let priority: Int
@@ -86,33 +86,34 @@ class CabinetViewModel: ObservableObject {
 
     /// Sezioni ordinate per List (cabinet e medicinali fuori da cabinet).
     func shelfEntries(
-        medicines: [Medicine],
+        entries: [MedicinePackage],
         logs: [Log],
         option: Option?,
         cabinets: [Cabinet]
     ) -> [ShelfEntry] {
-        let orderedMeds = orderedMedicines(
-            medicines: medicines,
+        let orderedEntries = orderedMedicinePackages(
+            entries: entries,
             logs: logs,
             option: option
         )
 
         var indexMap: [NSManagedObjectID: Int] = [:]
-        for (idx, med) in orderedMeds.enumerated() {
-            indexMap[med.objectID] = idx
+        for (idx, entry) in orderedEntries.enumerated() {
+            indexMap[entry.objectID] = idx
         }
 
         var medicineEntries: [ShelfEntry] = []
-        for med in orderedMeds where med.cabinet == nil {
-            let priority = indexMap[med.objectID] ?? Int.max
-            medicineEntries.append(ShelfEntry(id: med.objectID, priority: priority, name: med.nome, kind: .medicine(med)))
+        for entry in orderedEntries where entry.cabinet == nil {
+            let priority = indexMap[entry.objectID] ?? Int.max
+            let name = entry.medicine.nome
+            medicineEntries.append(ShelfEntry(id: entry.objectID, priority: priority, name: name, kind: .medicinePackage(entry)))
         }
 
-        let baseIndex = orderedMeds.count
+        let baseIndex = orderedEntries.count
         var cabinetEntries: [ShelfEntry] = []
         for (cabIdx, cabinet) in cabinets.enumerated() {
-            let meds = cabinet.medicines
-            let idxs = meds.compactMap { indexMap[$0.objectID] }
+            let cabinetEntryItems = orderedEntries.filter { $0.cabinet?.objectID == cabinet.objectID }
+            let idxs = cabinetEntryItems.compactMap { indexMap[$0.objectID] }
             let priority = idxs.min() ?? (baseIndex + cabIdx)
             cabinetEntries.append(ShelfEntry(id: cabinet.objectID, priority: priority, name: cabinet.name, kind: .cabinet(cabinet)))
         }
@@ -132,59 +133,45 @@ class CabinetViewModel: ObservableObject {
         }
     }
 
-    func sortedMedicines(in cabinet: Cabinet, logs: [Log], option: Option?) -> [Medicine] {
-        orderedMedicines(
-            medicines: Array(cabinet.medicines),
+    func sortedEntries(in cabinet: Cabinet, entries: [MedicinePackage], logs: [Log], option: Option?) -> [MedicinePackage] {
+        let filtered = entries.filter { $0.cabinet?.objectID == cabinet.objectID }
+        return orderedMedicinePackages(
+            entries: filtered,
             logs: logs,
             option: option
         )
     }
 
-    func shouldShowPrescriptionAction(for medicine: Medicine) -> Bool {
+    func shouldShowPrescriptionAction(for entry: MedicinePackage) -> Bool {
+        let medicine = entry.medicine
         guard medicine.obbligo_ricetta else { return false }
         if medicine.hasNewPrescritpionRequest() { return false }
         let rec = RecurrenceManager(context: viewContext)
         return needsPrescriptionBeforePurchase(medicine, recurrenceManager: rec)
     }
 
-    func package(for medicine: Medicine) -> Package? {
-        if let therapies = medicine.therapies, let therapy = therapies.first {
-            return therapy.package
-        }
-        if let logs = medicine.logs {
-            let purchaseLogs = logs.filter { $0.type == "purchase" }
-            if let package = purchaseLogs.sorted(by: { $0.timestamp > $1.timestamp }).first?.package {
-                return package
-            }
-        }
-        if let package = medicine.packages.first {
-            return package
-        }
-        return nil
-    }
-
     // MARK: - Sorting
-    private func orderedMedicines(
-        medicines: [Medicine],
+    private func orderedMedicinePackages(
+        entries: [MedicinePackage],
         logs: [Log],
         option: Option?
-    ) -> [Medicine] {
+    ) -> [MedicinePackage] {
         switch sortOrder {
         case .relevance, .byType:
-            let sections = computeSections(for: medicines, logs: logs, option: option)
+            let sections = computeSections(for: entries, logs: logs, option: option)
             return sections.purchase + sections.oggi + sections.ok
         case .nextDose:
             let recurrenceManager = RecurrenceManager(context: viewContext)
             let now = Date()
             return sortByNextDose(
-                medicines,
+                entries,
                 now: now,
                 recurrenceManager: recurrenceManager
             )
         case .stockDepletion:
             let recurrenceManager = RecurrenceManager(context: viewContext)
             return sortByStockDepletion(
-                medicines,
+                entries,
                 option: option,
                 recurrenceManager: recurrenceManager
             )
@@ -192,37 +179,38 @@ class CabinetViewModel: ObservableObject {
     }
 
     private func sortByNextDose(
-        _ medicines: [Medicine],
+        _ entries: [MedicinePackage],
         now: Date,
         recurrenceManager: RecurrenceManager
-    ) -> [Medicine] {
-        medicines.sorted { lhs, rhs in
+    ) -> [MedicinePackage] {
+        entries.sorted { lhs, rhs in
             let d1 = nextDoseDate(for: lhs, now: now, recurrenceManager: recurrenceManager) ?? .distantFuture
             let d2 = nextDoseDate(for: rhs, now: now, recurrenceManager: recurrenceManager) ?? .distantFuture
             if d1 != d2 { return d1 < d2 }
-            return lhs.nome.localizedCaseInsensitiveCompare(rhs.nome) == .orderedAscending
+            return lhs.medicine.nome.localizedCaseInsensitiveCompare(rhs.medicine.nome) == .orderedAscending
         }
     }
 
     private func sortByStockDepletion(
-        _ medicines: [Medicine],
+        _ entries: [MedicinePackage],
         option: Option?,
         recurrenceManager: RecurrenceManager
-    ) -> [Medicine] {
-        medicines.sorted { lhs, rhs in
+    ) -> [MedicinePackage] {
+        entries.sorted { lhs, rhs in
             let v1 = stockSortValue(for: lhs, option: option, recurrenceManager: recurrenceManager)
             let v2 = stockSortValue(for: rhs, option: option, recurrenceManager: recurrenceManager)
             if v1 != v2 { return v1 < v2 }
-            return lhs.nome.localizedCaseInsensitiveCompare(rhs.nome) == .orderedAscending
+            return lhs.medicine.nome.localizedCaseInsensitiveCompare(rhs.medicine.nome) == .orderedAscending
         }
     }
 
     private func nextDoseDate(
-        for medicine: Medicine,
+        for entry: MedicinePackage,
         now: Date,
         recurrenceManager: RecurrenceManager
     ) -> Date? {
-        guard let therapies = medicine.therapies, !therapies.isEmpty else { return nil }
+        let therapies = therapies(for: entry)
+        guard !therapies.isEmpty else { return nil }
         var best: Date?
         for therapy in therapies {
             let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
@@ -240,11 +228,12 @@ class CabinetViewModel: ObservableObject {
     }
 
     private func stockSortValue(
-        for medicine: Medicine,
+        for entry: MedicinePackage,
         option: Option?,
         recurrenceManager: RecurrenceManager
     ) -> Double {
-        if let therapies = medicine.therapies, !therapies.isEmpty {
+        let therapies = therapies(for: entry)
+        if !therapies.isEmpty {
             var totalLeftover: Double = 0
             var totalDailyUsage: Double = 0
             for therapy in therapies {
@@ -257,9 +246,16 @@ class CabinetViewModel: ObservableObject {
             return max(0, totalLeftover / totalDailyUsage)
         }
 
-        if let remaining = medicine.remainingUnitsWithoutTherapy() {
-            return Double(max(0, remaining))
+        let stockService = StockService(context: viewContext)
+        let remaining = stockService.units(for: entry.package)
+        return Double(max(0, remaining))
+    }
+
+    private func therapies(for entry: MedicinePackage) -> [Therapy] {
+        if let set = entry.therapies, !set.isEmpty {
+            return Array(set)
         }
-        return .greatestFiniteMagnitude
+        let all = entry.medicine.therapies as? Set<Therapy> ?? []
+        return all.filter { $0.package == entry.package }
     }
 }

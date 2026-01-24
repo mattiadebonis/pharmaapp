@@ -28,6 +28,7 @@ public class Therapy: NSManagedObject, Identifiable {
     @NSManaged public var logs: Set<Log>?
     @NSManaged public var manual_intake_registration: Bool
     @NSManaged public var clinicalRules: Data?
+    @NSManaged public var medicinePackage: MedicinePackage?
 
     // Aggiunta relazione: ogni Therapy appartiene a una Person
     @NSManaged public var person: Person

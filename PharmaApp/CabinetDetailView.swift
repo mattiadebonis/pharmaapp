@@ -4,7 +4,7 @@ import CoreData
 /// Dettaglio di un cabinet con elenco dei medicinali contenuti.
 struct CabinetDetailView: View {
     let cabinet: Cabinet
-    let medicines: [Medicine]
+    let entries: [MedicinePackage]
     @ObservedObject var viewModel: CabinetViewModel
     @Environment(\.dismiss) private var dismiss
     
@@ -12,22 +12,22 @@ struct CabinetDetailView: View {
     @FetchRequest(fetchRequest: Log.extractLogs()) private var logs: FetchedResults<Log>
     @FetchRequest(fetchRequest: Cabinet.extractCabinets()) private var cabinets: FetchedResults<Cabinet>
     
-    @State private var selectedMedicine: Medicine?
+    @State private var selectedEntry: MedicinePackage?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.66)
-    @State private var medicineToMove: Medicine?
+    @State private var entryToMove: MedicinePackage?
     @State private var isDeleteDialogPresented = false
     @State private var isMoveCabinetSheetPresented = false
     
     var body: some View {
-        let sections = computeSections(for: medicines, logs: Array(logs), option: options.first)
+        let sections = computeSections(for: entries, logs: Array(logs), option: options.first)
         let rows = sections.purchase.map { ($0, MedicineRowView.RowSection.purchase) }
             + sections.oggi.map { ($0, MedicineRowView.RowSection.tuttoOk) }
             + sections.ok.map { ($0, MedicineRowView.RowSection.tuttoOk) }
         
         List {
             ForEach(rows, id: \.0.objectID) { entry in
-                let med = entry.0
-                row(for: med)
+                let medPackage = entry.0
+                row(for: medPackage)
             }
         }
         .listStyle(.plain)
@@ -56,35 +56,25 @@ struct CabinetDetailView: View {
             }
         }
         .sheet(isPresented: Binding(
-            get: { selectedMedicine != nil },
-            set: { newValue in if !newValue { selectedMedicine = nil } }
+            get: { selectedEntry != nil },
+            set: { newValue in if !newValue { selectedEntry = nil } }
         )) {
-            if let medicine = selectedMedicine {
-                if let package = getPackage(for: medicine) {
-                    MedicineDetailView(medicine: medicine, package: package)
-                        .presentationDetents([.fraction(0.66), .large], selection: $detailSheetDetent)
-                        .presentationDragIndicator(.visible)
-                } else {
-                    VStack(spacing: 12) {
-                        Text("Completa i dati del medicinale")
-                            .font(.headline)
-                        Text("Aggiungi una confezione dalla schermata dettaglio per utilizzare le funzioni avanzate.")
-                            .multilineTextAlignment(.center)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding()
-                    .presentationDetents([PresentationDetent.medium])
-                }
+            if let entry = selectedEntry {
+                MedicineDetailView(
+                    medicine: entry.medicine,
+                    package: entry.package,
+                    medicinePackage: entry
+                )
+                .presentationDetents([.fraction(0.66), .large], selection: $detailSheetDetent)
+                .presentationDragIndicator(.visible)
             }
         }
-        .sheet(item: $medicineToMove) { medicine in
+        .sheet(item: $entryToMove) { entry in
             MoveToCabinetSheet(
-                medicine: medicine,
+                entry: entry,
                 cabinets: Array(cabinets),
                 onSelect: { cabinet in
-                    medicine.cabinet = cabinet
-                    medicine.in_cabinet = cabinet != nil
+                    entry.cabinet = cabinet
                     saveContext()
                 }
             )
@@ -111,46 +101,38 @@ struct CabinetDetailView: View {
         }
     }
     
-    private func row(for medicine: Medicine) -> some View {
-        let isSelected = viewModel.selectedMedicines.contains(medicine)
-        let shouldShowRx = shouldShowPrescriptionAction(for: medicine)
+    private func row(for entry: MedicinePackage) -> some View {
+        let isSelected = viewModel.selectedEntries.contains(entry)
+        let shouldShowRx = shouldShowPrescriptionAction(for: entry)
         return MedicineSwipeRow(
-            medicine: medicine,
+            entry: entry,
             isSelected: isSelected,
             isInSelectionMode: viewModel.isSelecting,
             shouldShowPrescription: shouldShowRx,
             onTap: {
                 if viewModel.isSelecting {
-                    viewModel.toggleSelection(for: medicine)
+                    viewModel.toggleSelection(for: entry)
                 } else {
-                    selectedMedicine = medicine
+                    selectedEntry = entry
                 }
             },
             onLongPress: {
-                selectedMedicine = medicine
+                selectedEntry = entry
                 Haptics.impact(.medium)
             },
-            onToggleSelection: { viewModel.toggleSelection(for: medicine) },
-            onEnterSelection: { viewModel.enterSelectionMode(with: medicine) },
-            onMarkTaken: { viewModel.actionService.markAsTaken(for: medicine) },
-            onMarkPurchased: { viewModel.actionService.markAsPurchased(for: medicine) },
-            onRequestPrescription: shouldShowRx ? { viewModel.actionService.requestPrescription(for: medicine) } : nil,
-            onMove: { medicineToMove = medicine }
+            onToggleSelection: { viewModel.toggleSelection(for: entry) },
+            onEnterSelection: { viewModel.enterSelectionMode(with: entry) },
+            onMarkTaken: { viewModel.actionService.markAsTaken(for: entry) },
+            onMarkPurchased: { viewModel.actionService.markAsPurchased(for: entry) },
+            onRequestPrescription: shouldShowRx ? { viewModel.actionService.requestPrescription(for: entry) } : nil,
+            onMove: { entryToMove = entry }
         )
         .listRowSeparator(.hidden, edges: .all)
         .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
     }
     
-    private func shouldShowPrescriptionAction(for medicine: Medicine) -> Bool {
-        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
-        return needsPrescriptionBeforePurchase(medicine, recurrenceManager: rec)
-    }
-    
-    private func getPackage(for medicine: Medicine) -> Package? {
-        if let packages = medicine.packages as? Set<Package> {
-            return packages.first
-        }
-        return nil
+    private func shouldShowPrescriptionAction(for entry: MedicinePackage) -> Bool {
+        viewModel.shouldShowPrescriptionAction(for: entry)
     }
     
     private func saveContext() {
@@ -168,10 +150,9 @@ struct CabinetDetailView: View {
     private func deleteCabinet(movingMedicinesTo target: Cabinet?) {
         isMoveCabinetSheetPresented = false
         let context = cabinet.managedObjectContext ?? PersistenceController.shared.container.viewContext
-        let medicinesToUpdate = Array(cabinet.medicines)
-        for medicine in medicinesToUpdate {
-            medicine.cabinet = target
-            medicine.in_cabinet = target != nil
+        let entriesToUpdate = Array(cabinet.medicinePackages ?? [])
+        for entry in entriesToUpdate {
+            entry.cabinet = target
         }
         context.delete(cabinet)
         do {
