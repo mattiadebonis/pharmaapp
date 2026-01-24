@@ -15,6 +15,8 @@ struct CabinetDetailView: View {
     @State private var selectedMedicine: Medicine?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.66)
     @State private var medicineToMove: Medicine?
+    @State private var isDeleteDialogPresented = false
+    @State private var isMoveCabinetSheetPresented = false
     
     var body: some View {
         let sections = computeSections(for: medicines, logs: Array(logs), option: options.first)
@@ -36,6 +38,23 @@ struct CabinetDetailView: View {
         .scrollContentBackground(.hidden)
         .navigationTitle(cabinet.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button(role: .destructive) {
+                        isDeleteDialogPresented = true
+                    } label: {
+                        Label("Elimina armadietto", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.headline)
+                        .padding(6)
+                        .contentShape(Rectangle())
+                }
+                .contentShape(Rectangle())
+            }
+        }
         .sheet(isPresented: Binding(
             get: { selectedMedicine != nil },
             set: { newValue in if !newValue { selectedMedicine = nil } }
@@ -65,10 +84,30 @@ struct CabinetDetailView: View {
                 cabinets: Array(cabinets),
                 onSelect: { cabinet in
                     medicine.cabinet = cabinet
+                    medicine.in_cabinet = cabinet != nil
                     saveContext()
                 }
             )
             .presentationDetents([PresentationDetent.medium, PresentationDetent.large])
+        }
+        .sheet(isPresented: $isMoveCabinetSheetPresented) {
+            MoveCabinetSelectionSheet(
+                cabinets: moveTargets,
+                onSelect: { target in
+                    deleteCabinet(movingMedicinesTo: target)
+                }
+            )
+        }
+        .alert("Elimina armadietto", isPresented: $isDeleteDialogPresented) {
+            Button("Sposta medicinali in un altro armadietto") {
+                isMoveCabinetSheetPresented = true
+            }
+            Button("Rimuovi medicinali dall'armadietto", role: .destructive) {
+                deleteCabinet(movingMedicinesTo: nil)
+            }
+            Button("Annulla", role: .cancel) { }
+        } message: {
+            Text("Cosa vuoi fare con i medicinali di questo armadietto?")
         }
     }
     
@@ -119,6 +158,72 @@ struct CabinetDetailView: View {
             try PersistenceController.shared.container.viewContext.save()
         } catch {
             print("Errore salvataggio: \(error)")
+        }
+    }
+
+    private var moveTargets: [Cabinet] {
+        cabinets.filter { $0.objectID != cabinet.objectID }
+    }
+
+    private func deleteCabinet(movingMedicinesTo target: Cabinet?) {
+        isMoveCabinetSheetPresented = false
+        let context = cabinet.managedObjectContext ?? PersistenceController.shared.container.viewContext
+        let medicinesToUpdate = Array(cabinet.medicines)
+        for medicine in medicinesToUpdate {
+            medicine.cabinet = target
+            medicine.in_cabinet = target != nil
+        }
+        context.delete(cabinet)
+        do {
+            try context.save()
+            dismiss()
+        } catch {
+            print("Errore eliminazione armadietto: \(error)")
+        }
+    }
+}
+
+private struct MoveCabinetSelectionSheet: View {
+    let cabinets: [Cabinet]
+    var onSelect: (Cabinet?) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    if cabinets.isEmpty {
+                        Button {
+                            onSelect(nil)
+                            dismiss()
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Armadio dei farmaci")
+                                Text("Nessun armadietto")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    ForEach(cabinets, id: \.objectID) { cabinet in
+                        Button {
+                            onSelect(cabinet)
+                            dismiss()
+                        } label: {
+                            Text(cabinet.name)
+                        }
+                    }
+                } header: {
+                    Text("Sposta in")
+                }
+            }
+            .navigationTitle("Sposta medicinali")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Chiudi") { dismiss() }
+                }
+            }
         }
     }
 }

@@ -212,19 +212,42 @@ struct MedicineRowView: View {
                     .truncationMode(.tail)
             }
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(value.line2)
-                    .font(.system(size: 14))
-                    .foregroundStyle(subtitleColor)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                line2View(for: value.line2)
             }
             if let indicator = deadlineIndicator {
                 Text(indicator.label)
                     .font(.system(size: 14))
-                    .foregroundStyle(subtitleColor)
+                    .foregroundStyle(indicator.color)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func line2View(for line: String) -> some View {
+        let baseFont = Font.system(size: 14)
+        let lowPrefix = "Scorte basse"
+        let emptyPrefix = "Scorte finite"
+
+        if line.hasPrefix(emptyPrefix) {
+            let suffix = String(line.dropFirst(emptyPrefix.count))
+            (Text(emptyPrefix).foregroundStyle(.red) + Text(suffix).foregroundStyle(subtitleColor))
+                .font(baseFont)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        } else if line.hasPrefix(lowPrefix) {
+            Text(line)
+                .font(baseFont)
+                .foregroundStyle(.orange)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        } else {
+            Text(line)
+                .font(baseFont)
+                .foregroundStyle(subtitleColor)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 
@@ -285,6 +308,9 @@ struct MedicineRowView: View {
     }
 
     private var leadingIconColor: Color {
+        if medicine.deadlineStatus == .expired {
+            return .red
+        }
         switch stockLevel {
         case .empty:
             return .red

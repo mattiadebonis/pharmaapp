@@ -33,7 +33,6 @@ struct TodayView: View {
     @State private var completionToastWorkItem: DispatchWorkItem?
     @State private var completionUndoLogID: NSManagedObjectID?
     @State private var completedTodoIDs: Set<String> = []
-    @State private var collapsedSections: Set<String> = []
     @State private var completedBlockedSubtasks: Set<String> = []
     @State private var pendingPrescriptionMedIDs: Set<NSManagedObjectID> = []
     @State private var mailComposeData: MailComposeData?
@@ -60,46 +59,31 @@ struct TodayView: View {
         let content = List {
             ForEach(Array(timeGroups.enumerated()), id: \.element.id) { entry in
                 let group = entry.element
-                let isCollapsed = collapsedSections.contains(group.label)
                 Section {
-                    if !isCollapsed {
-                        if shouldShowPharmacyCard(for: group) {
-                            pharmacySuggestionCard()
-                                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-                        }
-                        ForEach(Array(group.items.enumerated()), id: \.element.id) { rowEntry in
-                            let item = rowEntry.element
-                            let isLast = rowEntry.offset == group.items.count - 1
-                            todoListRow(
-                                for: item,
-                                isCompleted: completedTodoIDs.contains(item.id),
-                                isLast: isLast
-                            )
-                        }
-                        .padding(.top, -6)
+                    if shouldShowPharmacyCard(for: group) {
+                        pharmacySuggestionCard()
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                     }
+                    ForEach(Array(group.items.enumerated()), id: \.element.id) { rowEntry in
+                        let item = rowEntry.element
+                        let isLast = rowEntry.offset == group.items.count - 1
+                        todoListRow(
+                            for: item,
+                            isCompleted: completedTodoIDs.contains(completionKey(for: item)),
+                            isLast: isLast
+                        )
+                    }
+                    .padding(.top, -6)
                 } header: {
-                    Button {
-                        toggleSection(group.label)
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text(sectionTitle(for: group))
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.black)
-                                .textCase(nil)
-                            Text("\(group.items.count)")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        .contentShape(Rectangle())
+                    HStack {
+                        Text(sectionTitle(for: group))
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.black)
+                            .textCase(nil)
+                        Spacer()
                     }
-                    .buttonStyle(.plain)
                     .padding(.top, group.label == "Rifornimenti" ? 2 : 6)
                     .padding(.bottom, -4)
                 }
@@ -113,7 +97,7 @@ struct TodayView: View {
         .listStyle(.plain)
         .listSectionSeparator(.hidden)
         .listSectionSpacing(4)
-        .listRowSpacing(14)
+        .listRowSpacing(2)
         .safeAreaInset(edge: .bottom) {
             if completionToastItemID != nil {
                 completionToastView
@@ -207,14 +191,6 @@ struct TodayView: View {
     }
 
     // MARK: - Helpers insights
-    private func toggleSection(_ label: String) {
-        if collapsedSections.contains(label) {
-            collapsedSections.remove(label)
-        } else {
-            collapsedSections.insert(label)
-        }
-    }
-
     private func sectionTitle(for group: TodayViewModel.TimeGroup) -> String {
         group.label
     }
@@ -338,7 +314,8 @@ struct TodayView: View {
             blockedTherapyCard(for: item, info: blocked, isLast: isLast)
         } else if item.category == .purchase,
                   let med,
-                  needsPrescriptionBeforePurchase(med, recurrenceManager: RecurrenceManager(context: PersistenceController.shared.container.viewContext)) {
+                  med.obbligo_ricetta,
+                  isStockDepleted(med) {
             purchaseWithPrescriptionRow(for: item, medicine: med, isCompleted: isCompleted, isLast: isLast)
         } else {
             let rowOpacity: Double = isCompleted ? 0.55 : 1
@@ -392,7 +369,7 @@ struct TodayView: View {
             }()
 
             rowContent
-            .padding(.vertical, 6)
+            .padding(.vertical, 4)
             .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 14))
             .listRowSeparator(.hidden)
             .opacity(rowOpacity)
@@ -507,16 +484,7 @@ struct TodayView: View {
         let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
         let needsRx = viewModel.needsPrescriptionBeforePurchase(medicine, option: options.first, recurrenceManager: rec)
         let outOfStock = viewModel.isOutOfStock(medicine, option: options.first, recurrenceManager: rec)
-        let depleted: Bool = {
-            if let therapies = medicine.therapies, !therapies.isEmpty {
-                let totalLeft = therapies.reduce(0.0) { $0 + Double($1.leftover()) }
-                return totalLeft <= 0
-            }
-            if let remaining = medicine.remainingUnitsWithoutTherapy() {
-                return remaining <= 0
-            }
-            return false
-        }()
+        let depleted = isStockDepleted(medicine)
         guard needsRx || outOfStock else { return nil }
         let contact = prescriptionDoctorContact(for: medicine)
         let timeLabel = timeLabel(for: item)
@@ -586,34 +554,48 @@ struct TodayView: View {
     @ViewBuilder
     private func purchaseWithPrescriptionRow(for item: TodayTodoItem, medicine: Medicine, isCompleted: Bool, isLast: Bool) -> some View {
         let medName = formattedMedicineName(medicine.nome)
-        let awaitingRx = isAwaitingPrescription(medicine)
+        let prescriptionDone = isAwaitingPrescription(medicine)
+        let purchaseDone = isCompleted
+        let refillDone = prescriptionDone && purchaseDone
+        let purchaseLocked = !prescriptionDone
         let doctorName = prescriptionDoctor(for: medicine).map(doctorFullName) ?? "medico"
 
         VStack(spacing: 10) {
-            blockedStepRow(
-                title: "Compra \(medName)",
-                status: nil,
-                subtitle: purchaseSubtitle(for: medicine, awaitingRx: awaitingRx, doctorName: doctorName),
-                subtitleColor: .secondary,
-                subtitleAsBadge: false,
-                iconName: "cart",
-                showCircle: true,
-                isDone: isCompleted,
-                onCheck: { toggleCompletion(for: item) }
+            TodayTodoRowView(
+                iconName: "cart.badge.plus",
+                actionText: "Rifornisci",
+                title: medName,
+                subtitle: nil,
+                auxiliaryLine: nil,
+                isCompleted: refillDone,
+                showToggle: false,
+                onToggle: {}
             )
 
             VStack(spacing: 10) {
-                if !awaitingRx {
-                    blockedStepRow(
-                        title: "Chiedi ricetta al medico \(doctorName)",
-                        status: nil,
-                        iconName: "heart.text.square",
-                        showCircle: true,
-                        isDone: isBlockedSubtaskDone(type: "prescription", medicine: medicine),
-                        onCheck: { sendPrescriptionRequest(for: medicine) }
-                    )
-                    .padding(.leading, nestedRowIndent)
-                }
+                blockedStepRow(
+                    title: "Chiedi ricetta al medico \(doctorName)",
+                    status: nil,
+                    iconName: "heart.text.square",
+                    showCircle: true,
+                    isDone: prescriptionDone,
+                    onCheck: prescriptionDone ? nil : { sendPrescriptionRequest(for: medicine) }
+                )
+                .padding(.leading, nestedRowIndent)
+
+                blockedStepRow(
+                    title: "Compra \(medName)",
+                    status: purchaseLocked ? "Bloccato finche non chiedi la ricetta" : nil,
+                    subtitle: purchaseSubtitle(for: medicine, awaitingRx: prescriptionDone, doctorName: doctorName),
+                    subtitleColor: .secondary,
+                    subtitleAsBadge: false,
+                    iconName: "cart",
+                    showCircle: true,
+                    isDone: purchaseDone,
+                    isEnabled: !purchaseLocked,
+                    onCheck: purchaseLocked ? nil : { toggleCompletion(for: item) }
+                )
+                .padding(.leading, nestedRowIndent)
             }
         }
         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
@@ -760,7 +742,7 @@ struct TodayView: View {
     }
 
     @ViewBuilder
-    private func blockedStepRow(title: String, status: String? = nil, subtitle: String? = nil, subtitleColor: Color = .secondary, subtitleAsBadge: Bool = false, iconName: String? = nil, buttons: [SubtaskButton] = [], trailingBadge: (String, Color)? = nil, showCircle: Bool = true, isDone: Bool = false, onCheck: (() -> Void)? = nil) -> some View {
+    private func blockedStepRow(title: String, status: String? = nil, subtitle: String? = nil, subtitleColor: Color = .secondary, subtitleAsBadge: Bool = false, iconName: String? = nil, buttons: [SubtaskButton] = [], trailingBadge: (String, Color)? = nil, showCircle: Bool = true, isDone: Bool = false, isEnabled: Bool = true, onCheck: (() -> Void)? = nil) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             TodayTodoRowView(
                 iconName: iconName ?? "circle",
@@ -769,7 +751,7 @@ struct TodayView: View {
                 subtitle: subtitle,
                 auxiliaryLine: status.map { Text($0).foregroundColor(.orange) },
                 isCompleted: isDone,
-                showToggle: showCircle && onCheck != nil,
+                showToggle: showCircle && onCheck != nil && isEnabled,
                 trailingBadge: trailingBadge,
                 onToggle: { onCheck?() }
             )
@@ -807,6 +789,8 @@ struct TodayView: View {
             }
         }
         .padding(.vertical, 6)
+        .opacity(isEnabled ? 1 : 0.45)
+        .allowsHitTesting(isEnabled)
     }
 
     private func openPrescription(for medicine: Medicine) {
@@ -1252,6 +1236,17 @@ struct TodayView: View {
             parts.append(status)
         }
         return parts.isEmpty ? nil : parts.joined(separator: " • ")
+    }
+
+    private func isStockDepleted(_ medicine: Medicine) -> Bool {
+        if let therapies = medicine.therapies, !therapies.isEmpty {
+            let totalLeft = therapies.reduce(0.0) { $0 + Double($1.leftover()) }
+            return totalLeft <= 0
+        }
+        if let remaining = medicine.remainingUnitsWithoutTherapy() {
+            return remaining <= 0
+        }
+        return false
     }
 
     private func purchaseStockStatusLabel(for medicine: Medicine) -> String? {

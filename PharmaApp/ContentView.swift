@@ -79,7 +79,11 @@ struct ContentView: View {
             NavigationStack { OptionsView() }
         }
         .sheet(isPresented: $showMedicineWizard) {
-            MedicineWizardView(prefill: catalogSelection)
+            MedicineWizardView(prefill: catalogSelection) {
+                selectedTab = .medicine
+                catalogSelection = nil
+                showMedicineWizard = false
+            }
                 .environmentObject(appVM)
                 .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
                 .presentationDetents([.fraction(0.5), .large])

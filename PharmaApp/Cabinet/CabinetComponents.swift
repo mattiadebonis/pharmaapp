@@ -86,18 +86,36 @@ struct MedicineSwipeRow: View {
     }
 }
 
-/// Sheet semplificato per spostare un medicinale in un armadietto.
+/// Sheet semplificato per spostare un medicinale in un armadietto o nell'armadio dei farmaci.
 struct MoveToCabinetSheet: View {
     let medicine: Medicine
     let cabinets: [Cabinet]
-    var onSelect: (Cabinet) -> Void
+    var onSelect: (Cabinet?) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-            NavigationStack {
+        NavigationStack {
             List {
                 Section {
+                    Button {
+                        onSelect(nil)
+                        dismiss()
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Armadio dei farmaci")
+                                Text("Nessun armadietto")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if medicine.cabinet == nil {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                        }
+                    }
                     ForEach(Array(cabinets.enumerated()), id: \.element.objectID) { _, cabinet in
                         Button {
                             onSelect(cabinet)

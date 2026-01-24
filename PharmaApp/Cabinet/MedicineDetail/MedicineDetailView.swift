@@ -104,10 +104,11 @@ struct MedicineDetailView: View {
                         } label: {
                             Label("Conferma assunzione", systemImage: "checkmark.circle")
                         }
-                        Button(role: .destructive) {
+                        Button {
                             deletePackage()
                         } label: {
                             Label("Rimuovi confezione", systemImage: "minus.circle")
+                                .foregroundStyle(.orange)
                         }
                         Button(role: .destructive) {
                             deleteMedicine()

@@ -36,10 +36,8 @@ struct CabinetView: View {
             .navigationTitle("Armadio dei farmaci")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     HStack(spacing: 12) { // medium spacing
-                        
-
                         Button {
                             isNewCabinetPresented = true
                         } label: {
@@ -52,7 +50,6 @@ struct CabinetView: View {
                         }
                         .accessibilityLabel("Nuovo armadietto")
 
-                        
                         Menu {
                             ForEach(CabinetSortOrder.selectableCases) { order in
                                 Button {
@@ -70,16 +67,16 @@ struct CabinetView: View {
                             Image(systemName: "arrow.up.arrow.down")
                         }
                         .accessibilityLabel("Ordina")
-                        
-                        
-                        Button {
-                            appVM.isSettingsPresented = true
-                        } label: {
-                            Image(systemName: "person")
-                        }
-                        .accessibilityLabel("Profilo")
                     }
                     .foregroundStyle(.primary)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        appVM.isSettingsPresented = true
+                    } label: {
+                        Image(systemName: "person")
+                    }
+                    .accessibilityLabel("Profilo")
                 }
             }
     }
@@ -103,6 +100,7 @@ struct CabinetView: View {
                     cabinets: Array(cabinets),
                     onSelect: { cabinet in
                         medicine.cabinet = cabinet
+                        medicine.in_cabinet = cabinet != nil
                         saveContext()
                     }
                 )
@@ -137,6 +135,20 @@ struct CabinetView: View {
             cabinets: Array(cabinets)
         )
 
+        let medicineEntries = entries.compactMap { entry -> Medicine? in
+            if case .medicine(let med) = entry.kind { return med }
+            return nil
+        }
+        let cabinetEntries = entries.compactMap { entry -> Cabinet? in
+            if case .cabinet(let cabinet) = entry.kind { return cabinet }
+            return nil
+        }
+        let showsCabinetsFirst: Bool = {
+            guard let firstEntry = entries.first else { return false }
+            if case .cabinet = firstEntry.kind { return true }
+            return false
+        }()
+
         return AnyView(List {
             if appVM.suggestNearestPharmacies {
                 Section {
@@ -147,43 +159,41 @@ struct CabinetView: View {
                 .listSectionSeparator(.hidden)
             }
 
-            ForEach(entries) { entry in
-                switch entry.kind {
-                case .medicine(let med):
-                    row(for: med)
-                case .cabinet(let cabinet):
-                    let meds = viewModel.sortedMedicines(
-                        in: cabinet,
-                        logs: Array(logs),
-                        option: options.first
-                    )
-                    ZStack {
-                        Button {
-                            activeCabinetID = cabinet.objectID
-                        } label: {
-                            CabinetCardView(
-                                cabinet: cabinet,
-                                medicineCount: meds.count
-                            )
+            if showsCabinetsFirst {
+                if !cabinetEntries.isEmpty {
+                    Section("Armadietti") {
+                        ForEach(cabinetEntries, id: \.objectID) { cabinet in
+                            cabinetRow(for: cabinet)
                         }
-                        .buttonStyle(.plain)
-
-                        NavigationLink(
-                            destination: CabinetDetailView(cabinet: cabinet, medicines: meds, viewModel: viewModel),
-                            isActive: Binding(
-                                get: { activeCabinetID == cabinet.objectID },
-                                set: { newValue in
-                                    if !newValue { activeCabinetID = nil }
-                                }
-                            )
-                        ) {
-                            EmptyView()
-                        }
-                        .hidden()
                     }
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden, edges: .all)
-                    .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
+                    .listSectionSeparator(.hidden)
+                }
+
+                if !medicineEntries.isEmpty {
+                    Section("Farmaci") {
+                        ForEach(medicineEntries, id: \.objectID) { med in
+                            row(for: med)
+                        }
+                    }
+                    .listSectionSeparator(.hidden)
+                }
+            } else {
+                if !medicineEntries.isEmpty {
+                    Section("Farmaci") {
+                        ForEach(medicineEntries, id: \.objectID) { med in
+                            row(for: med)
+                        }
+                    }
+                    .listSectionSeparator(.hidden)
+                }
+
+                if !cabinetEntries.isEmpty {
+                    Section("Armadietti") {
+                        ForEach(cabinetEntries, id: \.objectID) { cabinet in
+                            cabinetRow(for: cabinet)
+                        }
+                    }
+                    .listSectionSeparator(.hidden)
                 }
             }
         })
@@ -292,6 +302,42 @@ struct CabinetView: View {
             onMove: { medicineToMove = medicine }
         )
         .accessibilityIdentifier("MedicineRow_\(medicine.objectID)")
+        .listRowSeparator(.hidden, edges: .all)
+        .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
+    }
+
+    private func cabinetRow(for cabinet: Cabinet) -> some View {
+        let meds = viewModel.sortedMedicines(
+            in: cabinet,
+            logs: Array(logs),
+            option: options.first
+        )
+
+        return ZStack {
+            Button {
+                activeCabinetID = cabinet.objectID
+            } label: {
+                CabinetCardView(
+                    cabinet: cabinet,
+                    medicineCount: meds.count
+                )
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink(
+                destination: CabinetDetailView(cabinet: cabinet, medicines: meds, viewModel: viewModel),
+                isActive: Binding(
+                    get: { activeCabinetID == cabinet.objectID },
+                    set: { newValue in
+                        if !newValue { activeCabinetID = nil }
+                    }
+                )
+            ) {
+                EmptyView()
+            }
+            .hidden()
+        }
+        .listRowBackground(Color.clear)
         .listRowSeparator(.hidden, edges: .all)
         .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
     }

@@ -68,7 +68,7 @@ struct MedicineSummaryBuilder {
         if let stockDays = stockDays(for: medicine, therapies: therapies, recurrenceManager: recurrenceManager) {
             let threshold = medicine.stockThreshold(option: nil)
             if stockDays <= 0 {
-                line2 = "Scorte finite • Compra"
+                line2 = "Scorte finite"
             } else if stockDays <= threshold {
                 line2 = "Scorte basse: \(stockDays) gg"
             } else {
