@@ -18,9 +18,7 @@ struct MedicineDetailView: View {
 	    @State private var customThresholdValue: Int = 7
 	    @State private var intakeConfirmationEnabled: Bool = false
     @State private var selectedDoctorID: NSManagedObjectID? = nil
-    @State private var showTherapySheet = false
-	    @State private var selectedTherapy: Therapy?
-	    @State private var newTherapySheetID = UUID()
+    @State private var therapySheet: TherapySheetState?
 	    @State private var showThresholdSheet = false
 	    @State private var showIntakeConfirmationSheet = false
 	    @State private var showDoctorSheet = false
@@ -210,15 +208,14 @@ struct MedicineDetailView: View {
                     }
             }
         }
-        .sheet(isPresented: $showTherapySheet) {
+        .sheet(item: $therapySheet) { state in
             TherapyFormView(
                 medicine: medicine,
                 package: package,
                 context: context,
                 medicinePackage: medicinePackage,
-                editingTherapy: selectedTherapy
+                editingTherapy: state.therapy
             )
-            .id(therapySheetIdentity)
             .presentationDetents([.large])
         }
         .onChange(of: selectedDoctorID) { newValue in
@@ -233,18 +230,24 @@ struct MedicineDetailView: View {
     }
     
     private func openTherapyForm(for therapy: Therapy?) {
-        selectedTherapy = therapy
-        if therapy == nil {
-            newTherapySheetID = UUID()
+        if let therapy {
+            therapySheet = .edit(therapy)
+        } else {
+            therapySheet = .create()
         }
-        showTherapySheet = true
     }
 
-    private var therapySheetIdentity: AnyHashable {
-        if let selectedTherapy {
-            return AnyHashable(selectedTherapy.objectID)
+    private struct TherapySheetState: Identifiable {
+        let id: AnyHashable
+        let therapy: Therapy?
+
+        static func edit(_ therapy: Therapy) -> TherapySheetState {
+            TherapySheetState(id: therapy.objectID, therapy: therapy)
         }
-        return AnyHashable(newTherapySheetID)
+
+        static func create() -> TherapySheetState {
+            TherapySheetState(id: UUID(), therapy: nil)
+        }
     }
     
     private struct PrimaryAction {
@@ -1801,8 +1804,7 @@ private struct StockManagementView: View {
         
     @FetchRequest private var therapies: FetchedResults<Therapy>
     
-    @State private var showTherapySheet = false
-    @State private var selectedTherapy: Therapy?
+    @State private var therapySheet: TherapySheetState?
     
     private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
     
@@ -1810,7 +1812,7 @@ private struct StockManagementView: View {
         self.medicine = medicine
         self.package = package
         let request: NSFetchRequest<Therapy> = Therapy.fetchRequest() as! NSFetchRequest<Therapy>
-        request.predicate = NSPredicate(format: "medicine == %@", medicine)
+        request.predicate = NSPredicate(format: "medicine == %@ AND package == %@", medicine, package)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \Therapy.start_date, ascending: true)]
         _therapies = FetchRequest(fetchRequest: request)
     }
@@ -1859,21 +1861,36 @@ private struct StockManagementView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Terapie attive")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showTherapySheet) {
+        .sheet(item: $therapySheet) { state in
             TherapyFormView(
                 medicine: medicine,
                 package: package,
                 context: context,
-                editingTherapy: selectedTherapy
+                editingTherapy: state.therapy
             )
-            .id(selectedTherapy?.id ?? UUID())
             .presentationDetents([.large])
-            }
+        }
         }
         
         private func openTherapyForm(for therapy: Therapy?) {
-            selectedTherapy = therapy
-            showTherapySheet = true
+            if let therapy {
+                therapySheet = .edit(therapy)
+            } else {
+                therapySheet = .create()
+            }
+        }
+
+        private struct TherapySheetState: Identifiable {
+            let id: AnyHashable
+            let therapy: Therapy?
+
+            static func edit(_ therapy: Therapy) -> TherapySheetState {
+                TherapySheetState(id: therapy.objectID, therapy: therapy)
+            }
+
+            static func create() -> TherapySheetState {
+                TherapySheetState(id: UUID(), therapy: nil)
+            }
         }
         
         private func recurrenceDescription(for therapy: Therapy) -> String {

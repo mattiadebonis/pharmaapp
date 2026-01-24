@@ -258,8 +258,17 @@ struct TherapyFormView: View {
             } else {
                 // Edge case: se esiste una sola therapy per questa medicina, assumiamo modalità "edit" implicita
                 if selectedPerson == nil {
-                    let set = medicine.therapies as? Set<Therapy> ?? []
-                    if set.count == 1, let only = set.first {
+                    let all = medicine.therapies as? Set<Therapy> ?? []
+                    let candidates: [Therapy] = {
+                        if let entry = medicinePackage {
+                            if let entryTherapies = entry.therapies, !entryTherapies.isEmpty {
+                                return Array(entryTherapies)
+                            }
+                            return all.filter { $0.medicinePackage == entry || $0.package == entry.package }
+                        }
+                        return all.filter { $0.package == package }
+                    }()
+                    if candidates.count == 1, let only = candidates.first {
                         populateFromTherapy(only)
                         selectedPerson = only.person
                     } else {
