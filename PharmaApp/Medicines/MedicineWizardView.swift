@@ -69,9 +69,6 @@ struct MedicineWizardView: View {
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
     @FetchRequest(fetchRequest: Person.extractPersons()) private var persons: FetchedResults<Person>
 
-    @StateObject private var stockViewModel = MedicineFormViewModel(
-        context: PersistenceController.shared.container.viewContext
-    )
     @StateObject private var therapyFormViewModel = TherapyFormViewModel(
         context: PersistenceController.shared.container.viewContext
     )
@@ -88,6 +85,10 @@ struct MedicineWizardView: View {
     @State private var deadlineMonthInput: String = ""
     @State private var deadlineYearInput: String = ""
     @State private var showTaperEditor = false
+
+    private var stockService: MedicineStockService {
+        MedicineStockService(context: context)
+    }
 
     private let allDaysICS = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
 
@@ -741,8 +742,8 @@ struct MedicineWizardView: View {
         applyDeadlineInputs(to: medicine)
         saveTherapyDraft(medicine: medicine, package: package, medicinePackage: entry)
 
-        stockViewModel.addPurchase(for: medicine, for: package)
-        stockViewModel.setStockUnits(medicine: medicine, package: package, targetUnits: stockUnits)
+        stockService.addPurchase(medicine: medicine, package: package)
+        stockService.setStockUnits(medicine: medicine, package: package, targetUnits: stockUnits)
 
         onFinish?()
         dismiss()

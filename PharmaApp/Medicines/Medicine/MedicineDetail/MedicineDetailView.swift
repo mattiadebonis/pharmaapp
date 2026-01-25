@@ -8,9 +8,6 @@ struct MedicineDetailView: View {
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-    @StateObject private var viewModel = MedicineFormViewModel(
-        context: PersistenceController.shared.container.viewContext
-    )
 	    @StateObject private var actionsViewModel = MedicineRowViewModel(
 	        managedObjectContext: PersistenceController.shared.container.viewContext
 	    )
@@ -24,6 +21,10 @@ struct MedicineDetailView: View {
 	    @State private var showDoctorSheet = false
     @State private var deadlineMonthInput: String = ""
     @State private var deadlineYearInput: String = ""
+
+    private var stockService: MedicineStockService {
+        MedicineStockService(context: context)
+    }
     
     @ObservedObject var medicine: Medicine
     let package: Package
@@ -645,7 +646,7 @@ struct MedicineDetailView: View {
         if action.label == "Richiedi ricetta" {
             showEmailSheet = true
         } else {
-            viewModel.addPurchase(for: medicine, for: package)
+            stockService.addPurchase(medicine: medicine, package: package)
         }
     }
     
@@ -807,7 +808,7 @@ extension MedicineDetailView {
             Stepper(
                 value: Binding(
                     get: { stockUnitsForSelectedPackage },
-                    set: { viewModel.setStockUnits(medicine: medicine, package: package, targetUnits: $0) }
+                    set: { stockService.setStockUnits(medicine: medicine, package: package, targetUnits: $0) }
                 ),
                 in: 0...9999
             ) {
@@ -890,7 +891,7 @@ extension MedicineDetailView {
             .buttonStyle(CapsuleActionButtonStyle(fill: .green, textColor: .white))
 
             Button {
-                viewModel.addPurchase(for: medicine, for: package)
+                stockService.addPurchase(medicine: medicine, package: package)
             } label: {
                 Label("Acquistato", systemImage: "cart.fill")
                     .frame(maxWidth: .infinity)
