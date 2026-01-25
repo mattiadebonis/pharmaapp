@@ -380,24 +380,3 @@ enum OpeningHoursParser {
         timeFormatter.string(from: interval.end)
     }
 }
-
-@available(iOS 17.0, *)
-struct MapItemDetailInlineView: View {
-    let mapItem: MKMapItem
-
-    var body: some View {
-        MapItemDetailViewControllerRepresentable(mapItem: mapItem)
-    }
-
-    private struct MapItemDetailViewControllerRepresentable: UIViewControllerRepresentable {
-        let mapItem: MKMapItem
-
-        func makeUIViewController(context: Context) -> MKMapItemDetailViewController {
-            MKMapItemDetailViewController(mapItem: mapItem)
-        }
-
-        func updateUIViewController(_ uiViewController: MKMapItemDetailViewController, context: Context) {
-            uiViewController.mapItem = mapItem
-        }
-    }
-}
