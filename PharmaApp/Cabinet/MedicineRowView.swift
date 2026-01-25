@@ -194,7 +194,7 @@ struct MedicineRowView: View {
     // MARK: - Body
     
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 18) {
             leadingIcon
             VStack(alignment: .leading, spacing: 6) {
                 titleLine
@@ -222,7 +222,7 @@ struct MedicineRowView: View {
         return VStack(alignment: .leading, spacing: 3) {
             if !value.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(value.line1)
-                    .font(.system(size: 14))
+                    .font(condensedSubtitleFont)
                     .foregroundStyle(subtitleColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -232,7 +232,7 @@ struct MedicineRowView: View {
             }
             if let indicator = deadlineIndicator {
                 Text(indicator.label)
-                    .font(.system(size: 14))
+                    .font(condensedSubtitleFont)
                     .foregroundStyle(indicator.color)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -242,7 +242,7 @@ struct MedicineRowView: View {
 
     @ViewBuilder
     private func line2View(for line: String) -> some View {
-        let baseFont = Font.system(size: 14)
+        let baseFont = condensedSubtitleFont
         let lowPrefix = "Scorte basse"
         let emptyPrefix = "Scorte finite"
 
@@ -269,6 +269,10 @@ struct MedicineRowView: View {
 
     private var subtitleColor: Color {
         Color.primary.opacity(0.45)
+    }
+
+    private var condensedSubtitleFont: Font {
+        Font.custom("SFProDisplay-CondensedLight", size: 15)
     }
 
     private var deadlineIndicator: (symbol: String, color: Color, label: String)? {
@@ -370,9 +374,9 @@ struct MedicineRowView: View {
 
     private var leadingIcon: some View {
         Image(systemName: leadingIconName)
-            .font(.system(size: 16, weight: .regular))
+            .font(.system(size: 17, weight: .regular))
             .foregroundStyle(leadingIconColor)
-            .frame(width: 20, height: 20, alignment: .center)
+            .frame(width: 22, height: 22, alignment: .center)
     }
     
     private func packageQuantityLabel(_ pkg: Package) -> String? {

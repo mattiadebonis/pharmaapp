@@ -10,7 +10,7 @@ struct CabinetCardView: View {
     
     var body: some View {
         let subtitle = makeDrawerSubtitle(drawer: cabinet, now: Date())
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 18) {
             leadingIcon
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -30,12 +30,12 @@ struct CabinetCardView: View {
                     .foregroundStyle(Color.primary.opacity(0.45))
                 }
                 Text(subtitle.line1)
-                    .font(.system(size: 14))
+                    .font(condensedSubtitleFont)
                     .foregroundStyle(subtitleColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Text(subtitle.line2)
-                    .font(.system(size: 14))
+                    .font(condensedSubtitleFont)
                     .foregroundStyle(subtitleColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -50,13 +50,17 @@ struct CabinetCardView: View {
     
     private var leadingIcon: some View {
         Image(systemName: "cross.case.fill")
-            .font(.system(size: 18, weight: .regular))
+            .font(.system(size: 19, weight: .regular))
             .foregroundStyle(baseAccentColor)
-            .frame(width: 22, height: 22, alignment: .center)
+            .frame(width: 24, height: 24, alignment: .center)
     }
     
     private var subtitleColor: Color {
         Color.primary.opacity(0.45)
+    }
+
+    private var condensedSubtitleFont: Font {
+        Font.custom("SFProDisplay-CondensedLight", size: 14)
     }
     
     // MARK: - Stock summary

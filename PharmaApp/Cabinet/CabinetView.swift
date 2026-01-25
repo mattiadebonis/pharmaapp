@@ -37,7 +37,16 @@ struct CabinetView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 12) { // medium spacing
+                    Button {
+                        appVM.isSettingsPresented = true
+                    } label: {
+                        Image(systemName: "person")
+                    }
+                    .accessibilityLabel("Profilo")
+                    .foregroundStyle(.primary)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 12) {
                         Button {
                             isNewCabinetPresented = true
                         } label: {
@@ -69,14 +78,6 @@ struct CabinetView: View {
                         .accessibilityLabel("Ordina")
                     }
                     .foregroundStyle(.primary)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        appVM.isSettingsPresented = true
-                    } label: {
-                        Image(systemName: "person")
-                    }
-                    .accessibilityLabel("Profilo")
                 }
             }
     }
@@ -118,7 +119,7 @@ struct CabinetView: View {
             .listSectionSeparator(.hidden)
             .listRowSeparator(.hidden, edges: .all)
             .listSectionSpacing(4)
-            .listRowSpacing(12)
+            .listRowSpacing(18)
             .listStyle(.plain)
             .padding(.top, 16)
             .padding(.leading, 5)
@@ -160,7 +161,7 @@ struct CabinetView: View {
 
             if showsCabinetsFirst {
                 if !cabinetEntries.isEmpty {
-                    Section("Armadietti") {
+                    Section(header: sectionHeader("Armadietti")) {
                         ForEach(cabinetEntries, id: \.objectID) { cabinet in
                             cabinetRow(for: cabinet)
                         }
@@ -169,7 +170,7 @@ struct CabinetView: View {
                 }
 
                 if !medicineEntries.isEmpty {
-                    Section("Farmaci") {
+                    Section(header: sectionHeader("Farmaci")) {
                         ForEach(medicineEntries, id: \.objectID) { entry in
                             row(for: entry)
                         }
@@ -178,7 +179,7 @@ struct CabinetView: View {
                 }
             } else {
                 if !medicineEntries.isEmpty {
-                    Section("Farmaci") {
+                    Section(header: sectionHeader("Farmaci")) {
                         ForEach(medicineEntries, id: \.objectID) { entry in
                             row(for: entry)
                         }
@@ -187,7 +188,7 @@ struct CabinetView: View {
                 }
 
                 if !cabinetEntries.isEmpty {
-                    Section("Armadietti") {
+                    Section(header: sectionHeader("Armadietti")) {
                         ForEach(cabinetEntries, id: \.objectID) { cabinet in
                             cabinetRow(for: cabinet)
                         }
@@ -196,6 +197,18 @@ struct CabinetView: View {
                 }
             }
         })
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.primary)
+            Spacer()
+        }
+        .padding(.top, 12)
+        .padding(.bottom, 6)
+        .padding(.leading, 4)
     }
 
     // MARK: - Helpers
