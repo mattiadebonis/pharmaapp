@@ -185,9 +185,25 @@ extension Medicine {
     }
 
     /// True se esiste un'assunzione prevista oggi (a partire da `date`).
-    func hasIntakeToday(from date: Date = Date(), recurrenceManager: RecurrenceManager) -> Bool {
-        guard let next = nextIntakeDate(from: date, recurrenceManager: recurrenceManager) else { return false }
-        return Calendar.current.isDateInToday(next)
+    func hasIntakeToday(
+        from date: Date = Date(),
+        recurrenceManager: RecurrenceManager,
+        calendar: Calendar = .current
+    ) -> Bool {
+        guard let therapies = therapies, !therapies.isEmpty else { return false }
+        let today = calendar.startOfDay(for: date)
+        return therapies.contains { therapy in
+            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+            let start = therapy.start_date ?? date
+            let dosesPerDay = max(1, therapy.doses?.count ?? 1)
+            return recurrenceManager.allowedEvents(
+                on: today,
+                rule: rule,
+                startDate: start,
+                dosesPerDay: dosesPerDay,
+                calendar: calendar
+            ) > 0
+        }
     }
 
     /// True se esiste già un log di assunzione registrato nella giornata corrente.

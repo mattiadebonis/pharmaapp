@@ -65,7 +65,7 @@ extension Therapy {
         // Parsing rrule
         let parsedRule = recurrenceManager.parseRecurrenceString(rruleString)
         let freq = parsedRule.freq.uppercased()   // "DAILY", "WEEKLY", etc.
-        let interval = parsedRule.interval ?? 1
+        let interval = max(1, parsedRule.interval)
         let byDayCount = parsedRule.byDay.count
         let doseCount = doses?.count ?? 1
         

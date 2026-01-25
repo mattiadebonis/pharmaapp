@@ -26,7 +26,7 @@
         <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="type" optional="YES" attributeType="String"/>
         <relationship name="medicine" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="logs" inverseEntity="Medicine"/>
-        <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package"/>
+        <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package" inverseName="logs" inverseEntity="Package"/>
         <relationship name="therapy" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Therapy" inverseName="logs" inverseEntity="Therapy"/>
     </entity>
     <entity name="Todo" representedClassName=".Todo" syncable="YES">
@@ -93,6 +93,7 @@
         <relationship name="medicine" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="packages" inverseEntity="Medicine"/>
         <relationship name="stocks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Stock" inverseName="package" inverseEntity="Stock"/>
         <relationship name="therapies" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Therapy" inverseName="package" inverseEntity="Therapy"/>
+        <relationship name="logs" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Log" inverseName="package" inverseEntity="Log"/>
         <relationship name="medicinePackages" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="MedicinePackage" inverseName="package" inverseEntity="MedicinePackage"/>
     </entity>
     <entity name="Stock" representedClassName=".Stock" syncable="YES">
@@ -120,7 +121,7 @@
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="importance" optional="YES" attributeType="String"/>
         <attribute name="manual_intake_registration" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="clinicalRules" optional="YES" attributeType="Transformable"/>
+        <attribute name="clinicalRules" optional="YES" attributeType="Transformable" valueTransformerName="NSSecureUnarchiveFromDataTransformerName"/>
         <attribute name="rrule" optional="YES" attributeType="String"/>
         <attribute name="start_date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="doses" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Dose" inverseName="therapy" inverseEntity="Dose"/>

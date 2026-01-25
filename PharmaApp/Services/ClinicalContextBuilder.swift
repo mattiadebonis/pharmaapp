@@ -217,7 +217,7 @@ struct ClinicalContextBuilder {
         if let until = rule.until, calendar.startOfDay(for: until) < calendar.startOfDay(for: day) { return false }
 
         let freq = rule.freq.uppercased()
-        let interval = rule.interval ?? 1
+        let interval = max(1, rule.interval)
 
         switch freq {
         case "DAILY":

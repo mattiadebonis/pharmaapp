@@ -264,25 +264,25 @@ struct RecurrenceManager {
         calendar: Calendar
     ) -> Bool {
         let freq = rule.freq.uppercased()
-        let interval = rule.interval ?? 1
+        let interval = normalizedInterval(rule.interval)
 
         switch freq {
         case "DAILY":
             let startSOD = calendar.startOfDay(for: startDate)
             let daySOD = calendar.startOfDay(for: day)
             if let days = calendar.dateComponents([.day], from: startSOD, to: daySOD).day, days >= 0 {
-                return days % max(1, interval) == 0
+                return days % interval == 0
             }
             return false
 
         case "WEEKLY":
-            let byDays = rule.byDay.isEmpty ? ["MO","TU","WE","TH","FR","SA","SU"] : rule.byDay
+            let byDays = rule.byDay.isEmpty ? [weekdayToICS(startDate)] : rule.byDay
             guard byDays.contains(weekdayToICS(day)) else { return false }
 
             let startWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: startDate)) ?? startDate
             let dayWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: day)) ?? day
             if let weeks = calendar.dateComponents([.weekOfYear], from: startWeek, to: dayWeek).weekOfYear, weeks >= 0 {
-                return weeks % max(1, interval) == 0
+                return weeks % interval == 0
             }
             return false
 
@@ -318,7 +318,7 @@ struct RecurrenceManager {
         }
         
         // Ordiniamo i "Dose" per orario
-        let sortedDoses = doseSet.sorted { ($0.time ?? Date()) < ($1.time ?? Date()) }
+        let sortedDoses = doseSet.sorted { $0.time < $1.time }
         
         // Se la freq è "DAILY" o "WEEKLY", ci comportiamo in maniera semplificata.
         // Altrimenti, potresti aggiungere ulteriori casi come MONTHLY, YEARLY, etc.
@@ -340,12 +340,13 @@ struct RecurrenceManager {
 
                 if matchesPattern(day: day, rule: rule, startDate: startDate, calendar: calendar) {
                     for dose in sortedDoses {
+                        guard let combinedDate = combine(day: day, withTime: dose.time),
+                              combinedDate >= startDate else {
+                            continue
+                        }
                         eventIndex += 1
                         if eventIndex > maxCount { return nil }
-                        if let combinedDate = combine(day: day, withTime: dose.time),
-                           combinedDate > now {
-                            return combinedDate
-                        }
+                        if combinedDate > now { return combinedDate }
                         if eventIndex >= maxCount { break }
                     }
                 }
@@ -364,33 +365,44 @@ struct RecurrenceManager {
         let maxOccurrences = 30
         var candidateDates: [Date] = []
         
-        var currentDate = startDate
-        
-        // Se la data di inizio è già nel passato, spostiamoci a "oggi" per non generare date passate
-        if currentDate < now {
-            currentDate = Calendar.current.startOfDay(for: now)
-        }
-        
         // Creiamo un calendario per i calcoli
         let calendar = Calendar.current
+        let nowDay = calendar.startOfDay(for: now)
         
         switch freq {
             
         case "DAILY":
+            let intervalDays = normalizedInterval(rule.interval)
+            let startDay = calendar.startOfDay(for: startDate)
+            var currentDate = firstAlignedDay(
+                startDay: startDay,
+                nowDay: nowDay,
+                interval: intervalDays,
+                calendar: calendar
+            )
             // Esempio: per i prossimi 30 giorni a partire da currentDate
             for _ in 1...maxOccurrences {
+                if let until = rule.until,
+                   calendar.startOfDay(for: currentDate) > calendar.startOfDay(for: until) {
+                    break
+                }
+                guard matchesPattern(day: currentDate, rule: rule, startDate: startDate, calendar: calendar) else {
+                    currentDate = calendar.date(byAdding: .day, value: intervalDays, to: currentDate) ?? currentDate
+                    continue
+                }
                 // Per ogni giorno, aggiungiamo i possibili orari della day
                 // Supponendo che 'time' sia NON opzionale: Date (non Date?)
                 for dose in sortedDoses {
                     // dose.time è un Date (non faccio if let, non è optional)
                     if let combinedDate = combine(day: currentDate, withTime: dose.time),
+                       combinedDate >= startDate,
                        combinedDate > now {
                         candidateDates.append(combinedDate)
                     }
                 }
                 // Passiamo al giorno successivo in base all'intervallo
                 // Se rule.interval è 2, significa "ogni 2 giorni", etc.
-                currentDate = calendar.date(byAdding: .day, value: rule.interval, to: currentDate) ?? currentDate
+                currentDate = calendar.date(byAdding: .day, value: intervalDays, to: currentDate) ?? currentDate
             }
             
         case "WEEKLY":
@@ -400,23 +412,40 @@ struct RecurrenceManager {
             
             // Se NON hai byDay, assumiamo "tutti i giorni" della settimana,
             // altrimenti usiamo i giorni in byDay.
-            let byDays = rule.byDay.isEmpty ? ["MO","TU","WE","TH","FR","SA","SU"] : rule.byDay
+            let byDays = rule.byDay.isEmpty ? [weekdayToICS(startDate)] : rule.byDay
+            let intervalWeeks = normalizedInterval(rule.interval)
+            var currentDate = alignedWeekStart(
+                startDate: startDate,
+                nowDay: nowDay,
+                intervalWeeks: intervalWeeks,
+                calendar: calendar
+            )
             
             for _ in 1...maxOccurrences {
+                if let until = rule.until,
+                   calendar.startOfDay(for: currentDate) > calendar.startOfDay(for: until) {
+                    break
+                }
                 
                 // Cerchiamo la prossima settimana.  
                 // Esempio: enumeriamo i 7 giorni della settimana a partire da currentDate
                 var tempDate = currentDate
                 
                 for _ in 1...7 {
+                    if let until = rule.until,
+                       calendar.startOfDay(for: tempDate) > calendar.startOfDay(for: until) {
+                        break
+                    }
                     let weekdayCode = weekdayToICS(tempDate)
                     // Se questo giorno è incluso in byDays
-                    if byDays.contains(weekdayCode) {
+                    if byDays.contains(weekdayCode),
+                       matchesPattern(day: tempDate, rule: rule, startDate: startDate, calendar: calendar) {
                         // Aggiungiamo i possibili orari "Dose"
                         // Supponendo che 'time' sia NON opzionale: Date (non Date?)
                         for dose in sortedDoses {
                             // dose.time è un Date (non faccio if let, non è optional)
-                            if let combinedDate = combine(day: currentDate, withTime: dose.time),
+                            if let combinedDate = combine(day: tempDate, withTime: dose.time),
+                               combinedDate >= startDate,
                                combinedDate > now {
                                 candidateDates.append(combinedDate)
                             }
@@ -426,7 +455,7 @@ struct RecurrenceManager {
                 }
                 
                 // Avanziamo di "rule.interval" settimane
-                currentDate = calendar.date(byAdding: .day, value: 7 * rule.interval, to: currentDate) ?? currentDate
+                currentDate = calendar.date(byAdding: .weekOfYear, value: intervalWeeks, to: currentDate) ?? currentDate
             }
             
         default:
@@ -490,5 +519,41 @@ struct RecurrenceManager {
         case 7: return "SA"
         default: return "MO"
         }
+    }
+
+    private func normalizedInterval(_ interval: Int) -> Int {
+        max(1, interval)
+    }
+
+    private func firstAlignedDay(
+        startDay: Date,
+        nowDay: Date,
+        interval: Int,
+        calendar: Calendar
+    ) -> Date {
+        if nowDay <= startDay { return startDay }
+        let daysSinceStart = calendar.dateComponents([.day], from: startDay, to: nowDay).day ?? 0
+        let remainder = daysSinceStart % interval
+        if remainder == 0 { return nowDay }
+        let daysToAdd = interval - remainder
+        return calendar.date(byAdding: .day, value: daysToAdd, to: nowDay) ?? nowDay
+    }
+
+    private func alignedWeekStart(
+        startDate: Date,
+        nowDay: Date,
+        intervalWeeks: Int,
+        calendar: Calendar
+    ) -> Date {
+        let startWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: startDate))
+            ?? calendar.startOfDay(for: startDate)
+        let nowWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: nowDay))
+            ?? nowDay
+        if nowWeek <= startWeek { return startWeek }
+        let weeksSinceStart = calendar.dateComponents([.weekOfYear], from: startWeek, to: nowWeek).weekOfYear ?? 0
+        let remainder = weeksSinceStart % intervalWeeks
+        if remainder == 0 { return nowWeek }
+        let weeksToAdd = intervalWeeks - remainder
+        return calendar.date(byAdding: .weekOfYear, value: weeksToAdd, to: nowWeek) ?? nowWeek
     }
 }

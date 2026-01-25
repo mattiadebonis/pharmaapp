@@ -11,7 +11,6 @@
 
 import SwiftUI
 import CoreData
-import UIKit
 // import Vision spostato nella schermata di creazione
 
 struct ContentView: View {
@@ -107,27 +106,6 @@ struct ContentView: View {
     ContentView()
         .environmentObject(AppViewModel())
         .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
-}
-
-// Icona calendario con numero del giorno
-struct TodayCalendarIcon: View {
-    let day: Int
-
-    var body: some View {
-        let symbolName = "\(day).calendar"
-        if let uiImage = UIImage(systemName: symbolName) {
-            Image(uiImage: uiImage)
-                .font(.system(size: 18, weight: .regular))
-        } else {
-            ZStack(alignment: .center) {
-                Image(systemName: "calendar")
-                    .font(.system(size: 18, weight: .regular))
-                Text("\(day)")
-                    .font(.system(size: 11, weight: .semibold))
-                    .offset(y: 2)
-            }
-        }
-    }
 }
 
 // Placeholder ricerca catalogo se non è presente un componente dedicato.
