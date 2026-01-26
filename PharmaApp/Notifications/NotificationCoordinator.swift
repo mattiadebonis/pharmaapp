@@ -6,19 +6,27 @@ import UIKit
 final class NotificationCoordinator: ObservableObject {
     private let context: NSManagedObjectContext
     private let scheduler: NotificationScheduler
+    private let autoIntakeProcessor: AutoIntakeProcessor
     private var didStart = false
     private var debounceTask: Task<Void, Never>?
+    private var autoIntakeTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
 
     init(
         context: NSManagedObjectContext,
-        scheduler: NotificationScheduler? = nil
+        scheduler: NotificationScheduler? = nil,
+        autoIntakeProcessor: AutoIntakeProcessor? = nil
     ) {
         self.context = context
         if let scheduler {
             self.scheduler = scheduler
         } else {
             self.scheduler = NotificationScheduler(context: context)
+        }
+        if let autoIntakeProcessor {
+            self.autoIntakeProcessor = autoIntakeProcessor
+        } else {
+            self.autoIntakeProcessor = AutoIntakeProcessor(context: context)
         }
     }
 
@@ -87,7 +95,23 @@ final class NotificationCoordinator: ObservableObject {
         debounceTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard let self else { return }
+            self.autoIntakeProcessor.processDueIntakes(now: Date())
             await self.scheduler.rescheduleAll(reason: reason)
+            self.scheduleNextAutoIntake()
+        }
+    }
+
+    private func scheduleNextAutoIntake() {
+        autoIntakeTask?.cancel()
+        guard let nextDate = autoIntakeProcessor.nextAutoIntakeDate(now: Date()) else { return }
+        let now = Date()
+        let delaySeconds = max(1, nextDate.timeIntervalSince(now) + 1)
+        autoIntakeTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+            guard let self else { return }
+            self.autoIntakeProcessor.processDueIntakes(now: Date())
+            await self.scheduler.rescheduleAll(reason: "auto-intake")
+            self.scheduleNextAutoIntake()
         }
     }
 
@@ -118,5 +142,7 @@ final class NotificationCoordinator: ObservableObject {
 
     deinit {
         observers.forEach { NotificationCenter.default.removeObserver($0) }
+        debounceTask?.cancel()
+        autoIntakeTask?.cancel()
     }
 }
