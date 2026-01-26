@@ -50,9 +50,45 @@
 		        <attribute name="safety_min_interval_hours" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
 		        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
 		        <attribute name="in_cabinet" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
-	        <attribute name="nome" optional="YES" attributeType="String"/>
+        <attribute name="nome" optional="YES" attributeType="String"/>
         <attribute name="obbligo_ricetta" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
         <attribute name="principio_attivo" optional="YES" attributeType="String"/>
+        <attribute name="codice_forma_dosaggio" optional="YES" attributeType="String"/>
+        <attribute name="principi_attivi_it_json" optional="YES" attributeType="String"/>
+        <attribute name="vie_somministrazione_json" optional="YES" attributeType="String"/>
+        <attribute name="codice_atc_json" optional="YES" attributeType="String"/>
+        <attribute name="descrizione_atc_json" optional="YES" attributeType="String"/>
+        <attribute name="forma_farmaceutica" optional="YES" attributeType="String"/>
+        <attribute name="piano_terapeutico" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="descrizione_forma_dosaggio" optional="YES" attributeType="String"/>
+        <attribute name="flag_alcol" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="flag_potassio" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="flag_guida" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="flag_dopante" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="livello_guida" optional="YES" attributeType="String"/>
+        <attribute name="descrizione_livello" optional="YES" attributeType="String"/>
+        <attribute name="carente" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="innovativo" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="orfano" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="revocato" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="sospeso" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="principio_attivo_forma_json" optional="YES" attributeType="String"/>
+        <attribute name="flag_fi" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="flag_rcp" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="tipo_autorizzazione" optional="YES" attributeType="String"/>
+        <attribute name="aic6_importazione_parallela" optional="YES" attributeType="String"/>
+        <attribute name="sis_importazione_parallela" optional="YES" attributeType="String"/>
+        <attribute name="den_importazione_parallela" optional="YES" attributeType="String"/>
+        <attribute name="rag_importazione_parallela" optional="YES" attributeType="String"/>
+        <attribute name="position_json" optional="YES" attributeType="String"/>
+        <attribute name="codice_medicinale" optional="YES" attributeType="String"/>
+        <attribute name="aic6" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="denominazione_medicinale" optional="YES" attributeType="String"/>
+        <attribute name="codice_sis" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="azienda_titolare" optional="YES" attributeType="String"/>
+        <attribute name="categoria_medicinale" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="commercio" optional="YES" attributeType="String"/>
+        <attribute name="stato_amministrativo" optional="YES" attributeType="String"/>
         <relationship name="cabinet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Cabinet" inverseName="medicines" inverseEntity="Cabinet"/>
         <relationship name="logs" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Log" inverseName="medicine" inverseEntity="Log"/>
         <relationship name="todos" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Todo" inverseName="medicine" inverseEntity="Todo"/>
@@ -84,6 +120,35 @@
     </entity>
     <entity name="Package" representedClassName=".Package" syncable="YES">
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="id_package" optional="YES" attributeType="String"/>
+        <attribute name="denominazione_package" optional="YES" attributeType="String"/>
+        <attribute name="descrizione_fornitura" optional="YES" attributeType="String"/>
+        <attribute name="classe_fornitura" optional="YES" attributeType="String"/>
+        <attribute name="codice_forma_dosaggio" optional="YES" attributeType="String"/>
+        <attribute name="aic" optional="YES" attributeType="String"/>
+        <attribute name="descrizione_rf_json" optional="YES" attributeType="String"/>
+        <attribute name="carenza_motivazione" optional="YES" attributeType="String"/>
+        <attribute name="carenza_inizio" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="carenza_fine_presunta" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="data_autorizzazione" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="flag_commercio" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="flag_prescrizione" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="carente" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="vie_somministrazione_json" optional="YES" attributeType="String"/>
+        <attribute name="classe_rimborsabilita" optional="YES" attributeType="String"/>
+        <attribute name="descrizione_rimborsabilita" optional="YES" attributeType="String"/>
+        <attribute name="stato_amministrativo" optional="YES" attributeType="String"/>
+        <attribute name="descrizione_stato_amministrativo" optional="YES" attributeType="String"/>
+        <attribute name="data_registrazione_gu" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="data_ricezione_pratica" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="piano_terapeutico" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="fk_forma_dosaggio" optional="YES" attributeType="String"/>
+        <attribute name="tipo_autorizzazione" optional="YES" attributeType="String"/>
+        <attribute name="aic6_importazione_parallela" optional="YES" attributeType="String"/>
+        <attribute name="sis_importazione_parallela" optional="YES" attributeType="String"/>
+        <attribute name="den_importazione_parallela" optional="YES" attributeType="String"/>
+        <attribute name="rag_importazione_parallela" optional="YES" attributeType="String"/>
+        <attribute name="categoria_medicinale" optional="YES" attributeType="String"/>
         <attribute name="numero" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="principio_attivo" optional="YES" attributeType="String"/>
         <attribute name="tipologia" optional="YES" attributeType="String"/>

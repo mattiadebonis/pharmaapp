@@ -19,7 +19,6 @@ struct ContentView: View {
     @Environment(\.managedObjectContext) private var moc
     @EnvironmentObject private var appVM: AppViewModel
     @State private var isNewMedicinePresented = false
-    @State private var showMedicineWizard: Bool = false
     @State private var catalogSelection: CatalogSelection?
 
     enum AppTab: Hashable {
@@ -67,7 +66,6 @@ struct ContentView: View {
                 NavigationStack {
                     CatalogSearchScreen { selection in
                         catalogSelection = selection
-                        showMedicineWizard = true
                     }
                 }
             }
@@ -78,15 +76,14 @@ struct ContentView: View {
         )) {
             NavigationStack { OptionsView() }
         }
-        .sheet(isPresented: $showMedicineWizard) {
-            MedicineWizardView(prefill: catalogSelection) {
+        .sheet(item: $catalogSelection) { selection in
+            MedicineWizardView(prefill: selection) {
                 selectedTab = .medicine
                 catalogSelection = nil
-                showMedicineWizard = false
             }
-                .environmentObject(appVM)
-                .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
-                .presentationDetents([.fraction(0.5), .large])
+            .environmentObject(appVM)
+            .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
+            .presentationDetents([.fraction(0.5), .large])
         }
     }
 
@@ -354,11 +351,13 @@ struct CatalogSearchScreen: View {
     }
 
     private func loadCatalogEntries() -> [CatalogEntry] {
-        guard let url = Bundle.main.url(forResource: "medicinali", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+        guard let url = Bundle.main.url(forResource: "medicinale_example", withExtension: "json"),
+              let data = try? Data(contentsOf: url) else {
             return []
         }
+
+        let json = extractMedicineItems(from: data)
+        guard !json.isEmpty else { return [] }
 
         var results: [CatalogEntry] = []
         for entry in json.prefix(1200) {
@@ -477,11 +476,13 @@ struct CatalogSearchScreen: View {
     }
 
     private func loadCatalog() -> [CatalogSelection] {
-        guard let url = Bundle.main.url(forResource: "medicinali", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+        guard let url = Bundle.main.url(forResource: "medicinale_example", withExtension: "json"),
+              let data = try? Data(contentsOf: url) else {
             return []
         }
+
+        let json = extractMedicineItems(from: data)
+        guard !json.isEmpty else { return [] }
 
         var results: [CatalogSelection] = []
         for entry in json.prefix(1200) { // evita liste troppo lunghe
@@ -503,28 +504,48 @@ struct CatalogSearchScreen: View {
             }()
 
             let packages = entry["confezioni"] as? [[String: Any]] ?? []
-            guard let firstPackage = packages.first else { continue }
-            let pkgLabel = (firstPackage["denominazionePackage"] as? String ?? "Confezione").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !packages.isEmpty else { continue }
             let dosage = parseDosage(from: entry["descrizioneFormaDosaggio"] as? String)
-            let units = extractUnitCount(from: pkgLabel)
-            let volume = extractVolume(from: pkgLabel)
-            let requiresPrescription = prescriptionFlag(in: firstPackage)
 
-            let selection = CatalogSelection(
-                id: (firstPackage["idPackage"] as? String) ?? (entry["id"] as? String) ?? UUID().uuidString,
-                name: name,
-                principle: principle,
-                requiresPrescription: requiresPrescription,
-                packageLabel: pkgLabel,
-                units: max(1, units),
-                tipologia: pkgLabel,
-                valore: dosage.value,
-                unita: dosage.unit,
-                volume: volume
-            )
-            results.append(selection)
+            for package in packages {
+                let pkgLabel = (package["denominazionePackage"] as? String ?? "Confezione")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let units = extractUnitCount(from: pkgLabel)
+                let volume = extractVolume(from: pkgLabel)
+                let requiresPrescription = prescriptionFlag(in: package)
+
+                let selection = CatalogSelection(
+                    id: (package["idPackage"] as? String) ?? (entry["id"] as? String) ?? UUID().uuidString,
+                    name: name,
+                    principle: principle,
+                    requiresPrescription: requiresPrescription,
+                    packageLabel: pkgLabel,
+                    units: max(1, units),
+                    tipologia: pkgLabel,
+                    valore: dosage.value,
+                    unita: dosage.unit,
+                    volume: volume
+                )
+                results.append(selection)
+            }
         }
-        return results.sorted { $0.name < $1.name }
+        return results.sorted {
+            if $0.name == $1.name {
+                return $0.packageLabel < $1.packageLabel
+            }
+            return $0.name < $1.name
+        }
+    }
+
+    private func extractMedicineItems(from data: Data) -> [[String: Any]] {
+        guard let json = try? JSONSerialization.jsonObject(with: data) else { return [] }
+        if let array = json as? [[String: Any]] {
+            return array
+        }
+        if let dict = json as? [String: Any] {
+            return [dict]
+        }
+        return []
     }
 
     private func naturalPackageLabel(for item: CatalogSelection) -> String {

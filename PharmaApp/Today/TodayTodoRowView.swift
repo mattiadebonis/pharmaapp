@@ -73,7 +73,7 @@ struct TodayTodoRowView: View {
                     if let subtitle {
                         HStack(alignment: .firstTextBaseline, spacing: 0) {
                             Text(subtitle)
-                                .font(.system(size: 15, weight: .ultraLight))
+                                .font(.system(size: 15))
                                 .foregroundStyle(secondaryTextColor)
                                 .multilineTextAlignment(.leading)
                                 .lineLimit(2)
@@ -88,7 +88,7 @@ struct TodayTodoRowView: View {
                     }
                     if let auxiliaryLine {
                         auxiliaryLine
-                            .font(.system(size: 15, weight: .ultraLight))
+                            .font(.system(size: 15))
                             .foregroundStyle(secondaryTextColor)
                             .multilineTextAlignment(.leading)
                             .lineLimit(2)

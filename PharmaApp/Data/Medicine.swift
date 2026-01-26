@@ -14,6 +14,42 @@ public class Medicine: NSManagedObject, Identifiable {
     @NSManaged public var nome: String
     @NSManaged public var principio_attivo: String
     @NSManaged public var obbligo_ricetta: Bool
+    @NSManaged public var codice_forma_dosaggio: String?
+    @NSManaged public var principi_attivi_it_json: String?
+    @NSManaged public var vie_somministrazione_json: String?
+    @NSManaged public var codice_atc_json: String?
+    @NSManaged public var descrizione_atc_json: String?
+    @NSManaged public var forma_farmaceutica: String?
+    @NSManaged public var piano_terapeutico: Int32
+    @NSManaged public var descrizione_forma_dosaggio: String?
+    @NSManaged public var flag_alcol: Bool
+    @NSManaged public var flag_potassio: Bool
+    @NSManaged public var flag_guida: Bool
+    @NSManaged public var flag_dopante: Bool
+    @NSManaged public var livello_guida: String?
+    @NSManaged public var descrizione_livello: String?
+    @NSManaged public var carente: Bool
+    @NSManaged public var innovativo: Bool
+    @NSManaged public var orfano: Bool
+    @NSManaged public var revocato: Bool
+    @NSManaged public var sospeso: Bool
+    @NSManaged public var principio_attivo_forma_json: String?
+    @NSManaged public var flag_fi: Bool
+    @NSManaged public var flag_rcp: Bool
+    @NSManaged public var tipo_autorizzazione: String?
+    @NSManaged public var aic6_importazione_parallela: String?
+    @NSManaged public var sis_importazione_parallela: String?
+    @NSManaged public var den_importazione_parallela: String?
+    @NSManaged public var rag_importazione_parallela: String?
+    @NSManaged public var position_json: String?
+    @NSManaged public var codice_medicinale: String?
+    @NSManaged public var aic6: Int32
+    @NSManaged public var denominazione_medicinale: String?
+    @NSManaged public var codice_sis: Int32
+    @NSManaged public var azienda_titolare: String?
+    @NSManaged public var categoria_medicinale: Int32
+    @NSManaged public var commercio: String?
+    @NSManaged public var stato_amministrativo: String?
     @NSManaged public var custom_stock_threshold: Int32
     @NSManaged public var deadline_month: Int32
     @NSManaged public var deadline_year: Int32

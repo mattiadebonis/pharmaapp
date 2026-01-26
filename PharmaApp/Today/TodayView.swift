@@ -337,8 +337,9 @@ struct TodayView: View {
         } else {
             let rowOpacity: Double = isCompleted ? 0.55 : 1
             let title = mainLineText(for: item)
-            let subtitle = subtitleLine(for: item)
-            let auxiliaryLine = auxiliaryLineText(for: item)
+            let medSummary = med.map { medicineSubtitle(for: $0) }
+            let subtitle = subtitleLine(for: item, medicine: med, summary: medSummary)
+            let auxiliaryLine = auxiliaryLineText(for: item, summary: medSummary)
             let actionText = actionText(for: item, isCompleted: isCompleted)
             let titleColor: Color = isCompleted ? .secondary : .primary
             let actionLabelColor: Color = isCompleted ? .secondary : .primary
@@ -433,9 +434,19 @@ struct TodayView: View {
         return "Chiedi ricetta per \(medName) al medico \(doctorName)"
     }
 
-    private func subtitleLine(for item: TodayTodoItem) -> String? {
-        if item.category == .therapy, let med = medicine(for: item) {
-            return personNameForTherapy(med)
+    private func subtitleLine(
+        for item: TodayTodoItem,
+        medicine: Medicine?,
+        summary: MedicineAggregateSubtitle?
+    ) -> String? {
+        if item.category == .therapy {
+            if let line1 = summary?.line1.trimmingCharacters(in: .whitespacesAndNewlines), !line1.isEmpty {
+                return line1
+            }
+            if let med = medicine {
+                return personNameForTherapy(med)
+            }
+            return nil
         }
         if item.category == .monitoring {
             return item.detail
@@ -446,7 +457,10 @@ struct TodayView: View {
         return nil
     }
 
-    private func auxiliaryLineText(for item: TodayTodoItem) -> Text? {
+    private func auxiliaryLineText(for item: TodayTodoItem, summary: MedicineAggregateSubtitle?) -> Text? {
+        if item.category == .therapy, let line2 = summary?.line2, !line2.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return Text(line2)
+        }
         if item.category == .purchase, let med = medicine(for: item) {
             var parts: [String] = []
             if item.id.hasPrefix("purchase|deadline|"), let detail = item.detail, !detail.isEmpty {
@@ -1210,6 +1224,10 @@ struct TodayView: View {
             }
         }
         return nil
+    }
+
+    private func medicineSubtitle(for medicine: Medicine) -> MedicineAggregateSubtitle {
+        makeMedicineSubtitle(medicine: medicine)
     }
 
     private func purchaseSubtitle(for medicine: Medicine, awaitingRx: Bool, doctorName: String) -> String? {

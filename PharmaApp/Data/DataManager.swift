@@ -9,14 +9,14 @@ class DataManager {
     }
 
     func loadMedicinesFromJSON() -> [[String: Any]] {
-        guard let url = Bundle.main.url(forResource: "medicinali", withExtension: "json") else {
-            fatalError("Impossibile trovare il file 'medicinali.json' nel bundle.")
+        guard let url = Bundle.main.url(forResource: "medicinale_example", withExtension: "json") else {
+            fatalError("Impossibile trovare il file 'medicinale_example.json' nel bundle.")
         }
 
         do {
             let data = try Data(contentsOf: url)
-            let json = try JSONSerialization.jsonObject(with: data, options: []) as? [[String: Any]]
-            return json ?? []
+            let json = try JSONSerialization.jsonObject(with: data, options: [])
+            return extractMedicinesArray(from: json)
         } catch {
             fatalError("Impossibile decodificare il file JSON: \(error.localizedDescription)")
         }
@@ -52,6 +52,43 @@ class DataManager {
             medicine.nome = nome
             medicine.principio_attivo = principioAttivo
             medicine.obbligo_ricetta = obbligoRicetta
+            medicine.codice_forma_dosaggio = stringValue(medicineData["id"])
+            medicine.principi_attivi_it_json = jsonString(from: medicineData["principiAttiviIt"])
+            medicine.vie_somministrazione_json = jsonString(from: medicineData["vieSomministrazione"])
+            medicine.codice_atc_json = jsonString(from: medicineData["codiceAtc"])
+            medicine.descrizione_atc_json = jsonString(from: medicineData["descrizioneAtc"])
+            medicine.forma_farmaceutica = medicineData["formaFarmaceutica"] as? String
+            medicine.piano_terapeutico = int32Value(medicineData["pianoTerapeutico"])
+            medicine.descrizione_forma_dosaggio = medicineData["descrizioneFormaDosaggio"] as? String
+            medicine.flag_alcol = boolValue(medicineData["flagAlcol"])
+            medicine.flag_potassio = boolValue(medicineData["flagPotassio"])
+            medicine.flag_guida = boolValue(medicineData["flagGuida"])
+            medicine.flag_dopante = boolValue(medicineData["flagDopante"])
+            medicine.livello_guida = stringValue(medicineData["livelloGuida"])
+            medicine.descrizione_livello = medicineData["descrizioneLivello"] as? String
+            medicine.carente = boolValue(medicineData["carente"])
+            medicine.innovativo = boolValue(medicineData["innovativo"])
+            medicine.orfano = boolValue(medicineData["orfano"])
+            medicine.revocato = boolValue(medicineData["revocato"])
+            medicine.sospeso = boolValue(medicineData["sospeso"])
+            medicine.principio_attivo_forma_json = jsonString(from: medicineData["principioAttivoForma"])
+            medicine.flag_fi = boolValue(medicineData["flagFI"])
+            medicine.flag_rcp = boolValue(medicineData["flagRCP"])
+            medicine.tipo_autorizzazione = stringValue(medicineData["tipoAutorizzazione"])
+            medicine.aic6_importazione_parallela = stringValue(medicineData["aic6ImportazioneParallela"])
+            medicine.sis_importazione_parallela = stringValue(medicineData["sisImportazioneParallela"])
+            medicine.den_importazione_parallela = stringValue(medicineData["denImportazioneParallela"])
+            medicine.rag_importazione_parallela = stringValue(medicineData["ragImportazioneParallela"])
+            medicine.position_json = jsonString(from: medicineData["position"])
+
+            medicine.codice_medicinale = stringValue(medicinalInfo?["codiceMedicinale"])
+            medicine.aic6 = int32Value(medicinalInfo?["aic6"])
+            medicine.denominazione_medicinale = (medicinalInfo?["denominazioneMedicinale"] as? String) ?? nome
+            medicine.codice_sis = int32Value(medicinalInfo?["codiceSis"])
+            medicine.azienda_titolare = medicinalInfo?["aziendaTitolare"] as? String
+            medicine.categoria_medicinale = int32Value(medicinalInfo?["categoriaMedicinale"])
+            medicine.commercio = stringValue(medicinalInfo?["commercio"])
+            medicine.stato_amministrativo = medicinalInfo?["statoAmministrativo"] as? String
 
             for conf in confezioni {
                 let package = Package(context: context)
@@ -64,6 +101,36 @@ class DataManager {
                 package.unita = dosage.unit
                 package.volume = extractVolume(from: tipologia)
                 package.medicine = medicine
+                package.principio_attivo = medicine.principio_attivo
+                package.id_package = stringValue(conf["idPackage"])
+                package.denominazione_package = conf["denominazionePackage"] as? String
+                package.descrizione_fornitura = conf["descrizioneFornitura"] as? String
+                package.classe_fornitura = conf["classeFornitura"] as? String
+                package.codice_forma_dosaggio = stringValue(conf["codiceFormaDosaggio"])
+                package.aic = conf["aic"] as? String
+                package.descrizione_rf_json = jsonString(from: conf["descrizioneRf"])
+                package.carenza_motivazione = conf["carenzaMotivazione"] as? String
+                package.carenza_inizio = parseISODate(conf["carenzaInizio"])
+                package.carenza_fine_presunta = parseISODate(conf["carenzaFinePresunta"])
+                package.data_autorizzazione = parseISODate(conf["dataAutorizzazione"])
+                package.flag_commercio = boolValue(conf["flagCommercio"])
+                package.flag_prescrizione = boolValue(conf["flagPrescrizione"])
+                package.carente = boolValue(conf["carente"])
+                package.vie_somministrazione_json = jsonString(from: conf["vieSomministrazione"])
+                package.classe_rimborsabilita = conf["classeRimborsabilita"] as? String
+                package.descrizione_rimborsabilita = conf["descrizioneRimborsabilita"] as? String
+                package.stato_amministrativo = conf["statoAmministrativo"] as? String
+                package.descrizione_stato_amministrativo = conf["descrizioneStatoAmministrativo"] as? String
+                package.data_registrazione_gu = parseISODate(conf["dataRegistrazioneGU"])
+                package.data_ricezione_pratica = parseISODate(conf["dataRicezionePratica"])
+                package.piano_terapeutico = int32Value(conf["pianoTerapeutico"])
+                package.fk_forma_dosaggio = stringValue(conf["fkFormaDosaggio"])
+                package.tipo_autorizzazione = stringValue(conf["tipoAutorizzazione"])
+                package.aic6_importazione_parallela = stringValue(conf["aic6ImportazioneParallela"])
+                package.sis_importazione_parallela = stringValue(conf["sisImportazioneParallela"])
+                package.den_importazione_parallela = stringValue(conf["denImportazioneParallela"])
+                package.rag_importazione_parallela = stringValue(conf["ragImportazioneParallela"])
+                package.categoria_medicinale = stringValue(conf["categoriaMedicinale"])
                 medicine.addToPackages(package)
             }
         }
@@ -222,6 +289,111 @@ class DataManager {
         }
         return false
     }
+
+    private func extractMedicinesArray(from json: Any) -> [[String: Any]] {
+        if let array = json as? [[String: Any]] {
+            return array
+        }
+        if let dict = json as? [String: Any] {
+            return [dict]
+        }
+        return []
+    }
+
+    private func jsonString(from value: Any?) -> String? {
+        guard let value, !(value is NSNull) else { return nil }
+        if let string = value as? String {
+            return string
+        }
+        if JSONSerialization.isValidJSONObject(value),
+           let data = try? JSONSerialization.data(withJSONObject: value, options: []),
+           let string = String(data: data, encoding: .utf8) {
+            return string
+        }
+        if let number = value as? NSNumber {
+            return number.stringValue
+        }
+        return String(describing: value)
+    }
+
+    private func stringValue(_ value: Any?) -> String? {
+        guard let value, !(value is NSNull) else { return nil }
+        if let string = value as? String {
+            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        if let number = value as? NSNumber {
+            return number.stringValue
+        }
+        return String(describing: value)
+    }
+
+    private func int32Value(_ value: Any?) -> Int32 {
+        guard let value, !(value is NSNull) else { return 0 }
+        if let intValue = value as? Int {
+            return Int32(intValue)
+        }
+        if let intValue = value as? Int32 {
+            return intValue
+        }
+        if let intValue = value as? Int64 {
+            return Int32(intValue)
+        }
+        if let doubleValue = value as? Double {
+            return Int32(doubleValue)
+        }
+        if let boolValue = value as? Bool {
+            return boolValue ? 1 : 0
+        }
+        if let string = value as? String, let parsed = Int32(string.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            return parsed
+        }
+        return 0
+    }
+
+    private func boolValue(_ value: Any?) -> Bool {
+        guard let value, !(value is NSNull) else { return false }
+        if let boolValue = value as? Bool {
+            return boolValue
+        }
+        if let intValue = value as? Int {
+            return intValue != 0
+        }
+        if let intValue = value as? Int32 {
+            return intValue != 0
+        }
+        if let number = value as? NSNumber {
+            return number.intValue != 0
+        }
+        if let string = value as? String {
+            let normalized = string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return ["1", "true", "yes", "si", "y", "t"].contains(normalized)
+        }
+        return false
+    }
+
+    private func parseISODate(_ value: Any?) -> Date? {
+        if let date = value as? Date {
+            return date
+        }
+        guard let string = value as? String, !string.isEmpty else { return nil }
+        if let parsed = Self.isoFormatterWithFractional.date(from: string) {
+            return parsed
+        }
+        return Self.isoFormatter.date(from: string)
+    }
+
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let isoFormatterWithFractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 
     private func parseDosage(from description: String?) -> (value: Int32, unit: String) {
         guard let text = description else { return (0, "") }
