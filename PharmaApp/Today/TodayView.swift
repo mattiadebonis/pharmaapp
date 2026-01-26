@@ -307,6 +307,23 @@ struct TodayView: View {
     private var nestedRowIndent: CGFloat { 38 }
 
     @ViewBuilder
+    private func todoCard<Content: View>(_ content: Content) -> some View {
+        content
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color(UIColor.secondarySystemBackground))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.primary.opacity(0.05), lineWidth: 0.5)
+            )
+            .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
+            .listRowSeparator(.hidden)
+    }
+
+    @ViewBuilder
     private func todoListRow(for item: TodayTodoItem, isCompleted: Bool, isLast: Bool) -> some View {
         let med = medicine(for: item)
 
@@ -503,9 +520,7 @@ struct TodayView: View {
     @ViewBuilder
     private func blockedTherapyCard(for item: TodayTodoItem, info: BlockedTherapyInfo, isLast: Bool) -> some View {
         let medName = formattedMedicineName(info.medicine.nome)
-        let awaitingRx = isAwaitingPrescription(info.medicine) || isBlockedSubtaskDone(type: "prescription", medicine: info.medicine)
-        let doctorName = info.doctor?.name ?? "medico"
-        VStack(spacing: 10) {
+        todoCard(
             blockedStepRow(
                 title: "Assumi \(medName)",
                 status: nil,
@@ -516,39 +531,9 @@ struct TodayView: View {
                 trailingBadge: (info.isOutOfStock && info.isDepleted) ? ("Da rifornire", .orange) : nil,
                 showCircle: true,
                 isDone: isBlockedSubtaskDone(type: "intake", medicine: info.medicine),
-                        onCheck: { completeBlockedIntake(for: info) }
-                    )
-
-            if info.isOutOfStock && info.isDepleted {
-                VStack(spacing: 10) {
-                    if info.needsPrescription && !awaitingRx {
-                        blockedStepRow(
-                            title: awaitingRx ? "In attesa della ricetta da \(doctorName)" : "Chiedi ricetta al medico \(doctorName)",
-                            status: nil,
-                            iconName: "heart.text.square",
-                            showCircle: !awaitingRx,
-                            isDone: isBlockedSubtaskDone(type: "prescription", medicine: info.medicine),
-                            onCheck: awaitingRx ? nil : { completeBlockedPrescription(for: info) }
-                        )
-                        .padding(.leading, nestedRowIndent)
-                    }
-
-                    blockedStepRow(
-                        title: "Compra \(medName)",
-                        status: nil,
-                        subtitle: purchaseSubtitle(for: info.medicine, awaitingRx: awaitingRx, doctorName: doctorName),
-                        subtitleColor: .secondary,
-                        iconName: "cart",
-                        isDone: isBlockedSubtaskDone(type: "purchase", medicine: info.medicine),
-                        onCheck: { completeBlockedPurchase(for: info) }
-                    )
-                    .padding(.leading, nestedRowIndent)
-                }
-            }
-        }
-        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-        .padding(.vertical, 4)
-        .listRowSeparator(.hidden)
+                onCheck: { completeBlockedIntake(for: info) }
+            )
+        )
     }
 
     @ViewBuilder

@@ -114,10 +114,26 @@ class TodayViewModel: ObservableObject {
                    isOutOfStock(med, option: option, recurrenceManager: rec) {
                     return false
                 }
-                return true
+               return true
             }
         }
 
+        let rec = RecurrenceManager(context: viewContext)
+        let depletedPurchaseItems = medicines.compactMap { medicine -> TodayTodoItem? in
+            guard shouldAddDepletedPurchase(for: medicine, existingItems: baseItems, option: option, urgentIDs: urgentIDs, recurrenceManager: rec) else {
+                return nil
+            }
+            let detail = purchaseDetail(for: medicine, option: option, urgentIDs: urgentIDs, recurrenceManager: rec)
+            let id = "purchase|depleted|\(medicine.objectID.uriRepresentation().absoluteString)"
+            return TodayTodoItem(
+                id: id,
+                title: medicine.nome,
+                detail: detail,
+                category: .purchase,
+                medicineID: medicine.objectID
+            )
+        }
+        baseItems.append(contentsOf: depletedPurchaseItems)
         let deadlineItems = deadlineTodoItems(from: medicines)
         let clinicalContext = ClinicalContextBuilder(context: viewContext).build(for: medicines)
         return baseItems + deadlineItems + clinicalContext.allTodos
@@ -490,6 +506,63 @@ class TodayViewModel: ObservableObject {
             return remaining <= medicine.stockThreshold(option: option)
         }
         return false
+    }
+
+    private func shouldAddDepletedPurchase(
+        for medicine: Medicine,
+        existingItems: [TodayTodoItem],
+        option: Option?,
+        urgentIDs: Set<NSManagedObjectID>,
+        recurrenceManager: RecurrenceManager
+    ) -> Bool {
+        guard isOutOfStock(medicine, option: option, recurrenceManager: recurrenceManager) else { return false }
+        guard !medicine.hasIntakeToday(recurrenceManager: recurrenceManager) else { return false }
+        if existingItems.contains(where: { $0.category == .purchase && $0.medicineID == medicine.objectID }) {
+            return false
+        }
+        return true
+    }
+
+    private func purchaseDetail(
+        for medicine: Medicine,
+        option: Option?,
+        urgentIDs: Set<NSManagedObjectID>,
+        recurrenceManager: RecurrenceManager
+    ) -> String? {
+        var parts: [String] = []
+        if let status = purchaseStockStatusLabel(for: medicine, option: option, recurrenceManager: recurrenceManager) {
+            parts.append(status)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
+    }
+
+    private func purchaseStockStatusLabel(
+        for medicine: Medicine,
+        option: Option?,
+        recurrenceManager: RecurrenceManager
+    ) -> String? {
+        let threshold = medicine.stockThreshold(option: option)
+        if let therapies = medicine.therapies, !therapies.isEmpty {
+            var totalLeft: Double = 0
+            var dailyUsage: Double = 0
+            for therapy in therapies {
+                totalLeft += Double(therapy.leftover())
+                dailyUsage += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
+            }
+            if totalLeft <= 0 {
+                return "Scorte finite"
+            }
+            guard dailyUsage > 0 else { return nil }
+            let days = totalLeft / dailyUsage
+            return days < Double(threshold) ? "Scorte in esaurimento" : nil
+        }
+        if let remaining = medicine.remainingUnitsWithoutTherapy() {
+            if remaining <= 0 {
+                return "Scorte finite"
+            }
+            return remaining < threshold ? "Scorte in esaurimento" : nil
+        }
+        return nil
     }
 
     // MARK: - Helpers per medicine lookup
