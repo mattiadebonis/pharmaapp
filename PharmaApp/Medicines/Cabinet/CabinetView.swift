@@ -50,11 +50,11 @@ struct CabinetView: View {
                         Button {
                             isNewCabinetPresented = true
                         } label: {
-                            ZStack(alignment: .topTrailing) {
+                            ZStack(alignment: .bottomTrailing) {
                                 Image(systemName: "cross.case")
                                 Image(systemName: "plus.circle.fill")
                                     .font(.system(size: 9, weight: .bold))
-                                    .offset(x: 4, y: -4)
+                                    .offset(x: 4, y: 4)
                             }
                         }
                         .accessibilityLabel("Nuovo armadietto")
