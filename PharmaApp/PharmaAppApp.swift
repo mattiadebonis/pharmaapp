@@ -7,14 +7,28 @@
 
 import SwiftUI
 import FirebaseCore
+import UserNotifications
 
 
-class AppDelegate: NSObject, UIApplicationDelegate {
+class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
   func application(_ application: UIApplication,
                    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
     FirebaseApp.configure()
+    UNUserNotificationCenter.current().delegate = self
 
     return true
+  }
+
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    if #available(iOS 14.0, *) {
+      completionHandler([.banner, .list, .sound, .badge])
+    } else {
+      completionHandler([.alert, .sound, .badge])
+    }
   }
 }
 
@@ -25,6 +39,9 @@ struct PharmaAppApp: App {
 
     @StateObject var appViewModel = AppViewModel()
     @StateObject var authViewModel = AuthViewModel()
+    @StateObject private var notificationCoordinator = NotificationCoordinator(
+        context: PersistenceController.shared.container.viewContext
+    )
 
     var body: some Scene {
         WindowGroup {
@@ -35,8 +52,9 @@ struct PharmaAppApp: App {
                 .onOpenURL { url in
                     authViewModel.handleOpenURL(url)
                 }
+                .task {
+                    notificationCoordinator.start()
+                }
         }
     }
 }
-
-
