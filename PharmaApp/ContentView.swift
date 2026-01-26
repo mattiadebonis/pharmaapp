@@ -11,7 +11,8 @@
 
 import SwiftUI
 import CoreData
-// import Vision spostato nella schermata di creazione
+import UIKit
+import Vision
 
 struct ContentView: View {
     // MARK: – Dependencies
@@ -116,6 +117,29 @@ struct CatalogSearchScreen: View {
     @FocusState private var isSearching: Bool
     @State private var catalog: [CatalogSelection] = []
     @State private var isLoading = false
+    @State private var isScanPresented = false
+    @State private var isProcessingScan = false
+    @State private var scanErrorMessage: String?
+    @State private var showScanError = false
+
+    private struct CatalogEntry {
+        let name: String
+        let principle: String
+        let packages: [CatalogPackage]
+        let codes: [String]
+    }
+
+    private struct CatalogPackage {
+        let id: String
+        let label: String
+        let units: Int
+        let tipologia: String
+        let dosageValue: Int32
+        let dosageUnit: String
+        let volume: String
+        let requiresPrescription: Bool
+        let codes: [String]
+    }
 
     var body: some View {
         List {
@@ -159,7 +183,7 @@ struct CatalogSearchScreen: View {
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Cerca il farmaco")
         .navigationTitle("Cerca")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
                 Button {
                     appVM.isSettingsPresented = true
                 } label: {
@@ -171,6 +195,34 @@ struct CatalogSearchScreen: View {
         .onAppear { isSearching = true }
         .focused($isSearching)
         .task { loadCatalogIfNeeded() }
+        .background(
+            SearchBarAccessoryInstaller(
+                systemImage: "vial.viewfinder",
+                accessibilityLabel: "Scansiona confezione",
+                onTap: { startScan() }
+            )
+        )
+        .fullScreenCover(isPresented: $isScanPresented) {
+            ImagePicker(sourceType: .camera) { image in
+                handleScanImage(image)
+            }
+            .ignoresSafeArea()
+        }
+        .overlay {
+            if isProcessingScan {
+                ZStack {
+                    Color.black.opacity(0.2).ignoresSafeArea()
+                    ProgressView("Analisi in corso...")
+                        .padding(16)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                }
+            }
+        }
+        .alert("Scansione non riuscita", isPresented: $showScanError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(scanErrorMessage ?? "Riprova con una foto piu nitida.")
+        }
     }
 
     private var filteredResults: [CatalogSelection] {
@@ -196,6 +248,232 @@ struct CatalogSearchScreen: View {
                 isLoading = false
             }
         }
+    }
+
+    private func startScan() {
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            scanErrorMessage = "La fotocamera non e disponibile su questo dispositivo."
+            showScanError = true
+            return
+        }
+        isScanPresented = true
+    }
+
+    private func handleScanImage(_ image: UIImage?) {
+        isScanPresented = false
+        guard let image else { return }
+        isProcessingScan = true
+        recognizeText(in: image) { text in
+            guard let text, !text.isEmpty else {
+                isProcessingScan = false
+                scanErrorMessage = "Non sono riuscito a leggere testo dalla foto."
+                showScanError = true
+                return
+            }
+            DispatchQueue.global(qos: .userInitiated).async {
+                let match = matchCatalog(from: text)
+                DispatchQueue.main.async {
+                    isProcessingScan = false
+                    if let match {
+                        onSelect(match)
+                    } else {
+                        scanErrorMessage = "Nessuna corrispondenza trovata nel catalogo."
+                        showScanError = true
+                    }
+                }
+            }
+        }
+    }
+
+    private func recognizeText(in image: UIImage, completion: @escaping (String?) -> Void) {
+        guard let cgImage = image.cgImage ?? image.ciImage.flatMap({ CIContext().createCGImage($0, from: $0.extent) }) else {
+            DispatchQueue.main.async { completion(nil) }
+            return
+        }
+
+        let request = VNRecognizeTextRequest { request, error in
+            if error != nil {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            let observations = request.results as? [VNRecognizedTextObservation] ?? []
+            let lines = observations.compactMap { $0.topCandidates(1).first?.string }
+            let text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            DispatchQueue.main.async { completion(text.isEmpty ? nil : text) }
+        }
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        request.recognitionLanguages = ["it-IT", "en-US"]
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            do {
+                try handler.perform([request])
+            } catch {
+                DispatchQueue.main.async { completion(nil) }
+            }
+        }
+    }
+
+    private func matchCatalog(from text: String) -> CatalogSelection? {
+        let normalizedText = normalize(text)
+        let textTokens = tokenSet(from: normalizedText)
+        let textNumbers = numberTokens(from: normalizedText)
+        let entries = loadCatalogEntries()
+
+        var best: (selection: CatalogSelection, score: Double, singlePackage: Bool)?
+
+        for entry in entries {
+            let medScore = scoreMedicine(entry: entry, normalizedText: normalizedText, tokens: textTokens, numbers: textNumbers)
+            if medScore < 4 { continue }
+
+            for package in entry.packages {
+                let pkgScore = scorePackage(package: package, normalizedText: normalizedText, tokens: textTokens, numbers: textNumbers)
+                let total = medScore + pkgScore
+                if best == nil || total > best!.score {
+                    let selection = CatalogSelection(
+                        id: package.id,
+                        name: entry.name,
+                        principle: entry.principle,
+                        requiresPrescription: package.requiresPrescription,
+                        packageLabel: package.label,
+                        units: max(1, package.units),
+                        tipologia: package.tipologia,
+                        valore: package.dosageValue,
+                        unita: package.dosageUnit,
+                        volume: package.volume
+                    )
+                    best = (selection: selection, score: total, singlePackage: entry.packages.count == 1)
+                }
+            }
+        }
+
+        guard let best else { return nil }
+        let threshold = best.singlePackage ? 6.0 : 8.0
+        return best.score >= threshold ? best.selection : nil
+    }
+
+    private func loadCatalogEntries() -> [CatalogEntry] {
+        guard let url = Bundle.main.url(forResource: "medicinali", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return []
+        }
+
+        var results: [CatalogEntry] = []
+        for entry in json.prefix(1200) {
+            let medInfo = entry["medicinale"] as? [String: Any]
+            let rawName = (medInfo?["denominazioneMedicinale"] as? String)
+                ?? (entry["descrizioneFormaDosaggio"] as? String)
+                ?? (entry["principiAttiviIt"] as? [String])?.first
+                ?? ""
+            let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+
+            let principles = entry["principiAttiviIt"] as? [String] ?? []
+            let atc = entry["descrizioneAtc"] as? [String] ?? []
+            let principle: String = {
+                let joined = principles.joined(separator: ", ")
+                if !joined.isEmpty { return joined }
+                let fallback = atc.joined(separator: ", ")
+                return fallback.isEmpty ? name : fallback
+            }()
+
+            let medCodes: [String] = [
+                medInfo?["codiceMedicinale"] as? String,
+                (medInfo?["aic6"] as? Int).map(String.init)
+            ].compactMap { $0 }
+
+            let dosage = parseDosage(from: entry["descrizioneFormaDosaggio"] as? String)
+            let packages = (entry["confezioni"] as? [[String: Any]] ?? []).compactMap { pkg in
+                let label = (pkg["denominazionePackage"] as? String ?? "Confezione").trimmingCharacters(in: .whitespacesAndNewlines)
+                let units = extractUnitCount(from: label)
+                let volume = extractVolume(from: label)
+                let requiresPrescription = prescriptionFlag(in: pkg)
+                let pkgId = (pkg["idPackage"] as? String) ?? UUID().uuidString
+                let pkgCodes: [String] = [
+                    pkg["aic"] as? String,
+                    pkg["idPackage"] as? String
+                ].compactMap { $0 }
+
+                return CatalogPackage(
+                    id: pkgId,
+                    label: label,
+                    units: max(1, units),
+                    tipologia: label,
+                    dosageValue: dosage.value,
+                    dosageUnit: dosage.unit,
+                    volume: volume,
+                    requiresPrescription: requiresPrescription,
+                    codes: pkgCodes
+                )
+            }
+
+            if packages.isEmpty { continue }
+            results.append(CatalogEntry(name: name, principle: principle, packages: packages, codes: medCodes))
+        }
+        return results
+    }
+
+    private func scoreMedicine(entry: CatalogEntry, normalizedText: String, tokens: Set<String>, numbers: Set<String>) -> Double {
+        let nameNorm = normalize(entry.name)
+        guard !nameNorm.isEmpty else { return 0 }
+        let nameTokens = tokenSet(from: nameNorm)
+        let overlap = nameTokens.intersection(tokens).count
+        let ratio = Double(overlap) / Double(max(1, nameTokens.count))
+        var score = Double(overlap) * 1.5 + ratio * 2.0
+        if normalizedText.contains(nameNorm) {
+            score += 6.0
+        }
+        for code in entry.codes where numbers.contains(code) {
+            score += 4.0
+        }
+        return score
+    }
+
+    private func scorePackage(package: CatalogPackage, normalizedText: String, tokens: Set<String>, numbers: Set<String>) -> Double {
+        let labelNorm = normalize(package.label)
+        let labelTokens = tokenSet(from: labelNorm)
+        let overlap = labelTokens.intersection(tokens).count
+        let labelNumbers = numberTokens(from: labelNorm)
+        let numberOverlap = labelNumbers.intersection(numbers).count
+        var score = Double(overlap) * 1.0 + Double(numberOverlap) * 2.0
+        if !labelNorm.isEmpty && normalizedText.contains(labelNorm) {
+            score += 4.0
+        }
+        for code in package.codes where numbers.contains(code) {
+            score += 5.0
+        }
+        return score
+    }
+
+    private func normalize(_ text: String) -> String {
+        let folded = text.folding(options: [.diacriticInsensitive, .widthInsensitive, .caseInsensitive], locale: .current)
+        let upper = folded.uppercased()
+        let cleaned = upper.replacingOccurrences(of: "[^A-Z0-9]", with: " ", options: .regularExpression)
+        return cleaned.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func tokenSet(from normalized: String) -> Set<String> {
+        let tokens = normalized.split(separator: " ")
+        let filtered = tokens.map(String.init).filter { token in
+            if token.allSatisfy(\.isNumber) { return true }
+            return token.count > 1
+        }
+        return Set(filtered)
+    }
+
+    private func numberTokens(from normalized: String) -> Set<String> {
+        let pattern = "\\d+"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let matches = regex.matches(in: normalized, range: NSRange(normalized.startIndex..., in: normalized))
+        var results = Set<String>()
+        for match in matches {
+            if let range = Range(match.range, in: normalized) {
+                results.insert(String(normalized[range]))
+            }
+        }
+        return results
     }
 
     private func loadCatalog() -> [CatalogSelection] {
@@ -341,5 +619,137 @@ struct CatalogSearchScreen: View {
                 return String(first).uppercased() + part.dropFirst()
             }
             .joined(separator: " ")
+    }
+}
+
+private struct ImagePicker: UIViewControllerRepresentable {
+    let sourceType: UIImagePickerController.SourceType
+    let onImage: (UIImage?) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onImage: onImage)
+    }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = sourceType
+        picker.delegate = context.coordinator
+        picker.allowsEditing = false
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        private let onImage: (UIImage?) -> Void
+
+        init(onImage: @escaping (UIImage?) -> Void) {
+            self.onImage = onImage
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            onImage(nil)
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            let image = info[.originalImage] as? UIImage
+            onImage(image)
+        }
+    }
+}
+
+private struct SearchBarAccessoryInstaller: UIViewControllerRepresentable {
+    let systemImage: String
+    let accessibilityLabel: String
+    let onTap: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onTap: onTap)
+    }
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        let controller = UIViewController()
+        controller.view.isHidden = true
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        context.coordinator.onTap = onTap
+        context.coordinator.installIfNeeded(from: uiViewController, systemImage: systemImage, label: accessibilityLabel)
+    }
+
+    final class Coordinator {
+        var onTap: () -> Void
+        private weak var installedField: UISearchTextField?
+        private weak var installedButton: UIButton?
+
+        init(onTap: @escaping () -> Void) {
+            self.onTap = onTap
+        }
+
+        func installIfNeeded(from viewController: UIViewController, systemImage: String, label: String) {
+            DispatchQueue.main.async {
+                guard let searchController = viewController.findSearchController() else { return }
+                let textField = searchController.searchBar.searchTextField
+                if self.installedField === textField, let button = self.installedButton {
+                    button.setImage(UIImage(systemName: systemImage), for: .normal)
+                    button.accessibilityLabel = label
+                    return
+                }
+
+                let button = UIButton(type: .system)
+                button.setImage(UIImage(systemName: systemImage), for: .normal)
+                button.tintColor = .label
+                button.accessibilityLabel = label
+                button.contentEdgeInsets = UIEdgeInsets(top: 0, left: 6, bottom: 0, right: 6)
+                button.addAction(UIAction { [weak self] _ in
+                    self?.onTap()
+                }, for: .touchUpInside)
+
+                textField.rightView = button
+                textField.rightViewMode = .always
+                textField.clearButtonMode = .whileEditing
+
+                self.installedField = textField
+                self.installedButton = button
+            }
+        }
+    }
+}
+
+private extension UIViewController {
+    func findSearchController() -> UISearchController? {
+        var current: UIViewController? = self
+        while let controller = current {
+            if let searchController = controller.navigationItem.searchController {
+                return searchController
+            }
+            current = controller.parent
+        }
+
+        if let nav = navigationController, let searchController = nav.topViewController?.navigationItem.searchController {
+            return searchController
+        }
+
+        if let root = view.window?.rootViewController {
+            return root.findSearchControllerInChildren()
+        }
+
+        return nil
+    }
+
+    func findSearchControllerInChildren() -> UISearchController? {
+        if let searchController = navigationItem.searchController {
+            return searchController
+        }
+        for child in children {
+            if let searchController = child.findSearchControllerInChildren() {
+                return searchController
+            }
+        }
+        return nil
     }
 }
