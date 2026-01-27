@@ -54,7 +54,7 @@ struct SearchView: View {
     }
 
     private func row(for medicine: Medicine) -> some View {
-        MedicineRowView(medicine: medicine)
+        SearchMedicineRowView(medicine: medicine)
         .contentShape(Rectangle())
         .gesture(
             TapGesture().onEnded {

@@ -20,6 +20,8 @@ struct TodayView: View {
     private var doctors: FetchedResults<Doctor>
     @FetchRequest(fetchRequest: Todo.extractTodos())
     private var storedTodos: FetchedResults<Todo>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(key: "updated_at", ascending: false)])
+    private var stocks: FetchedResults<Stock>
 
     @StateObject private var viewModel = TodayViewModel()
     @StateObject private var locationVM = LocationSearchViewModel()
@@ -563,6 +565,7 @@ struct TodayView: View {
                 showToggle: false,
                 onToggle: {}
             )
+            .padding(.vertical, 4)
 
             VStack(spacing: 10) {
                 blockedStepRow(
