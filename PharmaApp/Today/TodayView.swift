@@ -311,14 +311,6 @@ struct TodayView: View {
         content
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color(UIColor.secondarySystemBackground))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.primary.opacity(0.05), lineWidth: 0.5)
-            )
             .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
             .listRowSeparator(.hidden)
     }
@@ -389,6 +381,7 @@ struct TodayView: View {
             rowContent
             .padding(.vertical, 4)
             .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 14))
+            .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
             .opacity(rowOpacity)
         }
@@ -770,14 +763,6 @@ struct TodayView: View {
                                     .foregroundStyle(Color.primary)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 6)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(Color(.systemGray5))
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .stroke(Color(.systemGray4), lineWidth: 1)
-                                    )
                             }
                         }
                         .buttonStyle(.plain)
