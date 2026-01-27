@@ -77,7 +77,6 @@ struct TodayView: View {
                             isLast: isLast
                         )
                     }
-                    .padding(.top, -6)
                 } header: {
                     HStack {
                         Text(sectionTitle(for: group))
@@ -86,8 +85,8 @@ struct TodayView: View {
                             .textCase(nil)
                         Spacer()
                     }
-                    .padding(.top, group.label == "Rifornimenti" ? 2 : 6)
-                    .padding(.bottom, -4)
+                    .padding(.top, 12)
+                    .padding(.bottom, 6)
                 }
             }
         }
@@ -317,6 +316,14 @@ struct TodayView: View {
             .listRowSeparator(.hidden)
     }
 
+    private var condensedSubtitleFont: Font {
+        Font.custom("SFProDisplay-CondensedLight", size: 15)
+    }
+
+    private var condensedSubtitleColor: Color {
+        Color.primary.opacity(0.45)
+    }
+
     @ViewBuilder
     private func todoListRow(for item: TodayTodoItem, isCompleted: Bool, isLast: Bool) -> some View {
         let med = medicine(for: item)
@@ -333,11 +340,11 @@ struct TodayView: View {
             let title = mainLineText(for: item)
             let medSummary = med.map { medicineSubtitle(for: $0) }
             let subtitle = subtitleLine(for: item, medicine: med, summary: medSummary)
-            let auxiliaryLine = auxiliaryLineText(for: item, summary: medSummary)
+            let auxiliaryLine = auxiliaryLineText(for: item)
             let actionText = actionText(for: item, isCompleted: isCompleted)
             let titleColor: Color = isCompleted ? .secondary : .primary
-            let actionLabelColor: Color = isCompleted ? .secondary : .primary
             let prescriptionMedicine = med
+            let usesCondensedSubtitleStyle = item.category == .therapy
             let isPrescriptionActionEnabled = item.category == .prescription
             let iconName = actionIcon(for: item)
             let swipeButtons = (item.category == .prescription && prescriptionMedicine != nil) ? prescriptionButtons(for: prescriptionMedicine!) : []
@@ -367,7 +374,11 @@ struct TodayView: View {
                             subtitle: subtitle,
                             auxiliaryLine: auxiliaryLine,
                             isCompleted: isCompleted,
-                            onToggle: { toggleCompletion(for: item) }
+                            onToggle: { toggleCompletion(for: item) },
+                            subtitleFont: usesCondensedSubtitleStyle ? condensedSubtitleFont : nil,
+                            subtitleColor: usesCondensedSubtitleStyle ? condensedSubtitleColor : nil,
+                            auxiliaryFont: usesCondensedSubtitleStyle ? condensedSubtitleFont : nil,
+                            auxiliaryColor: usesCondensedSubtitleStyle ? condensedSubtitleColor : nil
                         )
                     )
                 }
@@ -418,13 +429,14 @@ struct TodayView: View {
     }
 
     private func mainLineText(for item: TodayTodoItem) -> String {
-        let medicine = medicine(for: item)
-        let formattedName = formattedMedicineName(medicine?.nome ?? item.title)
-        return formattedName
+        if let medicine = medicine(for: item) {
+            return medicineTitleWithDosage(for: medicine)
+        }
+        return formattedMedicineName(item.title)
     }
 
     private func prescriptionMainText(for item: TodayTodoItem, medicine: Medicine?) -> String {
-        let medName = formattedMedicineName(medicine?.nome ?? item.title)
+        let medName = medicine.map { medicineTitleWithDosage(for: $0) } ?? formattedMedicineName(item.title)
         let doctorName = medicine.map { prescriptionDoctorName(for: $0) } ?? "medico"
         return "Chiedi ricetta per \(medName) al medico \(doctorName)"
     }
@@ -435,8 +447,8 @@ struct TodayView: View {
         summary: MedicineAggregateSubtitle?
     ) -> String? {
         if item.category == .therapy {
-            if let line1 = summary?.line1.trimmingCharacters(in: .whitespacesAndNewlines), !line1.isEmpty {
-                return line1
+            if let route = therapyRouteSubtitle(for: medicine) {
+                return route
             }
             if let med = medicine {
                 return personNameForTherapy(med)
@@ -452,9 +464,53 @@ struct TodayView: View {
         return nil
     }
 
-    private func auxiliaryLineText(for item: TodayTodoItem, summary: MedicineAggregateSubtitle?) -> Text? {
-        if item.category == .therapy, let line2 = summary?.line2, !line2.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return Text(line2)
+    private func therapyRouteSubtitle(for medicine: Medicine?) -> String? {
+        let packageRoutes = medicine.flatMap { getPackage(for: $0) }?.vie_somministrazione_json
+        let routes = administrationRoutesDescription(from: packageRoutes)
+            ?? administrationRoutesDescription(from: medicine?.vie_somministrazione_json)
+        guard let routes, !routes.isEmpty else { return nil }
+        return "Via di somministrazione: \(routes)"
+    }
+
+    private func administrationRoutesDescription(from jsonString: String?) -> String? {
+        guard let json = jsonString?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !json.isEmpty,
+              let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data, options: [])
+        else {
+            return nil
+        }
+
+        let rawRoutes: [String]
+        if let array = object as? [String] {
+            rawRoutes = array
+        } else if let string = object as? String {
+            rawRoutes = [string]
+        } else if let anyArray = object as? [Any] {
+            rawRoutes = anyArray.compactMap { $0 as? String }
+        } else {
+            return nil
+        }
+
+        let cleaned = rawRoutes
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !cleaned.isEmpty else { return nil }
+
+        var seen: Set<String> = []
+        let unique = cleaned.filter { seen.insert($0).inserted }
+        return unique.joined(separator: ", ")
+    }
+
+    private func auxiliaryLineText(for item: TodayTodoItem) -> Text? {
+        if item.category == .therapy {
+            let med = medicine(for: item)
+            let isShowingRoute = therapyRouteSubtitle(for: med) != nil
+            if isShowingRoute, let person = med.flatMap(personNameForTherapy) {
+                return Text(person)
+            }
+            return nil
         }
         if item.category == .purchase, let med = medicine(for: item) {
             var parts: [String] = []
@@ -528,7 +584,7 @@ struct TodayView: View {
 
     @ViewBuilder
     private func blockedTherapyCard(for item: TodayTodoItem, info: BlockedTherapyInfo, isLast: Bool) -> some View {
-        let medName = formattedMedicineName(info.medicine.nome)
+        let medName = medicineTitleWithDosage(for: info.medicine)
         todoCard(
             blockedStepRow(
                 title: "Assumi \(medName)",
@@ -547,7 +603,7 @@ struct TodayView: View {
 
     @ViewBuilder
     private func purchaseWithPrescriptionRow(for item: TodayTodoItem, medicine: Medicine, isCompleted: Bool, isLast: Bool) -> some View {
-        let medName = formattedMedicineName(medicine.nome)
+        let medName = medicineTitleWithDosage(for: medicine)
         let prescriptionDone = isAwaitingPrescription(medicine)
         let purchaseDone = isCompleted
         let refillDone = prescriptionDone && purchaseDone
@@ -1043,6 +1099,24 @@ struct TodayView: View {
         return trimmed.lowercased().localizedCapitalized
     }
 
+    private func medicineTitleWithDosage(for medicine: Medicine) -> String {
+        let base = formattedMedicineName(medicine.nome)
+        guard let dosage = medicineDosageLabel(for: medicine) else { return base }
+        return "\(base) \(dosage)"
+    }
+
+    private func medicineDosageLabel(for medicine: Medicine) -> String? {
+        guard let package = getPackage(for: medicine) else { return nil }
+        return packageDosageLabel(package)
+    }
+
+    private func packageDosageLabel(_ package: Package) -> String? {
+        let value = package.valore
+        guard value > 0 else { return nil }
+        let unit = package.unita.trimmingCharacters(in: .whitespacesAndNewlines)
+        return unit.isEmpty ? "\(value)" : "\(value) \(unit)"
+    }
+
     private func actionText(for item: TodayTodoItem, isCompleted: Bool) -> String {
         let med = medicine(for: item)
         switch item.category {
@@ -1058,6 +1132,9 @@ struct TodayView: View {
             if let med {
                 let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
                 let awaiting = isAwaitingPrescription(med)
+                if awaiting {
+                    return "Rifornire farmaco"
+                }
                 if !awaiting && needsPrescriptionBeforePurchase(med, recurrenceManager: rec) {
                     let doctor = prescriptionDoctor(for: med)
                     let docName = doctor.map(doctorFullName) ?? "medico"

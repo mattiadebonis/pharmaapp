@@ -39,6 +39,7 @@ struct PharmaAppApp: App {
 
     @StateObject var appViewModel = AppViewModel()
     @StateObject var authViewModel = AuthViewModel()
+    @StateObject private var favoritesStore = FavoritesStore()
     @StateObject private var notificationCoordinator = NotificationCoordinator(
         context: PersistenceController.shared.container.viewContext
     )
@@ -49,6 +50,7 @@ struct PharmaAppApp: App {
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .environmentObject(appViewModel)
                 .environmentObject(authViewModel)
+                .environmentObject(favoritesStore)
                 .onOpenURL { url in
                     authViewModel.handleOpenURL(url)
                 }

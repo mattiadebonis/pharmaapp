@@ -27,15 +27,24 @@ class DataManager {
         let medicines = loadMedicinesFromJSON()
 
         for medicineData in medicines {
-            let medicineId = UUID(uuidString: medicineData["id"] as? String ?? "") ?? UUID()
+            let info = medicineData["informazioni"] as? [String: Any]
+            let flags = medicineData["flags"] as? [String: Any]
+            let principles = medicineData["principi"] as? [String: Any]
             let medicinalInfo = medicineData["medicinale"] as? [String: Any]
+
+            func medValue(_ key: String) -> Any? {
+                value(for: key, in: medicineData, fallbacks: [info, flags, principles])
+            }
+
+            let medicineId = UUID(uuidString: medicineData["id"] as? String ?? "") ?? UUID()
             let nome = (medicinalInfo?["denominazioneMedicinale"] as? String)
-                ?? (medicineData["descrizioneFormaDosaggio"] as? String)
-                ?? (medicineData["principiAttiviIt"] as? [String])?.first
+                ?? (medValue("denominazioneMedicinale") as? String)
+                ?? (medValue("descrizioneFormaDosaggio") as? String)
+                ?? (medValue("principiAttiviIt") as? [String])?.first
                 ?? "Medicinale"
 
-            let principiAttivi = medicineData["principiAttiviIt"] as? [String] ?? []
-            let descrizioniAtc = medicineData["descrizioneAtc"] as? [String] ?? []
+            let principiAttivi = medValue("principiAttiviIt") as? [String] ?? []
+            let descrizioniAtc = medValue("descrizioneAtc") as? [String] ?? []
             let principioAttivo = {
                 let joined = principiAttivi.joined(separator: ", ")
                 if !joined.isEmpty { return joined }
@@ -45,7 +54,7 @@ class DataManager {
 
             let confezioni = medicineData["confezioni"] as? [[String: Any]] ?? []
             let obbligoRicetta = requiresPrescription(from: confezioni)
-            let dosage = parseDosage(from: medicineData["descrizioneFormaDosaggio"] as? String)
+            let dosage = parseDosage(from: medValue("descrizioneFormaDosaggio") as? String)
 
             let medicine = Medicine(context: context)
             medicine.id = medicineId
@@ -53,33 +62,33 @@ class DataManager {
             medicine.principio_attivo = principioAttivo
             medicine.obbligo_ricetta = obbligoRicetta
             medicine.codice_forma_dosaggio = stringValue(medicineData["id"])
-            medicine.principi_attivi_it_json = jsonString(from: medicineData["principiAttiviIt"])
-            medicine.vie_somministrazione_json = jsonString(from: medicineData["vieSomministrazione"])
-            medicine.codice_atc_json = jsonString(from: medicineData["codiceAtc"])
-            medicine.descrizione_atc_json = jsonString(from: medicineData["descrizioneAtc"])
-            medicine.forma_farmaceutica = medicineData["formaFarmaceutica"] as? String
-            medicine.piano_terapeutico = int32Value(medicineData["pianoTerapeutico"])
-            medicine.descrizione_forma_dosaggio = medicineData["descrizioneFormaDosaggio"] as? String
-            medicine.flag_alcol = boolValue(medicineData["flagAlcol"])
-            medicine.flag_potassio = boolValue(medicineData["flagPotassio"])
-            medicine.flag_guida = boolValue(medicineData["flagGuida"])
-            medicine.flag_dopante = boolValue(medicineData["flagDopante"])
-            medicine.livello_guida = stringValue(medicineData["livelloGuida"])
-            medicine.descrizione_livello = medicineData["descrizioneLivello"] as? String
-            medicine.carente = boolValue(medicineData["carente"])
-            medicine.innovativo = boolValue(medicineData["innovativo"])
-            medicine.orfano = boolValue(medicineData["orfano"])
-            medicine.revocato = boolValue(medicineData["revocato"])
-            medicine.sospeso = boolValue(medicineData["sospeso"])
-            medicine.principio_attivo_forma_json = jsonString(from: medicineData["principioAttivoForma"])
-            medicine.flag_fi = boolValue(medicineData["flagFI"])
-            medicine.flag_rcp = boolValue(medicineData["flagRCP"])
-            medicine.tipo_autorizzazione = stringValue(medicineData["tipoAutorizzazione"])
-            medicine.aic6_importazione_parallela = stringValue(medicineData["aic6ImportazioneParallela"])
-            medicine.sis_importazione_parallela = stringValue(medicineData["sisImportazioneParallela"])
-            medicine.den_importazione_parallela = stringValue(medicineData["denImportazioneParallela"])
-            medicine.rag_importazione_parallela = stringValue(medicineData["ragImportazioneParallela"])
-            medicine.position_json = jsonString(from: medicineData["position"])
+            medicine.principi_attivi_it_json = jsonString(from: medValue("principiAttiviIt"))
+            medicine.vie_somministrazione_json = jsonString(from: medValue("vieSomministrazione"))
+            medicine.codice_atc_json = jsonString(from: medValue("codiceAtc"))
+            medicine.descrizione_atc_json = jsonString(from: medValue("descrizioneAtc"))
+            medicine.forma_farmaceutica = medValue("formaFarmaceutica") as? String
+            medicine.piano_terapeutico = int32Value(medValue("pianoTerapeutico"))
+            medicine.descrizione_forma_dosaggio = medValue("descrizioneFormaDosaggio") as? String
+            medicine.flag_alcol = boolValue(medValue("flagAlcol"))
+            medicine.flag_potassio = boolValue(medValue("flagPotassio"))
+            medicine.flag_guida = boolValue(medValue("flagGuida"))
+            medicine.flag_dopante = boolValue(medValue("flagDopante"))
+            medicine.livello_guida = stringValue(medValue("livelloGuida"))
+            medicine.descrizione_livello = medValue("descrizioneLivello") as? String
+            medicine.carente = boolValue(medValue("carente"))
+            medicine.innovativo = boolValue(medValue("innovativo"))
+            medicine.orfano = boolValue(medValue("orfano"))
+            medicine.revocato = boolValue(medValue("revocato"))
+            medicine.sospeso = boolValue(medValue("sospeso"))
+            medicine.principio_attivo_forma_json = jsonString(from: medValue("principioAttivoForma") ?? principles?["forme"] ?? medValue("forme"))
+            medicine.flag_fi = boolValue(medValue("flagFI"))
+            medicine.flag_rcp = boolValue(medValue("flagRCP"))
+            medicine.tipo_autorizzazione = stringValue(medValue("tipoAutorizzazione"))
+            medicine.aic6_importazione_parallela = stringValue(medValue("aic6ImportazioneParallela"))
+            medicine.sis_importazione_parallela = stringValue(medValue("sisImportazioneParallela"))
+            medicine.den_importazione_parallela = stringValue(medValue("denImportazioneParallela"))
+            medicine.rag_importazione_parallela = stringValue(medValue("ragImportazioneParallela"))
+            medicine.position_json = jsonString(from: medValue("position"))
 
             medicine.codice_medicinale = stringValue(medicinalInfo?["codiceMedicinale"])
             medicine.aic6 = int32Value(medicinalInfo?["aic6"])
@@ -104,33 +113,34 @@ class DataManager {
                 package.principio_attivo = medicine.principio_attivo
                 package.id_package = stringValue(conf["idPackage"])
                 package.denominazione_package = conf["denominazionePackage"] as? String
-                package.descrizione_fornitura = conf["descrizioneFornitura"] as? String
-                package.classe_fornitura = conf["classeFornitura"] as? String
-                package.codice_forma_dosaggio = stringValue(conf["codiceFormaDosaggio"])
-                package.aic = conf["aic"] as? String
-                package.descrizione_rf_json = jsonString(from: conf["descrizioneRf"])
-                package.carenza_motivazione = conf["carenzaMotivazione"] as? String
-                package.carenza_inizio = parseISODate(conf["carenzaInizio"])
-                package.carenza_fine_presunta = parseISODate(conf["carenzaFinePresunta"])
-                package.data_autorizzazione = parseISODate(conf["dataAutorizzazione"])
-                package.flag_commercio = boolValue(conf["flagCommercio"])
-                package.flag_prescrizione = boolValue(conf["flagPrescrizione"])
-                package.carente = boolValue(conf["carente"])
-                package.vie_somministrazione_json = jsonString(from: conf["vieSomministrazione"])
-                package.classe_rimborsabilita = conf["classeRimborsabilita"] as? String
-                package.descrizione_rimborsabilita = conf["descrizioneRimborsabilita"] as? String
-                package.stato_amministrativo = conf["statoAmministrativo"] as? String
-                package.descrizione_stato_amministrativo = conf["descrizioneStatoAmministrativo"] as? String
-                package.data_registrazione_gu = parseISODate(conf["dataRegistrazioneGU"])
-                package.data_ricezione_pratica = parseISODate(conf["dataRicezionePratica"])
-                package.piano_terapeutico = int32Value(conf["pianoTerapeutico"])
-                package.fk_forma_dosaggio = stringValue(conf["fkFormaDosaggio"])
-                package.tipo_autorizzazione = stringValue(conf["tipoAutorizzazione"])
-                package.aic6_importazione_parallela = stringValue(conf["aic6ImportazioneParallela"])
-                package.sis_importazione_parallela = stringValue(conf["sisImportazioneParallela"])
-                package.den_importazione_parallela = stringValue(conf["denImportazioneParallela"])
-                package.rag_importazione_parallela = stringValue(conf["ragImportazioneParallela"])
-                package.categoria_medicinale = stringValue(conf["categoriaMedicinale"])
+                package.descrizione_fornitura = packageValue("descrizioneFornitura", in: conf) as? String
+                package.classe_fornitura = packageValue("classeFornitura", in: conf) as? String
+                package.codice_forma_dosaggio = stringValue(packageValue("codiceFormaDosaggio", in: conf))
+                package.aic = packageValue("aic", in: conf) as? String
+                package.descrizione_rf_json = jsonString(from: packageValue("descrizioneRf", in: conf))
+                package.carenza_motivazione = packageValue("carenzaMotivazione", in: conf) as? String
+                package.carenza_inizio = parseISODate(packageValue("carenzaInizio", in: conf))
+                package.carenza_fine_presunta = parseISODate(packageValue("carenzaFinePresunta", in: conf))
+                package.data_autorizzazione = parseISODate(packageValue("dataAutorizzazione", in: conf))
+                package.flag_commercio = boolValue(packageValue("flagCommercio", in: conf))
+                package.flag_prescrizione = boolValue(packagePrescriptionValue(in: conf))
+                package.carente = boolValue(packageValue("carente", in: conf))
+                let routesValue = packageAdministrationRoutes(in: conf) ?? medValue("vieSomministrazione")
+                package.vie_somministrazione_json = jsonString(from: routesValue)
+                package.classe_rimborsabilita = packageValue("classeRimborsabilita", in: conf) as? String
+                package.descrizione_rimborsabilita = packageValue("descrizioneRimborsabilita", in: conf) as? String
+                package.stato_amministrativo = packageValue("statoAmministrativo", in: conf) as? String
+                package.descrizione_stato_amministrativo = packageValue("descrizioneStatoAmministrativo", in: conf) as? String
+                package.data_registrazione_gu = parseISODate(packageValue("dataRegistrazioneGU", in: conf))
+                package.data_ricezione_pratica = parseISODate(packageValue("dataRicezionePratica", in: conf))
+                package.piano_terapeutico = int32Value(packageValue("pianoTerapeutico", in: conf))
+                package.fk_forma_dosaggio = stringValue(packageValue("fkFormaDosaggio", in: conf))
+                package.tipo_autorizzazione = stringValue(packageValue("tipoAutorizzazione", in: conf))
+                package.aic6_importazione_parallela = stringValue(packageValue("aic6ImportazioneParallela", in: conf))
+                package.sis_importazione_parallela = stringValue(packageValue("sisImportazioneParallela", in: conf))
+                package.den_importazione_parallela = stringValue(packageValue("denImportazioneParallela", in: conf))
+                package.rag_importazione_parallela = stringValue(packageValue("ragImportazioneParallela", in: conf))
+                package.categoria_medicinale = stringValue(packageValue("categoriaMedicinale", in: conf))
                 medicine.addToPackages(package)
             }
         }
@@ -272,22 +282,28 @@ class DataManager {
 
     private func requiresPrescription(from packages: [[String: Any]]) -> Bool {
         for package in packages {
-            if let intFlag = package["flagPrescrizione"] as? Int, intFlag != 0 {
+            if boolValue(packagePrescriptionValue(in: package)) {
                 return true
             }
-            if let boolFlag = package["flagPrescrizione"] as? Bool, boolFlag {
-                return true
-            }
-            if let classe = (package["classeFornitura"] as? String)?.uppercased(),
+            if let classe = (packageValue("classeFornitura", in: package) as? String)?.uppercased(),
                ["RR", "RRL", "OSP"].contains(classe) {
                 return true
             }
-            if let descrizioni = package["descrizioneRf"] as? [String],
-               descrizioni.contains(where: { $0.lowercased().contains("prescrizione") }) {
+            let descrizioni = stringArray(from: packageValue("descrizioneRf", in: package))
+            if descrizioni.contains(where: requiresPrescriptionDescription) {
                 return true
             }
         }
         return false
+    }
+
+    private func requiresPrescriptionDescription(_ description: String) -> Bool {
+        let lower = description.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if lower.contains("non soggetto") || lower.contains("senza ricetta") || lower.contains("senza prescrizione") || lower.contains("non richiede") {
+            return false
+        }
+        return lower.contains("prescrizione") || lower.contains("ricetta")
     }
 
     private func extractMedicinesArray(from json: Any) -> [[String: Any]] {
@@ -370,6 +386,59 @@ class DataManager {
             return ["1", "true", "yes", "si", "y", "t"].contains(normalized)
         }
         return false
+    }
+
+    private func value(for key: String, in dict: [String: Any], fallbacks: [[String: Any]?] = []) -> Any? {
+        var candidates: [[String: Any]?] = [dict]
+        candidates.append(contentsOf: fallbacks)
+        for candidate in candidates {
+            if let val = candidate?[key], !(val is NSNull) {
+                return val
+            }
+        }
+        return nil
+    }
+
+    private func packageValue(_ key: String, in package: [String: Any]) -> Any? {
+        let prescrizioni = package["prescrizioni"]
+        var fallbacks: [[String: Any]?] = []
+        if let dict = prescrizioni as? [String: Any] {
+            fallbacks.append(dict)
+        }
+        fallbacks.append(package["informazioni"] as? [String: Any])
+
+        if let val = value(for: key, in: package, fallbacks: fallbacks) {
+            return val
+        }
+
+        if key == "flagPrescrizione" {
+            if let bool = prescrizioni as? Bool { return bool }
+            if let int = prescrizioni as? Int { return int }
+            if let number = prescrizioni as? NSNumber { return number }
+        }
+        return nil
+    }
+
+    private func packagePrescriptionValue(in package: [String: Any]) -> Any? {
+        if let val = packageValue("flagPrescrizione", in: package) { return val }
+        return packageValue("prescrizione", in: package)
+    }
+
+    private func packageAdministrationRoutes(in package: [String: Any]) -> Any? {
+        if let routes = packageValue("vieSomministrazione", in: package) {
+            return routes
+        }
+        return nil
+    }
+
+    private func stringArray(from value: Any?) -> [String] {
+        guard let value = value else { return [] }
+        if let array = value as? [String] { return array }
+        if let string = value as? String { return [string] }
+        if let anyArray = value as? [Any] {
+            return anyArray.compactMap { $0 as? String }
+        }
+        return []
     }
 
     private func parseISODate(_ value: Any?) -> Date? {

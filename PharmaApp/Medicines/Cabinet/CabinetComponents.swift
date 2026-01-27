@@ -16,6 +16,7 @@ struct MedicineSwipeRow: View {
     var onRequestPrescription: (() -> Void)?
     var onMove: (() -> Void)?
     private var medicine: Medicine { entry.medicine }
+    @EnvironmentObject private var favoritesStore: FavoritesStore
 
     var body: some View {
         MedicineRowView(
@@ -62,6 +63,16 @@ struct MedicineSwipeRow: View {
         }
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
             Button {
+                favoritesStore.toggleFavorite(entry)
+            } label: {
+                swipeLabel(
+                    favoritesLabel,
+                    systemImage: favoritesIcon
+                )
+            }
+            .tint(favoritesTint)
+
+            Button {
                 if isInSelectionMode {
                     onToggleSelection()
                 } else {
@@ -85,6 +96,22 @@ struct MedicineSwipeRow: View {
                 .font(.system(size: 12, weight: .semibold))
         }
         .foregroundStyle(.white)
+    }
+
+    private var isFavorite: Bool {
+        favoritesStore.isFavorite(entry)
+    }
+
+    private var favoritesLabel: String {
+        isFavorite ? "Rimuovi preferiti" : "Preferito"
+    }
+
+    private var favoritesIcon: String {
+        isFavorite ? "heart.fill" : "heart"
+    }
+
+    private var favoritesTint: Color {
+        isFavorite ? .red : .pink
     }
 }
 

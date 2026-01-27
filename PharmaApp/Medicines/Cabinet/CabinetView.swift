@@ -4,6 +4,7 @@ import CoreData
 /// Vista dedicata al tab "Armadietto" (ex ramo medicines di FeedView)
 struct CabinetView: View {
     @EnvironmentObject private var appVM: AppViewModel
+    @EnvironmentObject private var favoritesStore: FavoritesStore
     @Environment(\.managedObjectContext) private var managedObjectContext
     @StateObject private var viewModel = CabinetViewModel()
 
@@ -143,12 +144,10 @@ struct CabinetView: View {
             if case .cabinet(let cabinet) = entry.kind { return cabinet }
             return nil
         }
-        let showsCabinetsFirst: Bool = {
-            guard let firstEntry = entries.first else { return false }
-            if case .cabinet = firstEntry.kind { return true }
-            return false
-        }()
-
+        let favoriteMedicineEntries = medicineEntries.filter { favoritesStore.isFavorite($0) }
+        let otherMedicineEntries = medicineEntries.filter { !favoritesStore.isFavorite($0) }
+        let favoriteCabinetEntries = cabinetEntries.filter { favoritesStore.isFavorite($0) }
+        let otherCabinetEntries = cabinetEntries.filter { !favoritesStore.isFavorite($0) }
         return AnyView(List {
             if appVM.suggestNearestPharmacies {
                 Section {
@@ -159,44 +158,62 @@ struct CabinetView: View {
                 .listSectionSeparator(.hidden)
             }
 
-            if showsCabinetsFirst {
-                if !cabinetEntries.isEmpty {
-                    Section(header: sectionHeader("Armadietti")) {
-                        ForEach(cabinetEntries, id: \.objectID) { cabinet in
-                            cabinetRow(for: cabinet)
-                        }
-                    }
-                    .listSectionSeparator(.hidden)
-                }
+            shelfSections(
+                favoriteCabinets: favoriteCabinetEntries,
+                favoriteMedicines: favoriteMedicineEntries,
+                cabinetEntries: otherCabinetEntries,
+                medicineEntries: otherMedicineEntries
+            )
+        })
+    }
 
-                if !medicineEntries.isEmpty {
-                    Section(header: sectionHeader("Farmaci")) {
-                        ForEach(medicineEntries, id: \.objectID) { entry in
-                            row(for: entry)
-                        }
-                    }
-                    .listSectionSeparator(.hidden)
-                }
-            } else {
-                if !medicineEntries.isEmpty {
-                    Section(header: sectionHeader("Farmaci")) {
-                        ForEach(medicineEntries, id: \.objectID) { entry in
-                            row(for: entry)
-                        }
-                    }
-                    .listSectionSeparator(.hidden)
-                }
+    @ViewBuilder
+    private func shelfSections(
+        favoriteCabinets: [Cabinet],
+        favoriteMedicines: [MedicinePackage],
+        cabinetEntries: [Cabinet],
+        medicineEntries: [MedicinePackage]
+    ) -> some View {
+        let hasFavorites = !favoriteCabinets.isEmpty || !favoriteMedicines.isEmpty
+        let hasCabinets = !cabinetEntries.isEmpty
+        let showMedicineHeader = hasFavorites || hasCabinets
 
-                if !cabinetEntries.isEmpty {
-                    Section(header: sectionHeader("Armadietti")) {
-                        ForEach(cabinetEntries, id: \.objectID) { cabinet in
-                            cabinetRow(for: cabinet)
-                        }
-                    }
-                    .listSectionSeparator(.hidden)
+        if hasFavorites {
+            Section(header: sectionHeader("Preferiti")) {
+                ForEach(favoriteCabinets, id: \.objectID) { cabinet in
+                    cabinetRow(for: cabinet)
+                }
+                ForEach(favoriteMedicines, id: \.objectID) { entry in
+                    row(for: entry)
                 }
             }
-        })
+            .listSectionSeparator(.hidden)
+        }
+
+        if hasCabinets {
+            Section(header: sectionHeader("Armadietti")) {
+                ForEach(cabinetEntries, id: \.objectID) { cabinet in
+                    cabinetRow(for: cabinet)
+                }
+            }
+            .listSectionSeparator(.hidden)
+        }
+
+        if !medicineEntries.isEmpty {
+            Section(header: medicineSectionHeader(showMedicineHeader)) {
+                ForEach(medicineEntries, id: \.objectID) { entry in
+                    row(for: entry)
+                }
+            }
+            .listSectionSeparator(.hidden)
+        }
+    }
+
+    @ViewBuilder
+    private func medicineSectionHeader(_ showTitle: Bool) -> some View {
+        if showTitle {
+            sectionHeader("Altri medicinali")
+        }
     }
 
     private func sectionHeader(_ title: String) -> some View {
@@ -209,6 +226,16 @@ struct CabinetView: View {
         .padding(.top, 12)
         .padding(.bottom, 6)
         .padding(.leading, 4)
+    }
+
+    private func swipeLabel(_ text: String, systemImage: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+            Text(text)
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .foregroundStyle(.white)
     }
 
     // MARK: - Helpers
@@ -316,6 +343,7 @@ struct CabinetView: View {
             option: options.first
         )
 
+        let isFavoriteCabinet = favoritesStore.isFavorite(cabinet)
         return ZStack {
             Button {
                 activeCabinetID = cabinet.objectID
@@ -339,6 +367,17 @@ struct CabinetView: View {
                 EmptyView()
             }
             .hidden()
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            Button {
+                favoritesStore.toggleFavorite(cabinet)
+            } label: {
+                swipeLabel(
+                    isFavoriteCabinet ? "Rimuovi preferiti" : "Preferito",
+                    systemImage: isFavoriteCabinet ? "heart.fill" : "heart"
+                )
+            }
+            .tint(isFavoriteCabinet ? .red : .pink)
         }
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden, edges: .all)

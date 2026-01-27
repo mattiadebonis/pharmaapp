@@ -29,16 +29,18 @@ struct CabinetCardView: View {
                     }
                     .foregroundStyle(Color.primary.opacity(0.45))
                 }
-                Text(subtitle.line1)
-                    .font(condensedSubtitleFont)
-                    .foregroundStyle(subtitleColor)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Text(subtitle.line2)
-                    .font(condensedSubtitleFont)
-                    .foregroundStyle(subtitleColor)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                if let subtitle {
+                    Text(subtitle.line1)
+                        .font(condensedSubtitleFont)
+                        .foregroundStyle(subtitleColor)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text(subtitle.line2)
+                        .font(condensedSubtitleFont)
+                        .foregroundStyle(subtitleColor)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
             Spacer(minLength: 0)
         }

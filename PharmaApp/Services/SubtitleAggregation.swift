@@ -35,8 +35,9 @@ func makeMedicineSubtitle(
     return builder.build(for: medicine, now: now)
 }
 
-func makeDrawerSubtitle(drawer: Cabinet, now: Date = Date()) -> DrawerAggregateSubtitle {
+func makeDrawerSubtitle(drawer: Cabinet, now: Date = Date()) -> DrawerAggregateSubtitle? {
     let entries = Array(drawer.medicinePackages ?? [])
+    guard !entries.isEmpty else { return nil }
     let context = drawer.managedObjectContext ?? PersistenceController.shared.container.viewContext
     let recurrenceManager = RecurrenceManager(context: context)
 

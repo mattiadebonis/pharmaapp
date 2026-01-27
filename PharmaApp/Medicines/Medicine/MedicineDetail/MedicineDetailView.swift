@@ -143,7 +143,7 @@ struct MedicineDetailView: View {
             let current = Int(medicine.custom_stock_threshold)
             customThresholdValue = current > 0 ? current : 7
             loadRulesState()
-            selectedDoctorID = medicine.prescribingDoctor?.objectID
+            selectedDoctorID = medicine.obbligo_ricetta ? medicine.prescribingDoctor?.objectID : nil
             syncDeadlineInputs()
         }
         .sheet(isPresented: $showThresholdSheet) {
@@ -161,10 +161,13 @@ struct MedicineDetailView: View {
                 onPersist: persistIntakeConfirmation
             )
         }
-	        .sheet(isPresented: $showDoctorSheet) {
-	            DoctorSheet(
-	                selectedDoctorID: $selectedDoctorID,
-	                doctors: doctors,
+        .sheet(isPresented: Binding(
+            get: { medicine.obbligo_ricetta && showDoctorSheet },
+            set: { showDoctorSheet = $0 }
+        )) {
+            DoctorSheet(
+                selectedDoctorID: $selectedDoctorID,
+                doctors: doctors,
                 onChange: { newID in
                     selectedDoctorID = newID
                     medicine.prescribingDoctor = doctors.first(where: { $0.objectID == newID })
@@ -172,7 +175,10 @@ struct MedicineDetailView: View {
                 }
             )
         }
-        .sheet(isPresented: $showEmailSheet) {
+        .sheet(isPresented: Binding(
+            get: { medicine.obbligo_ricetta && showEmailSheet },
+            set: { showEmailSheet = $0 }
+        )) {
             EmailRequestSheet(
                 doctorName: doctorDisplayName,
                 primaryMedicine: medicine,
@@ -559,10 +565,12 @@ struct MedicineDetailView: View {
     }
     
     private var assignedDoctor: Doctor? {
-        medicine.prescribingDoctor
+        guard medicine.obbligo_ricetta else { return nil }
+        return medicine.prescribingDoctor
     }
     
     private var assignedDoctorEmail: String? {
+        guard medicine.obbligo_ricetta else { return nil }
         guard let email = assignedDoctor?.mail?.trimmingCharacters(in: .whitespacesAndNewlines),
               !email.isEmpty else {
             return nil
@@ -571,6 +579,7 @@ struct MedicineDetailView: View {
     }
 
     private var assignedDoctorPhoneInternational: String? {
+        guard medicine.obbligo_ricetta else { return nil }
         guard let raw = assignedDoctor?.telefono?.trimmingCharacters(in: .whitespacesAndNewlines),
               !raw.isEmpty else {
             return nil
@@ -579,10 +588,12 @@ struct MedicineDetailView: View {
     }
 
     private var assignedDoctorName: String? {
-        doctorFullName(assignedDoctor)
+        guard medicine.obbligo_ricetta else { return nil }
+        return doctorFullName(assignedDoctor)
     }
     
     private var doctorWithEmail: Doctor? {
+        guard medicine.obbligo_ricetta else { return nil }
         if let doctor = assignedDoctor, let email = doctor.mail?.trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty {
             return doctor
         }
@@ -590,10 +601,12 @@ struct MedicineDetailView: View {
     }
     
     private var doctorEmail: String? {
-        doctorWithEmail?.mail?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard medicine.obbligo_ricetta else { return nil }
+        return doctorWithEmail?.mail?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var doctorPhoneInternational: String? {
+        guard medicine.obbligo_ricetta else { return nil }
         if let assigned = assignedDoctorPhoneInternational {
             return assigned
         }
@@ -612,6 +625,7 @@ struct MedicineDetailView: View {
     }
     
     private var doctorDisplayName: String {
+        guard medicine.obbligo_ricetta else { return "Dottore" }
         if let assignedName = assignedDoctorName, !assignedName.isEmpty {
             return assignedName
         }
@@ -643,7 +657,7 @@ struct MedicineDetailView: View {
     }
     
     private func handlePrimaryAction(_ action: PrimaryAction) {
-        if action.label == "Richiedi ricetta" {
+        if action.label == "Richiedi ricetta", medicine.obbligo_ricetta {
             showEmailSheet = true
         } else {
             stockService.addPurchase(medicine: medicine, package: package)

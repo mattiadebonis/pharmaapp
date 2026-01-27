@@ -1,11 +1,66 @@
 [
   {
     "id": "0000000979",
-    "principiAttiviIt": [
-      "PARACETAMOLO",
-      "CAFFEINA",
-      "PROPIFENAZONE"
-    ],
+    "titolo": "SARIDON",
+    "medicinale": {
+      "codiceMedicinale": "419",
+      "aic6": 4336,
+      "denominazioneMedicinale": "SARIDON",
+      "codiceSis": 22,
+      "aziendaTitolare": "BAYER S.P.A.",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "A"
+    },
+    "principi": {
+      "principiAttiviIt": [
+        "PARACETAMOLO",
+        "CAFFEINA",
+        "PROPIFENAZONE"
+      ],
+      "forme": [
+        {
+          "formaFarmaceutica": "Compressa",
+          "principiAttivi": [
+            "CAFFEINA",
+            "PARACETAMOLO",
+            "PROPIFENAZONE"
+          ],
+          "flagDopante": null
+        }
+      ]
+    },
+    "informazioni": {
+      "formaFarmaceutica": "Compressa",
+      "descrizioneFormaDosaggio": "250 mg ,150 mg ,25 mg COMPRESSA",
+      "pianoTerapeutico": 0,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": "A",
+      "position": null,
+      "vieSomministrazione": [
+        "ORALE"
+      ],
+      "codiceAtc": [
+        "N02BE51"
+      ],
+      "descrizioneAtc": [
+        "PARACETAMOLO, ASSOCIAZIONI ESCL. PSICOLETTICI"
+      ]
+    },
+    "flags": {
+      "flagAlcol": 0,
+      "flagPotassio": 0,
+      "flagGuida": 0,
+      "flagDopante": 0,
+      "carente": 1,
+      "innovativo": 0,
+      "orfano": 0,
+      "revocato": 0,
+      "sospeso": 0,
+      "flagFI": true,
+      "flagRCP": true
+    },
     "confezioni": [
       {
         "idPackage": "1469",
@@ -21,26 +76,25 @@
         "carenzaInizio": null,
         "carenzaFinePresunta": null,
         "dataAutorizzazione": "1987-03-09T00:00:00.000+00:00",
+        "dataRegistrazioneGU": "1987-03-08T00:00:00.000+00:00",
+        "dataRicezionePratica": "1900-01-01T02:00:00.000+00:00",
         "flagCommercio": 1,
         "flagPrescrizione": 0,
         "carente": 0,
-        "vieSomministrazione": [
-          "ORALE"
-        ],
+        "pianoTerapeutico": null,
+        "tipoAutorizzazione": "A",
         "classeRimborsabilita": "C-bis",
         "descrizioneRimborsabilita": "A TOTALE CARICO DELL'ASSISTITO",
         "statoAmministrativo": "A",
         "descrizioneStatoAmministrativo": "AUTORIZZATA",
-        "dataRegistrazioneGU": "1987-03-08T00:00:00.000+00:00",
-        "dataRicezionePratica": "1900-01-01T02:00:00.000+00:00",
-        "pianoTerapeutico": null,
-        "fkFormaDosaggio": null,
-        "tipoAutorizzazione": "A",
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "categoriaMedicinale": "1",
         "aic6ImportazioneParallela": null,
         "sisImportazioneParallela": null,
         "denImportazioneParallela": null,
-        "ragImportazioneParallela": null,
-        "categoriaMedicinale": "1"
+        "ragImportazioneParallela": null
       },
       {
         "idPackage": "1472",
@@ -56,26 +110,25 @@
         "carenzaInizio": null,
         "carenzaFinePresunta": null,
         "dataAutorizzazione": "1989-09-01T00:00:00.000+00:00",
+        "dataRegistrazioneGU": null,
+        "dataRicezionePratica": "1988-10-27T02:00:00.000+00:00",
         "flagCommercio": 0,
         "flagPrescrizione": 0,
         "carente": 0,
-        "vieSomministrazione": [
-          "ORALE"
-        ],
+        "pianoTerapeutico": null,
+        "tipoAutorizzazione": "A",
         "classeRimborsabilita": "C-bis",
         "descrizioneRimborsabilita": "A TOTALE CARICO DELL'ASSISTITO",
         "statoAmministrativo": "A",
         "descrizioneStatoAmministrativo": "AUTORIZZATA",
-        "dataRegistrazioneGU": null,
-        "dataRicezionePratica": "1988-10-27T02:00:00.000+00:00",
-        "pianoTerapeutico": null,
-        "fkFormaDosaggio": null,
-        "tipoAutorizzazione": "A",
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "categoriaMedicinale": "1",
         "aic6ImportazioneParallela": null,
         "sisImportazioneParallela": null,
         "denImportazioneParallela": null,
-        "ragImportazioneParallela": null,
-        "categoriaMedicinale": "1"
+        "ragImportazioneParallela": null
       },
       {
         "idPackage": "1474",
@@ -91,28 +144,36 @@
         "carenzaInizio": "2025-12-31T00:00:00.000+00:00",
         "carenzaFinePresunta": null,
         "dataAutorizzazione": "2002-12-17T00:00:00.000+00:00",
+        "dataRegistrazioneGU": "2002-12-16T00:00:00.000+00:00",
+        "dataRicezionePratica": "2002-03-05T02:00:00.000+00:00",
         "flagCommercio": 0,
         "flagPrescrizione": 0,
         "carente": 1,
-        "vieSomministrazione": [
-          "ORALE"
-        ],
+        "pianoTerapeutico": null,
+        "tipoAutorizzazione": "A",
         "classeRimborsabilita": "C-bis",
         "descrizioneRimborsabilita": "A TOTALE CARICO DELL'ASSISTITO",
         "statoAmministrativo": "A",
         "descrizioneStatoAmministrativo": "AUTORIZZATA",
-        "dataRegistrazioneGU": "2002-12-16T00:00:00.000+00:00",
-        "dataRicezionePratica": "2002-03-05T02:00:00.000+00:00",
-        "pianoTerapeutico": null,
-        "fkFormaDosaggio": null,
-        "tipoAutorizzazione": "A",
+        "vieSomministrazione": [
+          "ORALE"
+        ],
+        "categoriaMedicinale": "1",
         "aic6ImportazioneParallela": null,
         "sisImportazioneParallela": null,
         "denImportazioneParallela": null,
-        "ragImportazioneParallela": null,
-        "categoriaMedicinale": "1"
+        "ragImportazioneParallela": null
       }
     ],
+    "response": {
+      "httpStatus": 200,
+      "bodyStatus": 200,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000980",
+    "titolo": "SARIDON",
     "medicinale": {
       "codiceMedicinale": "419",
       "aic6": 4336,
@@ -121,494 +182,971 @@
       "aziendaTitolare": "BAYER S.P.A.",
       "categoriaMedicinale": 1,
       "commercio": null,
-      "statoAmministrativo": "A"
+      "statoAmministrativo": "T"
     },
-    "vieSomministrazione": [
-      "ORALE"
-    ],
-    "codiceAtc": [
-      "N02BE51"
-    ],
-    "descrizioneAtc": [
-      "PARACETAMOLO, ASSOCIAZIONI ESCL. PSICOLETTICI"
-    ],
-    "formaFarmaceutica": "Compressa",
-    "pianoTerapeutico": 0,
-    "descrizioneFormaDosaggio": "250 mg ,150 mg ,25 mg COMPRESSA",
-    "flagAlcol": 0,
-    "flagPotassio": 0,
-    "flagGuida": 0,
-    "flagDopante": 0,
-    "livelloGuida": null,
-    "descrizioneLivello": null,
-    "carente": 1,
-    "innovativo": 0,
-    "orfano": 0,
-    "revocato": 0,
-    "sospeso": 0,
-    "principioAttivoForma": [
-      {
-        "principioAttivo": [
-          "CAFFEINA",
-          "PARACETAMOLO",
-          "PROPIFENAZONE"
-        ],
-        "formaFarmaceutica": "Compressa",
-        "flagDopante": null
-      }
-    ],
-    "flagFI": true,
-    "flagRCP": true,
-    "tipoAutorizzazione": "A",
-    "aic6ImportazioneParallela": null,
-    "sisImportazioneParallela": null,
-    "denImportazioneParallela": null,
-    "ragImportazioneParallela": null,
-    "position": null
+    "principi": {
+      "principiAttiviIt": [
+        "PARACETAMOLO",
+        "CAFFEINA",
+        "PROPIFENAZONE"
+      ],
+      "forme": [
+        {
+          "formaFarmaceutica": "Compressa",
+          "principiAttivi": [
+            "CAFFEINA",
+            "PARACETAMOLO",
+            "PROPIFENAZONE"
+          ],
+          "flagDopante": null
+        }
+      ]
+    },
+    "informazioni": {
+      "formaFarmaceutica": "Compressa",
+      "descrizioneFormaDosaggio": "REV 0 g ,0 g ,0 g COMPRESSA senza caffeina",
+      "pianoTerapeutico": 0,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": "A",
+      "position": null,
+      "vieSomministrazione": [
+        "ORALE"
+      ],
+      "codiceAtc": [
+        "N02BE51"
+      ],
+      "descrizioneAtc": [
+        "PARACETAMOLO, ASSOCIAZIONI ESCL. PSICOLETTICI"
+      ]
+    },
+    "flags": {
+      "flagAlcol": 0,
+      "flagPotassio": 0,
+      "flagGuida": 0,
+      "flagDopante": 0,
+      "carente": 0,
+      "innovativo": 0,
+      "orfano": 0,
+      "revocato": 1,
+      "sospeso": 0,
+      "flagFI": true,
+      "flagRCP": true
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 200,
+      "bodyStatus": 200,
+      "error": null
+    }
   },
   {
-    "id": "0000050046",
-    "principiAttiviIt": [
-      "VORTIOXETINA BROMIDRATO",
-      "VORTIOXETINA"
-    ],
-    "confezioni": [
-      {
-        "idPackage": "146683",
-        "denominazionePackage": "10 MG - COMPRESSE RIVESTITE CON FILM - USO ORALE - BLISTER (PVC/PVDC/ALU) - 7 COMPRESSE",
-        "descrizioneFornitura": null,
-        "classeFornitura": "RR",
-        "codiceFormaDosaggio": "0000050046",
-        "aic": "043187083",
-        "descrizioneRf": [
-          "Soggetto a Prescrizione Medica"
-        ],
-        "carenzaMotivazione": null,
-        "carenzaInizio": null,
-        "carenzaFinePresunta": null,
-        "dataAutorizzazione": "2014-03-19T00:00:00.000+00:00",
-        "flagCommercio": 0,
-        "flagPrescrizione": 1,
-        "carente": 0,
-        "vieSomministrazione": [
-          "ORALE"
-        ],
-        "classeRimborsabilita": "Cnn",
-        "descrizioneRimborsabilita": "C NON NEGOZIATA",
-        "statoAmministrativo": "A",
-        "descrizioneStatoAmministrativo": "AUTORIZZATA",
-        "dataRegistrazioneGU": "2014-03-18T00:00:00.000+00:00",
-        "dataRicezionePratica": "2012-09-19T08:00:00.000+00:00",
-        "pianoTerapeutico": null,
-        "fkFormaDosaggio": null,
-        "tipoAutorizzazione": "A",
-        "aic6ImportazioneParallela": null,
-        "sisImportazioneParallela": null,
-        "denImportazioneParallela": null,
-        "ragImportazioneParallela": null,
-        "categoriaMedicinale": "1"
-      },
-      {
-        "idPackage": "146684",
-        "denominazionePackage": "10 MG - COMPRESSE RIVESTITE CON FILM - USO ORALE - BLISTER (PVC/PVDC/ALU) - 14 COMPRESSE",
-        "descrizioneFornitura": null,
-        "classeFornitura": "RR",
-        "codiceFormaDosaggio": "0000050046",
-        "aic": "043187095",
-        "descrizioneRf": [
-          "Soggetto a Prescrizione Medica"
-        ],
-        "carenzaMotivazione": null,
-        "carenzaInizio": null,
-        "carenzaFinePresunta": null,
-        "dataAutorizzazione": "2014-03-19T00:00:00.000+00:00",
-        "flagCommercio": 0,
-        "flagPrescrizione": 1,
-        "carente": 0,
-        "vieSomministrazione": [
-          "ORALE"
-        ],
-        "classeRimborsabilita": "Cnn",
-        "descrizioneRimborsabilita": "C NON NEGOZIATA",
-        "statoAmministrativo": "A",
-        "descrizioneStatoAmministrativo": "AUTORIZZATA",
-        "dataRegistrazioneGU": "2014-03-18T00:00:00.000+00:00",
-        "dataRicezionePratica": "2012-09-19T08:00:00.000+00:00",
-        "pianoTerapeutico": null,
-        "fkFormaDosaggio": null,
-        "tipoAutorizzazione": "A",
-        "aic6ImportazioneParallela": null,
-        "sisImportazioneParallela": null,
-        "denImportazioneParallela": null,
-        "ragImportazioneParallela": null,
-        "categoriaMedicinale": "1"
-      },
-      {
-        "idPackage": "146685",
-        "denominazionePackage": "10 MG - COMPRESSE RIVESTITE CON FILM - USO ORALE - BLISTER (PVC/PVDC/ALU) - 28 COMPRESSE",
-        "descrizioneFornitura": null,
-        "classeFornitura": "RR",
-        "codiceFormaDosaggio": "0000050046",
-        "aic": "043187107",
-        "descrizioneRf": [
-          "Soggetto a Prescrizione Medica"
-        ],
-        "carenzaMotivazione": null,
-        "carenzaInizio": null,
-        "carenzaFinePresunta": null,
-        "dataAutorizzazione": "2014-03-19T00:00:00.000+00:00",
-        "flagCommercio": 1,
-        "flagPrescrizione": 1,
-        "carente": 0,
-        "vieSomministrazione": [
-          "ORALE"
-        ],
-        "classeRimborsabilita": "A",
-        "descrizioneRimborsabilita": "A TOTALE CARICO DEL SSN.",
-        "statoAmministrativo": "A",
-        "descrizioneStatoAmministrativo": "AUTORIZZATA",
-        "dataRegistrazioneGU": "2014-03-18T00:00:00.000+00:00",
-        "dataRicezionePratica": "2012-09-19T08:00:00.000+00:00",
-        "pianoTerapeutico": 0,
-        "fkFormaDosaggio": null,
-        "tipoAutorizzazione": "A",
-        "aic6ImportazioneParallela": null,
-        "sisImportazioneParallela": null,
-        "denImportazioneParallela": null,
-        "ragImportazioneParallela": null,
-        "categoriaMedicinale": "1"
-      },
-      {
-        "idPackage": "146686",
-        "denominazionePackage": "10 MG - COMPRESSE RIVESTITE CON FILM - USO ORALE - BLISTER (PVC/PVDC/ALU) - 56 COMPRESSE",
-        "descrizioneFornitura": null,
-        "classeFornitura": "RR",
-        "codiceFormaDosaggio": "0000050046",
-        "aic": "043187119",
-        "descrizioneRf": [
-          "Soggetto a Prescrizione Medica"
-        ],
-        "carenzaMotivazione": null,
-        "carenzaInizio": null,
-        "carenzaFinePresunta": null,
-        "dataAutorizzazione": "2014-03-19T00:00:00.000+00:00",
-        "flagCommercio": 0,
-        "flagPrescrizione": 1,
-        "carente": 0,
-        "vieSomministrazione": [
-          "ORALE"
-        ],
-        "classeRimborsabilita": "Cnn",
-        "descrizioneRimborsabilita": "C NON NEGOZIATA",
-        "statoAmministrativo": "A",
-        "descrizioneStatoAmministrativo": "AUTORIZZATA",
-        "dataRegistrazioneGU": "2014-03-18T00:00:00.000+00:00",
-        "dataRicezionePratica": "2012-09-19T08:00:00.000+00:00",
-        "pianoTerapeutico": null,
-        "fkFormaDosaggio": null,
-        "tipoAutorizzazione": "A",
-        "aic6ImportazioneParallela": null,
-        "sisImportazioneParallela": null,
-        "denImportazioneParallela": null,
-        "ragImportazioneParallela": null,
-        "categoriaMedicinale": "1"
-      },
-      {
-        "idPackage": "146687",
-        "denominazionePackage": "10 MG - COMPRESSE RIVESTITE CON FILM - USO ORALE - BLISTER (PVC/PVDC/ALU) - 98 COMPRESSE",
-        "descrizioneFornitura": null,
-        "classeFornitura": "OSP",
-        "codiceFormaDosaggio": "0000050046",
-        "aic": "043187121",
-        "descrizioneRf": [
-          "Medicinale soggetto a prescrizione medica limitativa"
-        ],
-        "carenzaMotivazione": null,
-        "carenzaInizio": null,
-        "carenzaFinePresunta": null,
-        "dataAutorizzazione": "2014-03-19T00:00:00.000+00:00",
-        "flagCommercio": 0,
-        "flagPrescrizione": 1,
-        "carente": 0,
-        "vieSomministrazione": [
-          "ORALE"
-        ],
-        "classeRimborsabilita": "Cnn",
-        "descrizioneRimborsabilita": "C NON NEGOZIATA",
-        "statoAmministrativo": "A",
-        "descrizioneStatoAmministrativo": "AUTORIZZATA",
-        "dataRegistrazioneGU": "2014-03-18T00:00:00.000+00:00",
-        "dataRicezionePratica": "2012-09-19T08:00:00.000+00:00",
-        "pianoTerapeutico": null,
-        "fkFormaDosaggio": null,
-        "tipoAutorizzazione": "A",
-        "aic6ImportazioneParallela": null,
-        "sisImportazioneParallela": null,
-        "denImportazioneParallela": null,
-        "ragImportazioneParallela": null,
-        "categoriaMedicinale": "1"
-      },
-      {
-        "idPackage": "146688",
-        "denominazionePackage": "10 MG - COMPRESSE RIVESTITE CON FILM - USO ORALE - BLISTER (PVC/PVDC/ALU) - 56X1 COMPRESSA (DOSE UNITARIA)",
-        "descrizioneFornitura": null,
-        "classeFornitura": "RR",
-        "codiceFormaDosaggio": "0000050046",
-        "aic": "043187133",
-        "descrizioneRf": [
-          "Soggetto a Prescrizione Medica"
-        ],
-        "carenzaMotivazione": null,
-        "carenzaInizio": null,
-        "carenzaFinePresunta": null,
-        "dataAutorizzazione": "2014-03-19T00:00:00.000+00:00",
-        "flagCommercio": 0,
-        "flagPrescrizione": 1,
-        "carente": 0,
-        "vieSomministrazione": [
-          "ORALE"
-        ],
-        "classeRimborsabilita": "Cnn",
-        "descrizioneRimborsabilita": "C NON NEGOZIATA",
-        "statoAmministrativo": "A",
-        "descrizioneStatoAmministrativo": "AUTORIZZATA",
-        "dataRegistrazioneGU": "2014-03-18T00:00:00.000+00:00",
-        "dataRicezionePratica": "2012-09-19T08:00:00.000+00:00",
-        "pianoTerapeutico": null,
-        "fkFormaDosaggio": null,
-        "tipoAutorizzazione": "A",
-        "aic6ImportazioneParallela": null,
-        "sisImportazioneParallela": null,
-        "denImportazioneParallela": null,
-        "ragImportazioneParallela": null,
-        "categoriaMedicinale": "1"
-      },
-      {
-        "idPackage": "146689",
-        "denominazionePackage": "10 MG - COMPRESSE RIVESTITE CON FILM - USO ORALE - BLISTER (PVC/PVDC/ALU) - 98X1 COMPRESSA (DOSE UNITARIA)",
-        "descrizioneFornitura": null,
-        "classeFornitura": "OSP",
-        "codiceFormaDosaggio": "0000050046",
-        "aic": "043187145",
-        "descrizioneRf": [
-          "Medicinale soggetto a prescrizione medica limitativa"
-        ],
-        "carenzaMotivazione": null,
-        "carenzaInizio": null,
-        "carenzaFinePresunta": null,
-        "dataAutorizzazione": "2014-03-19T00:00:00.000+00:00",
-        "flagCommercio": 0,
-        "flagPrescrizione": 1,
-        "carente": 0,
-        "vieSomministrazione": [
-          "ORALE"
-        ],
-        "classeRimborsabilita": "Cnn",
-        "descrizioneRimborsabilita": "C NON NEGOZIATA",
-        "statoAmministrativo": "A",
-        "descrizioneStatoAmministrativo": "AUTORIZZATA",
-        "dataRegistrazioneGU": "2014-03-18T00:00:00.000+00:00",
-        "dataRicezionePratica": "2012-09-19T08:00:00.000+00:00",
-        "pianoTerapeutico": null,
-        "fkFormaDosaggio": null,
-        "tipoAutorizzazione": "A",
-        "aic6ImportazioneParallela": null,
-        "sisImportazioneParallela": null,
-        "denImportazioneParallela": null,
-        "ragImportazioneParallela": null,
-        "categoriaMedicinale": "1"
-      },
-      {
-        "idPackage": "146690",
-        "denominazionePackage": "10 MG - COMPRESSE RIVESTITE CON FILM - USO ORALE - BLISTER (PVC/PVDC/ALU) - 490 (5X98) COMPRESSE (MULTIPACK)",
-        "descrizioneFornitura": null,
-        "classeFornitura": "OSP",
-        "codiceFormaDosaggio": "0000050046",
-        "aic": "043187158",
-        "descrizioneRf": [
-          "Medicinale soggetto a prescrizione medica limitativa"
-        ],
-        "carenzaMotivazione": null,
-        "carenzaInizio": null,
-        "carenzaFinePresunta": null,
-        "dataAutorizzazione": "2014-03-19T00:00:00.000+00:00",
-        "flagCommercio": 0,
-        "flagPrescrizione": 1,
-        "carente": 0,
-        "vieSomministrazione": [
-          "ORALE"
-        ],
-        "classeRimborsabilita": "Cnn",
-        "descrizioneRimborsabilita": "C NON NEGOZIATA",
-        "statoAmministrativo": "A",
-        "descrizioneStatoAmministrativo": "AUTORIZZATA",
-        "dataRegistrazioneGU": "2014-03-18T00:00:00.000+00:00",
-        "dataRicezionePratica": "2012-09-19T08:00:00.000+00:00",
-        "pianoTerapeutico": null,
-        "fkFormaDosaggio": null,
-        "tipoAutorizzazione": "A",
-        "aic6ImportazioneParallela": null,
-        "sisImportazioneParallela": null,
-        "denImportazioneParallela": null,
-        "ragImportazioneParallela": null,
-        "categoriaMedicinale": "1"
-      },
-      {
-        "idPackage": "146691",
-        "denominazionePackage": "10 MG - COMPRESSE RIVESTITE CON FILM - USO ORALE - FLACONE  (HDPE) - 100 COMPRESSE",
-        "descrizioneFornitura": null,
-        "classeFornitura": "OSP",
-        "codiceFormaDosaggio": "0000050046",
-        "aic": "043187160",
-        "descrizioneRf": [
-          "Medicinale soggetto a prescrizione medica limitativa"
-        ],
-        "carenzaMotivazione": null,
-        "carenzaInizio": null,
-        "carenzaFinePresunta": null,
-        "dataAutorizzazione": "2014-03-19T00:00:00.000+00:00",
-        "flagCommercio": 0,
-        "flagPrescrizione": 1,
-        "carente": 0,
-        "vieSomministrazione": [
-          "ORALE"
-        ],
-        "classeRimborsabilita": "Cnn",
-        "descrizioneRimborsabilita": "C NON NEGOZIATA",
-        "statoAmministrativo": "A",
-        "descrizioneStatoAmministrativo": "AUTORIZZATA",
-        "dataRegistrazioneGU": "2014-03-18T00:00:00.000+00:00",
-        "dataRicezionePratica": "2012-09-19T08:00:00.000+00:00",
-        "pianoTerapeutico": null,
-        "fkFormaDosaggio": null,
-        "tipoAutorizzazione": "A",
-        "aic6ImportazioneParallela": null,
-        "sisImportazioneParallela": null,
-        "denImportazioneParallela": null,
-        "ragImportazioneParallela": null,
-        "categoriaMedicinale": "1"
-      },
-      {
-        "idPackage": "146692",
-        "denominazionePackage": "10 MG - COMPRESSE RIVESTITE CON FILM - USO ORALE - FLACONE  (HDPE) - 200 COMPRESSE",
-        "descrizioneFornitura": null,
-        "classeFornitura": "OSP",
-        "codiceFormaDosaggio": "0000050046",
-        "aic": "043187172",
-        "descrizioneRf": [
-          "Medicinale soggetto a prescrizione medica limitativa"
-        ],
-        "carenzaMotivazione": null,
-        "carenzaInizio": null,
-        "carenzaFinePresunta": null,
-        "dataAutorizzazione": "2014-03-19T00:00:00.000+00:00",
-        "flagCommercio": 0,
-        "flagPrescrizione": 1,
-        "carente": 0,
-        "vieSomministrazione": [
-          "ORALE"
-        ],
-        "classeRimborsabilita": "Cnn",
-        "descrizioneRimborsabilita": "C NON NEGOZIATA",
-        "statoAmministrativo": "A",
-        "descrizioneStatoAmministrativo": "AUTORIZZATA",
-        "dataRegistrazioneGU": "2014-03-18T00:00:00.000+00:00",
-        "dataRicezionePratica": "2012-09-19T08:00:00.000+00:00",
-        "pianoTerapeutico": null,
-        "fkFormaDosaggio": null,
-        "tipoAutorizzazione": "A",
-        "aic6ImportazioneParallela": null,
-        "sisImportazioneParallela": null,
-        "denImportazioneParallela": null,
-        "ragImportazioneParallela": null,
-        "categoriaMedicinale": "1"
-      },
-      {
-        "idPackage": "146714",
-        "denominazionePackage": "10 MG -  COMPRESSA RIVESTITA CON FILM - USO ORALE - BLISTER (PVC/PVDC/ALU) - 126 (9X14) COMPRESSE (MULTIPACK)",
-        "descrizioneFornitura": null,
-        "classeFornitura": "OSP",
-        "codiceFormaDosaggio": "0000050046",
-        "aic": "043187398",
-        "descrizioneRf": [
-          "Medicinale soggetto a prescrizione medica limitativa"
-        ],
-        "carenzaMotivazione": null,
-        "carenzaInizio": null,
-        "carenzaFinePresunta": null,
-        "dataAutorizzazione": "2015-03-28T00:00:00.000+00:00",
-        "flagCommercio": 0,
-        "flagPrescrizione": 1,
-        "carente": 0,
-        "vieSomministrazione": [
-          "ORALE"
-        ],
-        "classeRimborsabilita": "Cnn",
-        "descrizioneRimborsabilita": "C NON NEGOZIATA",
-        "statoAmministrativo": "A",
-        "descrizioneStatoAmministrativo": "AUTORIZZATA",
-        "dataRegistrazioneGU": "2015-03-27T00:00:00.000+00:00",
-        "dataRicezionePratica": "2014-11-18T08:00:00.000+00:00",
-        "pianoTerapeutico": null,
-        "fkFormaDosaggio": null,
-        "tipoAutorizzazione": "A",
-        "aic6ImportazioneParallela": null,
-        "sisImportazioneParallela": null,
-        "denImportazioneParallela": null,
-        "ragImportazioneParallela": null,
-        "categoriaMedicinale": "1"
-      }
-    ],
+    "id": "0000000981",
+    "titolo": "RINOCIDINA",
     "medicinale": {
-      "codiceMedicinale": "23166",
-      "aic6": 43187,
-      "denominazioneMedicinale": "BRINTELLIX",
-      "codiceSis": 911,
-      "aziendaTitolare": "H. LUNDBECK A/S",
+      "codiceMedicinale": "420",
+      "aic6": 4347,
+      "denominazioneMedicinale": "RINOCIDINA",
+      "codiceSis": 3582,
+      "aziendaTitolare": "NEOPHARMED GENTILI S.P.A.",
       "categoriaMedicinale": 1,
       "commercio": null,
       "statoAmministrativo": "A"
     },
-    "vieSomministrazione": [
-      "ORALE"
-    ],
-    "codiceAtc": [
-      "N06AX26"
-    ],
-    "descrizioneAtc": [
-      "VORTIOXETINE"
-    ],
-    "formaFarmaceutica": "Compressa rivestita con film",
-    "pianoTerapeutico": 0,
-    "descrizioneFormaDosaggio": "10 mg COMPRESSA RIVESTITA CON FILM",
-    "flagAlcol": 0,
-    "flagPotassio": 0,
-    "flagGuida": 0,
-    "flagDopante": 0,
-    "livelloGuida": null,
-    "descrizioneLivello": null,
-    "carente": 0,
-    "innovativo": 0,
-    "orfano": 0,
-    "revocato": 0,
-    "sospeso": 0,
-    "principioAttivoForma": [
+    "principi": {
+      "principiAttiviIt": [
+        "TIROTRICINA",
+        "NAFAZOLINA"
+      ],
+      "forme": [
+        {
+          "formaFarmaceutica": "Gocce nasali, soluzione",
+          "principiAttivi": [
+            "NAFAZOLINA",
+            "TIROTRICINA"
+          ],
+          "flagDopante": 0
+        }
+      ]
+    },
+    "informazioni": {
+      "formaFarmaceutica": "Gocce nasali, soluzione",
+      "descrizioneFormaDosaggio": "7.5 mg , 3 mg GOCCE NASALI, SOLUZIONE",
+      "pianoTerapeutico": 0,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": "A",
+      "position": null,
+      "vieSomministrazione": [
+        "USO NASALE"
+      ],
+      "codiceAtc": [
+        "R01AB02"
+      ],
+      "descrizioneAtc": [
+        "NAFAZOLINA"
+      ]
+    },
+    "flags": {
+      "flagAlcol": 0,
+      "flagPotassio": 0,
+      "flagGuida": 0,
+      "flagDopante": 0,
+      "carente": 0,
+      "innovativo": 0,
+      "orfano": 0,
+      "revocato": 0,
+      "sospeso": 0,
+      "flagFI": true,
+      "flagRCP": true
+    },
+    "confezioni": [
       {
-        "principioAttivo": [
-          "VORTIOXETINA",
-          "VORTIOXETINA BROMIDRATO"
+        "idPackage": "1475",
+        "denominazionePackage": "\"7,5 MG + 3 MG GOCCE NASALI, SOLUZIONE\" 1 FLACONE DA 15 ML",
+        "descrizioneFornitura": null,
+        "classeFornitura": "SOP",
+        "codiceFormaDosaggio": "0000000981",
+        "aic": "004347011",
+        "descrizioneRf": [
+          "Non Soggetto a Prescrizione Medica"
         ],
-        "formaFarmaceutica": "Compressa rivestita con film",
-        "flagDopante": null
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "1979-05-12T00:00:00.000+00:00",
+        "dataRegistrazioneGU": "1979-05-11T00:00:00.000+00:00",
+        "dataRicezionePratica": "1900-01-01T00:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 0,
+        "carente": 0,
+        "pianoTerapeutico": null,
+        "tipoAutorizzazione": "A",
+        "classeRimborsabilita": "C",
+        "descrizioneRimborsabilita": "A TOTALE CARICO DELL'ASSISTITO",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "vieSomministrazione": [
+          "USO NASALE"
+        ],
+        "categoriaMedicinale": "1",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null
       }
     ],
-    "flagFI": true,
-    "flagRCP": true,
-    "tipoAutorizzazione": "A",
-    "aic6ImportazioneParallela": null,
-    "sisImportazioneParallela": null,
-    "denImportazioneParallela": null,
-    "ragImportazioneParallela": null,
-    "position": null
+    "response": {
+      "httpStatus": 200,
+      "bodyStatus": 200,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000982",
+    "titolo": "RINOCIDINA",
+    "medicinale": {
+      "codiceMedicinale": "420",
+      "aic6": 4347,
+      "denominazioneMedicinale": "RINOCIDINA",
+      "codiceSis": 3582,
+      "aziendaTitolare": "NEOPHARMED GENTILI S.P.A.",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "T"
+    },
+    "principi": {
+      "principiAttiviIt": [
+        "TIROTRICINA",
+        "NAFAZOLINA"
+      ],
+      "forme": [
+        {
+          "formaFarmaceutica": "GOCCIA",
+          "principiAttivi": [
+            "NAFAZOLINA",
+            "TIROTRICINA"
+          ],
+          "flagDopante": 0
+        }
+      ]
+    },
+    "informazioni": {
+      "formaFarmaceutica": "GOCCIA",
+      "descrizioneFormaDosaggio": "3 mg ,N.D. N.D. GOCCIA",
+      "pianoTerapeutico": 0,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": "A",
+      "position": null,
+      "vieSomministrazione": [
+        "ENDONASALE"
+      ],
+      "codiceAtc": [
+        ""
+      ],
+      "descrizioneAtc": [
+        ""
+      ]
+    },
+    "flags": {
+      "flagAlcol": 0,
+      "flagPotassio": 0,
+      "flagGuida": 0,
+      "flagDopante": 0,
+      "carente": 0,
+      "innovativo": 0,
+      "orfano": 0,
+      "revocato": 1,
+      "sospeso": 0,
+      "flagFI": true,
+      "flagRCP": true
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 200,
+      "bodyStatus": 200,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000983",
+    "titolo": "RINOCIDINA",
+    "medicinale": {
+      "codiceMedicinale": "420",
+      "aic6": 4347,
+      "denominazioneMedicinale": "RINOCIDINA",
+      "codiceSis": 3582,
+      "aziendaTitolare": "NEOPHARMED GENTILI S.P.A.",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "U"
+    },
+    "principi": {
+      "principiAttiviIt": [
+        "TIROTRICINA",
+        "NAFAZOLINA"
+      ],
+      "forme": [
+        {
+          "formaFarmaceutica": "SPRAY",
+          "principiAttivi": [
+            "NAFAZOLINA",
+            "TIROTRICINA"
+          ],
+          "flagDopante": 0
+        }
+      ]
+    },
+    "informazioni": {
+      "formaFarmaceutica": "SPRAY",
+      "descrizioneFormaDosaggio": "3 mg ,N.D. N.D. SPRAY",
+      "pianoTerapeutico": 0,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": "A",
+      "position": null,
+      "vieSomministrazione": [
+        "USO AURICOLARE",
+        "ENDONASALE"
+      ],
+      "codiceAtc": [
+        ""
+      ],
+      "descrizioneAtc": [
+        ""
+      ]
+    },
+    "flags": {
+      "flagAlcol": 0,
+      "flagPotassio": 0,
+      "flagGuida": 0,
+      "flagDopante": 0,
+      "carente": 0,
+      "innovativo": 0,
+      "orfano": 0,
+      "revocato": 1,
+      "sospeso": 0,
+      "flagFI": true,
+      "flagRCP": true
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 200,
+      "bodyStatus": 200,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000984",
+    "titolo": null,
+    "medicinale": {},
+    "principi": {
+      "principiAttiviIt": [],
+      "forme": []
+    },
+    "informazioni": {
+      "formaFarmaceutica": null,
+      "descrizioneFormaDosaggio": null,
+      "pianoTerapeutico": null,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": null,
+      "position": null,
+      "vieSomministrazione": null,
+      "codiceAtc": null,
+      "descrizioneAtc": null
+    },
+    "flags": {
+      "flagAlcol": null,
+      "flagPotassio": null,
+      "flagGuida": null,
+      "flagDopante": null,
+      "carente": null,
+      "innovativo": null,
+      "orfano": null,
+      "revocato": null,
+      "sospeso": null,
+      "flagFI": null,
+      "flagRCP": null
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 404,
+      "bodyStatus": 404,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000985",
+    "titolo": null,
+    "medicinale": {},
+    "principi": {
+      "principiAttiviIt": [],
+      "forme": []
+    },
+    "informazioni": {
+      "formaFarmaceutica": null,
+      "descrizioneFormaDosaggio": null,
+      "pianoTerapeutico": null,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": null,
+      "position": null,
+      "vieSomministrazione": null,
+      "codiceAtc": null,
+      "descrizioneAtc": null
+    },
+    "flags": {
+      "flagAlcol": null,
+      "flagPotassio": null,
+      "flagGuida": null,
+      "flagDopante": null,
+      "carente": null,
+      "innovativo": null,
+      "orfano": null,
+      "revocato": null,
+      "sospeso": null,
+      "flagFI": null,
+      "flagRCP": null
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 404,
+      "bodyStatus": 404,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000986",
+    "titolo": "SEDRIL",
+    "medicinale": {
+      "codiceMedicinale": "422",
+      "aic6": 4356,
+      "denominazioneMedicinale": "SEDRIL",
+      "codiceSis": 7043,
+      "aziendaTitolare": "RHONE POULENC RORER S.P.A.",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "T"
+    },
+    "principi": {
+      "principiAttiviIt": [
+        "N.D."
+      ],
+      "forme": [
+        {
+          "formaFarmaceutica": "UNGUENTO",
+          "principiAttivi": [
+            "N.D."
+          ],
+          "flagDopante": null
+        }
+      ]
+    },
+    "informazioni": {
+      "formaFarmaceutica": "UNGUENTO",
+      "descrizioneFormaDosaggio": "0 N.D. POMATA",
+      "pianoTerapeutico": 0,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": "A",
+      "position": null,
+      "vieSomministrazione": [
+        "TOPICA CUTANEA"
+      ],
+      "codiceAtc": [
+        ""
+      ],
+      "descrizioneAtc": [
+        ""
+      ]
+    },
+    "flags": {
+      "flagAlcol": 0,
+      "flagPotassio": 0,
+      "flagGuida": 0,
+      "flagDopante": 0,
+      "carente": 0,
+      "innovativo": 0,
+      "orfano": 0,
+      "revocato": 1,
+      "sospeso": 0,
+      "flagFI": false,
+      "flagRCP": false
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 200,
+      "bodyStatus": 200,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000987",
+    "titolo": null,
+    "medicinale": {},
+    "principi": {
+      "principiAttiviIt": [],
+      "forme": []
+    },
+    "informazioni": {
+      "formaFarmaceutica": null,
+      "descrizioneFormaDosaggio": null,
+      "pianoTerapeutico": null,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": null,
+      "position": null,
+      "vieSomministrazione": null,
+      "codiceAtc": null,
+      "descrizioneAtc": null
+    },
+    "flags": {
+      "flagAlcol": null,
+      "flagPotassio": null,
+      "flagGuida": null,
+      "flagDopante": null,
+      "carente": null,
+      "innovativo": null,
+      "orfano": null,
+      "revocato": null,
+      "sospeso": null,
+      "flagFI": null,
+      "flagRCP": null
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 404,
+      "bodyStatus": 404,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000988",
+    "titolo": null,
+    "medicinale": {},
+    "principi": {
+      "principiAttiviIt": [],
+      "forme": []
+    },
+    "informazioni": {
+      "formaFarmaceutica": null,
+      "descrizioneFormaDosaggio": null,
+      "pianoTerapeutico": null,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": null,
+      "position": null,
+      "vieSomministrazione": null,
+      "codiceAtc": null,
+      "descrizioneAtc": null
+    },
+    "flags": {
+      "flagAlcol": null,
+      "flagPotassio": null,
+      "flagGuida": null,
+      "flagDopante": null,
+      "carente": null,
+      "innovativo": null,
+      "orfano": null,
+      "revocato": null,
+      "sospeso": null,
+      "flagFI": null,
+      "flagRCP": null
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 404,
+      "bodyStatus": 404,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000989",
+    "titolo": null,
+    "medicinale": {},
+    "principi": {
+      "principiAttiviIt": [],
+      "forme": []
+    },
+    "informazioni": {
+      "formaFarmaceutica": null,
+      "descrizioneFormaDosaggio": null,
+      "pianoTerapeutico": null,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": null,
+      "position": null,
+      "vieSomministrazione": null,
+      "codiceAtc": null,
+      "descrizioneAtc": null
+    },
+    "flags": {
+      "flagAlcol": null,
+      "flagPotassio": null,
+      "flagGuida": null,
+      "flagDopante": null,
+      "carente": null,
+      "innovativo": null,
+      "orfano": null,
+      "revocato": null,
+      "sospeso": null,
+      "flagFI": null,
+      "flagRCP": null
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 404,
+      "bodyStatus": 404,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000990",
+    "titolo": null,
+    "medicinale": {},
+    "principi": {
+      "principiAttiviIt": [],
+      "forme": []
+    },
+    "informazioni": {
+      "formaFarmaceutica": null,
+      "descrizioneFormaDosaggio": null,
+      "pianoTerapeutico": null,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": null,
+      "position": null,
+      "vieSomministrazione": null,
+      "codiceAtc": null,
+      "descrizioneAtc": null
+    },
+    "flags": {
+      "flagAlcol": null,
+      "flagPotassio": null,
+      "flagGuida": null,
+      "flagDopante": null,
+      "carente": null,
+      "innovativo": null,
+      "orfano": null,
+      "revocato": null,
+      "sospeso": null,
+      "flagFI": null,
+      "flagRCP": null
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 404,
+      "bodyStatus": 404,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000991",
+    "titolo": null,
+    "medicinale": {},
+    "principi": {
+      "principiAttiviIt": [],
+      "forme": []
+    },
+    "informazioni": {
+      "formaFarmaceutica": null,
+      "descrizioneFormaDosaggio": null,
+      "pianoTerapeutico": null,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": null,
+      "position": null,
+      "vieSomministrazione": null,
+      "codiceAtc": null,
+      "descrizioneAtc": null
+    },
+    "flags": {
+      "flagAlcol": null,
+      "flagPotassio": null,
+      "flagGuida": null,
+      "flagDopante": null,
+      "carente": null,
+      "innovativo": null,
+      "orfano": null,
+      "revocato": null,
+      "sospeso": null,
+      "flagFI": null,
+      "flagRCP": null
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 404,
+      "bodyStatus": 404,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000992",
+    "titolo": null,
+    "medicinale": {},
+    "principi": {
+      "principiAttiviIt": [],
+      "forme": []
+    },
+    "informazioni": {
+      "formaFarmaceutica": null,
+      "descrizioneFormaDosaggio": null,
+      "pianoTerapeutico": null,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": null,
+      "position": null,
+      "vieSomministrazione": null,
+      "codiceAtc": null,
+      "descrizioneAtc": null
+    },
+    "flags": {
+      "flagAlcol": null,
+      "flagPotassio": null,
+      "flagGuida": null,
+      "flagDopante": null,
+      "carente": null,
+      "innovativo": null,
+      "orfano": null,
+      "revocato": null,
+      "sospeso": null,
+      "flagFI": null,
+      "flagRCP": null
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 404,
+      "bodyStatus": 404,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000993",
+    "titolo": null,
+    "medicinale": {},
+    "principi": {
+      "principiAttiviIt": [],
+      "forme": []
+    },
+    "informazioni": {
+      "formaFarmaceutica": null,
+      "descrizioneFormaDosaggio": null,
+      "pianoTerapeutico": null,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": null,
+      "position": null,
+      "vieSomministrazione": null,
+      "codiceAtc": null,
+      "descrizioneAtc": null
+    },
+    "flags": {
+      "flagAlcol": null,
+      "flagPotassio": null,
+      "flagGuida": null,
+      "flagDopante": null,
+      "carente": null,
+      "innovativo": null,
+      "orfano": null,
+      "revocato": null,
+      "sospeso": null,
+      "flagFI": null,
+      "flagRCP": null
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 404,
+      "bodyStatus": 404,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000994",
+    "titolo": "DIAFORIL",
+    "medicinale": {
+      "codiceMedicinale": "425",
+      "aic6": 4397,
+      "denominazioneMedicinale": "DIAFORIL",
+      "codiceSis": 1136,
+      "aziendaTitolare": "HALEON ITALY S.R.L.",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "T"
+    },
+    "principi": {
+      "principiAttiviIt": [
+        "N.D."
+      ],
+      "forme": [
+        {
+          "formaFarmaceutica": "Compressa",
+          "principiAttivi": [
+            "N.D."
+          ],
+          "flagDopante": null
+        }
+      ]
+    },
+    "informazioni": {
+      "formaFarmaceutica": "Compressa",
+      "descrizioneFormaDosaggio": "0 N.D. COMPRESSA",
+      "pianoTerapeutico": 0,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": "A",
+      "position": null,
+      "vieSomministrazione": [
+        "ORALE"
+      ],
+      "codiceAtc": [
+        ""
+      ],
+      "descrizioneAtc": [
+        ""
+      ]
+    },
+    "flags": {
+      "flagAlcol": 0,
+      "flagPotassio": 0,
+      "flagGuida": 0,
+      "flagDopante": 0,
+      "carente": 0,
+      "innovativo": 0,
+      "orfano": 0,
+      "revocato": 1,
+      "sospeso": 0,
+      "flagFI": false,
+      "flagRCP": false
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 200,
+      "bodyStatus": 200,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000995",
+    "titolo": null,
+    "medicinale": {},
+    "principi": {
+      "principiAttiviIt": [],
+      "forme": []
+    },
+    "informazioni": {
+      "formaFarmaceutica": null,
+      "descrizioneFormaDosaggio": null,
+      "pianoTerapeutico": null,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": null,
+      "position": null,
+      "vieSomministrazione": null,
+      "codiceAtc": null,
+      "descrizioneAtc": null
+    },
+    "flags": {
+      "flagAlcol": null,
+      "flagPotassio": null,
+      "flagGuida": null,
+      "flagDopante": null,
+      "carente": null,
+      "innovativo": null,
+      "orfano": null,
+      "revocato": null,
+      "sospeso": null,
+      "flagFI": null,
+      "flagRCP": null
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 404,
+      "bodyStatus": 404,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000996",
+    "titolo": null,
+    "medicinale": {},
+    "principi": {
+      "principiAttiviIt": [],
+      "forme": []
+    },
+    "informazioni": {
+      "formaFarmaceutica": null,
+      "descrizioneFormaDosaggio": null,
+      "pianoTerapeutico": null,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": null,
+      "position": null,
+      "vieSomministrazione": null,
+      "codiceAtc": null,
+      "descrizioneAtc": null
+    },
+    "flags": {
+      "flagAlcol": null,
+      "flagPotassio": null,
+      "flagGuida": null,
+      "flagDopante": null,
+      "carente": null,
+      "innovativo": null,
+      "orfano": null,
+      "revocato": null,
+      "sospeso": null,
+      "flagFI": null,
+      "flagRCP": null
+    },
+    "confezioni": [],
+    "response": {
+      "httpStatus": 404,
+      "bodyStatus": 404,
+      "error": null
+    }
+  },
+  {
+    "id": "0000000997",
+    "titolo": "OTALGAN",
+    "medicinale": {
+      "codiceMedicinale": "426",
+      "aic6": 4398,
+      "denominazioneMedicinale": "OTALGAN",
+      "codiceSis": 4567,
+      "aziendaTitolare": "SWISS PHARMA GMBH",
+      "categoriaMedicinale": 1,
+      "commercio": null,
+      "statoAmministrativo": "A"
+    },
+    "principi": {
+      "principiAttiviIt": [
+        "FENAZONE",
+        "PROCAINA"
+      ],
+      "forme": [
+        {
+          "formaFarmaceutica": "Gocce auricolari, soluzione",
+          "principiAttivi": [
+            "FENAZONE",
+            "PROCAINA"
+          ],
+          "flagDopante": null
+        }
+      ]
+    },
+    "informazioni": {
+      "formaFarmaceutica": "Gocce auricolari, soluzione",
+      "descrizioneFormaDosaggio": "5 % ,1 % GOCCE AURICOLARI, SOLUZIONE",
+      "pianoTerapeutico": 0,
+      "livelloGuida": null,
+      "descrizioneLivello": null,
+      "tipoAutorizzazione": "A",
+      "position": null,
+      "vieSomministrazione": [
+        "USO AURICOLARE"
+      ],
+      "codiceAtc": [
+        "S02DA30"
+      ],
+      "descrizioneAtc": [
+        "ASSOCIAZIONI"
+      ]
+    },
+    "flags": {
+      "flagAlcol": 0,
+      "flagPotassio": 0,
+      "flagGuida": 0,
+      "flagDopante": 0,
+      "carente": 0,
+      "innovativo": 0,
+      "orfano": 0,
+      "revocato": 0,
+      "sospeso": 0,
+      "flagFI": true,
+      "flagRCP": true
+    },
+    "confezioni": [
+      {
+        "idPackage": "1496",
+        "denominazionePackage": "\"1% + 5% GOCCE AURICOLARI, SOLUZIONE\" FLACONE DA 6G",
+        "descrizioneFornitura": null,
+        "classeFornitura": "OTC",
+        "codiceFormaDosaggio": "0000000997",
+        "aic": "004398018",
+        "descrizioneRf": [
+          "Non Soggetto a Prescrizione Medica"
+        ],
+        "carenzaMotivazione": null,
+        "carenzaInizio": null,
+        "carenzaFinePresunta": null,
+        "dataAutorizzazione": "1951-01-24T00:00:00.000+00:00",
+        "dataRegistrazioneGU": null,
+        "dataRicezionePratica": "1900-01-01T02:00:00.000+00:00",
+        "flagCommercio": 1,
+        "flagPrescrizione": 0,
+        "carente": 0,
+        "pianoTerapeutico": null,
+        "tipoAutorizzazione": "A",
+        "classeRimborsabilita": "C-bis",
+        "descrizioneRimborsabilita": "A TOTALE CARICO DELL'ASSISTITO",
+        "statoAmministrativo": "A",
+        "descrizioneStatoAmministrativo": "AUTORIZZATA",
+        "vieSomministrazione": [
+          "USO AURICOLARE"
+        ],
+        "categoriaMedicinale": "1",
+        "aic6ImportazioneParallela": null,
+        "sisImportazioneParallela": null,
+        "denImportazioneParallela": null,
+        "ragImportazioneParallela": null
+      }
+    ],
+    "response": {
+      "httpStatus": 200,
+      "bodyStatus": 200,
+      "error": null
+    }
   }
 ]

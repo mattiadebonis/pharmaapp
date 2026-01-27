@@ -11,7 +11,10 @@ struct TodayTodoRowView: View {
     let showToggle: Bool
     let trailingBadge: (String, Color)?
     let onToggle: () -> Void
-    
+    let subtitleFont: Font?
+    let subtitleColor: Color?
+    let auxiliaryFont: Font?
+    let auxiliaryColor: Color?
     init(
         iconName: String,
         actionText: String? = nil,
@@ -21,7 +24,11 @@ struct TodayTodoRowView: View {
         isCompleted: Bool,
         showToggle: Bool = true,
         trailingBadge: (String, Color)? = nil,
-        onToggle: @escaping () -> Void
+        onToggle: @escaping () -> Void,
+        subtitleFont: Font? = nil,
+        subtitleColor: Color? = nil,
+        auxiliaryFont: Font? = nil,
+        auxiliaryColor: Color? = nil
     ) {
         self.iconName = iconName
         self.actionText = actionText
@@ -32,6 +39,10 @@ struct TodayTodoRowView: View {
         self.showToggle = showToggle
         self.trailingBadge = trailingBadge
         self.onToggle = onToggle
+        self.subtitleFont = subtitleFont
+        self.subtitleColor = subtitleColor
+        self.auxiliaryFont = auxiliaryFont
+        self.auxiliaryColor = auxiliaryColor
     }
 
     var body: some View {
@@ -73,8 +84,8 @@ struct TodayTodoRowView: View {
                     if let subtitle {
                         HStack(alignment: .firstTextBaseline, spacing: 0) {
                             Text(subtitle)
-                                .font(.system(size: 15))
-                                .foregroundStyle(secondaryTextColor)
+                                .font(subtitleFont ?? .system(size: 15))
+                                .foregroundStyle(subtitleColor ?? secondaryTextColor)
                                 .multilineTextAlignment(.leading)
                                 .lineLimit(2)
                                 .truncationMode(.tail)
@@ -88,8 +99,8 @@ struct TodayTodoRowView: View {
                     }
                     if let auxiliaryLine {
                         auxiliaryLine
-                            .font(.system(size: 15))
-                            .foregroundStyle(secondaryTextColor)
+                            .font(auxiliaryFont ?? .system(size: 15))
+                            .foregroundStyle(auxiliaryColor ?? secondaryTextColor)
                             .multilineTextAlignment(.leading)
                             .lineLimit(2)
                             .truncationMode(.tail)

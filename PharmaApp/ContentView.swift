@@ -363,14 +363,15 @@ struct CatalogSearchScreen: View {
         for entry in json.prefix(1200) {
             let medInfo = entry["medicinale"] as? [String: Any]
             let rawName = (medInfo?["denominazioneMedicinale"] as? String)
-                ?? (entry["descrizioneFormaDosaggio"] as? String)
-                ?? (entry["principiAttiviIt"] as? [String])?.first
+                ?? (medicineValue("denominazioneMedicinale", in: entry) as? String)
+                ?? (medicineValue("descrizioneFormaDosaggio", in: entry) as? String)
+                ?? stringArray(from: medicineValue("principiAttiviIt", in: entry)).first
                 ?? ""
             let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { continue }
 
-            let principles = entry["principiAttiviIt"] as? [String] ?? []
-            let atc = entry["descrizioneAtc"] as? [String] ?? []
+            let principles = stringArray(from: medicineValue("principiAttiviIt", in: entry))
+            let atc = stringArray(from: medicineValue("descrizioneAtc", in: entry))
             let principle: String = {
                 let joined = principles.joined(separator: ", ")
                 if !joined.isEmpty { return joined }
@@ -383,16 +384,16 @@ struct CatalogSearchScreen: View {
                 (medInfo?["aic6"] as? Int).map(String.init)
             ].compactMap { $0 }
 
-            let dosage = parseDosage(from: entry["descrizioneFormaDosaggio"] as? String)
+            let dosage = parseDosage(from: medicineValue("descrizioneFormaDosaggio", in: entry) as? String)
             let packages = (entry["confezioni"] as? [[String: Any]] ?? []).compactMap { pkg in
-                let label = (pkg["denominazionePackage"] as? String ?? "Confezione").trimmingCharacters(in: .whitespacesAndNewlines)
+                let label = (packageValue("denominazionePackage", in: pkg) as? String ?? "Confezione").trimmingCharacters(in: .whitespacesAndNewlines)
                 let units = extractUnitCount(from: label)
                 let volume = extractVolume(from: label)
                 let requiresPrescription = prescriptionFlag(in: pkg)
-                let pkgId = (pkg["idPackage"] as? String) ?? UUID().uuidString
+                let pkgId = (packageValue("idPackage", in: pkg) as? String) ?? UUID().uuidString
                 let pkgCodes: [String] = [
-                    pkg["aic"] as? String,
-                    pkg["idPackage"] as? String
+                    packageValue("aic", in: pkg) as? String,
+                    packageValue("idPackage", in: pkg) as? String
                 ].compactMap { $0 }
 
                 return CatalogPackage(
@@ -488,14 +489,15 @@ struct CatalogSearchScreen: View {
         for entry in json.prefix(1200) { // evita liste troppo lunghe
             let medInfo = entry["medicinale"] as? [String: Any]
             let rawName = (medInfo?["denominazioneMedicinale"] as? String)
-                ?? (entry["descrizioneFormaDosaggio"] as? String)
-                ?? (entry["principiAttiviIt"] as? [String])?.first
+                ?? (medicineValue("denominazioneMedicinale", in: entry) as? String)
+                ?? (medicineValue("descrizioneFormaDosaggio", in: entry) as? String)
+                ?? stringArray(from: medicineValue("principiAttiviIt", in: entry)).first
                 ?? ""
             let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { continue }
 
-            let principles = entry["principiAttiviIt"] as? [String] ?? []
-            let atc = entry["descrizioneAtc"] as? [String] ?? []
+            let principles = stringArray(from: medicineValue("principiAttiviIt", in: entry))
+            let atc = stringArray(from: medicineValue("descrizioneAtc", in: entry))
             let principle: String = {
                 let joined = principles.joined(separator: ", ")
                 if !joined.isEmpty { return joined }
@@ -505,17 +507,17 @@ struct CatalogSearchScreen: View {
 
             let packages = entry["confezioni"] as? [[String: Any]] ?? []
             guard !packages.isEmpty else { continue }
-            let dosage = parseDosage(from: entry["descrizioneFormaDosaggio"] as? String)
+            let dosage = parseDosage(from: medicineValue("descrizioneFormaDosaggio", in: entry) as? String)
 
             for package in packages {
-                let pkgLabel = (package["denominazionePackage"] as? String ?? "Confezione")
+                let pkgLabel = (packageValue("denominazionePackage", in: package) as? String ?? "Confezione")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 let units = extractUnitCount(from: pkgLabel)
                 let volume = extractVolume(from: pkgLabel)
                 let requiresPrescription = prescriptionFlag(in: package)
 
                 let selection = CatalogSelection(
-                    id: (package["idPackage"] as? String) ?? (entry["id"] as? String) ?? UUID().uuidString,
+                    id: (packageValue("idPackage", in: package) as? String) ?? (entry["id"] as? String) ?? UUID().uuidString,
                     name: name,
                     principle: principle,
                     requiresPrescription: requiresPrescription,
@@ -535,6 +537,67 @@ struct CatalogSearchScreen: View {
             }
             return $0.name < $1.name
         }
+    }
+
+    private func medicineValue(_ key: String, in entry: [String: Any]) -> Any? {
+        let info = entry["informazioni"] as? [String: Any]
+        let flags = entry["flags"] as? [String: Any]
+        let principles = entry["principi"] as? [String: Any]
+        let candidates: [[String: Any]?] = [entry, info, flags, principles]
+        for candidate in candidates {
+            if let value = candidate?[key], !(value is NSNull) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private func packageValue(_ key: String, in package: [String: Any]) -> Any? {
+        let prescrizioni = package["prescrizioni"]
+        var fallbacks: [[String: Any]?] = []
+        if let dict = prescrizioni as? [String: Any] {
+            fallbacks.append(dict)
+        }
+        fallbacks.append(package["informazioni"] as? [String: Any])
+
+        var candidates: [[String: Any]?] = [package]
+        candidates.append(contentsOf: fallbacks)
+
+        for candidate in candidates {
+            if let value = candidate?[key], !(value is NSNull) {
+                return value
+            }
+        }
+
+        if key == "flagPrescrizione" {
+            if let bool = prescrizioni as? Bool { return bool }
+            if let int = prescrizioni as? Int { return int }
+            if let number = prescrizioni as? NSNumber { return number }
+        }
+        return nil
+    }
+
+    private func stringArray(from value: Any?) -> [String] {
+        guard let value = value else { return [] }
+        if let array = value as? [String] { return array }
+        if let string = value as? String { return [string] }
+        if let anyArray = value as? [Any] {
+            return anyArray.compactMap { $0 as? String }
+        }
+        return []
+    }
+
+    private func boolValue(_ value: Any?) -> Bool {
+        guard let value, !(value is NSNull) else { return false }
+        if let bool = value as? Bool { return bool }
+        if let int = value as? Int { return int != 0 }
+        if let int = value as? Int32 { return int != 0 }
+        if let number = value as? NSNumber { return number.intValue != 0 }
+        if let string = value as? String {
+            let normalized = string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return ["1", "true", "yes", "si", "y", "t"].contains(normalized)
+        }
+        return false
     }
 
     private func extractMedicineItems(from data: Data) -> [[String: Any]] {
@@ -614,21 +677,28 @@ struct CatalogSearchScreen: View {
     }
 
     private func prescriptionFlag(in package: [String: Any]) -> Bool {
-        if let intFlag = package["flagPrescrizione"] as? Int, intFlag != 0 {
+        let flagValue = packageValue("flagPrescrizione", in: package) ?? packageValue("prescrizione", in: package)
+        if boolValue(flagValue) {
             return true
         }
-        if let boolFlag = package["flagPrescrizione"] as? Bool, boolFlag {
-            return true
-        }
-        if let classe = (package["classeFornitura"] as? String)?.uppercased(),
+        if let classe = (packageValue("classeFornitura", in: package) as? String)?.uppercased(),
            ["RR", "RRL", "OSP"].contains(classe) {
             return true
         }
-        if let descrizioni = package["descrizioneRf"] as? [String],
-           descrizioni.contains(where: { $0.lowercased().contains("prescrizione") }) {
+        let descrizioni = stringArray(from: packageValue("descrizioneRf", in: package))
+        if descrizioni.contains(where: requiresPrescriptionDescription) {
             return true
         }
         return false
+    }
+
+    private func requiresPrescriptionDescription(_ description: String) -> Bool {
+        let lower = description.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if lower.contains("non soggetto") || lower.contains("senza ricetta") || lower.contains("senza prescrizione") || lower.contains("non richiede") {
+            return false
+        }
+        return lower.contains("prescrizione") || lower.contains("ricetta")
     }
 
     private func camelCase(_ text: String) -> String {
