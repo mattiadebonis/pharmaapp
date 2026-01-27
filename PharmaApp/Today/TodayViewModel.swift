@@ -105,17 +105,7 @@ class TodayViewModel: ObservableObject {
                 }
                 return item
             }
-            // Evita di duplicare il farmaco sia nella sezione oraria (terapia) sia nei rifornimenti
-            baseItems = baseItems.filter { item in
-                if item.category == .purchase,
-                   let med = medicine(for: item, medicines: medicines),
-                   med.hasIntakeToday(recurrenceManager: rec),
-                   !med.hasIntakeLoggedToday(),
-                   isOutOfStock(med, option: option, recurrenceManager: rec) {
-                    return false
-                }
-               return true
-            }
+
         }
 
         let rec = RecurrenceManager(context: viewContext)
@@ -516,7 +506,7 @@ class TodayViewModel: ObservableObject {
         recurrenceManager: RecurrenceManager
     ) -> Bool {
         guard isOutOfStock(medicine, option: option, recurrenceManager: recurrenceManager) else { return false }
-        guard !medicine.hasIntakeToday(recurrenceManager: recurrenceManager) else { return false }
+
         if existingItems.contains(where: { $0.category == .purchase && $0.medicineID == medicine.objectID }) {
             return false
         }
