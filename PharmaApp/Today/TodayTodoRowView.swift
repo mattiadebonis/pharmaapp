@@ -4,6 +4,7 @@ import SwiftUI
 struct TodayTodoRowView: View {
     let iconName: String
     let actionText: String?
+    let leadingTime: String?
     let title: String
     let subtitle: String?
     let auxiliaryLine: Text?
@@ -18,6 +19,7 @@ struct TodayTodoRowView: View {
     init(
         iconName: String,
         actionText: String? = nil,
+        leadingTime: String? = nil,
         title: String,
         subtitle: String? = nil,
         auxiliaryLine: Text? = nil,
@@ -32,6 +34,7 @@ struct TodayTodoRowView: View {
     ) {
         self.iconName = iconName
         self.actionText = actionText
+        self.leadingTime = leadingTime
         self.title = title
         self.subtitle = subtitle
         self.auxiliaryLine = auxiliaryLine
@@ -47,19 +50,13 @@ struct TodayTodoRowView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
-            Button(action: onToggle) {
-                ZStack {
-                    Circle()
-                        .fill(isCompleted ? circleStrokeColor.opacity(0.2) : .clear)
-                    Circle()
-                        .stroke(circleStrokeColor, lineWidth: 1.3)
-                }
-                .frame(width: 18, height: 18)
-                .accessibilityLabel(Text(iconName))
+            if let leadingTime, !leadingTime.isEmpty {
+                Text(leadingTime)
+                    .foregroundStyle(secondaryTextColor)
+                    .monospacedDigit()
+                    .frame(minWidth: 46, alignment: .leading)
+                    .padding(.top, 2)
             }
-            .buttonStyle(.plain)
-            .disabled(!showToggle)
-
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     if let actionText, !actionText.isEmpty {
@@ -110,9 +107,18 @@ struct TodayTodoRowView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if showToggle {
-                // Toggle handled by leading circle
+            Button(action: onToggle) {
+                ZStack {
+                    Circle()
+                        .fill(isCompleted ? circleStrokeColor.opacity(0.2) : .clear)
+                    Circle()
+                        .stroke(circleStrokeColor, lineWidth: 1.3)
+                }
+                .frame(width: 18, height: 18)
+                .accessibilityLabel(Text(iconName))
             }
+            .buttonStyle(.plain)
+            .disabled(!showToggle)
         }
         .contentShape(Rectangle())
         .onTapGesture { if showToggle { onToggle() } }
