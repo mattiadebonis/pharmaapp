@@ -122,9 +122,18 @@ struct CabinetDetailView: View {
             },
             onToggleSelection: { viewModel.toggleSelection(for: entry) },
             onEnterSelection: { viewModel.enterSelectionMode(with: entry) },
-            onMarkTaken: { viewModel.actionService.markAsTaken(for: entry) },
-            onMarkPurchased: { viewModel.actionService.markAsPurchased(for: entry) },
-            onRequestPrescription: shouldShowRx ? { viewModel.actionService.requestPrescription(for: entry) } : nil,
+            onMarkTaken: {
+                let opId = operationId(for: .intake, entry: entry)
+                viewModel.actionService.markAsTaken(for: entry, operationId: opId)
+            },
+            onMarkPurchased: {
+                let opId = operationId(for: .purchase, entry: entry)
+                viewModel.actionService.markAsPurchased(for: entry, operationId: opId)
+            },
+            onRequestPrescription: shouldShowRx ? {
+                let opId = operationId(for: .prescriptionRequest, entry: entry)
+                viewModel.actionService.requestPrescription(for: entry, operationId: opId)
+            } : nil,
             onMove: { entryToMove = entry }
         )
         .listRowSeparator(.hidden, edges: .all)
@@ -133,6 +142,18 @@ struct CabinetDetailView: View {
     
     private func shouldShowPrescriptionAction(for entry: MedicinePackage) -> Bool {
         viewModel.shouldShowPrescriptionAction(for: entry)
+    }
+
+    private func operationId(for action: OperationAction, entry: MedicinePackage) -> UUID {
+        OperationIdProvider.shared.operationId(
+            for: OperationKey.medicineAction(
+                action: action,
+                medicineId: entry.medicine.id,
+                packageId: entry.package.id,
+                source: .cabinet
+            ),
+            ttl: 3
+        )
     }
     
     private func saveContext() {

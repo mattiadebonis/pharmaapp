@@ -14,12 +14,14 @@ struct MedicineStockService {
             type: "purchase",
             medicine: medicine,
             package: package,
+            operationId: UUID(),
             save: false
         )
 
         do {
             try context.save()
         } catch {
+            context.rollback()
             print("Error saving purchase log: \(error.localizedDescription)")
         }
     }
@@ -43,6 +45,7 @@ struct MedicineStockService {
                     type: "purchase",
                     medicine: medicine,
                     package: package,
+                    operationId: UUID(),
                     save: false
                 )
             }
@@ -53,6 +56,7 @@ struct MedicineStockService {
                         type: "stock_increment",
                         medicine: medicine,
                         package: package,
+                        operationId: UUID(),
                         save: false
                     )
                 }
@@ -63,6 +67,7 @@ struct MedicineStockService {
                     type: "stock_adjustment",
                     medicine: medicine,
                     package: package,
+                    operationId: UUID(),
                     save: false
                 )
             }
@@ -73,8 +78,8 @@ struct MedicineStockService {
         do {
             try context.save()
         } catch {
+            context.rollback()
             print("Error updating stock units: \(error.localizedDescription)")
         }
     }
 }
-

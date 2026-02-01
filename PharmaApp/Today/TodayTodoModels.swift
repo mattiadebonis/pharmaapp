@@ -235,7 +235,7 @@ enum TodayTodoBuilder {
 
     private static func intakeCountToday(for therapy: Therapy, medicine: Medicine, now: Date) -> Int {
         let calendar = Calendar.current
-        let logsToday = (medicine.logs ?? []).filter { $0.type == "intake" && calendar.isDate($0.timestamp, inSameDayAs: now) }
+        let logsToday = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
         let assigned = logsToday.filter { $0.therapy == therapy }.count
         if assigned > 0 { return assigned }
 

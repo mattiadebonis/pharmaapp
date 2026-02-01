@@ -11,20 +11,41 @@ import CoreData
 class MedicineRowViewModel: ObservableObject {
     let managedObjectContext: NSManagedObjectContext
     private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+    private let operationIdProvider: OperationIdProviding
 
-    init(managedObjectContext: NSManagedObjectContext) {
+    init(
+        managedObjectContext: NSManagedObjectContext,
+        operationIdProvider: OperationIdProviding = OperationIdProvider.shared
+    ) {
         self.managedObjectContext = managedObjectContext
+        self.operationIdProvider = operationIdProvider
     }
     
     /// Funzione generica per salvare un log per una determinata medicina e tipo
-    func addLog(for medicine: Medicine, type: String, package: Package? = nil, therapy: Therapy? = nil) {
+    func addLog(
+        for medicine: Medicine,
+        type: String,
+        package: Package? = nil,
+        therapy: Therapy? = nil,
+        operationId: UUID? = nil
+    ) {
         let resolvedPackage = resolvePackage(for: medicine, fallback: package, therapy: therapy)
         let stockService = StockService(context: managedObjectContext)
+        let resolvedOperationId = operationId ?? operationIdProvider.operationId(
+            for: OperationKey.medicineAction(
+                action: actionType(for: type),
+                medicineId: medicine.id,
+                packageId: resolvedPackage?.id,
+                source: .medicineRow
+            ),
+            ttl: 3
+        )
         _ = stockService.createLog(
             type: type,
             medicine: medicine,
             package: resolvedPackage,
             therapy: therapy,
+            operationId: resolvedOperationId,
             save: false
         )
 
@@ -32,6 +53,7 @@ class MedicineRowViewModel: ObservableObject {
             try managedObjectContext.save()
             print("Log salvato: \(type) per \(medicine.nome)")
         } catch {
+            managedObjectContext.rollback()
             print("Errore nel salvataggio del log: \(error)")
         }
     }
@@ -60,7 +82,12 @@ class MedicineRowViewModel: ObservableObject {
                 let left = Int(max(0, t.leftover()))
                 guard left > 0 else { continue }
                 for _ in 0..<left {
-                    addLog(for: medicine, type: "stock_adjustment", package: t.package)
+                    addLog(
+                        for: medicine,
+                        type: "stock_adjustment",
+                        package: t.package,
+                        operationId: UUID()
+                    )
                 }
             }
             return
@@ -69,14 +96,19 @@ class MedicineRowViewModel: ObservableObject {
         if let remaining = medicine.remainingUnitsWithoutTherapy(), remaining > 0 {
             let pkg = (medicine.packages.first) ?? getLastPurchasedPackage(for: medicine)
             for _ in 0..<remaining {
-                addLog(for: medicine, type: "stock_adjustment", package: pkg)
+                addLog(
+                    for: medicine,
+                    type: "stock_adjustment",
+                    package: pkg,
+                    operationId: UUID()
+                )
             }
         }
     }
 
     private func getLastPurchasedPackage(for medicine: Medicine) -> Package? {
-        guard let logs = medicine.logs else { return nil }
-        return logs.filter { $0.type == "purchase" }
+        let logs = medicine.effectivePurchaseLogs()
+        return logs
             .sorted(by: { $0.timestamp > $1.timestamp })
             .first?.package
     }
@@ -89,6 +121,21 @@ class MedicineRowViewModel: ObservableObject {
             return medicine.packages.sorted(by: { $0.numero > $1.numero }).first
         }
         return nil
+    }
+
+    private func actionType(for logType: String) -> OperationAction {
+        switch logType {
+        case "purchase":
+            return .purchase
+        case "new_prescription_request":
+            return .prescriptionRequest
+        case "new_prescription":
+            return .prescriptionReceived
+        case "stock_adjustment":
+            return .stockAdjustment
+        default:
+            return .intake
+        }
     }
 
     func prescriptionStatus(medicine : Medicine, currentOption : Option) -> String? {

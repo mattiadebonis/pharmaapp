@@ -12,13 +12,95 @@ class TodayViewModel: ObservableObject {
     }
 
     let actionService: MedicineActionService
+    private let recordIntakeUseCase: RecordIntakeUseCase
+    private let operationIdProvider: OperationIdProviding
+    @Published private(set) var state: TodayState = .empty
 
-    init(actionService: MedicineActionService = MedicineActionService()) {
+    init(
+        actionService: MedicineActionService = MedicineActionService(),
+        recordIntakeUseCase: RecordIntakeUseCase = RecordIntakeUseCase(
+            eventStore: CoreDataEventStore(context: PersistenceController.shared.container.viewContext),
+            clock: SystemClock()
+        ),
+        operationIdProvider: OperationIdProviding = OperationIdProvider.shared
+    ) {
         self.actionService = actionService
+        self.recordIntakeUseCase = recordIntakeUseCase
+        self.operationIdProvider = operationIdProvider
     }
 
     private var viewContext: NSManagedObjectContext {
         PersistenceController.shared.container.viewContext
+    }
+
+    @MainActor
+    func refreshState(
+        medicines: [Medicine],
+        logs: [Log],
+        todos: [Todo],
+        option: Option?,
+        completedTodoIDs: Set<String>
+    ) {
+        let recurrenceManager = RecurrenceManager(context: viewContext)
+        let clinicalContext = ClinicalContextBuilder(context: viewContext).build(for: medicines)
+        let newState = TodayTodoEngine.buildState(
+            medicines: medicines,
+            logs: logs,
+            todos: todos,
+            option: option,
+            completedTodoIDs: completedTodoIDs,
+            recurrenceManager: recurrenceManager,
+            clinicalContext: clinicalContext
+        )
+        if newState != state {
+            state = newState
+        }
+    }
+
+    // MARK: - Intake (PharmaCore)
+    func recordIntake(medicine: Medicine, therapy: Therapy?, operationId: UUID) -> RecordIntakeResult? {
+        guard let package = resolvePackage(for: medicine, therapy: therapy) else {
+            print("⚠️ recordIntake: package missing for \(medicine.nome)")
+            return nil
+        }
+
+        let request = RecordIntakeRequest(
+            operationId: operationId,
+            medicineId: MedicineId(medicine.id),
+            therapyId: therapy.map { TherapyId($0.id) },
+            packageId: PackageId(package.id)
+        )
+
+        do {
+            return try recordIntakeUseCase.execute(request)
+        } catch {
+            print("⚠️ recordIntake: \(error)")
+            return nil
+        }
+    }
+
+    func undoCompletion(operationId: UUID?, logObjectID: NSManagedObjectID?) {
+        if let operationId {
+            _ = actionService.undoLog(operationId: operationId)
+            return
+        }
+        if let logObjectID {
+            _ = actionService.undoLog(logObjectID: logObjectID)
+        }
+    }
+
+    func intakeOperationId(for completionKey: String, source: OperationSource = .today) -> UUID {
+        let key = OperationKey.intake(completionKey: completionKey, source: source)
+        return operationIdProvider.operationId(for: key, ttl: 180)
+    }
+
+    func clearIntakeOperationId(for completionKey: String, source: OperationSource = .today) {
+        let key = OperationKey.intake(completionKey: completionKey, source: source)
+        operationIdProvider.clear(key)
+    }
+
+    func completionKey(for item: TodayTodoItem) -> String {
+        TodayTodoEngine.completionKey(for: item)
     }
 
     // MARK: - Insights / Todo building
@@ -571,5 +653,20 @@ class TodayViewModel: ObservableObject {
         let outOfStock = isOutOfStock(med, option: option, recurrenceManager: rec)
         guard needsRx || outOfStock else { return nil }
         return med
+    }
+
+    private func resolvePackage(for medicine: Medicine, therapy: Therapy?) -> Package? {
+        if let therapy { return therapy.package }
+        if let therapies = medicine.therapies, let first = therapies.first {
+            return first.package
+        }
+        let purchaseLogs = medicine.effectivePurchaseLogs()
+        if let package = purchaseLogs.sorted(by: { $0.timestamp > $1.timestamp }).first?.package {
+            return package
+        }
+        if !medicine.packages.isEmpty {
+            return medicine.packages.sorted(by: { $0.numero > $1.numero }).first
+        }
+        return nil
     }
 }

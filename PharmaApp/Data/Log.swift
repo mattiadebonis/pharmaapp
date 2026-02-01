@@ -11,6 +11,9 @@ import CoreData
 @objc(Log)
 public class Log : NSManagedObject , Identifiable{    
     @NSManaged public var id : UUID
+    @NSManaged public var operation_id: UUID?
+    @NSManaged public var reversal_of_operation_id: UUID?
+    @NSManaged public var synced_at: Date?
     @NSManaged public var type : String
     @NSManaged public var timestamp : Date
     @NSManaged public var medicine: Medicine
@@ -56,4 +59,3 @@ extension Log{
         return request
     }
 }
-

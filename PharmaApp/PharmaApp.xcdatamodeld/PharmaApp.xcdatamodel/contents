@@ -23,8 +23,16 @@
     </entity>
     <entity name="Log" representedClassName=".Log" syncable="YES">
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="operation_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="reversal_of_operation_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="synced_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="type" optional="YES" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="operation_id"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
         <relationship name="medicine" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="logs" inverseEntity="Medicine"/>
         <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package" inverseName="logs" inverseEntity="Package"/>
         <relationship name="therapy" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Therapy" inverseName="logs" inverseEntity="Therapy"/>

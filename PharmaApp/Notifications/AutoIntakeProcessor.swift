@@ -44,12 +44,17 @@ final class AutoIntakeProcessor {
             guard !hasMatchingIntakeLog(for: event, therapy: therapy, tolerance: config.logToleranceSeconds) else {
                 continue
             }
+            let operationId = OperationIdProvider.shared.operationId(
+                for: OperationKey.autoIntake(therapyId: therapy.id, scheduledAt: event.date),
+                ttl: 24 * 60 * 60
+            )
             let log = stockService.createLog(
                 type: "intake",
                 medicine: therapy.medicine,
                 package: therapy.package,
                 therapy: therapy,
-                timestamp: event.date
+                timestamp: event.date,
+                operationId: operationId
             )
             if log != nil {
                 createdCount += 1
@@ -108,8 +113,7 @@ final class AutoIntakeProcessor {
         therapy: Therapy,
         tolerance: TimeInterval
     ) -> Bool {
-        guard let logs = therapy.medicine.logs else { return false }
-        let intakeLogs = logs.filter { $0.type == "intake" }
+        let intakeLogs = therapy.medicine.effectiveIntakeLogs()
         guard !intakeLogs.isEmpty else { return false }
 
         for log in intakeLogs {

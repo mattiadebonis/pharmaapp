@@ -104,8 +104,7 @@ struct MedicineRowView: View {
     private var intakeLogsToday: Int {
         let now = Date()
         let cal = Calendar.current
-        guard let logs = medicine.logs else { return 0 }
-        let filtered = logs.filter { $0.type == "intake" && cal.isDate($0.timestamp, inSameDayAs: now) }
+        let filtered = medicine.effectiveIntakeLogs(on: now, calendar: cal)
         guard let entry = medicinePackage else { return filtered.count }
         return filtered.filter { $0.package == entry.package }.count
     }
@@ -459,7 +458,7 @@ struct MedicineRowView: View {
 
     private func intakeCountToday(for therapy: Therapy, now: Date) -> Int {
         let calendar = Calendar.current
-        let logsToday = (medicine.logs ?? []).filter { $0.type == "intake" && calendar.isDate($0.timestamp, inSameDayAs: now) }
+        let logsToday = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
         let assigned = logsToday.filter { $0.therapy == therapy }.count
         if assigned > 0 { return assigned }
 

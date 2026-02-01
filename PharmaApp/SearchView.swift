@@ -76,11 +76,9 @@ struct SearchView: View {
         if let therapies = medicine.therapies, let therapy = therapies.first {
             return therapy.package
         }
-        if let logs = medicine.logs {
-            let purchaseLogs = logs.filter { $0.type == "purchase" }
-            if let package = purchaseLogs.sorted(by: { $0.timestamp > $1.timestamp }).first?.package {
-                return package
-            }
+        let purchaseLogs = medicine.effectivePurchaseLogs()
+        if let package = purchaseLogs.sorted(by: { $0.timestamp > $1.timestamp }).first?.package {
+            return package
         }
         if let package = medicine.packages.first {
             return package

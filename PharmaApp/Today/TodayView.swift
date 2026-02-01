@@ -8,7 +8,6 @@ import MessageUI
 struct TodayView: View {
     @EnvironmentObject private var appVM: AppViewModel
     @Environment(\.openURL) private var openURL
-    @Environment(\.managedObjectContext) var managedObjectContext
 
     @FetchRequest(fetchRequest: Medicine.extractMedicines())
     var medicines: FetchedResults<Medicine>
@@ -33,7 +32,9 @@ struct TodayView: View {
     @State private var selectedMapItem: MKMapItem?
     @State private var completionToastItemID: String?
     @State private var completionToastWorkItem: DispatchWorkItem?
+    @State private var completionUndoOperationId: UUID?
     @State private var completionUndoLogID: NSManagedObjectID?
+    @State private var completionUndoKey: String?
     @State private var completedTodoIDs: Set<String> = []
     @State private var completedBlockedSubtasks: Set<String> = []
     @State private var pendingPrescriptionMedIDs: Set<NSManagedObjectID> = []
@@ -42,25 +43,12 @@ struct TodayView: View {
     @State private var intakeGuardrailPrompt: IntakeGuardrailPrompt?
 
     var body: some View {
-        let sections = computeSections(for: Array(medicines), logs: Array(logs), option: options.first)
-        let insightsContext = viewModel.buildInsightsContext(for: sections, medicines: Array(medicines), option: options.first)
-        let urgentIDs = viewModel.urgentMedicineIDs(for: sections)
-        let computedTodos = viewModel.buildTodoItems(from: insightsContext, medicines: Array(medicines), urgentIDs: urgentIDs, option: options.first)
-        let todoItems = storedTodos.compactMap { TodayTodoItem(todo: $0) }
-        let sorted = viewModel.sortTodos(todoItems)
-        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
-        let filtered = sorted.filter { item in
-            if item.category == .therapy, let med = medicine(for: item) {
-                return med.hasIntakeToday(recurrenceManager: rec) && !med.hasIntakeLoggedToday()
-            }
-            return true
-        }
-        let pendingItems = filtered.filter { !completedTodoIDs.contains(completionKey(for: $0)) }
-        let purchaseItems = pendingItems.filter { $0.category == .purchase }
-        let nonPurchaseItems = pendingItems.filter { $0.category != .purchase }
-        let therapyItems = nonPurchaseItems.filter { $0.category == .therapy }
-        let otherItems = nonPurchaseItems.filter { $0.category != .therapy }
-        let showPharmacyCard = !purchaseItems.isEmpty
+        let state = viewModel.state
+        let pendingItems = state.pendingItems
+        let purchaseItems = state.purchaseItems
+        let therapyItems = state.therapyItems
+        let otherItems = state.otherItems
+        let showPharmacyCard = state.showPharmacyCard
 
         let content = List {
             ForEach(Array(therapyItems.enumerated()), id: \.element.id) { entry in
@@ -68,7 +56,7 @@ struct TodayView: View {
                 let isLast = entry.offset == therapyItems.count - 1
                 todoListRow(
                     for: item,
-                    isCompleted: completedTodoIDs.contains(completionKey(for: item)),
+                    isCompleted: completedTodoIDs.contains(viewModel.completionKey(for: item)),
                     isLast: isLast
                 )
             }
@@ -85,7 +73,7 @@ struct TodayView: View {
                         let isLast = entry.offset == purchaseItems.count - 1
                         todoListRow(
                             for: item,
-                            isCompleted: completedTodoIDs.contains(completionKey(for: item)),
+                            isCompleted: completedTodoIDs.contains(viewModel.completionKey(for: item)),
                             isLast: isLast
                         )
                     }
@@ -106,7 +94,7 @@ struct TodayView: View {
                 let isLast = entry.offset == otherItems.count - 1
                 todoListRow(
                     for: item,
-                    isCompleted: completedTodoIDs.contains(completionKey(for: item)),
+                    isCompleted: completedTodoIDs.contains(viewModel.completionKey(for: item)),
                     isLast: isLast
                 )
             }
@@ -129,8 +117,8 @@ struct TodayView: View {
             }
         }
         .scrollIndicators(.hidden)
-        .task(id: syncToken(for: computedTodos)) {
-            viewModel.syncTodos(from: computedTodos, medicines: Array(medicines), option: options.first)
+        .task(id: state.syncToken) {
+            viewModel.syncTodos(from: state.computedTodos, medicines: Array(medicines), option: options.first)
         }
         .sheet(item: $prescriptionToConfirm) { medicine in
             let doctor = prescriptionDoctorContact(for: medicine)
@@ -207,7 +195,19 @@ struct TodayView: View {
         }
         .navigationTitle("Oggi")
         .navigationBarTitleDisplayMode(.large)
-        .onAppear { locationVM.ensureStarted() }
+        .onAppear {
+            locationVM.ensureStarted()
+            refreshState()
+        }
+        .onChange(of: completedTodoIDs) { _ in
+            refreshState()
+        }
+        .onReceive(NotificationCenter.default.publisher(
+            for: .NSManagedObjectContextObjectsDidChange,
+            object: PersistenceController.shared.container.viewContext
+        )) { _ in
+            refreshState()
+        }
 
         mapItemWrappedView(content)
     }
@@ -615,6 +615,7 @@ struct TodayView: View {
         let item: TodayTodoItem
         let medicine: Medicine
         let therapy: Therapy?
+        let operationId: UUID
     }
 
     private func blockedTherapyInfo(for item: TodayTodoItem) -> BlockedTherapyInfo? {
@@ -1046,7 +1047,7 @@ struct TodayView: View {
 
     private func intakeCountToday(for therapy: Therapy, medicine: Medicine, now: Date) -> Int {
         let calendar = Calendar.current
-        let logsToday = (medicine.logs ?? []).filter { $0.type == "intake" && calendar.isDate($0.timestamp, inSameDayAs: now) }
+        let logsToday = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
         let assigned = logsToday.filter { $0.therapy == therapy }.count
         if assigned > 0 { return assigned }
 
@@ -1431,11 +1432,12 @@ struct TodayView: View {
             }
         }
 
-        let key = completionKey(for: item)
+        let key = viewModel.completionKey(for: item)
         if completedTodoIDs.contains(key) {
             _ = withAnimation(.easeInOut(duration: 0.2)) {
                 completedTodoIDs.remove(key)
             }
+            viewModel.clearIntakeOperationId(for: key)
             return
         }
 
@@ -1444,23 +1446,31 @@ struct TodayView: View {
         }
 
         if item.category == .therapy, let medicine = medicine(for: item) {
-            let result: IntakeGuardrailResult
+            let operationId = viewModel.intakeOperationId(for: key)
+            let decision: IntakeDecision
             if let info = nextDoseTodayInfo(for: medicine) {
-                result = viewModel.actionService.guardedMarkAsTaken(for: info.therapy)
+                decision = viewModel.actionService.intakeDecision(for: info.therapy)
             } else {
-                result = viewModel.actionService.guardedMarkAsTaken(for: medicine)
+                decision = viewModel.actionService.intakeDecision(for: medicine)
             }
-            switch result {
-            case .allowed(let log):
-                completeItem(item, log: log)
-            case .requiresConfirmation(let warning, let therapy):
+
+            if let warning = decision.warning {
                 intakeGuardrailPrompt = IntakeGuardrailPrompt(
                     warning: warning,
                     item: item,
                     medicine: medicine,
-                    therapy: therapy
+                    therapy: decision.therapy,
+                    operationId: operationId
                 )
+                return
             }
+
+            let result = viewModel.recordIntake(
+                medicine: medicine,
+                therapy: decision.therapy,
+                operationId: operationId
+            )
+            completeItem(item, log: nil, operationId: result?.operationId ?? operationId)
             return
         }
 
@@ -1468,23 +1478,28 @@ struct TodayView: View {
         completeItem(item, log: log)
     }
 
-    private func completeItem(_ item: TodayTodoItem, log: Log?) {
+    private func completeItem(_ item: TodayTodoItem, log: Log?, operationId: UUID? = nil) {
+        let key = viewModel.completionKey(for: item)
+        completionUndoKey = key
+        completionUndoOperationId = operationId ?? log?.operation_id
         completionUndoLogID = log?.objectID
+        if operationId != nil {
+            _ = viewModel.intakeOperationId(for: key)
+        }
         _ = withAnimation(.easeInOut(duration: 0.2)) {
-            completedTodoIDs.insert(completionKey(for: item))
+            completedTodoIDs.insert(viewModel.completionKey(for: item))
         }
         showCompletionToast(for: item)
     }
 
     private func confirmGuardrailOverride(_ prompt: IntakeGuardrailPrompt) {
-        let log: Log?
-        if let therapy = prompt.therapy {
-            log = viewModel.actionService.markAsTaken(for: therapy)
-        } else {
-            log = viewModel.actionService.markAsTaken(for: prompt.medicine)
-        }
+        let result = viewModel.recordIntake(
+            medicine: prompt.medicine,
+            therapy: prompt.therapy,
+            operationId: prompt.operationId
+        )
         intakeGuardrailPrompt = nil
-        completeItem(prompt.item, log: log)
+        completeItem(prompt.item, log: nil, operationId: result?.operationId ?? prompt.operationId)
     }
 
     private func showCompletionToast(for item: TodayTodoItem) {
@@ -1492,10 +1507,16 @@ struct TodayView: View {
         withAnimation(.easeInOut(duration: 0.2)) {
             completionToastItemID = item.id
         }
+        let undoKey = completionUndoKey
         let workItem = DispatchWorkItem {
             withAnimation(.easeInOut(duration: 0.2)) {
                 completionToastItemID = nil
             }
+            if let undoKey {
+                viewModel.clearIntakeOperationId(for: undoKey)
+            }
+            completionUndoKey = nil
+            completionUndoOperationId = nil
             completionUndoLogID = nil
             completionToastWorkItem = nil
         }
@@ -1511,12 +1532,16 @@ struct TodayView: View {
             completedTodoIDs.remove(id)
             completionToastItemID = nil
         }
-        if let logID = completionUndoLogID,
-           let log = try? managedObjectContext.existingObject(with: logID) as? Log {
-            managedObjectContext.delete(log)
-            try? managedObjectContext.save()
+        viewModel.undoCompletion(
+            operationId: completionUndoOperationId,
+            logObjectID: completionUndoLogID
+        )
+        if let key = completionUndoKey {
+            viewModel.clearIntakeOperationId(for: key)
         }
+        completionUndoOperationId = nil
         completionUndoLogID = nil
+        completionUndoKey = nil
     }
 
     private func recordLogCompletion(for item: TodayTodoItem) -> Log? {
@@ -1526,11 +1551,14 @@ struct TodayView: View {
         let log: Log?
         switch item.category {
         case .therapy:
-            if let info = nextDoseTodayInfo(for: medicine) {
-                log = viewModel.actionService.markAsTaken(for: info.therapy)
-            } else {
-                log = viewModel.actionService.markAsTaken(for: medicine)
-            }
+            let operationId = UUID()
+            let therapy = nextDoseTodayInfo(for: medicine)?.therapy
+            _ = viewModel.recordIntake(
+                medicine: medicine,
+                therapy: therapy,
+                operationId: operationId
+            )
+            log = nil
         case .monitoring, .missedDose:
             log = nil
         case .purchase:
@@ -1554,22 +1582,14 @@ struct TodayView: View {
         return log
     }
 
-    private func completionKey(for item: TodayTodoItem) -> String {
-        if item.category == .monitoring || item.category == .missedDose {
-            return item.id
-        }
-        if let medID = item.medicineID {
-            return "\(item.category.rawValue)|\(medID)"
-        }
-        return item.id
-    }
-
-    private func syncToken(for items: [TodayTodoItem]) -> String {
-        items.map { item in
-            let detail = item.detail ?? ""
-            let medID = item.medicineID?.uriRepresentation().absoluteString ?? ""
-            return "\(item.id)|\(item.category.rawValue)|\(item.title)|\(detail)|\(medID)"
-        }.joined(separator: "||")
+    private func refreshState() {
+        viewModel.refreshState(
+            medicines: Array(medicines),
+            logs: Array(logs),
+            todos: Array(storedTodos),
+            option: options.first,
+            completedTodoIDs: completedTodoIDs
+        )
     }
 
     private var completionToastView: some View {
@@ -1906,11 +1926,9 @@ struct TodayView: View {
         if let therapies = medicine.therapies, let therapy = therapies.first {
             return therapy.package
         }
-        if let logs = medicine.logs {
-            let purchaseLogs = logs.filter { $0.type == "purchase" }
-            if let package = purchaseLogs.sorted(by: { $0.timestamp > $1.timestamp }).first?.package {
-                return package
-            }
+        let purchaseLogs = medicine.effectivePurchaseLogs()
+        if let package = purchaseLogs.sorted(by: { $0.timestamp > $1.timestamp }).first?.package {
+            return package
         }
         if let package = medicine.packages.first {
             return package

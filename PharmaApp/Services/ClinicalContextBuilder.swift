@@ -157,8 +157,7 @@ struct ClinicalContextBuilder {
     }
 
     private func hasMatchingIntakeLog(for event: DoseEvent, therapy: Therapy, tolerance: TimeInterval) -> Bool {
-        guard let logs = therapy.medicine.logs else { return false }
-        let intakeLogs = logs.filter { $0.type == "intake" }
+        let intakeLogs = therapy.medicine.effectiveIntakeLogs()
         guard !intakeLogs.isEmpty else { return false }
 
         for log in intakeLogs {

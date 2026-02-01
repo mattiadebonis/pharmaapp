@@ -248,12 +248,8 @@ struct CabinetCardView: View {
     private func intakeLogsToday(for entry: MedicinePackage) -> Int {
         let cal = Calendar.current
         let today = Date()
-        let logs = entry.medicine.logs ?? []
-        return logs.filter {
-            $0.type == "intake" &&
-            $0.package == entry.package &&
-            cal.isDate($0.timestamp, inSameDayAs: today)
-        }.count
+        let logs = entry.medicine.effectiveIntakeLogs(on: today, calendar: cal)
+        return logs.filter { $0.package == entry.package }.count
     }
 
     private func therapies(for entry: MedicinePackage) -> [Therapy] {

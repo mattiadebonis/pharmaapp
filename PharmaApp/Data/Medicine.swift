@@ -157,17 +157,12 @@ extension Medicine {
     /// Restituisce `true` se esiste almeno un log di tipo "new_prescription"
     /// non seguito (cioè avvenuto dopo) da un log di tipo "purchase".
     func hasPendingNewPrescription() -> Bool {
-        // Se non ci sono log, ritorna false
-        guard let logs = self.logs, !logs.isEmpty else { return false }
-        
-        // Filtra i log di tipo "new_prescription"
-        let newPrescriptionLogs = logs.filter { $0.type == "new_prescription" }
+        let newPrescriptionLogs = effectivePrescriptionReceivedLogs()
         if newPrescriptionLogs.isEmpty {
             return false
         }
         
-        // Filtra i log di tipo "purchase"
-        let purchaseLogs = logs.filter { $0.type == "purchase" }
+        let purchaseLogs = effectivePurchaseLogs()
         
         // Trova l'ultimo log di "new_prescription" (in base al timestamp)
         guard let lastNewPrescription = newPrescriptionLogs.max(by: { $0.timestamp < $1.timestamp }) else {
@@ -185,11 +180,7 @@ extension Medicine {
     }
 
     func hasNewPrescritpionRequest() -> Bool {
-        // Verifica che esistano log associati alla medicina
-        guard let logs = self.logs, !logs.isEmpty else { return false }
-        
-        // Filtra i log di tipo "new_prescription"
-        let prescriptionLogs = logs.filter { $0.type == "new_prescription_request" }
+        let prescriptionLogs = effectivePrescriptionRequestLogs()
         guard !prescriptionLogs.isEmpty else { return false }
         
         // Trova l'ultimo log di "new_prescription" in base al timestamp
@@ -198,7 +189,7 @@ extension Medicine {
         }
         
         // Filtra i log di tipo "purchase" che sono avvenuti dopo l'ultimo "new_prescription"
-        let purchaseLogsAfterPrescription = logs.filter { $0.type == "purchase" && $0.timestamp > lastPrescription.timestamp }
+        let purchaseLogsAfterPrescription = effectivePurchaseLogs().filter { $0.timestamp > lastPrescription.timestamp }
         
         // Restituisce true solo se non sono stati trovati log di "purchase" successivi all'ultima "new_prescription"
         return purchaseLogsAfterPrescription.isEmpty
@@ -244,10 +235,53 @@ extension Medicine {
 
     /// True se esiste già un log di assunzione registrato nella giornata corrente.
     func hasIntakeLoggedToday(calendar: Calendar = .current) -> Bool {
-        guard let logs = logs, !logs.isEmpty else { return false }
-        return logs.contains { log in
-            log.type == "intake" && calendar.isDateInToday(log.timestamp)
+        let todayLogs = effectiveIntakeLogs(on: Date(), calendar: calendar)
+        return !todayLogs.isEmpty
+    }
+
+    func effectiveIntakeLogs(calendar: Calendar = .current) -> [Log] {
+        effectiveLogs(type: "intake", undoType: "intake_undo")
+    }
+
+    func effectiveIntakeLogs(on date: Date, calendar: Calendar = .current) -> [Log] {
+        effectiveIntakeLogs(calendar: calendar).filter { log in
+            calendar.isDate(log.timestamp, inSameDayAs: date)
         }
+    }
+
+    func effectivePurchaseLogs() -> [Log] {
+        effectiveLogs(type: "purchase", undoType: "purchase_undo")
+    }
+
+    func effectivePrescriptionRequestLogs() -> [Log] {
+        effectiveLogs(type: "new_prescription_request", undoType: "prescription_request_undo")
+    }
+
+    func effectivePrescriptionReceivedLogs() -> [Log] {
+        effectiveLogs(type: "new_prescription", undoType: "prescription_received_undo")
+    }
+
+    private func effectiveLogs(type: String, undoType: String) -> [Log] {
+        let logs = Array(logs ?? [])
+        guard !logs.isEmpty else { return [] }
+        let reversed = reversedOperationIds(for: undoType, logs: logs)
+        return logs.filter { log in
+            guard log.type == type else { return false }
+            guard let opId = log.operation_id else { return true }
+            return !reversed.contains(opId)
+        }
+    }
+
+    private func reversedOperationIds(for undoType: String, logs: [Log]) -> Set<UUID> {
+        Set(
+            logs.compactMap { log in
+                guard log.type == undoType,
+                      let opId = log.reversal_of_operation_id else {
+                    return nil
+                }
+                return opId
+            }
+        )
     }
 
 
@@ -416,18 +450,13 @@ extension Medicine {
     }
 
     func isPrescriptionNotFollowedByPurchase() -> Bool {
-        // Se non esistono log, restituisce false
-        guard let logs = self.logs, !logs.isEmpty else { return false }
-        
-        // Filtra i log di tipo "new_prescription"
-        let prescriptionLogs = logs.filter { $0.type == "new_prescription" }
+        let prescriptionLogs = effectivePrescriptionReceivedLogs()
         // Se non ci sono ricette, non ha senso controllare gli acquisti
         guard let lastPrescription = prescriptionLogs.max(by: { $0.timestamp < $1.timestamp }) else {
             return false
         }
         
-        // Filtra i log di tipo "purchase" che sono avvenuti dopo l'ultima ricetta
-        let purchaseLogsAfterPrescription = logs.filter { $0.type == "purchase" && $0.timestamp > lastPrescription.timestamp }
+        let purchaseLogsAfterPrescription = effectivePurchaseLogs().filter { $0.timestamp > lastPrescription.timestamp }
         
         // Se non esistono acquisti dopo l'ultima ricetta, restituisce true
         return purchaseLogsAfterPrescription.isEmpty

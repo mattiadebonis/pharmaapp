@@ -6,6 +6,11 @@ struct IntakeGuardrailWarning {
     let message: String
 }
 
+struct IntakeDecision {
+    let warning: IntakeGuardrailWarning?
+    let therapy: Therapy?
+}
+
 enum IntakeGuardrailResult {
     case allowed(Log?)
     case requiresConfirmation(IntakeGuardrailWarning, therapy: Therapy?)
@@ -14,90 +19,184 @@ enum IntakeGuardrailResult {
 /// Servizio che incapsula le azioni di dominio sui medicinali (log di assunzione, acquisto, ricetta).
 final class MedicineActionService {
     private let context: NSManagedObjectContext
+    private let clock: Clock
     private lazy var stockService = StockService(context: context)
+    private lazy var eventStore: EventStore = CoreDataEventStore(context: context)
+    private lazy var recordPurchaseUseCase = RecordPurchaseUseCase(eventStore: eventStore, clock: clock)
+    private lazy var requestPrescriptionUseCase = RequestPrescriptionUseCase(eventStore: eventStore, clock: clock)
+    private lazy var recordPrescriptionReceivedUseCase = RecordPrescriptionReceivedUseCase(eventStore: eventStore, clock: clock)
 
-    init(context: NSManagedObjectContext = PersistenceController.shared.container.viewContext) {
+    init(context: NSManagedObjectContext = PersistenceController.shared.container.viewContext, clock: Clock = SystemClock()) {
         self.context = context
+        self.clock = clock
     }
 
     // MARK: - API pubblica
     @discardableResult
-    func requestPrescription(for medicine: Medicine) -> Log? {
+    func requestPrescription(for medicine: Medicine, operationId: UUID = UUID()) -> Log? {
         guard let package = package(for: medicine) else { return nil }
-        return addLog(for: medicine, package: package, type: "new_prescription_request")
+        let request = RequestPrescriptionRequest(
+            operationId: operationId,
+            medicineId: MedicineId(medicine.id),
+            packageId: PackageId(package.id)
+        )
+        do {
+            _ = try requestPrescriptionUseCase.execute(request)
+            return existingLog(operationId: operationId)
+        } catch {
+            print("⚠️ requestPrescription: \(error)")
+            return nil
+        }
     }
 
     @discardableResult
-    func requestPrescription(for entry: MedicinePackage) -> Log? {
-        addLog(for: entry.medicine, package: entry.package, type: "new_prescription_request")
+    func requestPrescription(for entry: MedicinePackage, operationId: UUID = UUID()) -> Log? {
+        let request = RequestPrescriptionRequest(
+            operationId: operationId,
+            medicineId: MedicineId(entry.medicine.id),
+            packageId: PackageId(entry.package.id)
+        )
+        do {
+            _ = try requestPrescriptionUseCase.execute(request)
+            return existingLog(operationId: operationId)
+        } catch {
+            print("⚠️ requestPrescription: \(error)")
+            return nil
+        }
     }
 
     @discardableResult
-    func markPrescriptionReceived(for medicine: Medicine) -> Log? {
+    func markPrescriptionReceived(for medicine: Medicine, operationId: UUID = UUID()) -> Log? {
         guard let package = package(for: medicine) else { return nil }
-        return addLog(for: medicine, package: package, type: "new_prescription")
+        let request = RecordPrescriptionReceivedRequest(
+            operationId: operationId,
+            medicineId: MedicineId(medicine.id),
+            packageId: PackageId(package.id)
+        )
+        do {
+            _ = try recordPrescriptionReceivedUseCase.execute(request)
+            return existingLog(operationId: operationId)
+        } catch {
+            print("⚠️ markPrescriptionReceived: \(error)")
+            return nil
+        }
     }
 
     @discardableResult
-    func markPrescriptionReceived(for entry: MedicinePackage) -> Log? {
-        addLog(for: entry.medicine, package: entry.package, type: "new_prescription")
+    func markPrescriptionReceived(for entry: MedicinePackage, operationId: UUID = UUID()) -> Log? {
+        let request = RecordPrescriptionReceivedRequest(
+            operationId: operationId,
+            medicineId: MedicineId(entry.medicine.id),
+            packageId: PackageId(entry.package.id)
+        )
+        do {
+            _ = try recordPrescriptionReceivedUseCase.execute(request)
+            return existingLog(operationId: operationId)
+        } catch {
+            print("⚠️ markPrescriptionReceived: \(error)")
+            return nil
+        }
     }
 
     @discardableResult
-    func markAsPurchased(for medicine: Medicine) -> Log? {
+    func markAsPurchased(for medicine: Medicine, operationId: UUID = UUID()) -> Log? {
         guard let package = package(for: medicine) else { return nil }
-        return addLog(for: medicine, package: package, type: "purchase")
+        let request = RecordPurchaseRequest(
+            operationId: operationId,
+            medicineId: MedicineId(medicine.id),
+            packageId: PackageId(package.id)
+        )
+        do {
+            _ = try recordPurchaseUseCase.execute(request)
+            return existingLog(operationId: operationId)
+        } catch {
+            print("⚠️ markAsPurchased: \(error)")
+            return nil
+        }
     }
 
     @discardableResult
-    func markAsPurchased(for entry: MedicinePackage) -> Log? {
-        addLog(for: entry.medicine, package: entry.package, type: "purchase")
+    func markAsPurchased(for entry: MedicinePackage, operationId: UUID = UUID()) -> Log? {
+        let request = RecordPurchaseRequest(
+            operationId: operationId,
+            medicineId: MedicineId(entry.medicine.id),
+            packageId: PackageId(entry.package.id)
+        )
+        do {
+            _ = try recordPurchaseUseCase.execute(request)
+            return existingLog(operationId: operationId)
+        } catch {
+            print("⚠️ markAsPurchased: \(error)")
+            return nil
+        }
     }
 
     @discardableResult
-    func markAsTaken(for medicine: Medicine) -> Log? {
+    func markAsTaken(for medicine: Medicine, operationId: UUID = UUID()) -> Log? {
         let therapy = resolveTherapyCandidate(for: medicine, now: Date())
-        return addIntakeLog(for: medicine, therapy: therapy)
+        return addIntakeLog(for: medicine, therapy: therapy, operationId: operationId)
     }
 
     @discardableResult
-    func markAsTaken(for entry: MedicinePackage) -> Log? {
+    func markAsTaken(for entry: MedicinePackage, operationId: UUID = UUID()) -> Log? {
         let therapy = resolveTherapyCandidate(for: entry, now: Date())
         if let therapy {
-            return addLog(for: entry.medicine, package: entry.package, type: "intake", therapy: therapy)
+            return addLog(for: entry.medicine, package: entry.package, type: "intake", therapy: therapy, operationId: operationId)
         }
-        return addLog(for: entry.medicine, package: entry.package, type: "intake")
+        return addLog(for: entry.medicine, package: entry.package, type: "intake", operationId: operationId)
     }
 
     @discardableResult
-    func markAsTaken(for therapy: Therapy) -> Log? {
-        addIntakeLog(for: therapy.medicine, therapy: therapy)
+    func markAsTaken(for therapy: Therapy, operationId: UUID = UUID()) -> Log? {
+        addIntakeLog(for: therapy.medicine, therapy: therapy, operationId: operationId)
     }
 
-    func guardedMarkAsTaken(for medicine: Medicine, now: Date = Date()) -> IntakeGuardrailResult {
+    func guardedMarkAsTaken(for medicine: Medicine, operationId: UUID = UUID(), now: Date = Date()) -> IntakeGuardrailResult {
         let therapy = resolveTherapyCandidate(for: medicine, now: now)
         if let warning = intakeGuardrailWarning(for: medicine, therapy: therapy, now: now) {
             return .requiresConfirmation(warning, therapy: therapy)
         }
-        return .allowed(addIntakeLog(for: medicine, therapy: therapy))
+        return .allowed(addIntakeLog(for: medicine, therapy: therapy, operationId: operationId))
     }
 
-    func guardedMarkAsTaken(for entry: MedicinePackage, now: Date = Date()) -> IntakeGuardrailResult {
+    func guardedMarkAsTaken(for entry: MedicinePackage, operationId: UUID = UUID(), now: Date = Date()) -> IntakeGuardrailResult {
         let therapy = resolveTherapyCandidate(for: entry, now: now)
         if let warning = intakeGuardrailWarning(for: entry.medicine, therapy: therapy, now: now) {
             return .requiresConfirmation(warning, therapy: therapy)
         }
         if let therapy {
-            return .allowed(addLog(for: entry.medicine, package: entry.package, type: "intake", therapy: therapy))
+            return .allowed(addLog(for: entry.medicine, package: entry.package, type: "intake", therapy: therapy, operationId: operationId))
         }
-        return .allowed(addLog(for: entry.medicine, package: entry.package, type: "intake"))
+        return .allowed(addLog(for: entry.medicine, package: entry.package, type: "intake", operationId: operationId))
     }
 
-    func guardedMarkAsTaken(for therapy: Therapy, now: Date = Date()) -> IntakeGuardrailResult {
+    func guardedMarkAsTaken(for therapy: Therapy, operationId: UUID = UUID(), now: Date = Date()) -> IntakeGuardrailResult {
         if let warning = intakeGuardrailWarning(for: therapy.medicine, therapy: therapy, now: now) {
             return .requiresConfirmation(warning, therapy: therapy)
         }
-        return .allowed(addIntakeLog(for: therapy.medicine, therapy: therapy))
+        return .allowed(addIntakeLog(for: therapy.medicine, therapy: therapy, operationId: operationId))
+    }
+
+    func intakeDecision(for medicine: Medicine, now: Date = Date()) -> IntakeDecision {
+        let therapy = resolveTherapyCandidate(for: medicine, now: now)
+        let warning = intakeGuardrailWarning(for: medicine, therapy: therapy, now: now)
+        return IntakeDecision(warning: warning, therapy: therapy)
+    }
+
+    func intakeDecision(for therapy: Therapy, now: Date = Date()) -> IntakeDecision {
+        let warning = intakeGuardrailWarning(for: therapy.medicine, therapy: therapy, now: now)
+        return IntakeDecision(warning: warning, therapy: therapy)
+    }
+
+    @discardableResult
+    func undoLog(operationId: UUID) -> Bool {
+        return stockService.undoLog(operationId: operationId)
+    }
+
+    @discardableResult
+    func undoLog(logObjectID: NSManagedObjectID) -> Bool {
+        guard let log = try? context.existingObject(with: logObjectID) as? Log else { return false }
+        return stockService.undoLog(log)
     }
 
     // MARK: - Helpers
@@ -105,11 +204,9 @@ final class MedicineActionService {
         if let therapies = medicine.therapies, let therapy = therapies.first {
             return therapy.package
         }
-        if let logs = medicine.logs {
-            let purchaseLogs = logs.filter { $0.type == "purchase" }
-            if let package = purchaseLogs.sorted(by: { $0.timestamp > $1.timestamp }).first?.package {
-                return package
-            }
+        let purchaseLogs = medicine.effectivePurchaseLogs()
+        if let package = purchaseLogs.sorted(by: { $0.timestamp > $1.timestamp }).first?.package {
+            return package
         }
         if !medicine.packages.isEmpty {
             return medicine.packages.sorted(by: { $0.numero > $1.numero }).first
@@ -166,12 +263,12 @@ final class MedicineActionService {
         return therapies.first
     }
 
-    private func addIntakeLog(for medicine: Medicine, therapy: Therapy?) -> Log? {
+    private func addIntakeLog(for medicine: Medicine, therapy: Therapy?, operationId: UUID) -> Log? {
         if let therapy {
-            return addLog(for: medicine, package: therapy.package, type: "intake", therapy: therapy)
+            return addLog(for: medicine, package: therapy.package, type: "intake", therapy: therapy, operationId: operationId)
         }
         guard let package = package(for: medicine) else { return nil }
-        return addLog(for: medicine, package: package, type: "intake")
+        return addLog(for: medicine, package: package, type: "intake", operationId: operationId)
     }
 
     private func intakeGuardrailWarning(for medicine: Medicine, therapy: Therapy?, now: Date) -> IntakeGuardrailWarning? {
@@ -180,7 +277,7 @@ final class MedicineActionService {
 
     private func intakeCountToday(for therapy: Therapy?, medicine: Medicine, now: Date) -> Int {
         let calendar = Calendar.current
-        let logsToday = (medicine.logs ?? []).filter { $0.type == "intake" && calendar.isDate($0.timestamp, inSameDayAs: now) }
+        let logsToday = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
         guard let therapy else { return logsToday.count }
         let assigned = logsToday.filter { $0.therapy == therapy }.count
         if assigned > 0 { return assigned }
@@ -192,7 +289,7 @@ final class MedicineActionService {
     }
 
     private func lastIntakeLog(for therapy: Therapy?, medicine: Medicine) -> Log? {
-        let logs = (medicine.logs ?? []).filter { $0.type == "intake" }
+        let logs = medicine.effectiveIntakeLogs()
         guard let therapy else {
             return logs.max(by: { $0.timestamp < $1.timestamp })
         }
@@ -209,7 +306,27 @@ final class MedicineActionService {
     }
 
     @discardableResult
-    private func addLog(for medicine: Medicine, package: Package, type: String, therapy: Therapy? = nil) -> Log? {
-        return stockService.createLog(type: type, medicine: medicine, package: package, therapy: therapy)
+    private func addLog(
+        for medicine: Medicine,
+        package: Package,
+        type: String,
+        therapy: Therapy? = nil,
+        operationId: UUID
+    ) -> Log? {
+        return stockService.createLog(
+            type: type,
+            medicine: medicine,
+            package: package,
+            therapy: therapy,
+            operationId: operationId
+        )
+    }
+
+    private func existingLog(operationId: UUID) -> Log? {
+        let request: NSFetchRequest<Log> = Log.fetchRequest() as! NSFetchRequest<Log>
+        request.fetchLimit = 1
+        request.includesSubentities = false
+        request.predicate = NSPredicate(format: "operation_id == %@", operationId as CVarArg)
+        return try? context.fetch(request).first
     }
 }
