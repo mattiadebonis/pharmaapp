@@ -589,14 +589,8 @@ struct TodayView: View {
     }
 
     private func personNameForTherapy(_ medicine: Medicine) -> String? {
-        if let info = nextDoseTodayInfo(for: medicine), let person = info.personName, !person.isEmpty {
-            return person
-        }
-        if let therapies = medicine.therapies,
-           let person = therapies.compactMap({ ($0.value(forKey: "person") as? Person).flatMap(displayName(for:)) }).first(where: { !$0.isEmpty }) {
-            return person
-        }
-        return nil
+        guard let person = viewModel.state.medicineStatuses[medicine.objectID]?.personName else { return nil }
+        return person.isEmpty ? nil : person
     }
 
     // MARK: - Terapia bloccata (ricetta/scorte)
@@ -619,19 +613,16 @@ struct TodayView: View {
     }
 
     private func blockedTherapyInfo(for item: TodayTodoItem) -> BlockedTherapyInfo? {
-        guard item.category == .therapy, let medicine = medicine(for: item) else { return nil }
-        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
-        let needsRx = viewModel.needsPrescriptionBeforePurchase(medicine, option: options.first, recurrenceManager: rec)
-        let outOfStock = viewModel.isOutOfStock(medicine, option: options.first, recurrenceManager: rec)
-        let depleted = isStockDepleted(medicine)
-        guard needsRx || outOfStock else { return nil }
+        guard item.category == .therapy,
+              let blocked = viewModel.state.blockedTherapyStatuses[item.id],
+              let medicine = medicine(for: item) else { return nil }
         let contact = prescriptionDoctorContact(for: medicine)
-        let personName = personNameForTherapy(medicine)
+        let personName = blocked.personName
         return BlockedTherapyInfo(
             medicine: medicine,
-            needsPrescription: needsRx,
-            isOutOfStock: outOfStock,
-            isDepleted: depleted,
+            needsPrescription: blocked.needsPrescription,
+            isOutOfStock: blocked.isOutOfStock,
+            isDepleted: blocked.isDepleted,
             doctor: contact,
             personName: personName
         )
@@ -742,8 +733,7 @@ struct TodayView: View {
 
     private func completeBlockedIntake(for info: BlockedTherapyInfo) {
         let med = info.medicine
-        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
-        if needsPrescriptionBeforePurchase(med, recurrenceManager: rec),
+        if viewModel.state.medicineStatuses[med.objectID]?.needsPrescription == true,
            !isAwaitingPrescription(med) {
             sendPrescriptionRequest(for: med)
         }
@@ -995,169 +985,13 @@ struct TodayView: View {
         }
     }
 
-    private struct TodayDoseInfo {
-        let date: Date
-        let personName: String?
-        let therapy: Therapy
-    }
-
     private enum PrescriptionTaskState: Equatable {
         case needsRequest
         case waitingResponse
     }
-
-    private func combine(day: Date, withTime time: Date) -> Date? {
-        let calendar = Calendar.current
-        let dayComponents = calendar.dateComponents([.year, .month, .day], from: day)
-        let timeComponents = calendar.dateComponents([.hour, .minute, .second], from: time)
-
-        var mergedComponents = DateComponents()
-        mergedComponents.year = dayComponents.year
-        mergedComponents.month = dayComponents.month
-        mergedComponents.day = dayComponents.day
-        mergedComponents.hour = timeComponents.hour
-        mergedComponents.minute = timeComponents.minute
-        mergedComponents.second = timeComponents.second
-
-        return calendar.date(from: mergedComponents)
-    }
-
-    private func allowedEvents(on day: Date, for therapy: Therapy, recurrenceManager: RecurrenceManager) -> Int {
-        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-        let start = therapy.start_date ?? day
-        let perDay = max(1, therapy.doses?.count ?? 0)
-        return recurrenceManager.allowedEvents(on: day, rule: rule, startDate: start, dosesPerDay: perDay)
-    }
-
-    private func occursToday(_ therapy: Therapy, now: Date, recurrenceManager: RecurrenceManager) -> Bool {
-        return allowedEvents(on: now, for: therapy, recurrenceManager: recurrenceManager) > 0
-    }
-
-    private func scheduledTimesToday(for therapy: Therapy, now: Date, recurrenceManager: RecurrenceManager) -> [Date] {
-        let today = Calendar.current.startOfDay(for: now)
-        let allowed = allowedEvents(on: today, for: therapy, recurrenceManager: recurrenceManager)
-        guard allowed > 0 else { return [] }
-        guard let doseSet = therapy.doses, !doseSet.isEmpty else { return [] }
-        let sortedDoses = doseSet.sorted { $0.time < $1.time }
-        let limitedDoses = sortedDoses.prefix(min(allowed, sortedDoses.count))
-        return limitedDoses.compactMap { dose in
-            combine(day: today, withTime: dose.time)
-        }
-    }
-
-    private func intakeCountToday(for therapy: Therapy, medicine: Medicine, now: Date) -> Int {
-        let calendar = Calendar.current
-        let logsToday = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
-        let assigned = logsToday.filter { $0.therapy == therapy }.count
-        if assigned > 0 { return assigned }
-
-        let unassigned = logsToday.filter { $0.therapy == nil }
-        let therapyCount = medicine.therapies?.count ?? 0
-        if therapyCount == 1 { return unassigned.count }
-        return unassigned.filter { $0.package == therapy.package }.count
-    }
-
-    private func nextUpcomingDoseDate(for therapy: Therapy, medicine: Medicine, now: Date, recurrenceManager: RecurrenceManager) -> Date? {
-        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-        let startDate = therapy.start_date ?? now
-        let calendar = Calendar.current
-
-        let timesToday = scheduledTimesToday(for: therapy, now: now, recurrenceManager: recurrenceManager)
-        if calendar.isDateInToday(now), !timesToday.isEmpty {
-            let takenCount = intakeCountToday(for: therapy, medicine: medicine, now: now)
-            if takenCount >= timesToday.count {
-                let endOfDay = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: calendar.startOfDay(for: now)) ?? now
-                return recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: endOfDay, doses: therapy.doses as NSSet?)
-            }
-            let pending = Array(timesToday.dropFirst(min(takenCount, timesToday.count)))
-            if let firstPending = pending.first {
-                return firstPending
-            }
-        }
-
-        return recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: now, doses: therapy.doses as NSSet?)
-    }
-
-    private func nextDoseTodayInfo(for medicine: Medicine) -> TodayDoseInfo? {
-        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
-        guard let therapies = medicine.therapies, !therapies.isEmpty else { return nil }
-        let now = Date()
-        let calendar = Calendar.current
-
-        var best: (date: Date, personName: String?, therapy: Therapy)? = nil
-        for therapy in therapies where therapy.manual_intake_registration {
-            guard let next = nextUpcomingDoseDate(for: therapy, medicine: medicine, now: now, recurrenceManager: rec) else {
-                continue
-            }
-            guard calendar.isDateInToday(next) else { continue }
-            let personName = (therapy.value(forKey: "person") as? Person).flatMap { displayName(for: $0) }
-            if best == nil || next < best!.date {
-                best = (next, personName, therapy)
-            }
-        }
-        guard let best else { return nil }
-        return TodayDoseInfo(date: best.date, personName: best.personName, therapy: best.therapy)
-    }
-
     private func prescriptionTaskState(for medicine: Medicine?, item: TodayTodoItem) -> PrescriptionTaskState? {
         guard item.category == .prescription, let medicine else { return nil }
         return medicine.hasNewPrescritpionRequest() ? .waitingResponse : .needsRequest
-    }
-
-    private func displayName(for person: Person) -> String? {
-        let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return first.isEmpty ? nil : first
-    }
-
-    private func therapyVerb(for medicine: Medicine) -> String {
-        let now = Date()
-        guard let therapies = medicine.therapies, !therapies.isEmpty else { return "continuare" }
-        let earliestStart = therapies.compactMap(\.start_date).min() ?? now
-        return earliestStart > now ? "iniziare" : "continuare"
-    }
-
-    private func nextDoseLabelInNextWeek(for medicineID: NSManagedObjectID) -> String? {
-        guard let medicine = medicines.first(where: { $0.objectID == medicineID }) else { return nil }
-        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
-        guard let next = earliestDoseInNextWeek(for: medicine, recurrenceManager: rec) else { return nil }
-        return formattedDoseDateTime(next)
-    }
-
-    private func earliestDoseInNextWeek(for medicine: Medicine, recurrenceManager: RecurrenceManager) -> Date? {
-        guard let therapies = medicine.therapies, !therapies.isEmpty else { return nil }
-        let now = Date()
-        let limit = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
-        var best: Date? = nil
-        for therapy in therapies {
-            if let next = nextUpcomingDoseDate(for: therapy, medicine: medicine, now: now, recurrenceManager: recurrenceManager) {
-                guard next <= limit else { continue }
-                if best == nil || next < best! { best = next }
-            }
-        }
-        return best
-    }
-
-    private func formattedDoseDateTime(_ date: Date) -> String {
-        let calendar = Calendar.current
-
-        let timeFormatter = DateFormatter()
-        timeFormatter.locale = Locale(identifier: "it_IT")
-        timeFormatter.dateStyle = .none
-        timeFormatter.timeStyle = .short
-        let time = timeFormatter.string(from: date)
-
-        if calendar.isDateInToday(date) { return "oggi alle \(time)" }
-        if calendar.isDateInTomorrow(date) { return "domani alle \(time)" }
-        if let dayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: Date()),
-           calendar.isDate(date, inSameDayAs: dayAfterTomorrow) {
-            return "dopodomani alle \(time)" }
-
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "it_IT")
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        let dateText = formatter.string(from: date)
-        return "\(dateText) alle \(time)"
     }
 
     private func formattedMedicineName(_ name: String) -> String {
@@ -1240,112 +1074,6 @@ struct TodayView: View {
         }
     }
 
-    private func stockBadge(for medicine: Medicine) -> String? {
-        if let therapies = medicine.therapies, !therapies.isEmpty {
-            let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
-            let totalLeft = therapies.reduce(0.0) { $0 + Double($1.leftover()) }
-            let totalDaily = therapies.reduce(0.0) { $0 + $1.stimaConsumoGiornaliero(recurrenceManager: rec) }
-            if totalDaily > 0 {
-                let days = Int(totalLeft / totalDaily)
-                return "Scorte \(max(0, days)) gg"
-            }
-            return totalLeft <= 0 ? "Scorte 0" : "Scorte ok"
-        }
-        if let remaining = medicine.remainingUnitsWithoutTherapy() {
-            return remaining <= 0 ? "Scorte 0" : "Scorte \(remaining) u"
-        }
-        return nil
-    }
-
-    private func stockSubtitle(for medicine: Medicine) -> String? {
-        let unitForm = medicineUnitForm(for: medicine)
-        var lines: [String] = []
-
-        if let therapies = medicine.therapies, !therapies.isEmpty {
-            let totalLeft = therapies.reduce(0.0) { $0 + Double($1.leftover()) }
-            lines.append(stockLine(count: Int(max(0, totalLeft)), unitForm: unitForm))
-            if totalLeft <= 0, let nextDose = earliestDoseToday(for: medicine) {
-                lines.append("Prossima dose scoperta: \(TodayFormatters.time.string(from: nextDose))")
-            }
-            return lines.joined(separator: "\n")
-        }
-        if let remaining = medicine.remainingUnitsWithoutTherapy() {
-            lines.append(stockLine(count: max(0, remaining), unitForm: unitForm))
-            if remaining <= 0, let nextDose = earliestDoseToday(for: medicine) {
-                lines.append("Prossima dose scoperta: \(TodayFormatters.time.string(from: nextDose))")
-            }
-            return lines.joined(separator: "\n")
-        }
-        return nil
-    }
-
-    private func stockLine(count: Int, unitForm: UnitForm) -> String {
-        let isSingular = count == 1
-        let unitText = isSingular ? unitForm.singular : unitForm.plural
-        let verb = isSingular ? "rimasta" : "rimaste"
-        return "\(count) \(unitText) \(verb)"
-    }
-
-    private struct UnitForm {
-        let singular: String
-        let plural: String
-        let aliases: [String]
-    }
-
-    private static let unitForms: [UnitForm] = [
-        UnitForm(singular: "compressa", plural: "compresse", aliases: ["compressa", "compresse"]),
-        UnitForm(singular: "capsula", plural: "capsule", aliases: ["capsula", "capsule"]),
-        UnitForm(singular: "fiala", plural: "fiale", aliases: ["fiala", "fiale"]),
-        UnitForm(singular: "bustina", plural: "bustine", aliases: ["bustina", "bustine"]),
-        UnitForm(singular: "goccia", plural: "gocce", aliases: ["goccia", "gocce"]),
-        UnitForm(singular: "cerotto", plural: "cerotti", aliases: ["cerotto", "cerotti"]),
-        UnitForm(singular: "ovulo", plural: "ovuli", aliases: ["ovulo", "ovuli"]),
-        UnitForm(singular: "supposta", plural: "supposte", aliases: ["supposta", "supposte"]),
-        UnitForm(singular: "flaconcino", plural: "flaconcini", aliases: ["flaconcino", "flaconcini"]),
-        UnitForm(singular: "flacone", plural: "flaconi", aliases: ["flacone", "flaconi"]),
-        UnitForm(singular: "siringa", plural: "siringhe", aliases: ["siringa", "siringhe"]),
-        UnitForm(singular: "pipetta", plural: "pipette", aliases: ["pipetta", "pipette"]),
-        UnitForm(singular: "boccetta", plural: "boccette", aliases: ["boccetta", "boccette"]),
-        UnitForm(singular: "sacca", plural: "sacche", aliases: ["sacca", "sacche"]),
-        UnitForm(singular: "garza", plural: "garze", aliases: ["garza", "garze"]),
-        UnitForm(singular: "pastiglia", plural: "pastiglie", aliases: ["pastiglia", "pastiglie"]),
-        UnitForm(singular: "pillola", plural: "pillole", aliases: ["pillola", "pillole"]),
-        UnitForm(singular: "spray", plural: "spray", aliases: ["spray"]),
-        UnitForm(singular: "pezzo", plural: "pezzi", aliases: ["pezzo", "pezzi", "pz"]),
-        UnitForm(singular: "unità", plural: "unità", aliases: ["unità"])
-    ]
-
-    private static let fallbackUnitForm = UnitForm(
-        singular: "unità",
-        plural: "unità",
-        aliases: []
-    )
-
-    private func medicineUnitForm(for medicine: Medicine) -> UnitForm {
-        let package = medicine.therapies?.first?.package ?? medicine.packages.first
-        if let form = unitForm(from: package?.tipologia) { return form }
-        if let form = unitForm(from: package?.unita) { return form }
-        return Self.fallbackUnitForm
-    }
-
-    private func unitForm(from raw: String?) -> UnitForm? {
-        guard let raw else { return nil }
-        let normalized = raw.lowercased().replacingOccurrences(
-            of: #"[^\p{L}]+"#,
-            with: " ",
-            options: .regularExpression
-        )
-        let tokens = normalized.split(separator: " ").map(String.init)
-        for token in tokens {
-            if let match = Self.unitForms.first(where: { form in
-                form.aliases.contains(where: { token.hasPrefix($0) })
-            }) {
-                return match
-            }
-        }
-        return nil
-    }
-
     private func medicineSubtitle(for medicine: Medicine) -> MedicineAggregateSubtitle {
         makeMedicineSubtitle(medicine: medicine)
     }
@@ -1362,44 +1090,11 @@ struct TodayView: View {
     }
 
     private func isStockDepleted(_ medicine: Medicine) -> Bool {
-        if let therapies = medicine.therapies, !therapies.isEmpty {
-            let totalLeft = therapies.reduce(0.0) { $0 + Double($1.leftover()) }
-            return totalLeft <= 0
-        }
-        if let remaining = medicine.remainingUnitsWithoutTherapy() {
-            return remaining <= 0
-        }
-        return false
+        viewModel.state.medicineStatuses[medicine.objectID]?.isDepleted ?? false
     }
 
     private func purchaseStockStatusLabel(for medicine: Medicine) -> String? {
-        let threshold = medicine.stockThreshold(option: options.first)
-        if let therapies = medicine.therapies, !therapies.isEmpty {
-            var totalLeft: Double = 0
-            var dailyUsage: Double = 0
-            for therapy in therapies {
-                totalLeft += Double(therapy.leftover())
-                dailyUsage += therapy.stimaConsumoGiornaliero(recurrenceManager: RecurrenceManager(context: PersistenceController.shared.container.viewContext))
-            }
-            if totalLeft <= 0 {
-                return "Scorte finite"
-            }
-            guard dailyUsage > 0 else { return nil }
-            let days = totalLeft / dailyUsage
-            return days < Double(threshold) ? "Scorte in esaurimento" : nil
-        }
-        if let remaining = medicine.remainingUnitsWithoutTherapy() {
-            if remaining <= 0 {
-                return "Scorte finite"
-            }
-            return remaining < threshold ? "Scorte in esaurimento" : nil
-        }
-        return nil
-    }
-
-    private func dueLabel(for medicine: Medicine) -> String? {
-        guard let label = nextDoseLabelInNextWeek(for: medicine.objectID) else { return nil }
-        return "Entro \(label)"
+        viewModel.state.medicineStatuses[medicine.objectID]?.purchaseStockStatus
     }
 
     private func metaInfo(for item: TodayTodoItem) -> (icon: String, text: String)? {
@@ -1425,8 +1120,7 @@ struct TodayView: View {
     private func toggleCompletion(for item: TodayTodoItem) {
         if item.category == .purchase,
            let med = medicine(for: item) {
-            let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
-            if needsPrescriptionBeforePurchase(med, recurrenceManager: rec),
+            if viewModel.state.medicineStatuses[med.objectID]?.needsPrescription == true,
                !isAwaitingPrescription(med) {
                 return
             }
@@ -1448,7 +1142,7 @@ struct TodayView: View {
         if item.category == .therapy, let medicine = medicine(for: item) {
             let operationId = viewModel.intakeOperationId(for: key)
             let decision: IntakeDecision
-            if let info = nextDoseTodayInfo(for: medicine) {
+            if let info = viewModel.nextDoseTodayInfo(for: medicine) {
                 decision = viewModel.actionService.intakeDecision(for: info.therapy)
             } else {
                 decision = viewModel.actionService.intakeDecision(for: medicine)
@@ -1552,7 +1246,7 @@ struct TodayView: View {
         switch item.category {
         case .therapy:
             let operationId = UUID()
-            let therapy = nextDoseTodayInfo(for: medicine)?.therapy
+            let therapy = viewModel.nextDoseTodayInfo(for: medicine)?.therapy
             _ = viewModel.recordIntake(
                 medicine: medicine,
                 therapy: therapy,
@@ -1642,225 +1336,9 @@ struct TodayView: View {
         }
     }
 
-    // MARK: - Build insights data
-    private func buildInsightsContext(for sections: (purchase: [Medicine], oggi: [Medicine], ok: [Medicine])) -> AIInsightsContext? {
-        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
-        let purchaseCandidates = sections.purchase.filter { !needsPrescriptionBeforePurchase($0, recurrenceManager: rec) }
-        let purchaseLines = purchaseCandidates.prefix(5).map { medicine in
-            "\(medicine.nome): \(purchaseHighlight(for: medicine, recurrenceManager: rec))"
-        }
-        let therapySources = sections.oggi + sections.purchase
-        let therapyLines = therapySources.compactMap { medicine in
-            nextDoseTodayHighlight(for: medicine, recurrenceManager: rec)
-        }
-        let upcomingLines = sections.ok.prefix(3).compactMap { medicine in
-            nextDoseHighlight(for: medicine, recurrenceManager: rec)
-        }
-        var prescriptionLines: [String] = []
-        for medicine in medicines {
-            guard needsPrescriptionBeforePurchase(medicine, recurrenceManager: rec) else { continue }
-            prescriptionLines.append(medicine.nome)
-            if prescriptionLines.count >= 6 { break }
-        }
-        let context = AIInsightsContext(
-            purchaseHighlights: purchaseLines,
-            therapyHighlights: therapyLines,
-            upcomingHighlights: upcomingLines,
-            prescriptionHighlights: prescriptionLines,
-            pharmacySuggestion: purchaseLines.isEmpty ? nil : pharmacyHighlightLine
-        )
-        return context.hasSignals ? context : nil
-    }
-
-    private func purchaseHighlight(for medicine: Medicine, recurrenceManager: RecurrenceManager) -> String {
-        if let therapies = medicine.therapies, !therapies.isEmpty {
-            var totalLeft: Double = 0
-            var totalDaily: Double = 0
-            for therapy in therapies {
-                totalLeft += Double(therapy.leftover())
-                totalDaily += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
-            }
-            if totalLeft <= 0 {
-                if let nextToday = earliestDoseToday(for: medicine) {
-                    let fmt = DateFormatter(); fmt.timeStyle = .short
-                    return "scorte terminate · da prendere alle \(fmt.string(from: nextToday))"
-                }
-                return "scorte terminate"
-            }
-            guard totalDaily > 0 else {
-                return "copertura non stimabile"
-            }
-            let days = Int(totalLeft / totalDaily)
-            if days <= 0 { return "scorte terminate" }
-            return days == 1 ? "copertura per 1 giorno" : "copertura per \(days) giorni"
-        }
-        if let remaining = medicine.remainingUnitsWithoutTherapy() {
-            if remaining <= 0 { return "nessuna unità residua" }
-            if remaining < 5 { return "solo \(remaining) unità" }
-            return "\(remaining) unità disponibili"
-        }
-        return "scorte non monitorate"
-    }
-
-    private func nextDoseHighlight(for medicine: Medicine, recurrenceManager: RecurrenceManager) -> String? {
-        guard let therapies = medicine.therapies, !therapies.isEmpty else { return nil }
-        let now = Date()
-        let calendar = Calendar.current
-        let upcomingDates = therapies.compactMap { therapy in
-            nextUpcomingDoseDate(for: therapy, medicine: medicine, now: now, recurrenceManager: recurrenceManager)
-        }
-        guard let next = upcomingDates.sorted().first else { return nil }
-        if calendar.isDateInToday(next) {
-            return "\(medicine.nome): \(TodayFormatters.time.string(from: next))"
-        } else if calendar.isDateInTomorrow(next) {
-            return "\(medicine.nome): domani"
-        }
-        let fmt = DateFormatter(); fmt.dateStyle = .short; fmt.timeStyle = .short
-        return "\(medicine.nome): \(fmt.string(from: next))"
-    }
-
-    private func nextDoseTodayHighlight(for medicine: Medicine, recurrenceManager: RecurrenceManager) -> String? {
-        guard let therapies = medicine.therapies, !therapies.isEmpty else { return nil }
-        let now = Date()
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: now)
-        var timesToday: [Date] = []
-        for therapy in therapies {
-            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-            let startDate = therapy.start_date ?? now
-            let next = recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: today, doses: therapy.doses as NSSet?)
-            if let next, calendar.isDateInToday(next) {
-                timesToday.append(next)
-            }
-        }
-        guard let nextToday = timesToday.sorted().first else { return nil }
-        let timeText = TodayFormatters.time.string(from: nextToday)
-        return "\(medicine.nome): \(timeText)"
-    }
-
-    private var pharmacyHighlightLine: String {
-        if let distance = shortDistanceText() ?? distanceMetersText() {
-            return "Farmacia consigliata a \(distance)"
-        }
-        return "Farmacia consigliata nelle vicinanze"
-    }
-
-    // MARK: - Todo building
-    private func buildTodoItems(from context: AIInsightsContext?, urgentIDs: Set<NSManagedObjectID>) -> [TodayTodoItem] {
-        guard let context else { return [] }
-        var items = TodayTodoBuilder.makeTodos(from: context, medicines: Array(medicines), urgentIDs: urgentIDs)
-        items = items.filter { [.therapy, .purchase, .prescription].contains($0.category) }
-        let blockedMedicineIDs: Set<NSManagedObjectID> = Set(
-            items.compactMap { item in
-                guard let info = blockedTherapyInfo(for: item) else { return nil }
-                return info.medicine.objectID
-            }
-        )
-        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
-        if !blockedMedicineIDs.isEmpty {
-            items = items.filter { item in
-                guard let medID = item.medicineID else { return true }
-                guard blockedMedicineIDs.contains(medID) else { return true }
-                if item.category == .prescription { return false }
-                return true
-            }
-        }
-        items = items.map { item in
-            if item.category == .prescription,
-               let med = medicine(for: item),
-               needsPrescriptionBeforePurchase(med, recurrenceManager: rec) {
-                return TodayTodoItem(
-                    id: "purchase|rx|\(item.id)",
-                    title: item.title,
-                    detail: item.detail,
-                    category: .purchase,
-                    medicineID: item.medicineID
-                )
-            }
-            return item
-        }
-        items = items.filter { item in
-            if item.category == .purchase, let med = medicine(for: item) {
-                if earliestDoseToday(for: med) != nil,
-                   isOutOfStock(med, recurrenceManager: rec) {
-                    return false
-                }
-            }
-            return true
-        }
-        return items
-    }
-
-    private func sortTodos(_ items: [TodayTodoItem]) -> [TodayTodoItem] {
-        items.sorted { lhs, rhs in
-            let lTime = timeSortValue(for: lhs) ?? Int.max
-            let rTime = timeSortValue(for: rhs) ?? Int.max
-            if lTime != rTime { return lTime < rTime }
-            if categoryRank(lhs.category) != categoryRank(rhs.category) {
-                return categoryRank(lhs.category) < categoryRank(rhs.category)
-            }
-            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
-        }
-    }
-
-    private func timeSortValue(for item: TodayTodoItem) -> Int? {
-        guard let date = todoTimeDate(for: item) else { return nil }
-        let comps = Calendar.current.dateComponents([.hour, .minute], from: date)
-        return (comps.hour ?? 0) * 60 + (comps.minute ?? 0)
-    }
-
-    private func todoTimeDate(for item: TodayTodoItem) -> Date? {
-        if let medicine = medicine(for: item), let date = earliestDoseToday(for: medicine) {
-            return date
-        }
-        guard let detail = item.detail, let match = timeComponents(from: detail) else { return nil }
-        let now = Date()
-        return Calendar.current.date(bySettingHour: match.hour, minute: match.minute, second: 0, of: now)
-    }
-
-    private func timeComponents(from detail: String) -> (hour: Int, minute: Int)? {
-        let pattern = "([0-9]{1,2}):([0-9]{2})"
-        guard let range = detail.range(of: pattern, options: .regularExpression) else { return nil }
-        let substring = String(detail[range])
-        let parts = substring.split(separator: ":").compactMap { Int($0) }
-        guard parts.count == 2 else { return nil }
-        let hour = parts[0]
-        let minute = parts[1]
-        guard (0...23).contains(hour), (0...59).contains(minute) else { return nil }
-        return (hour, minute)
-    }
-
     private func rowTimeLabel(for item: TodayTodoItem) -> String? {
         guard item.category != .purchase, item.category != .deadline else { return nil }
-        guard let date = todoTimeDate(for: item) else { return nil }
-        return TodayFormatters.time.string(from: date)
-    }
-
-    private func categoryRank(_ category: TodayTodoItem.Category) -> Int {
-        viewModel.categoryRank(category)
-    }
-
-    private func urgentMedicineIDs(for sections: (purchase: [Medicine], oggi: [Medicine], ok: [Medicine])) -> Set<NSManagedObjectID> {
-        viewModel.urgentMedicineIDs(for: sections)
-    }
-
-    private func hasUpcomingTherapyInNextWeek(for medicine: Medicine, recurrenceManager: RecurrenceManager) -> Bool {
-        guard let therapies = medicine.therapies, !therapies.isEmpty else { return false }
-        let now = Date()
-        let limit = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
-        for therapy in therapies {
-            guard let next = nextUpcomingDoseDate(for: therapy, medicine: medicine, now: now, recurrenceManager: recurrenceManager) else {
-                continue
-            }
-            if next <= limit { return true }
-        }
-        return false
-    }
-
-    // MARK: - Helpers reused from FeedView
-    private func earliestDoseToday(for medicine: Medicine) -> Date? {
-        let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
-        return viewModel.earliestDoseToday(for: medicine, recurrenceManager: rec)
+        return viewModel.state.timeLabel(for: item)
     }
 
     private func prescriptionDoctorName(for medicine: Medicine) -> String {
