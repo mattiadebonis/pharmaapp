@@ -145,6 +145,7 @@ class CabinetViewModel: ObservableObject {
     func shouldShowPrescriptionAction(for entry: MedicinePackage) -> Bool {
         let medicine = entry.medicine
         guard medicine.obbligo_ricetta else { return false }
+        if medicine.hasEffectivePrescriptionReceived() { return false }
         if medicine.hasNewPrescritpionRequest() { return false }
         let rec = RecurrenceManager(context: viewContext)
         return needsPrescriptionBeforePurchase(medicine, recurrenceManager: rec)

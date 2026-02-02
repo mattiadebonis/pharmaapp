@@ -92,6 +92,22 @@ class TodayViewModel: ObservableObject {
         operationIdProvider.clear(key)
     }
 
+    func operationToken(
+        action: OperationAction,
+        medicine: Medicine,
+        source: OperationSource = .today,
+        ttl: TimeInterval = 3
+    ) -> (id: UUID, key: OperationKey) {
+        let key = operationKey(action: action, medicine: medicine, source: source)
+        let id = operationIdProvider.operationId(for: key, ttl: ttl)
+        return (id, key)
+    }
+
+    func clearOperationId(for key: OperationKey?) {
+        guard let key else { return }
+        operationIdProvider.clear(key)
+    }
+
     func completionKey(for item: TodayTodoItem) -> String {
         TodayTodoEngine.completionKey(for: item)
     }
@@ -206,5 +222,15 @@ class TodayViewModel: ObservableObject {
             return medicine.packages.sorted(by: { $0.numero > $1.numero }).first
         }
         return nil
+    }
+
+    func operationKey(action: OperationAction, medicine: Medicine, source: OperationSource) -> OperationKey {
+        let packageId = resolvePackage(for: medicine, therapy: nil)?.id
+        return OperationKey.medicineAction(
+            action: action,
+            medicineId: medicine.id,
+            packageId: packageId,
+            source: source
+        )
     }
 }

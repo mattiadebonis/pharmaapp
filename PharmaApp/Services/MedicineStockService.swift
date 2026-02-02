@@ -3,26 +3,34 @@ import CoreData
 /// Centralized stock mutations used by medicine flows.
 struct MedicineStockService {
     private let context: NSManagedObjectContext
+    private let operationIdProvider: OperationIdProviding
 
-    init(context: NSManagedObjectContext) {
+    init(
+        context: NSManagedObjectContext,
+        operationIdProvider: OperationIdProviding = OperationIdProvider.shared
+    ) {
         self.context = context
+        self.operationIdProvider = operationIdProvider
     }
 
     func addPurchase(medicine: Medicine, package: Package) {
         let stockService = StockService(context: context)
+        let token = purchaseOperationToken(medicine: medicine, package: package)
         _ = stockService.createLog(
             type: "purchase",
             medicine: medicine,
             package: package,
-            operationId: UUID(),
+            operationId: token.id,
             save: false
         )
 
         do {
             try context.save()
+            scheduleOperationClear(for: token.key)
         } catch {
             context.rollback()
             print("Error saving purchase log: \(error.localizedDescription)")
+            operationIdProvider.clear(token.key)
         }
     }
 
@@ -45,7 +53,7 @@ struct MedicineStockService {
                     type: "purchase",
                     medicine: medicine,
                     package: package,
-                    operationId: UUID(),
+                    operationId: operationIdProvider.newOperationId(),
                     save: false
                 )
             }
@@ -56,7 +64,7 @@ struct MedicineStockService {
                         type: "stock_increment",
                         medicine: medicine,
                         package: package,
-                        operationId: UUID(),
+                        operationId: operationIdProvider.newOperationId(),
                         save: false
                     )
                 }
@@ -67,7 +75,7 @@ struct MedicineStockService {
                     type: "stock_adjustment",
                     medicine: medicine,
                     package: package,
-                    operationId: UUID(),
+                    operationId: operationIdProvider.newOperationId(),
                     save: false
                 )
             }
@@ -80,6 +88,23 @@ struct MedicineStockService {
         } catch {
             context.rollback()
             print("Error updating stock units: \(error.localizedDescription)")
+        }
+    }
+
+    private func purchaseOperationToken(medicine: Medicine, package: Package) -> (id: UUID, key: OperationKey) {
+        let key = OperationKey.medicineAction(
+            action: .purchase,
+            medicineId: medicine.id,
+            packageId: package.id,
+            source: .unknown
+        )
+        let id = operationIdProvider.operationId(for: key, ttl: 3)
+        return (id, key)
+    }
+
+    private func scheduleOperationClear(for key: OperationKey, delay: TimeInterval = 2.4) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            self.operationIdProvider.clear(key)
         }
     }
 }

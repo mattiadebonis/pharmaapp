@@ -10,4 +10,19 @@ public enum EventType: String, Codable {
     case prescriptionReceived = "prescription_received"
     case prescriptionReceivedUndone = "prescription_received_undone"
     case stockAdjusted = "stock_adjusted"
+
+    public var undoType: EventType? {
+        switch self {
+        case .intakeRecorded:
+            return .intakeUndone
+        case .purchaseRecorded:
+            return .purchaseUndone
+        case .prescriptionRequested:
+            return .prescriptionRequestUndone
+        case .prescriptionReceived:
+            return .prescriptionReceivedUndone
+        default:
+            return nil
+        }
+    }
 }

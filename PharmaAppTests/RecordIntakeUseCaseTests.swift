@@ -295,6 +295,44 @@ final class RecordIntakeUseCaseTests: XCTestCase {
         }
     }
 
+    func testConcurrentCallsWithSameOperationIdPurchaseCreateSingleLog() throws {
+        let container = try makeContainer()
+        let viewContext = container.viewContext
+        let medicine = try makeMedicine(context: viewContext)
+        let package = try makePackage(context: viewContext, medicine: medicine)
+        try viewContext.save()
+
+        let backgroundContext = container.newBackgroundContext()
+        let useCase = RecordPurchaseUseCase(
+            eventStore: CoreDataEventStore(context: backgroundContext),
+            clock: FixedClock(date: Date())
+        )
+        let operationId = UUID()
+        let request = RecordPurchaseRequest(
+            operationId: operationId,
+            medicineId: MedicineId(medicine.id),
+            packageId: PackageId(package.id)
+        )
+
+        let group = DispatchGroup()
+        let queue = DispatchQueue.global(qos: .userInitiated)
+        for _ in 0..<2 {
+            group.enter()
+            queue.async {
+                _ = try? useCase.execute(request)
+                group.leave()
+            }
+        }
+        group.wait()
+
+        backgroundContext.performAndWait {
+            let request: NSFetchRequest<Log> = Log.fetchRequest() as! NSFetchRequest<Log>
+            request.predicate = NSPredicate(format: "operation_id == %@", operationId as CVarArg)
+            let logs = (try? backgroundContext.fetch(request)) ?? []
+            XCTAssertEqual(logs.count, 1)
+        }
+    }
+
     func testStockNeverNegative() throws {
         let container = try makeContainer()
         let context = container.viewContext
@@ -383,5 +421,63 @@ final class RecordIntakeUseCaseTests: XCTestCase {
         XCTAssertEqual(undoLogs.first?.reversal_of_operation_id, operationId)
         XCTAssertEqual(stockService.units(for: package), initialUnits)
         XCTAssertEqual(medicine.effectivePurchaseLogs().count, 0)
+    }
+
+    func testPrescriptionRequestIdempotent() throws {
+        let container = try makeContainer()
+        let context = container.viewContext
+        let medicine = try makeMedicine(context: context)
+        let package = try makePackage(context: context, medicine: medicine)
+        try context.save()
+
+        let useCase = RequestPrescriptionUseCase(
+            eventStore: CoreDataEventStore(context: context),
+            clock: FixedClock(date: Date())
+        )
+        let operationId = UUID()
+        let request = RequestPrescriptionRequest(
+            operationId: operationId,
+            medicineId: MedicineId(medicine.id),
+            packageId: PackageId(package.id)
+        )
+
+        _ = try useCase.execute(request)
+        _ = try useCase.execute(request)
+
+        let logs = try fetchLogs(context: context, operationId: operationId)
+        XCTAssertEqual(logs.count, 1)
+        XCTAssertEqual(medicine.effectivePrescriptionRequestLogs().count, 1)
+    }
+
+    func testUndoPrescriptionRequestCreatesReversal() throws {
+        let container = try makeContainer()
+        let context = container.viewContext
+        let medicine = try makeMedicine(context: context)
+        let package = try makePackage(context: context, medicine: medicine)
+        try context.save()
+
+        let useCase = RequestPrescriptionUseCase(
+            eventStore: CoreDataEventStore(context: context),
+            clock: FixedClock(date: Date())
+        )
+        let operationId = UUID()
+        let request = RequestPrescriptionRequest(
+            operationId: operationId,
+            medicineId: MedicineId(medicine.id),
+            packageId: PackageId(package.id)
+        )
+
+        _ = try useCase.execute(request)
+
+        let actionService = MedicineActionService(context: context)
+        XCTAssertTrue(actionService.undoLog(operationId: operationId))
+
+        let undoRequest: NSFetchRequest<Log> = Log.fetchRequest() as! NSFetchRequest<Log>
+        undoRequest.predicate = NSPredicate(format: "type == 'prescription_request_undo'")
+        let undoLogs = try context.fetch(undoRequest)
+
+        XCTAssertEqual(undoLogs.count, 1)
+        XCTAssertEqual(undoLogs.first?.reversal_of_operation_id, operationId)
+        XCTAssertEqual(medicine.effectivePrescriptionRequestLogs().count, 0)
     }
 }

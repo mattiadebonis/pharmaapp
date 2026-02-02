@@ -509,7 +509,7 @@ struct TodayTodoEngine {
         recurrenceManager: RecurrenceManager
     ) -> Bool {
         guard medicine.obbligo_ricetta else { return false }
-        if medicine.hasNewPrescritpionRequest() { return false }
+        if medicine.hasEffectivePrescriptionReceived() { return false }
         if let therapies = medicine.therapies, !therapies.isEmpty {
             var totalLeft: Double = 0
             var dailyUsage: Double = 0

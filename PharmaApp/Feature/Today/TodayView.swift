@@ -35,6 +35,7 @@ struct TodayView: View {
     @State private var completionUndoOperationId: UUID?
     @State private var completionUndoLogID: NSManagedObjectID?
     @State private var completionUndoKey: String?
+    @State private var completionUndoOperationKey: OperationKey?
     @State private var completedTodoIDs: Set<String> = []
     @State private var completedBlockedSubtasks: Set<String> = []
     @State private var pendingPrescriptionMedIDs: Set<NSManagedObjectID> = []
@@ -129,7 +130,7 @@ struct TodayView: View {
                 doctor: doctor,
                 subject: subject,
                 messageBody: prescriptionEmailBody(for: [medicine], doctorName: doctor.name),
-                onDidSend: { viewModel.actionService.requestPrescription(for: medicine) }
+                onDidSend: { sendPrescriptionRequest(for: medicine) }
             )
         }
         .sheet(item: $prescriptionEmailMedicine) { medicine in
@@ -143,7 +144,7 @@ struct TodayView: View {
                 onCopy: {
                     UIPasteboard.general.string = prescriptionEmailBody(for: [medicine], doctorName: doctor.name)
                 },
-                onDidSend: { viewModel.actionService.requestPrescription(for: medicine) }
+                onDidSend: { sendPrescriptionRequest(for: medicine) }
             )
         }
         .sheet(item: $messageComposeData) { data in
@@ -574,7 +575,7 @@ struct TodayView: View {
             if item.id.hasPrefix("purchase|deadline|"), let detail = item.detail, !detail.isEmpty {
                 parts.append(detail)
             }
-            if isAwaitingPrescription(med) {
+            if hasPrescriptionRequest(med) {
                 let doctor = prescriptionDoctor(for: med)
                 let docName = doctor.map(doctorFullName) ?? "medico"
                 parts.append("Richiesta ricetta inviata a \(docName)")
@@ -651,10 +652,10 @@ struct TodayView: View {
     @ViewBuilder
     private func purchaseWithPrescriptionRow(for item: TodayTodoItem, medicine: Medicine, leadingTime: String?, isCompleted: Bool, isLast: Bool) -> some View {
         let medName = medicineTitleWithDosage(for: medicine)
-        let prescriptionDone = isAwaitingPrescription(medicine)
+        let requestDone = hasPrescriptionRequest(medicine) || hasPrescriptionReceived(medicine)
         let purchaseDone = isCompleted
-        let refillDone = prescriptionDone && purchaseDone
-        let purchaseLocked = !prescriptionDone
+        let refillDone = requestDone && purchaseDone
+        let purchaseLocked = !hasPrescriptionReceived(medicine)
         let doctorName = prescriptionDoctor(for: medicine).map(doctorFullName) ?? "medico"
 
         VStack(spacing: 10) {
@@ -677,15 +678,15 @@ struct TodayView: View {
                     status: nil,
                     iconName: "heart.text.square",
                     showCircle: true,
-                    isDone: prescriptionDone,
-                    onCheck: prescriptionDone ? nil : { sendPrescriptionRequest(for: medicine) }
+                    isDone: requestDone,
+                    onCheck: requestDone ? nil : { sendPrescriptionRequest(for: medicine) }
                 )
                 .padding(.leading, nestedRowIndent)
 
                 blockedStepRow(
                     title: medName,
                     status: purchaseLocked ? "Bloccato finche non chiedi la ricetta" : nil,
-                    subtitle: purchaseSubtitle(for: medicine, awaitingRx: prescriptionDone, doctorName: doctorName),
+                    subtitle: purchaseSubtitle(for: medicine, awaitingRx: requestDone, doctorName: doctorName),
                     subtitleColor: .secondary,
                     subtitleAsBadge: false,
                     iconName: "cart",
@@ -721,24 +722,40 @@ struct TodayView: View {
         completedBlockedSubtasks.contains(blockedSubtaskKey(type, for: medicine))
     }
 
-    private func isAwaitingPrescription(_ medicine: Medicine) -> Bool {
+    private func hasPrescriptionRequest(_ medicine: Medicine) -> Bool {
         pendingPrescriptionMedIDs.contains(medicine.objectID) || medicine.hasNewPrescritpionRequest()
     }
 
+    private func hasPrescriptionReceived(_ medicine: Medicine) -> Bool {
+        medicine.hasEffectivePrescriptionReceived()
+    }
+
     private func sendPrescriptionRequest(for medicine: Medicine) {
-        _ = viewModel.actionService.requestPrescription(for: medicine)
-        pendingPrescriptionMedIDs.insert(medicine.objectID)
-        completedBlockedSubtasks.insert(blockedSubtaskKey("prescription", for: medicine))
+        let token = viewModel.operationToken(action: .prescriptionRequest, medicine: medicine)
+        let log = viewModel.actionService.requestPrescription(for: medicine, operationId: token.id)
+        if log != nil {
+            pendingPrescriptionMedIDs.insert(medicine.objectID)
+            completedBlockedSubtasks.insert(blockedSubtaskKey("prescription", for: medicine))
+            scheduleOperationClear(for: token.key)
+        } else {
+            viewModel.clearOperationId(for: token.key)
+        }
     }
 
     private func completeBlockedIntake(for info: BlockedTherapyInfo) {
         let med = info.medicine
         if viewModel.state.medicineStatuses[med.objectID]?.needsPrescription == true,
-           !isAwaitingPrescription(med) {
+           !hasPrescriptionRequest(med) && !hasPrescriptionReceived(med) {
             sendPrescriptionRequest(for: med)
         }
         completedBlockedSubtasks.insert(blockedSubtaskKey("purchase", for: med))
-        _ = viewModel.actionService.markAsPurchased(for: med)
+        let purchaseToken = viewModel.operationToken(action: .purchase, medicine: med)
+        let purchaseLog = viewModel.actionService.markAsPurchased(for: med, operationId: purchaseToken.id)
+        if purchaseLog != nil {
+            scheduleOperationClear(for: purchaseToken.key)
+        } else {
+            viewModel.clearOperationId(for: purchaseToken.key)
+        }
         completedBlockedSubtasks.insert(blockedSubtaskKey("intake", for: med))
     }
 
@@ -746,7 +763,13 @@ struct TodayView: View {
         let key = blockedSubtaskKey("purchase", for: info.medicine)
         guard !completedBlockedSubtasks.contains(key) else { return }
         completedBlockedSubtasks.insert(key)
-        _ = viewModel.actionService.markAsPurchased(for: info.medicine)
+        let token = viewModel.operationToken(action: .purchase, medicine: info.medicine)
+        let log = viewModel.actionService.markAsPurchased(for: info.medicine, operationId: token.id)
+        if log != nil {
+            scheduleOperationClear(for: token.key)
+        } else {
+            viewModel.clearOperationId(for: token.key)
+        }
     }
 
     private func completeBlockedPrescription(for info: BlockedTherapyInfo) {
@@ -1121,7 +1144,7 @@ struct TodayView: View {
         if item.category == .purchase,
            let med = medicine(for: item) {
             if viewModel.state.medicineStatuses[med.objectID]?.needsPrescription == true,
-               !isAwaitingPrescription(med) {
+               !hasPrescriptionReceived(med) {
                 return
             }
         }
@@ -1131,7 +1154,11 @@ struct TodayView: View {
             _ = withAnimation(.easeInOut(duration: 0.2)) {
                 completedTodoIDs.remove(key)
             }
-            viewModel.clearIntakeOperationId(for: key)
+            if let actionKey = operationKey(for: item) {
+                viewModel.clearOperationId(for: actionKey)
+            } else {
+                viewModel.clearIntakeOperationId(for: key)
+            }
             return
         }
 
@@ -1141,6 +1168,7 @@ struct TodayView: View {
 
         if item.category == .therapy, let medicine = medicine(for: item) {
             let operationId = viewModel.intakeOperationId(for: key)
+            let operationKey = OperationKey.intake(completionKey: key, source: .today)
             let decision: IntakeDecision
             if let info = viewModel.nextDoseTodayInfo(for: medicine) {
                 decision = viewModel.actionService.intakeDecision(for: info.therapy)
@@ -1164,22 +1192,33 @@ struct TodayView: View {
                 therapy: decision.therapy,
                 operationId: operationId
             )
-            completeItem(item, log: nil, operationId: result?.operationId ?? operationId)
+            completeItem(item, log: nil, operationId: result?.operationId ?? operationId, operationKey: operationKey)
             return
         }
 
-        let log = recordLogCompletion(for: item)
-        completeItem(item, log: log)
+        let record = recordLogCompletion(for: item)
+        if record.log == nil {
+            viewModel.clearOperationId(for: record.operationKey)
+        }
+        completeItem(
+            item,
+            log: record.log,
+            operationId: record.operationId,
+            operationKey: record.log == nil ? nil : record.operationKey
+        )
     }
 
-    private func completeItem(_ item: TodayTodoItem, log: Log?, operationId: UUID? = nil) {
+    private func completeItem(
+        _ item: TodayTodoItem,
+        log: Log?,
+        operationId: UUID? = nil,
+        operationKey: OperationKey? = nil
+    ) {
         let key = viewModel.completionKey(for: item)
         completionUndoKey = key
         completionUndoOperationId = operationId ?? log?.operation_id
         completionUndoLogID = log?.objectID
-        if operationId != nil {
-            _ = viewModel.intakeOperationId(for: key)
-        }
+        completionUndoOperationKey = operationKey
         _ = withAnimation(.easeInOut(duration: 0.2)) {
             completedTodoIDs.insert(viewModel.completionKey(for: item))
         }
@@ -1193,7 +1232,16 @@ struct TodayView: View {
             operationId: prompt.operationId
         )
         intakeGuardrailPrompt = nil
-        completeItem(prompt.item, log: nil, operationId: result?.operationId ?? prompt.operationId)
+        let opKey = OperationKey.intake(
+            completionKey: viewModel.completionKey(for: prompt.item),
+            source: .today
+        )
+        completeItem(
+            prompt.item,
+            log: nil,
+            operationId: result?.operationId ?? prompt.operationId,
+            operationKey: opKey
+        )
     }
 
     private func showCompletionToast(for item: TodayTodoItem) {
@@ -1202,16 +1250,20 @@ struct TodayView: View {
             completionToastItemID = item.id
         }
         let undoKey = completionUndoKey
+        let undoOperationKey = completionUndoOperationKey
         let workItem = DispatchWorkItem {
             withAnimation(.easeInOut(duration: 0.2)) {
                 completionToastItemID = nil
             }
-            if let undoKey {
+            if let undoOperationKey {
+                viewModel.clearOperationId(for: undoOperationKey)
+            } else if let undoKey {
                 viewModel.clearIntakeOperationId(for: undoKey)
             }
             completionUndoKey = nil
             completionUndoOperationId = nil
             completionUndoLogID = nil
+            completionUndoOperationKey = nil
             completionToastWorkItem = nil
         }
         completionToastWorkItem = workItem
@@ -1230,50 +1282,101 @@ struct TodayView: View {
             operationId: completionUndoOperationId,
             logObjectID: completionUndoLogID
         )
-        if let key = completionUndoKey {
+        if let opKey = completionUndoOperationKey {
+            viewModel.clearOperationId(for: opKey)
+        } else if let key = completionUndoKey {
             viewModel.clearIntakeOperationId(for: key)
         }
         completionUndoOperationId = nil
         completionUndoLogID = nil
         completionUndoKey = nil
+        completionUndoOperationKey = nil
     }
 
-    private func recordLogCompletion(for item: TodayTodoItem) -> Log? {
+    private struct CompletionRecord {
+        let log: Log?
+        let operationId: UUID?
+        let operationKey: OperationKey?
+    }
+
+    private func operationKey(for item: TodayTodoItem) -> OperationKey? {
+        guard let medicine = medicine(for: item) else { return nil }
+        switch item.category {
+        case .purchase:
+            return viewModel.operationKey(action: .purchase, medicine: medicine, source: .today)
+        case .prescription:
+            let action: OperationAction = prescriptionTaskState(for: medicine, item: item) == .waitingResponse
+                ? .prescriptionReceived
+                : .prescriptionRequest
+            return viewModel.operationKey(action: action, medicine: medicine, source: .today)
+        default:
+            return nil
+        }
+    }
+
+    private func scheduleOperationClear(for key: OperationKey, delay: TimeInterval = 2.4) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            viewModel.clearOperationId(for: key)
+        }
+    }
+
+    private func recordLogCompletion(for item: TodayTodoItem) -> CompletionRecord {
         guard let medicine = medicine(for: item) else {
-            return nil // Nessun log richiesto (es. task generico)
+            return CompletionRecord(log: nil, operationId: nil, operationKey: nil)
         }
         let log: Log?
+        let operationId: UUID?
+        let operationKey: OperationKey?
         switch item.category {
         case .therapy:
-            let operationId = UUID()
             let therapy = viewModel.nextDoseTodayInfo(for: medicine)?.therapy
             _ = viewModel.recordIntake(
                 medicine: medicine,
                 therapy: therapy,
-                operationId: operationId
+                operationId: viewModel.intakeOperationId(for: viewModel.completionKey(for: item))
             )
             log = nil
+            operationId = nil
+            operationKey = nil
         case .monitoring, .missedDose:
             log = nil
+            operationId = nil
+            operationKey = nil
         case .purchase:
-            log = viewModel.actionService.markAsPurchased(for: medicine)
+            let token = viewModel.operationToken(action: .purchase, medicine: medicine)
+            log = viewModel.actionService.markAsPurchased(for: medicine, operationId: token.id)
+            operationId = token.id
+            operationKey = token.key
         case .deadline:
             log = nil
+            operationId = nil
+            operationKey = nil
         case .prescription:
             if prescriptionTaskState(for: medicine, item: item) == .waitingResponse {
-                log = viewModel.actionService.markPrescriptionReceived(for: medicine)
+                let token = viewModel.operationToken(action: .prescriptionReceived, medicine: medicine)
+                log = viewModel.actionService.markPrescriptionReceived(for: medicine, operationId: token.id)
+                if log != nil {
+                    pendingPrescriptionMedIDs.remove(medicine.objectID)
+                }
+                operationId = token.id
+                operationKey = token.key
             } else {
-                log = viewModel.actionService.requestPrescription(for: medicine)
+                let token = viewModel.operationToken(action: .prescriptionRequest, medicine: medicine)
+                log = viewModel.actionService.requestPrescription(for: medicine, operationId: token.id)
+                operationId = token.id
+                operationKey = token.key
             }
         case .upcoming, .pharmacy:
             log = nil // Nessun log previsto
+            operationId = nil
+            operationKey = nil
         }
         if let log {
             print("✅ log creato \(log.type) per \(medicine.nome)")
         } else {
             print("⚠️ recordLogCompletion: log non creato per \(item.id)")
         }
-        return log
+        return CompletionRecord(log: log, operationId: operationId, operationKey: operationKey)
     }
 
     private func refreshState() {

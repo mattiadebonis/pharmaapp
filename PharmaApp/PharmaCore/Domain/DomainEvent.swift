@@ -8,6 +8,7 @@ public struct DomainEvent: Hashable, Codable {
     public let medicineId: MedicineId
     public let therapyId: TherapyId?
     public let packageId: PackageId?
+    public let reversalOfOperationId: UUID?
 
     public init(
         id: UUID,
@@ -16,7 +17,8 @@ public struct DomainEvent: Hashable, Codable {
         timestamp: Date,
         medicineId: MedicineId,
         therapyId: TherapyId?,
-        packageId: PackageId?
+        packageId: PackageId?,
+        reversalOfOperationId: UUID? = nil
     ) {
         self.id = id
         self.operationId = operationId
@@ -25,5 +27,6 @@ public struct DomainEvent: Hashable, Codable {
         self.medicineId = medicineId
         self.therapyId = therapyId
         self.packageId = packageId
+        self.reversalOfOperationId = reversalOfOperationId
     }
 }

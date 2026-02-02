@@ -1,4 +1,5 @@
 import XCTest
+import CoreData
 @testable import PharmaApp
 
 final class TodayTodoEngineTests: XCTestCase {
@@ -76,5 +77,30 @@ final class TodayTodoEngineTests: XCTestCase {
         )
 
         XCTAssertEqual(sortValue, 8 * 60 + 45)
+    }
+
+    func testTodayEngineUnlocksBuyWhenPrescriptionReceived() throws {
+        let container = try TestCoreDataFactory.makeContainer()
+        let context = container.viewContext
+        let medicine = try TestCoreDataFactory.makeMedicine(context: context)
+        medicine.obbligo_ricetta = true
+        let package = try TestCoreDataFactory.makePackage(context: context, medicine: medicine)
+        try context.save()
+
+        let recManager = RecurrenceManager(context: context)
+        XCTAssertTrue(TodayTodoEngine.needsPrescriptionBeforePurchase(medicine, option: nil, recurrenceManager: recManager))
+
+        let useCase = RecordPrescriptionReceivedUseCase(
+            eventStore: CoreDataEventStore(context: context),
+            clock: SystemClock()
+        )
+        let request = RecordPrescriptionReceivedRequest(
+            operationId: UUID(),
+            medicineId: MedicineId(medicine.id),
+            packageId: PackageId(package.id)
+        )
+        _ = try useCase.execute(request)
+
+        XCTAssertFalse(TodayTodoEngine.needsPrescriptionBeforePurchase(medicine, option: nil, recurrenceManager: recManager))
     }
 }

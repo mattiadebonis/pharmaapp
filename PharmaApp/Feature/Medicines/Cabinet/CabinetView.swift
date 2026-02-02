@@ -326,16 +326,18 @@ struct CabinetView: View {
             onToggleSelection: { viewModel.toggleSelection(for: entry) },
             onEnterSelection: { viewModel.enterSelectionMode(with: entry) },
             onMarkTaken: {
-                let opId = operationId(for: .intake, entry: entry)
+                let opId = operationToken(for: .intake, entry: entry).id
                 viewModel.actionService.markAsTaken(for: entry, operationId: opId)
             },
             onMarkPurchased: {
-                let opId = operationId(for: .purchase, entry: entry)
-                viewModel.actionService.markAsPurchased(for: entry, operationId: opId)
+                let token = operationToken(for: .purchase, entry: entry)
+                let log = viewModel.actionService.markAsPurchased(for: entry, operationId: token.id)
+                handleOperationResult(log, key: token.key)
             },
             onRequestPrescription: shouldShowRx ? {
-                let opId = operationId(for: .prescriptionRequest, entry: entry)
-                viewModel.actionService.requestPrescription(for: entry, operationId: opId)
+                let token = operationToken(for: .prescriptionRequest, entry: entry)
+                let log = viewModel.actionService.requestPrescription(for: entry, operationId: token.id)
+                handleOperationResult(log, key: token.key)
             } : nil,
             onMove: { entryToMove = entry }
         )
@@ -393,16 +395,25 @@ struct CabinetView: View {
         .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
     }
 
-    private func operationId(for action: OperationAction, entry: MedicinePackage) -> UUID {
-        OperationIdProvider.shared.operationId(
-            for: OperationKey.medicineAction(
-                action: action,
-                medicineId: entry.medicine.id,
-                packageId: entry.package.id,
-                source: .cabinet
-            ),
-            ttl: 3
+    private func operationToken(for action: OperationAction, entry: MedicinePackage) -> (id: UUID, key: OperationKey) {
+        let key = OperationKey.medicineAction(
+            action: action,
+            medicineId: entry.medicine.id,
+            packageId: entry.package.id,
+            source: .cabinet
         )
+        let id = OperationIdProvider.shared.operationId(for: key, ttl: 3)
+        return (id, key)
+    }
+
+    private func handleOperationResult(_ log: Log?, key: OperationKey) {
+        if log != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+                OperationIdProvider.shared.clear(key)
+            }
+        } else {
+            OperationIdProvider.shared.clear(key)
+        }
     }
 
     // MARK: - Banner
@@ -441,7 +452,7 @@ struct CabinetView: View {
     // MARK: - Prescription helpers reused
     private func needsPrescriptionBeforePurchase(_ medicine: Medicine, recurrenceManager: RecurrenceManager) -> Bool {
         guard medicine.obbligo_ricetta else { return false }
-        if medicine.hasNewPrescritpionRequest() { return false }
+        if medicine.hasEffectivePrescriptionReceived() { return false }
         if let therapies = medicine.therapies, !therapies.isEmpty {
             var totalLeft: Double = 0
             var dailyUsage: Double = 0

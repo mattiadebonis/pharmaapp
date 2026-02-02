@@ -25,6 +25,7 @@ final class MedicineActionService {
     private lazy var recordPurchaseUseCase = RecordPurchaseUseCase(eventStore: eventStore, clock: clock)
     private lazy var requestPrescriptionUseCase = RequestPrescriptionUseCase(eventStore: eventStore, clock: clock)
     private lazy var recordPrescriptionReceivedUseCase = RecordPrescriptionReceivedUseCase(eventStore: eventStore, clock: clock)
+    private lazy var undoActionUseCase = UndoActionUseCase(eventStore: eventStore, clock: clock)
 
     init(context: NSManagedObjectContext = PersistenceController.shared.container.viewContext, clock: Clock = SystemClock()) {
         self.context = context
@@ -33,7 +34,7 @@ final class MedicineActionService {
 
     // MARK: - API pubblica
     @discardableResult
-    func requestPrescription(for medicine: Medicine, operationId: UUID = UUID()) -> Log? {
+    func requestPrescription(for medicine: Medicine, operationId: UUID) -> Log? {
         guard let package = package(for: medicine) else { return nil }
         let request = RequestPrescriptionRequest(
             operationId: operationId,
@@ -50,7 +51,7 @@ final class MedicineActionService {
     }
 
     @discardableResult
-    func requestPrescription(for entry: MedicinePackage, operationId: UUID = UUID()) -> Log? {
+    func requestPrescription(for entry: MedicinePackage, operationId: UUID) -> Log? {
         let request = RequestPrescriptionRequest(
             operationId: operationId,
             medicineId: MedicineId(entry.medicine.id),
@@ -66,7 +67,7 @@ final class MedicineActionService {
     }
 
     @discardableResult
-    func markPrescriptionReceived(for medicine: Medicine, operationId: UUID = UUID()) -> Log? {
+    func markPrescriptionReceived(for medicine: Medicine, operationId: UUID) -> Log? {
         guard let package = package(for: medicine) else { return nil }
         let request = RecordPrescriptionReceivedRequest(
             operationId: operationId,
@@ -83,7 +84,7 @@ final class MedicineActionService {
     }
 
     @discardableResult
-    func markPrescriptionReceived(for entry: MedicinePackage, operationId: UUID = UUID()) -> Log? {
+    func markPrescriptionReceived(for entry: MedicinePackage, operationId: UUID) -> Log? {
         let request = RecordPrescriptionReceivedRequest(
             operationId: operationId,
             medicineId: MedicineId(entry.medicine.id),
@@ -99,7 +100,7 @@ final class MedicineActionService {
     }
 
     @discardableResult
-    func markAsPurchased(for medicine: Medicine, operationId: UUID = UUID()) -> Log? {
+    func markAsPurchased(for medicine: Medicine, operationId: UUID) -> Log? {
         guard let package = package(for: medicine) else { return nil }
         let request = RecordPurchaseRequest(
             operationId: operationId,
@@ -116,7 +117,7 @@ final class MedicineActionService {
     }
 
     @discardableResult
-    func markAsPurchased(for entry: MedicinePackage, operationId: UUID = UUID()) -> Log? {
+    func markAsPurchased(for entry: MedicinePackage, operationId: UUID) -> Log? {
         let request = RecordPurchaseRequest(
             operationId: operationId,
             medicineId: MedicineId(entry.medicine.id),
@@ -132,13 +133,13 @@ final class MedicineActionService {
     }
 
     @discardableResult
-    func markAsTaken(for medicine: Medicine, operationId: UUID = UUID()) -> Log? {
+    func markAsTaken(for medicine: Medicine, operationId: UUID) -> Log? {
         let therapy = resolveTherapyCandidate(for: medicine, now: Date())
         return addIntakeLog(for: medicine, therapy: therapy, operationId: operationId)
     }
 
     @discardableResult
-    func markAsTaken(for entry: MedicinePackage, operationId: UUID = UUID()) -> Log? {
+    func markAsTaken(for entry: MedicinePackage, operationId: UUID) -> Log? {
         let therapy = resolveTherapyCandidate(for: entry, now: Date())
         if let therapy {
             return addLog(for: entry.medicine, package: entry.package, type: "intake", therapy: therapy, operationId: operationId)
@@ -147,11 +148,11 @@ final class MedicineActionService {
     }
 
     @discardableResult
-    func markAsTaken(for therapy: Therapy, operationId: UUID = UUID()) -> Log? {
+    func markAsTaken(for therapy: Therapy, operationId: UUID) -> Log? {
         addIntakeLog(for: therapy.medicine, therapy: therapy, operationId: operationId)
     }
 
-    func guardedMarkAsTaken(for medicine: Medicine, operationId: UUID = UUID(), now: Date = Date()) -> IntakeGuardrailResult {
+    func guardedMarkAsTaken(for medicine: Medicine, operationId: UUID, now: Date = Date()) -> IntakeGuardrailResult {
         let therapy = resolveTherapyCandidate(for: medicine, now: now)
         if let warning = intakeGuardrailWarning(for: medicine, therapy: therapy, now: now) {
             return .requiresConfirmation(warning, therapy: therapy)
@@ -159,7 +160,7 @@ final class MedicineActionService {
         return .allowed(addIntakeLog(for: medicine, therapy: therapy, operationId: operationId))
     }
 
-    func guardedMarkAsTaken(for entry: MedicinePackage, operationId: UUID = UUID(), now: Date = Date()) -> IntakeGuardrailResult {
+    func guardedMarkAsTaken(for entry: MedicinePackage, operationId: UUID, now: Date = Date()) -> IntakeGuardrailResult {
         let therapy = resolveTherapyCandidate(for: entry, now: now)
         if let warning = intakeGuardrailWarning(for: entry.medicine, therapy: therapy, now: now) {
             return .requiresConfirmation(warning, therapy: therapy)
@@ -170,7 +171,7 @@ final class MedicineActionService {
         return .allowed(addLog(for: entry.medicine, package: entry.package, type: "intake", operationId: operationId))
     }
 
-    func guardedMarkAsTaken(for therapy: Therapy, operationId: UUID = UUID(), now: Date = Date()) -> IntakeGuardrailResult {
+    func guardedMarkAsTaken(for therapy: Therapy, operationId: UUID, now: Date = Date()) -> IntakeGuardrailResult {
         if let warning = intakeGuardrailWarning(for: therapy.medicine, therapy: therapy, now: now) {
             return .requiresConfirmation(warning, therapy: therapy)
         }
@@ -190,12 +191,30 @@ final class MedicineActionService {
 
     @discardableResult
     func undoLog(operationId: UUID) -> Bool {
+        do {
+            _ = try undoActionUseCase.execute(
+                UndoActionRequest(
+                    originalOperationId: operationId,
+                    undoOperationId: UUID()
+                )
+            )
+            return true
+        } catch let error as PharmaError {
+            if error.code == .invalidInput || error.code == .notFound {
+                return stockService.undoLog(operationId: operationId)
+            }
+        } catch {
+            return stockService.undoLog(operationId: operationId)
+        }
         return stockService.undoLog(operationId: operationId)
     }
 
     @discardableResult
     func undoLog(logObjectID: NSManagedObjectID) -> Bool {
         guard let log = try? context.existingObject(with: logObjectID) as? Log else { return false }
+        if let operationId = log.operation_id {
+            return undoLog(operationId: operationId)
+        }
         return stockService.undoLog(log)
     }
 

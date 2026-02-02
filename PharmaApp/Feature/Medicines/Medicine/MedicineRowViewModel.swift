@@ -31,15 +31,13 @@ class MedicineRowViewModel: ObservableObject {
     ) {
         let resolvedPackage = resolvePackage(for: medicine, fallback: package, therapy: therapy)
         let stockService = StockService(context: managedObjectContext)
-        let resolvedOperationId = operationId ?? operationIdProvider.operationId(
-            for: OperationKey.medicineAction(
-                action: actionType(for: type),
-                medicineId: medicine.id,
-                packageId: resolvedPackage?.id,
-                source: .medicineRow
-            ),
-            ttl: 3
+        let key = OperationKey.medicineAction(
+            action: actionType(for: type),
+            medicineId: medicine.id,
+            packageId: resolvedPackage?.id,
+            source: .medicineRow
         )
+        let resolvedOperationId = operationId ?? operationIdProvider.operationId(for: key, ttl: 3)
         _ = stockService.createLog(
             type: type,
             medicine: medicine,
@@ -52,9 +50,11 @@ class MedicineRowViewModel: ObservableObject {
         do {
             try managedObjectContext.save()
             print("Log salvato: \(type) per \(medicine.nome)")
+            scheduleOperationClear(for: key)
         } catch {
             managedObjectContext.rollback()
             print("Errore nel salvataggio del log: \(error)")
+            operationIdProvider.clear(key)
         }
     }
     
@@ -86,7 +86,7 @@ class MedicineRowViewModel: ObservableObject {
                         for: medicine,
                         type: "stock_adjustment",
                         package: t.package,
-                        operationId: UUID()
+                        operationId: operationIdProvider.newOperationId()
                     )
                 }
             }
@@ -100,7 +100,7 @@ class MedicineRowViewModel: ObservableObject {
                     for: medicine,
                     type: "stock_adjustment",
                     package: pkg,
-                    operationId: UUID()
+                    operationId: operationIdProvider.newOperationId()
                 )
             }
         }
@@ -138,6 +138,12 @@ class MedicineRowViewModel: ObservableObject {
         }
     }
 
+    private func scheduleOperationClear(for key: OperationKey, delay: TimeInterval = 2.4) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            self.operationIdProvider.clear(key)
+        }
+    }
+
     func prescriptionStatus(medicine : Medicine, currentOption : Option) -> String? {
         guard medicine.obbligo_ricetta else { return nil }
         let inEsaurimento = medicine.isInEsaurimento(option: currentOption, recurrenceManager: recurrenceManager)
@@ -156,7 +162,6 @@ class MedicineRowViewModel: ObservableObject {
         case "Richiedi ricetta":
             Button(action: {
                 self.addNewPrescriptionRequest(for: medicine)
-                self.addNewPrescription(for: medicine)
             }) {
                 Text("Richiedi ricetta")
             }

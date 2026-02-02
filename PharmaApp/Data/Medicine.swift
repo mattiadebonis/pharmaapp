@@ -195,6 +195,10 @@ extension Medicine {
         return purchaseLogsAfterPrescription.isEmpty
     }
 
+    func hasEffectivePrescriptionReceived() -> Bool {
+        !effectivePrescriptionReceivedLogs().isEmpty
+    }
+
     /// Restituisce la prossima assunzione programmata a partire da `date`, calcolata sulle terapie e sulle regole di ricorrenza.
     func nextIntakeDate(from date: Date = Date(), recurrenceManager: RecurrenceManager) -> Date? {
         guard let therapies = therapies, !therapies.isEmpty else { return nil }
