@@ -39,6 +39,7 @@ struct TodayView: View {
     @State private var completedTodoIDs: Set<String> = []
     @State private var completedBlockedSubtasks: Set<String> = []
     @State private var pendingPrescriptionMedIDs: Set<NSManagedObjectID> = []
+    @State private var lastCompletionResetDay: Date?
     @State private var mailComposeData: MailComposeData?
     @State private var messageComposeData: MessageComposeData?
     @State private var intakeGuardrailPrompt: IntakeGuardrailPrompt?
@@ -198,6 +199,7 @@ struct TodayView: View {
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
             locationVM.ensureStarted()
+            resetCompletionIfNewDay()
             refreshState()
         }
         .onChange(of: completedTodoIDs) { _ in
@@ -644,7 +646,7 @@ struct TodayView: View {
                 leadingTime: leadingTime,
                 showCircle: true,
                 isDone: isBlockedSubtaskDone(type: "intake", medicine: info.medicine),
-                onCheck: { completeBlockedIntake(for: info) }
+                onCheck: { completeBlockedIntake(for: info, item: item) }
             )
         )
     }
@@ -742,21 +744,47 @@ struct TodayView: View {
         }
     }
 
-    private func completeBlockedIntake(for info: BlockedTherapyInfo) {
+    private func completeBlockedIntake(for info: BlockedTherapyInfo, item: TodayTodoItem) {
         let med = info.medicine
         if viewModel.state.medicineStatuses[med.objectID]?.needsPrescription == true,
            !hasPrescriptionRequest(med) && !hasPrescriptionReceived(med) {
             sendPrescriptionRequest(for: med)
         }
-        completedBlockedSubtasks.insert(blockedSubtaskKey("purchase", for: med))
-        let purchaseToken = viewModel.operationToken(action: .purchase, medicine: med)
-        let purchaseLog = viewModel.actionService.markAsPurchased(for: med, operationId: purchaseToken.id)
-        if purchaseLog != nil {
-            scheduleOperationClear(for: purchaseToken.key)
+        let key = viewModel.completionKey(for: item)
+        let operationId = viewModel.intakeOperationId(for: key)
+        let operationKey = OperationKey.intake(completionKey: key, source: .today)
+        let decision: IntakeDecision
+        if let info = viewModel.nextDoseTodayInfo(for: med) {
+            decision = viewModel.actionService.intakeDecision(for: info.therapy)
         } else {
-            viewModel.clearOperationId(for: purchaseToken.key)
+            decision = viewModel.actionService.intakeDecision(for: med)
         }
-        completedBlockedSubtasks.insert(blockedSubtaskKey("intake", for: med))
+
+        if let warning = decision.warning {
+            intakeGuardrailPrompt = IntakeGuardrailPrompt(
+                warning: warning,
+                item: item,
+                medicine: med,
+                therapy: decision.therapy,
+                operationId: operationId
+            )
+            return
+        }
+
+        let result = viewModel.recordIntake(
+            medicine: med,
+            therapy: decision.therapy,
+            operationId: operationId
+        )
+        if result != nil {
+            completedBlockedSubtasks.insert(blockedSubtaskKey("intake", for: med))
+        }
+        completeItem(
+            item,
+            log: nil,
+            operationId: result?.operationId ?? operationId,
+            operationKey: operationKey
+        )
     }
 
     private func completeBlockedPurchase(for info: BlockedTherapyInfo) {
@@ -1380,6 +1408,7 @@ struct TodayView: View {
     }
 
     private func refreshState() {
+        resetCompletionIfNewDay()
         viewModel.refreshState(
             medicines: Array(medicines),
             logs: Array(logs),
@@ -1387,6 +1416,17 @@ struct TodayView: View {
             option: options.first,
             completedTodoIDs: completedTodoIDs
         )
+    }
+
+    private func resetCompletionIfNewDay() {
+        let today = Calendar.current.startOfDay(for: Date())
+        if let last = lastCompletionResetDay, Calendar.current.isDate(last, inSameDayAs: today) {
+            return
+        }
+        lastCompletionResetDay = today
+        if !completedTodoIDs.isEmpty { completedTodoIDs.removeAll() }
+        if !completedBlockedSubtasks.isEmpty { completedBlockedSubtasks.removeAll() }
+        if !pendingPrescriptionMedIDs.isEmpty { pendingPrescriptionMedIDs.removeAll() }
     }
 
     private var completionToastView: some View {

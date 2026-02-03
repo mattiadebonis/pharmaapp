@@ -56,7 +56,10 @@ struct TodayTodoEngine {
             now: now,
             calendar: calendar
         )
-        let pendingItems = filtered.filter { !completedTodoIDs.contains(completionKey(for: $0)) }
+        let pendingItems = filtered.filter { item in
+            if item.category == .therapy { return true }
+            return !completedTodoIDs.contains(completionKey(for: item))
+        }
         let purchaseItems = pendingItems.filter { $0.category == .purchase }
         let nonPurchaseItems = pendingItems.filter { $0.category != .purchase }
         let therapyItems = nonPurchaseItems.filter { $0.category == .therapy }
@@ -102,7 +105,7 @@ struct TodayTodoEngine {
     }
 
     static func completionKey(for item: TodayTodoItem) -> String {
-        if item.category == .monitoring || item.category == .missedDose {
+        if item.category == .monitoring || item.category == .missedDose || item.category == .therapy {
             return item.id
         }
         if let medID = item.medicineID {
@@ -135,8 +138,8 @@ struct TodayTodoEngine {
         calendar: Calendar = .current
     ) -> AIInsightsContext? {
         // [FIX] Ghost Medicine: Filter out medicines not in cabinet from highlights
-        let validPurchase = sections.purchase.filter { $0.in_cabinet }
-        let validOggi = sections.oggi.filter { $0.in_cabinet }
+        let validPurchase = sections.purchase.filter { isVisibleInToday($0) }
+        let validOggi = sections.oggi.filter { isVisibleInToday($0) }
         
         let purchaseLines = validPurchase.map { medicine in
             "\(medicine.nome): \(purchaseHighlight(for: medicine, option: option, recurrenceManager: recurrenceManager, now: now, calendar: calendar))"
@@ -219,6 +222,15 @@ struct TodayTodoEngine {
             }
         }
 
+        let missingTherapies = supplementalTherapyItems(
+            medicines: medicines,
+            existingItems: baseItems,
+            recurrenceManager: recurrenceManager,
+            now: now,
+            calendar: calendar
+        )
+        baseItems.append(contentsOf: missingTherapies)
+
         let depletedPurchaseItems = medicines.compactMap { medicine -> TodayTodoItem? in
             guard shouldAddDepletedPurchase(for: medicine, existingItems: baseItems, option: option, urgentIDs: urgentIDs, recurrenceManager: recurrenceManager) else {
                 return nil
@@ -293,7 +305,9 @@ struct TodayTodoEngine {
     ) -> Set<NSManagedObjectID> {
         let allMedicines = sections.purchase + sections.oggi + sections.ok
         let urgent = allMedicines.filter {
-            isOutOfStock($0, option: option, recurrenceManager: recurrenceManager) && hasUpcomingTherapyInNextWeek(for: $0, recurrenceManager: recurrenceManager, now: now, calendar: calendar)
+            isVisibleInToday($0) &&
+            isOutOfStock($0, option: option, recurrenceManager: recurrenceManager) &&
+            hasUpcomingTherapyInNextWeek(for: $0, recurrenceManager: recurrenceManager, now: now, calendar: calendar)
         }
         return Set(urgent.map { $0.objectID })
     }
@@ -491,8 +505,8 @@ struct TodayTodoEngine {
         option: Option?,
         recurrenceManager: RecurrenceManager
     ) -> Bool {
-        // [FIX] Ghost Medicine: Ignore medicines not in cabinet
-        guard medicine.in_cabinet else { return false }
+        // [FIX] Ghost Medicine: Ignore medicines not in cabinet unless they have active data.
+        guard isVisibleInToday(medicine) else { return false }
         
         if let therapies = medicine.therapies, !therapies.isEmpty {
             var totalLeft: Double = 0
@@ -517,8 +531,8 @@ struct TodayTodoEngine {
         recurrenceManager: RecurrenceManager
     ) -> Bool {
         guard medicine.obbligo_ricetta else { return false }
-        // [FIX] Ghost Medicine: Ignore medicines not in cabinet
-        guard medicine.in_cabinet else { return false }
+        // [FIX] Ghost Medicine: Ignore medicines not in cabinet unless they have active data.
+        guard isVisibleInToday(medicine) else { return false }
         
         if medicine.hasEffectivePrescriptionReceived() { return false }
         if let therapies = medicine.therapies, !therapies.isEmpty {
@@ -573,6 +587,73 @@ struct TodayTodoEngine {
             parts.append(status)
         }
         return parts.isEmpty ? nil : parts.joined(separator: " • ")
+    }
+
+    private static func supplementalTherapyItems(
+        medicines: [Medicine],
+        existingItems: [TodayTodoItem],
+        recurrenceManager: RecurrenceManager,
+        now: Date,
+        calendar: Calendar
+    ) -> [TodayTodoItem] {
+        var results: [TodayTodoItem] = []
+        for medicine in medicines {
+            guard isVisibleInToday(medicine) else { continue }
+            guard hasPendingIntakeToday(
+                for: medicine,
+                recurrenceManager: recurrenceManager,
+                now: now,
+                calendar: calendar
+            ) else { continue }
+
+            if existingItems.contains(where: { item in
+                guard item.category == .therapy else { return false }
+                if item.medicineID == medicine.objectID { return true }
+                let itemTitle = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let medTitle = medicine.nome.trimmingCharacters(in: .whitespacesAndNewlines)
+                return itemTitle.compare(medTitle, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+            }) {
+                continue
+            }
+
+            let detail: String? = {
+                guard let next = earliestDoseToday(
+                    for: medicine,
+                    recurrenceManager: recurrenceManager,
+                    now: now,
+                    calendar: calendar
+                ) else { return nil }
+                let timeText = TodayFormatters.time.string(from: next)
+                return "alle \(timeText)"
+            }()
+
+            let name = medicine.nome.trimmingCharacters(in: .whitespacesAndNewlines)
+            let identifier = "\(name.lowercased())|\(detail?.lowercased() ?? "")"
+            let id = "therapy|\(identifier)|\(latestLogSalt(for: medicine))"
+            results.append(
+                TodayTodoItem(
+                    id: id,
+                    title: name,
+                    detail: detail,
+                    category: .therapy,
+                    medicineID: medicine.objectID
+                )
+            )
+        }
+        return results
+    }
+
+    private static func isVisibleInToday(_ medicine: Medicine) -> Bool {
+        if medicine.in_cabinet { return true }
+        if let therapies = medicine.therapies, !therapies.isEmpty { return true }
+        if !medicine.packages.isEmpty { return true }
+        if let entries = medicine.medicinePackages, !entries.isEmpty { return true }
+        return false
+    }
+
+    private static func latestLogSalt(for medicine: Medicine) -> String {
+        guard let logs = medicine.logs, let lastDate = logs.map(\.timestamp).max() else { return "0" }
+        return String(Int(lastDate.timeIntervalSince1970))
     }
 
     private static func purchaseStockStatusLabel(
@@ -765,20 +846,83 @@ struct TodayTodoEngine {
         }
     }
 
-    private static func intakeCountToday(
+    private static func relevantIntakeLogsToday(
         for therapy: Therapy,
         medicine: Medicine,
         now: Date,
         calendar: Calendar
-    ) -> Int {
+    ) -> [Log] {
         let logsToday = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
-        let assigned = logsToday.filter { $0.therapy == therapy }.count
-        if assigned > 0 { return assigned }
+        let assigned = logsToday.filter { $0.therapy == therapy }
+        if !assigned.isEmpty { return assigned }
 
         let unassigned = logsToday.filter { $0.therapy == nil }
         let therapyCount = medicine.therapies?.count ?? 0
-        if therapyCount == 1 { return unassigned.count }
-        return unassigned.filter { $0.package == therapy.package }.count
+        if therapyCount == 1 { return unassigned }
+        return unassigned.filter { $0.package == therapy.package }
+    }
+
+    private static func completedDoseCountToday(
+        for therapy: Therapy,
+        medicine: Medicine,
+        now: Date,
+        calendar: Calendar,
+        scheduledTimes: [Date]
+    ) -> Int {
+        guard !scheduledTimes.isEmpty else { return 0 }
+        let logsToday = relevantIntakeLogsToday(for: therapy, medicine: medicine, now: now, calendar: calendar)
+        guard !logsToday.isEmpty else { return 0 }
+
+        let schedule = scheduledTimes.sorted()
+        let logTimes = logsToday.map(\.timestamp).sorted()
+        var scheduleIndex = schedule.count - 1
+        var completed = 0
+
+        for logTime in logTimes.sorted(by: >) {
+            while scheduleIndex >= 0, schedule[scheduleIndex] > logTime {
+                scheduleIndex -= 1
+            }
+            if scheduleIndex < 0 { break }
+            completed += 1
+            scheduleIndex -= 1
+        }
+
+        return completed
+    }
+
+    private static func hasPendingIntakeToday(
+        for medicine: Medicine,
+        recurrenceManager: RecurrenceManager,
+        now: Date,
+        calendar: Calendar
+    ) -> Bool {
+        guard let therapies = medicine.therapies, !therapies.isEmpty else { return false }
+        let today = calendar.startOfDay(for: now)
+
+        for therapy in therapies {
+            let allowed = allowedEvents(on: today, for: therapy, recurrenceManager: recurrenceManager)
+            guard allowed > 0 else { continue }
+
+            let timesToday = scheduledTimesToday(
+                for: therapy,
+                now: now,
+                recurrenceManager: recurrenceManager,
+                calendar: calendar
+            )
+            guard !timesToday.isEmpty else { continue }
+            let completedCount = completedDoseCountToday(
+                for: therapy,
+                medicine: medicine,
+                now: now,
+                calendar: calendar,
+                scheduledTimes: timesToday
+            )
+            if completedCount < timesToday.count {
+                return true
+            }
+        }
+
+        return false
     }
 
     private static func nextUpcomingDoseDateConsideringIntake(
@@ -798,12 +942,18 @@ struct TodayTodoEngine {
             calendar: calendar
         )
         if calendar.isDateInToday(now), !timesToday.isEmpty {
-            let takenCount = intakeCountToday(for: therapy, medicine: medicine, now: now, calendar: calendar)
-            if takenCount >= timesToday.count {
+            let completedCount = completedDoseCountToday(
+                for: therapy,
+                medicine: medicine,
+                now: now,
+                calendar: calendar,
+                scheduledTimes: timesToday
+            )
+            if completedCount >= timesToday.count {
                 let endOfDay = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: calendar.startOfDay(for: now)) ?? now
                 return recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: endOfDay, doses: therapy.doses as NSSet?)
             }
-            let pending = Array(timesToday.dropFirst(min(takenCount, timesToday.count)))
+            let pending = Array(timesToday.dropFirst(min(completedCount, timesToday.count)))
             if let firstPending = pending.first {
                 return firstPending
             }
@@ -871,9 +1021,12 @@ struct TodayTodoEngine {
     ) -> [TodayTodoItem] {
         items.filter { item in
             if item.category == .therapy, let med = medicine(for: item, medicines: medicines) {
-                let hasIntakeToday = med.hasIntakeToday(from: now, recurrenceManager: recurrenceManager, calendar: calendar)
-                let hasLoggedToday = !med.effectiveIntakeLogs(on: now, calendar: calendar).isEmpty
-                return hasIntakeToday && !hasLoggedToday
+                return hasPendingIntakeToday(
+                    for: med,
+                    recurrenceManager: recurrenceManager,
+                    now: now,
+                    calendar: calendar
+                )
             }
             return true
         }

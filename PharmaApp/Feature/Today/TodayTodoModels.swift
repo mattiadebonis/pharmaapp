@@ -233,16 +233,43 @@ enum TodayTodoBuilder {
         }
     }
 
-    private static func intakeCountToday(for therapy: Therapy, medicine: Medicine, now: Date) -> Int {
+    private static func relevantIntakeLogsToday(for therapy: Therapy, medicine: Medicine, now: Date) -> [Log] {
         let calendar = Calendar.current
         let logsToday = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
-        let assigned = logsToday.filter { $0.therapy == therapy }.count
-        if assigned > 0 { return assigned }
+        let assigned = logsToday.filter { $0.therapy == therapy }
+        if !assigned.isEmpty { return assigned }
 
         let unassigned = logsToday.filter { $0.therapy == nil }
         let therapyCount = medicine.therapies?.count ?? 0
-        if therapyCount == 1 { return unassigned.count }
-        return unassigned.filter { $0.package == therapy.package }.count
+        if therapyCount == 1 { return unassigned }
+        return unassigned.filter { $0.package == therapy.package }
+    }
+
+    private static func completedDoseCountToday(
+        for therapy: Therapy,
+        medicine: Medicine,
+        now: Date,
+        scheduledTimes: [Date]
+    ) -> Int {
+        guard !scheduledTimes.isEmpty else { return 0 }
+        let logsToday = relevantIntakeLogsToday(for: therapy, medicine: medicine, now: now)
+        guard !logsToday.isEmpty else { return 0 }
+
+        let schedule = scheduledTimes.sorted()
+        let logTimes = logsToday.map(\.timestamp).sorted()
+        var scheduleIndex = schedule.count - 1
+        var completed = 0
+
+        for logTime in logTimes.sorted(by: >) {
+            while scheduleIndex >= 0, schedule[scheduleIndex] > logTime {
+                scheduleIndex -= 1
+            }
+            if scheduleIndex < 0 { break }
+            completed += 1
+            scheduleIndex -= 1
+        }
+
+        return completed
     }
 
     private static func nextUpcomingDoseDate(for therapy: Therapy, medicine: Medicine, now: Date, recurrenceManager: RecurrenceManager) -> Date? {
@@ -252,12 +279,17 @@ enum TodayTodoBuilder {
 
         let timesToday = scheduledTimesToday(for: therapy, now: now, recurrenceManager: recurrenceManager)
         if calendar.isDateInToday(now), !timesToday.isEmpty {
-            let takenCount = intakeCountToday(for: therapy, medicine: medicine, now: now)
-            if takenCount >= timesToday.count {
+            let completedCount = completedDoseCountToday(
+                for: therapy,
+                medicine: medicine,
+                now: now,
+                scheduledTimes: timesToday
+            )
+            if completedCount >= timesToday.count {
                 let endOfDay = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: calendar.startOfDay(for: now)) ?? now
                 return recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: endOfDay, doses: therapy.doses as NSSet?)
             }
-            let pending = Array(timesToday.dropFirst(min(takenCount, timesToday.count)))
+            let pending = Array(timesToday.dropFirst(min(completedCount, timesToday.count)))
             if let nextToday = pending.first(where: { $0 > now }) {
                 return nextToday
             }
