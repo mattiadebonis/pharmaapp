@@ -9,6 +9,24 @@ import Foundation
 import CoreData
 import SwiftUI
 
+struct DoseEntry: Identifiable, Hashable {
+    var id: UUID = UUID()
+    var time: Date
+    var amount: Double
+
+    init(id: UUID = UUID(), time: Date, amount: Double) {
+        self.id = id
+        self.time = time
+        self.amount = amount
+    }
+}
+
+extension DoseEntry {
+    static func fromDose(_ dose: Dose) -> DoseEntry {
+        DoseEntry(time: dose.time, amount: dose.amountValue)
+    }
+}
+
 class TherapyFormViewModel: ObservableObject {
     
     @Published var isDataUpdated: Bool = false
@@ -45,7 +63,7 @@ class TherapyFormViewModel: ObservableObject {
         count: Int?,
         byDay: [String],
         startDate: Date,
-        times: [Date],
+        doses: [DoseEntry],
         package: Package,
         medicinePackage: MedicinePackage?,
         importance: String,
@@ -82,10 +100,11 @@ class TherapyFormViewModel: ObservableObject {
             }
         }
 
-        for time in times {
+        for entry in doses {
             let dose = Dose(context: context)
             dose.id = UUID()
-            dose.time = time
+            dose.time = entry.time
+            dose.amount = NSNumber(value: entry.amount)
             dose.therapy = therapy  
         }
 
@@ -110,7 +129,7 @@ class TherapyFormViewModel: ObservableObject {
         count: Int?,
         byDay: [String],
         startDate: Date,
-        times: [Date],
+        doses: [DoseEntry],
         package: Package,
         medicinePackage: MedicinePackage?,
         importance: String,
@@ -143,10 +162,11 @@ class TherapyFormViewModel: ObservableObject {
             }
         }
         
-        for time in times {
+        for entry in doses {
             let dose = Dose(context: context)
             dose.id = UUID()
-            dose.time = time
+            dose.time = entry.time
+            dose.amount = NSNumber(value: entry.amount)
             dose.therapy = therapy  
         }
         

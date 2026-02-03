@@ -27,5 +27,12 @@ extension Option{
         request.sortDescriptors = [sortDescriptor]
         return request
     }
+
+    static func current(in context: NSManagedObjectContext?) -> Option? {
+        guard let context else { return nil }
+        let request = extractOptions()
+        request.fetchLimit = 1
+        return (try? context.fetch(request))?.first
+    }
     
 }

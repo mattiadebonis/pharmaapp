@@ -8,6 +8,7 @@ struct TodayTodoRowView: View {
     let title: String
     let subtitle: String?
     let auxiliaryLine: Text?
+    let auxiliaryUsesDefaultStyle: Bool
     let isCompleted: Bool
     let showToggle: Bool
     let trailingBadge: (String, Color)?
@@ -23,6 +24,7 @@ struct TodayTodoRowView: View {
         title: String,
         subtitle: String? = nil,
         auxiliaryLine: Text? = nil,
+        auxiliaryUsesDefaultStyle: Bool = true,
         isCompleted: Bool,
         showToggle: Bool = true,
         trailingBadge: (String, Color)? = nil,
@@ -38,6 +40,7 @@ struct TodayTodoRowView: View {
         self.title = title
         self.subtitle = subtitle
         self.auxiliaryLine = auxiliaryLine
+        self.auxiliaryUsesDefaultStyle = auxiliaryUsesDefaultStyle
         self.isCompleted = isCompleted
         self.showToggle = showToggle
         self.trailingBadge = trailingBadge
@@ -95,13 +98,18 @@ struct TodayTodoRowView: View {
                         badgeView(text: badge.0, color: badge.1)
                     }
                     if let auxiliaryLine {
-                        auxiliaryLine
-                            .font(auxiliaryFont ?? .system(size: 15))
-                            .foregroundStyle(auxiliaryColor ?? secondaryTextColor)
+                        let baseLine = auxiliaryLine
                             .multilineTextAlignment(.leading)
-                            .lineLimit(2)
+                            .lineLimit(3)
                             .truncationMode(.tail)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                        if auxiliaryUsesDefaultStyle {
+                            baseLine
+                                .font(auxiliaryFont ?? .system(size: 15))
+                                .foregroundStyle(auxiliaryColor ?? secondaryTextColor)
+                        } else {
+                            baseLine
+                        }
                     }
                 }
             }
@@ -109,12 +117,14 @@ struct TodayTodoRowView: View {
 
             Button(action: onToggle) {
                 ZStack {
-                    Circle()
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
                         .fill(isCompleted ? circleStrokeColor.opacity(0.2) : .clear)
-                    Circle()
-                        .stroke(circleStrokeColor, lineWidth: 1.3)
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .strokeBorder(circleStrokeColor, lineWidth: 1.3)
                 }
                 .frame(width: 18, height: 18)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                 .accessibilityLabel(Text(iconName))
             }
             .buttonStyle(.plain)

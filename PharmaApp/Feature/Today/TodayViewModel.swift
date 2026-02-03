@@ -200,6 +200,17 @@ class TodayViewModel: ObservableObject {
         )
     }
 
+    @MainActor
+    func nextUpcomingDoseDate(for medicine: Medicine) -> Date? {
+        let recurrenceManager = RecurrenceManager(context: viewContext)
+        return TodayTodoEngine.nextUpcomingDoseDate(
+            for: medicine,
+            recurrenceManager: recurrenceManager,
+            now: Date(),
+            calendar: .current
+        )
+    }
+
     // MARK: - Helpers per medicine lookup
     private func medicine(for item: TodayTodoItem, medicines: [Medicine]) -> Medicine? {
         if let id = item.medicineID, let medicine = medicines.first(where: { $0.objectID == id }) {

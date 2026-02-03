@@ -8,17 +8,13 @@ struct MedicineDetailView: View {
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-	    @StateObject private var actionsViewModel = MedicineRowViewModel(
-	        managedObjectContext: PersistenceController.shared.container.viewContext
-	    )
-	    @State private var emailDetent: PresentationDetent = .fraction(0.55)
-	    @State private var customThresholdValue: Int = 7
-	    @State private var intakeConfirmationEnabled: Bool = false
+    @StateObject private var actionsViewModel = MedicineRowViewModel(
+        managedObjectContext: PersistenceController.shared.container.viewContext
+    )
+    @State private var emailDetent: PresentationDetent = .fraction(0.55)
     @State private var selectedDoctorID: NSManagedObjectID? = nil
     @State private var therapySheet: TherapySheetState?
-	    @State private var showThresholdSheet = false
-	    @State private var showIntakeConfirmationSheet = false
-	    @State private var showDoctorSheet = false
+    @State private var showDoctorSheet = false
     @State private var deadlineMonthInput: String = ""
     @State private var deadlineYearInput: String = ""
 
@@ -102,16 +98,6 @@ struct MedicineDetailView: View {
                             Label("Visualizza log", systemImage: "clock.arrow.circlepath")
                         }
                         Button {
-                            showThresholdSheet = true
-                        } label: {
-                            Label("Soglia scorte", systemImage: "bell.badge")
-                        }
-                        Button {
-                            showIntakeConfirmationSheet = true
-                        } label: {
-                            Label("Conferma assunzione", systemImage: "checkmark.circle")
-                        }
-                        Button {
                             deletePackage()
                         } label: {
                             Label("Rimuovi confezione", systemImage: "minus.circle")
@@ -140,26 +126,8 @@ struct MedicineDetailView: View {
                 .background(Color(.systemGroupedBackground))
         }
         .onAppear {
-            let current = Int(medicine.custom_stock_threshold)
-            customThresholdValue = current > 0 ? current : 7
-            loadRulesState()
             selectedDoctorID = medicine.obbligo_ricetta ? medicine.prescribingDoctor?.objectID : nil
             syncDeadlineInputs()
-        }
-        .sheet(isPresented: $showThresholdSheet) {
-            ThresholdSheet(
-                value: $customThresholdValue,
-                onChange: { newValue in
-                    medicine.custom_stock_threshold = Int32(newValue)
-                    saveContext()
-                }
-            )
-        }
-        .sheet(isPresented: $showIntakeConfirmationSheet) {
-            IntakeConfirmationSheet(
-                isEnabled: $intakeConfirmationEnabled,
-                onPersist: persistIntakeConfirmation
-            )
         }
         .sheet(isPresented: Binding(
             get: { medicine.obbligo_ricetta && showDoctorSheet },
@@ -393,17 +361,18 @@ struct MedicineDetailView: View {
     
     /// Builds the same style of text as the "Descrizione terapia" in TherapyForm: "Per [person] [dose] [frequency] [times], [confirmation]"
     private func therapyDescriptionText(for therapy: Therapy) -> String {
-        var parts: [String] = []
-        if let personName = personDisplayName(for: therapy.person), !personName.isEmpty {
-            parts.append("Per \(personName)")
+        let personName = personDisplayName(for: therapy.person)
+        let dose = doseDisplayText(for: therapy)
+        let frequency = frequencySummaryText(for: therapy)
+        let timesText = timesDescriptionText(for: therapy)
+        var sentence = "\(dose) \(frequency)"
+        if let timesText {
+            sentence += " \(timesText)"
         }
-        parts.append(doseDisplayText(for: therapy))
-        parts.append(frequencySummaryText(for: therapy))
-        if let timesText = timesDescriptionText(for: therapy) {
-            parts.append(timesText)
+        if let personName, !personName.isEmpty {
+            sentence += " per \(personName)"
         }
-        
-        return "\(parts.joined(separator: " "))"
+        return sentence.prefix(1).uppercased() + sentence.dropFirst()
     }
     
     private func personDisplayName(for person: Person?) -> String? {
@@ -413,46 +382,109 @@ struct MedicineDetailView: View {
     }
     
     private func doseDisplayText(for therapy: Therapy) -> String {
-        let pkg = therapy.package
-        let tipologia = (pkg.tipologia).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let unit: String = tipologia.contains("capsul") ? "capsula" : "compressa"
-        return "1 \(unit)"
+        let unit = doseUnit(for: therapy)
+        if let common = therapy.commonDoseAmount {
+            return doseDisplayText(amount: common, unit: unit)
+        }
+        return "dosi variabili"
+    }
+
+    private func doseDisplayText(amount: Double, unit: String) -> String {
+        if amount == 0.5 {
+            return "½ \(unit)"
+        }
+        let isInt = abs(amount.rounded() - amount) < 0.0001
+        let numberString: String = {
+            if isInt { return String(Int(amount.rounded())) }
+            return String(amount).replacingOccurrences(of: ".", with: ",")
+        }()
+        let unitString: String = {
+            guard amount > 1 else { return unit }
+            if unit == "compressa" { return "compresse" }
+            if unit == "capsula" { return "capsule" }
+            return unit
+        }()
+        return "\(numberString) \(unitString)"
     }
     
     private func frequencySummaryText(for therapy: Therapy) -> String {
         let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-        if rule.freq == "DAILY" {
-            if rule.interval <= 1 { return "Ogni giorno" }
-            return "Ogni \(rule.interval) giorni"
+        switch rule.freq {
+        case "DAILY":
+            if rule.interval <= 1 { return "al giorno" }
+            return "ogni \(rule.interval) giorni"
+        case "WEEKLY":
+            if !rule.byDay.isEmpty {
+                let names = rule.byDay.map { dayCodeToItalian($0) }
+                return "nei giorni \(joinedList(names))"
+            }
+            if rule.interval <= 1 { return "a settimana" }
+            return "ogni \(rule.interval) settimane"
+        case "MONTHLY":
+            if rule.interval <= 1 { return "al mese" }
+            return "ogni \(rule.interval) mesi"
+        case "YEARLY":
+            if rule.interval <= 1 { return "all'anno" }
+            return "ogni \(rule.interval) anni"
+        default:
+            return "a intervalli regolari"
         }
-        if !rule.byDay.isEmpty {
-            let names = rule.byDay.map { dayCodeToItalian($0) }
-            return names.joined(separator: ", ")
-        }
-        return "Ogni giorno"
     }
-    
+
     private func dayCodeToItalian(_ code: String) -> String {
         switch code {
-        case "MO": return "Lunedì"
-        case "TU": return "Martedì"
-        case "WE": return "Mercoledì"
-        case "TH": return "Giovedì"
-        case "FR": return "Venerdì"
-        case "SA": return "Sabato"
-        case "SU": return "Domenica"
+        case "MO": return "lunedì"
+        case "TU": return "martedì"
+        case "WE": return "mercoledì"
+        case "TH": return "giovedì"
+        case "FR": return "venerdì"
+        case "SA": return "sabato"
+        case "SU": return "domenica"
         default: return code
         }
+    }
+
+    private func joinedList(_ items: [String]) -> String {
+        if items.isEmpty { return "" }
+        if items.count == 1 { return items[0] }
+        if items.count == 2 { return "\(items[0]) e \(items[1])" }
+        let prefix = items.dropLast().joined(separator: ", ")
+        return "\(prefix) e \(items.last!)"
     }
     
     private func timesDescriptionText(for therapy: Therapy) -> String? {
         guard let doseSet = therapy.doses as? Set<Dose>, !doseSet.isEmpty else { return nil }
         let formatter = DateFormatter()
         formatter.timeStyle = .short
-        return doseSet
-            .sorted { $0.time < $1.time }
-            .map { "alle \(formatter.string(from: $0.time))" }
-            .joined(separator: ", ")
+        let includeAmounts = therapy.commonDoseAmount == nil
+        let entries = doseSet.sorted { $0.time < $1.time }
+        let segments: [String] = entries.map { dose in
+            let timeText = formatter.string(from: dose.time)
+            if includeAmounts {
+                let amountText = doseDisplayText(amount: dose.amountValue, unit: doseUnit(for: therapy))
+                return "alle \(timeText) (\(amountText))"
+            }
+            return "alle \(timeText)"
+        }
+        guard !segments.isEmpty else { return nil }
+        if segments.count == 1 {
+            return segments[0]
+        }
+        if segments.count == 2 {
+            return "\(segments[0]) e \(segments[1])"
+        }
+        let prefixTimes = segments.dropLast().joined(separator: ", ")
+        let last = segments.last!
+        return "\(prefixTimes) e \(last)"
+    }
+
+    private func doseUnit(for therapy: Therapy) -> String {
+        let tipologia = therapy.package.tipologia.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if tipologia.contains("capsul") { return "capsula" }
+        if tipologia.contains("compress") { return "compressa" }
+        let unitFallback = therapy.package.unita.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !unitFallback.isEmpty { return unitFallback.lowercased() }
+        return "unità"
     }
 
     private func combine(day: Date, withTime time: Date) -> Date? {
@@ -959,26 +991,6 @@ extension MedicineDetailView {
         .textCase(nil)
     }
 
-    private func loadRulesState() {
-        let fallbackConfirmation = therapies.contains(where: { $0.manual_intake_registration })
-        let resolvedConfirmation = medicine.manual_intake_registration || fallbackConfirmation
-        intakeConfirmationEnabled = resolvedConfirmation
-        let needsConfirmationSync = medicine.manual_intake_registration != resolvedConfirmation ||
-            therapies.contains(where: { $0.manual_intake_registration != resolvedConfirmation })
-        if needsConfirmationSync {
-            medicine.manual_intake_registration = resolvedConfirmation
-            persistIntakeConfirmation()
-        }
-    }
-    
-    private func persistIntakeConfirmation() {
-        medicine.manual_intake_registration = intakeConfirmationEnabled
-        for therapy in therapies {
-            therapy.manual_intake_registration = intakeConfirmationEnabled
-        }
-        saveContext()
-    }
-
     private func syncDeadlineInputs() {
         if let info = medicine.deadlineMonthYear {
             deadlineMonthInput = String(format: "%02d", info.month)
@@ -1026,69 +1038,6 @@ extension MedicineDetailView {
         saveContext()
     }
 
-    private struct IntakeConfirmationSheet: View {
-        @Binding var isEnabled: Bool
-        let onPersist: () -> Void
-        @Environment(\.dismiss) private var dismiss
-
-        var body: some View {
-            NavigationStack {
-                Form {
-                    Section(
-                        footer: Text("Valido per tutte le terapie di questo farmaco.")
-                    ) {
-                        Toggle(isOn: $isEnabled) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Chiedi conferma assunzione")
-                                Text("Quando ricevi il promemoria, conferma manualmente l'assunzione.")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .onChange(of: isEnabled) { _ in
-                            onPersist()
-                        }
-                    }
-                }
-                .navigationTitle("Conferma assunzione")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Chiudi") { dismiss() }
-                    }
-                }
-            }
-            .presentationDetents([.fraction(0.3), .medium])
-        }
-    }
-
-    private struct ThresholdSheet: View {
-        @Binding var value: Int
-        let onChange: (Int) -> Void
-        @Environment(\.dismiss) private var dismiss
-
-        var body: some View {
-            NavigationStack {
-                Form {
-                    Section {
-                        Stepper(value: $value, in: 1...60) {
-                            Text("Avvisami quando restano \(value) giorni")
-                        }
-                        .onChange(of: value, perform: onChange)
-                    }
-                }
-                .navigationTitle("Soglia scorte")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Chiudi") { dismiss() }
-                    }
-                }
-            }
-            .presentationDetents([.fraction(0.3), .medium])
-        }
-    }
-    
     private struct DoctorSheet: View {
         @Binding var selectedDoctorID: NSManagedObjectID?
         let doctors: FetchedResults<Doctor>

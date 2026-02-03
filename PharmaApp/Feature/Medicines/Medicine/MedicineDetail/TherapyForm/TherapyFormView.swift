@@ -64,6 +64,7 @@ struct TherapyFormView: View {
         entity: Person.entity(),
         sortDescriptors: [NSSortDescriptor(key: "nome", ascending: true)]
     ) private var persons: FetchedResults<Person>
+    @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
     
     // Nuovo state per la persona selezionata
     @State private var selectedPerson: Person?
@@ -99,8 +100,11 @@ struct TherapyFormView: View {
     @State private var interval: Int = 1
     @State private var therapyDescriptionText: String = ""
     @State private var lastAutoDescriptionText: String = ""
-    @State private var doseAmount: Double = 1
+    @State private var recurrenceInput: String = ""
+    @State private var lastAutoRecurrenceText: String = ""
+    @State private var isRecurrenceValid: Bool = false
     @State private var doseUnit: String = "compressa"
+    @State private var startDate: Date = Calendar.current.startOfDay(for: Date())
 
     // MARK: - Clinical rules (optional)
     @State private var courseEnabled: Bool = false
@@ -117,10 +121,13 @@ struct TherapyFormView: View {
     @State private var monitoringKind: MonitoringKind = .bloodPressure
     @State private var monitoringLeadMinutes: Int = 30
     @State private var missedDosePreset: MissedDosePreset = .none
+
+    private var manualIntakeEnabled: Bool {
+        options.first?.manual_intake_registration ?? false
+    }
     
     // Sezione Orari: con pulsante + per aggiungere e - per rimuovere
-    @State private var times: [Date] = [Date()]
-    @State private var isShowingFrequencySheet = false
+    @State private var doses: [DoseEntry] = [DoseEntry(time: Date(), amount: 1)]
     @State private var isShowingDurationSheet = false
     @State private var isShowingMonitoringSheet = false
     
@@ -175,18 +182,62 @@ struct TherapyFormView: View {
 
     private var therapyForm: some View {
         Form {
-            Section(header: Text("Frequenza e durata")) {
-                Button {
-                    isShowingFrequencySheet = true
-                } label: {
-                    HStack {
-                        Text("Ripetizione")
-                        Spacer()
-                        Text(frequencyDescription())
-                            .foregroundColor(.blue)
+            Section(header: Text("Frequenza")) {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        TextField("Es: ogni giorno / lunedì, mercoledì", text: $recurrenceInput)
+                            .multilineTextAlignment(.leading)
+                            .textInputAutocapitalization(.never)
+                            .disableAutocorrection(true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .onChange(of: recurrenceInput) { newValue in
+                                applyRecurrenceInput(newValue)
+                            }
+                        Divider()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if isRecurrenceValid {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
                     }
                 }
-                .accessibilityLabel("Seleziona frequenza")
+            }
+            .listRowBackground(Color(.systemGroupedBackground))
+
+            Section(header: Text("Orari")) {
+                ForEach(doses.indices, id: \.self) { index in
+                    HStack {
+                        DatePicker("", selection: $doses[index].time, displayedComponents: .hourAndMinute)
+                            .labelsHidden()
+                        Stepper(value: $doses[index].amount, in: 0.5...12, step: 0.5) {
+                            Text(doseDisplayText(amount: doses[index].amount, unit: doseUnitLabel))
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Button { doses.remove(at: index) } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundColor(.red)
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+                Button {
+                    doses.append(DoseEntry(time: Date(), amount: defaultDoseAmount))
+                } label: {
+                    Label("Aggiungi un orario", systemImage: "plus.circle")
+                }
+            }
+            .listRowBackground(Color(.systemGroupedBackground))
+
+            Section(header: Text("Durata e inizio")) {
+                DatePicker(
+                    "Inizio",
+                    selection: Binding(
+                        get: { startDate },
+                        set: { startDate = Calendar.current.startOfDay(for: $0) }
+                    ),
+                    displayedComponents: .date
+                )
                 Button {
                     isShowingDurationSheet = true
                 } label: {
@@ -199,28 +250,7 @@ struct TherapyFormView: View {
                 }
                 .accessibilityLabel("Seleziona fine terapia")
             }
-
-            Section(header: Text("Orari")) {
-                ForEach(times.indices, id: \.self) { index in
-                    HStack {
-                        DatePicker("", selection: $times[index], displayedComponents: .hourAndMinute)
-                            .labelsHidden()
-                        Text(doseDisplayText)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Button { times.remove(at: index) } label: {
-                            Image(systemName: "minus.circle.fill")
-                                .foregroundColor(.red)
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                }
-                Button {
-                    times.append(Date())
-                } label: {
-                    Label("Aggiungi un orario", systemImage: "plus.circle")
-                }
-            }
+            .listRowBackground(Color(.systemGroupedBackground))
 
             Section(header: Text("Persona")) {
                 Picker("Seleziona Persona", selection: $selectedPerson) {
@@ -231,6 +261,7 @@ struct TherapyFormView: View {
                 }
                 .accessibilityIdentifier("PersonPicker")
             }
+            .listRowBackground(Color(.systemGroupedBackground))
 
             taperSection
             monitoringOverviewSection
@@ -250,10 +281,25 @@ struct TherapyFormView: View {
                     .buttonStyle(CapsuleActionButtonStyle(fill: .green, textColor: .white))
                     .disabled(!canSave)
                 }
+                .listRowBackground(Color(.systemGroupedBackground))
             }
         }
-        .navigationTitle("\(medicine.nome) • \(package.numero) unità/conf.")
+        .navigationTitle(navigationTitleText)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: 2) {
+                    Text(navigationTitleText)
+                        .font(.headline)
+                    Text(packageSubtitleText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
         .onAppear {
+            startDate = startDateToday
             // Edit: popola dai dati della therapy
             if let therapy = editingTherapy {
                 populateFromTherapy(therapy)
@@ -279,22 +325,26 @@ struct TherapyFormView: View {
                     }
                 }
             }
+            updateRecurrenceInputIfNeeded(force: true)
         }
-        .sheet(isPresented: $isShowingFrequencySheet) {
-            NavigationView {
-                FrequencySelectionView(
-                    selectedFrequencyType: $selectedFrequencyType,
-                    freq: $freq,
-                    byDay: $byDay,
-                    interval: $interval
-                ) {
-                    isShowingFrequencySheet = false
-                }
+        .onChange(of: selectedFrequencyType) { _ in
+            updateRecurrenceInputIfNeeded(force: false)
+        }
+        .onChange(of: interval) { _ in
+            updateRecurrenceInputIfNeeded(force: false)
+        }
+        .onChange(of: startDate) { _ in
+            if courseEnabled {
+                syncCourseUntilFromCourse()
             }
+        }
+        .onChange(of: byDay) { _ in
+            updateRecurrenceInputIfNeeded(force: false)
         }
         .sheet(isPresented: $isShowingDurationSheet) {
             NavigationView {
                 DurationSelectionView(
+                    startDate: baseStartDate,
                     courseEnabled: $courseEnabled,
                     courseTotalDays: $courseTotalDays,
                     useUntil: $useUntil,
@@ -325,6 +375,43 @@ struct TherapyFormView: View {
                 TaperStepEditorView(steps: $taperSteps)
             }
         }
+    }
+
+    private var navigationTitleText: String {
+        camelCase(medicine.nome)
+    }
+
+    private var packageSubtitleText: String {
+        let typeRaw = package.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
+        let quantity: String? = {
+            if package.numero > 0 {
+                let unitLabel = typeRaw.isEmpty ? "unità" : typeRaw.lowercased()
+                return "\(package.numero) \(unitLabel)"
+            }
+            return typeRaw.isEmpty ? nil : typeRaw.capitalized
+        }()
+        let dosage: String? = {
+            guard package.valore > 0 else { return nil }
+            let unit = package.unita.trimmingCharacters(in: .whitespacesAndNewlines)
+            return unit.isEmpty ? "\(package.valore)" : "\(package.valore) \(unit)"
+        }()
+        if let quantity, let dosage {
+            return "\(quantity) da \(dosage)"
+        }
+        if let quantity { return quantity }
+        if let dosage { return dosage }
+        return "Confezione"
+    }
+
+    private func camelCase(_ text: String) -> String {
+        let lowered = text.lowercased()
+        return lowered
+            .split(separator: " ")
+            .map { part in
+                guard let first = part.first else { return "" }
+                return String(first).uppercased() + part.dropFirst()
+            }
+            .joined(separator: " ")
     }
 
     private var canSave: Bool {
@@ -376,21 +463,6 @@ struct TherapyFormView: View {
         .padding(.vertical, 2)
     }
     
-    private func frequencyDescription() -> String {
-        switch selectedFrequencyType {
-        case .daily:
-            return "Ogni \(interval) \(interval == 1 ? "giorno" : "giorni")"
-        case .specificDays:
-            let dayNames = byDay.map { dayName(for: $0) }
-            if dayNames.isEmpty {
-                return "Nessun giorno"
-                
-            } else {
-                return dayNames.joined(separator: ", ")
-            }
-        }
-    }
-
     private func dayName(for icsDay: String) -> String {
         switch icsDay {
             case "MO": return "Lunedì"
@@ -404,23 +476,49 @@ struct TherapyFormView: View {
         }
     }
 
-    private var doseDisplayText: String {
-        let unit = doseUnit
-        if doseAmount == 0.5 {
+    private var doseUnitLabel: String {
+        let tipologia = package.tipologia.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if tipologia.contains("capsul") { return "capsula" }
+        if tipologia.contains("compress") { return "compressa" }
+        let unitFallback = package.unita.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !unitFallback.isEmpty { return unitFallback.lowercased() }
+        return doseUnit
+    }
+
+    private var commonDoseAmount: Double? {
+        let amounts = doses.map { $0.amount }
+        guard let first = amounts.first else { return nil }
+        let isUniform = amounts.allSatisfy { abs($0 - first) < 0.0001 }
+        return isUniform ? first : nil
+    }
+
+    private var defaultDoseAmount: Double {
+        commonDoseAmount ?? 1
+    }
+
+    private func doseDisplayText(amount: Double, unit: String) -> String {
+        if amount == 0.5 {
             return "½ \(unit)"
         }
-        let isInt = abs(doseAmount.rounded() - doseAmount) < 0.0001
+        let isInt = abs(amount.rounded() - amount) < 0.0001
         let numberString: String = {
-            if isInt { return String(Int(doseAmount.rounded())) }
-            return String(doseAmount).replacingOccurrences(of: ".", with: ",")
+            if isInt { return String(Int(amount.rounded())) }
+            return String(amount).replacingOccurrences(of: ".", with: ",")
         }()
         let unitString: String = {
-            guard doseAmount > 1 else { return unit }
+            guard amount > 1 else { return unit }
             if unit == "compressa" { return "compresse" }
             if unit == "capsula" { return "capsule" }
             return unit
         }()
         return "\(numberString) \(unitString)"
+    }
+
+    private var doseSummaryText: String {
+        if let amount = commonDoseAmount {
+            return doseDisplayText(amount: amount, unit: doseUnitLabel)
+        }
+        return "dosi variabili"
     }
 
     private var therapyDescriptionSection: some View {
@@ -436,6 +534,7 @@ struct TherapyFormView: View {
                 applyTherapyDescription(newValue)
             }
         }
+        .listRowBackground(Color(.systemGroupedBackground))
         .onAppear {
             updateTherapyDescriptionIfNeeded(force: true)
         }
@@ -458,6 +557,7 @@ struct TherapyFormView: View {
             }
             .accessibilityLabel("Seleziona fine terapia")
         }
+        .listRowBackground(Color(.systemGroupedBackground))
     }
 
     private var monitoringOverviewSection: some View {
@@ -477,6 +577,7 @@ struct TherapyFormView: View {
                 )
             }
         }
+        .listRowBackground(Color(.systemGroupedBackground))
     }
 
     private var taperSection: some View {
@@ -492,6 +593,7 @@ struct TherapyFormView: View {
                 }
             }
         }
+        .listRowBackground(Color(.systemGroupedBackground))
     }
 
     private var interactionsSection: some View {
@@ -504,6 +606,7 @@ struct TherapyFormView: View {
                 Stepper("Distanza \(spacingHours) ore", value: $spacingHours, in: 1...24)
             }
         }
+        .listRowBackground(Color(.systemGroupedBackground))
     }
 
     private var missedDoseSection: some View {
@@ -532,6 +635,7 @@ struct TherapyFormView: View {
                 .padding(.top, 4)
             }
         }
+        .listRowBackground(Color(.systemGroupedBackground))
     }
 
     private var monitoringSection: some View {
@@ -557,6 +661,7 @@ struct TherapyFormView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .listRowBackground(Color(.systemGroupedBackground))
     }
 
     private func spacingBinding(for substance: SpacingSubstance) -> Binding<Bool> {
@@ -594,7 +699,7 @@ struct TherapyFormView: View {
             let unit = countNumber == 1 ? "assunzione" : "assunzioni"
             return "Dopo \(countNumber) \(unit)"
         }
-        if courseEnabled, let endDate = courseEndDate(from: startDateToday, totalDays: courseTotalDays) {
+        if courseEnabled, let endDate = courseEndDate(from: baseStartDate, totalDays: courseTotalDays) {
             if Calendar.current.isDateInToday(endDate) {
                 return "Oggi"
             }
@@ -604,13 +709,24 @@ struct TherapyFormView: View {
     }
 
     private var timesDescriptionText: String? {
-        guard !times.isEmpty else { return nil }
+        guard !doses.isEmpty else { return nil }
         let formatter = DateFormatter()
         formatter.timeStyle = .short
-        return times
-            .sorted()
-            .map { "alle \(formatter.string(from: $0))" }
-            .joined(separator: ", ")
+        let includeAmounts = commonDoseAmount == nil
+        let sorted = doses.sorted { $0.time < $1.time }
+        let segments: [String] = sorted.map { entry in
+            let timeText = formatter.string(from: entry.time)
+            if includeAmounts {
+                let amountText = doseDisplayText(amount: entry.amount, unit: doseUnitLabel)
+                return "alle \(timeText) (\(amountText))"
+            }
+            return "alle \(timeText)"
+        }
+        guard !segments.isEmpty else { return nil }
+        if segments.count == 1 { return segments[0] }
+        if segments.count == 2 { return "\(segments[0]) e \(segments[1])" }
+        let prefix = segments.dropLast().joined(separator: ", ")
+        return "\(prefix) e \(segments.last!)"
     }
 
     private var therapyDescriptionSummaryText: String {
@@ -618,12 +734,12 @@ struct TherapyFormView: View {
         if let personName = selectedPersonName, !personName.isEmpty {
             parts.append("Per \(personName)")
         }
-        parts.append(doseDisplayText)
+        parts.append(doseSummaryText)
         parts.append(frequencySummaryText)
         if let timesText = timesDescriptionText {
             parts.append(timesText)
         }
-        let confirmation = medicine.manual_intake_registration ? "chiedi conferma" : "senza conferma"
+        let confirmation = manualIntakeEnabled ? "chiedi conferma" : "senza conferma"
         if parts.isEmpty {
             return confirmation
         }
@@ -648,12 +764,62 @@ struct TherapyFormView: View {
         }
     }
 
+    private func applyRecurrenceInput(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            isRecurrenceValid = false
+            return
+        }
+
+        let parser = TherapyDescriptionParser(persons: Array(persons), defaultPerson: persons.first)
+        guard let frequency = parser.parseFrequencyOnly(trimmed),
+              isAllowedFrequency(frequency) else {
+            isRecurrenceValid = false
+            return
+        }
+
+        switch frequency {
+        case .daily(let intervalDays):
+            selectedFrequencyType = .daily
+            freq = "DAILY"
+            interval = max(1, intervalDays)
+        case .weekly(let weekDays):
+            selectedFrequencyType = .specificDays
+            freq = "WEEKLY"
+            byDay = weekDays
+        }
+        isRecurrenceValid = true
+    }
+
+    private func isAllowedFrequency(_ frequency: ParsedTherapyDescription.Frequency) -> Bool {
+        switch frequency {
+        case .daily(let intervalDays):
+            return (1...30).contains(intervalDays)
+        case .weekly(let weekDays):
+            let allowed = Set(["MO", "TU", "WE", "TH", "FR", "SA", "SU"])
+            return !weekDays.isEmpty && weekDays.allSatisfy { allowed.contains($0) }
+        }
+    }
+
+    private func updateRecurrenceInputIfNeeded(force: Bool) {
+        let summary = frequencySummaryText
+        let trimmed = recurrenceInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if summary.isEmpty { return }
+        if force || trimmed.isEmpty || recurrenceInput == lastAutoRecurrenceText {
+            if recurrenceInput != summary {
+                recurrenceInput = summary
+            }
+            lastAutoRecurrenceText = summary
+            isRecurrenceValid = true
+        }
+    }
+
     private var startDateToday: Date {
         Calendar.current.startOfDay(for: Date())
     }
 
     private var baseStartDate: Date {
-        editingTherapy?.start_date ?? startDateToday
+        Calendar.current.startOfDay(for: startDate)
     }
 
     private func inclusiveDayCount(from start: Date, to end: Date) -> Int {
@@ -686,8 +852,9 @@ struct TherapyFormView: View {
             selectedPerson = person
         }
 
+        var parsedDoseAmount: Double?
         if let dose = parsed.dose {
-            doseAmount = dose.amount
+            parsedDoseAmount = dose.amount
             doseUnit = dose.unit
         }
 
@@ -705,7 +872,12 @@ struct TherapyFormView: View {
         }
 
         if let parsedTimes = parsed.times, !parsedTimes.isEmpty {
-            times = parsedTimes
+            let amount = parsedDoseAmount ?? commonDoseAmount ?? 1
+            doses = parsedTimes.map { DoseEntry(time: $0, amount: amount) }
+        } else if let parsedDoseAmount {
+            doses = doses.map { entry in
+                DoseEntry(id: entry.id, time: entry.time, amount: parsedDoseAmount)
+            }
         }
 
         if let duration = parsed.duration {
@@ -870,12 +1042,12 @@ extension TherapyFormView {
                     count: useCount ? countNumber : nil,
                     byDay: [],
                     startDate: effectiveStartDate,
-                    times: times,
+                    doses: doses,
                     package: effectivePackage,
                     medicinePackage: effectiveMedicinePackage,
                     importance: effectiveImportance,
                     person: effectivePerson,
-                    manualIntake: medicine.manual_intake_registration,
+                    manualIntake: manualIntakeEnabled,
                     clinicalRules: clinicalRules
                 )
             } else {
@@ -887,12 +1059,12 @@ extension TherapyFormView {
                     count: useCount ? countNumber : nil,
                     byDay: byDay,
                     startDate: effectiveStartDate,
-                    times: times,
+                    doses: doses,
                     package: effectivePackage,
                     medicinePackage: effectiveMedicinePackage,
                     importance: effectiveImportance,
                     person: effectivePerson,
-                    manualIntake: medicine.manual_intake_registration,
+                    manualIntake: manualIntakeEnabled,
                     clinicalRules: clinicalRules
                 )
             }
@@ -907,12 +1079,12 @@ extension TherapyFormView {
                     count: useCount ? countNumber : nil,
                     byDay: [],
                     startDate: effectiveStartDate,
-                    times: times,
+                    doses: doses,
                     package: effectivePackage,
                     medicinePackage: effectiveMedicinePackage,
                     importance: "standard",
                     person: effectivePerson,
-                    manualIntake: medicine.manual_intake_registration,
+                    manualIntake: manualIntakeEnabled,
                     clinicalRules: clinicalRules
                 )
             } else {
@@ -924,12 +1096,12 @@ extension TherapyFormView {
                     count: useCount ? countNumber : nil,
                     byDay: byDay,
                     startDate: effectiveStartDate,
-                    times: times,
+                    doses: doses,
                     package: effectivePackage,
                     medicinePackage: effectiveMedicinePackage,
                     importance: "standard",
                     person: effectivePerson,
-                    manualIntake: medicine.manual_intake_registration,
+                    manualIntake: manualIntakeEnabled,
                     clinicalRules: clinicalRules
                 )
             }
@@ -961,6 +1133,7 @@ extension TherapyFormView {
     }
     
     private func populateFromTherapy(_ therapy: Therapy) {
+        startDate = Calendar.current.startOfDay(for: therapy.start_date ?? startDateToday)
         if let rruleString = therapy.rrule, !rruleString.isEmpty {
             let parsedRule = RecurrenceManager(context: context)
                 .parseRecurrenceString(rruleString)
@@ -996,9 +1169,9 @@ extension TherapyFormView {
         
         if let existingDoses = therapy.doses as? Set<Dose> {
             let sortedDoses = existingDoses.sorted { $0.time < $1.time }
-            self.times = sortedDoses.map { $0.time }
+            self.doses = sortedDoses.map { DoseEntry.fromDose($0) }
         } else {
-            self.times = []
+            self.doses = []
         }
         applyClinicalRules(therapy.clinicalRulesValue)
 
@@ -1024,121 +1197,8 @@ extension TherapyFormView {
 
 }
 
-// MARK: - Seconda Vista: FrequencySelectionView
-
-struct FrequencySelectionView: View {
-    
-    @Binding var selectedFrequencyType: FrequencyType
-    @Binding var freq: String
-    @Binding var byDay: [String]
-    @Binding var interval: Int
-
-    var onClose: () -> Void
-    let allDaysICS = ["MO","TU","WE","TH","FR","SA","SU"]
-
-    var body: some View {
-        Form {
-            Section {
-                frequencyRow(.daily)
-                frequencyRow(.specificDays)
-            }
-            
-            if selectedFrequencyType == .daily {
-                dailySectionView
-            }
-            
-            if selectedFrequencyType == .specificDays {
-                specificDaysSectionView
-            }
-        }
-        .navigationTitle("Frequenza")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button("Annulla") {
-                    onClose()
-                }
-            }
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Fine") {
-                    onClose()
-                }
-            }
-        }
-    }
-    
-    // MARK: - Sezioni
-
-   private var dailySectionView: some View {
-            
-        Section("Scegli intervallo") {
-            Picker("Ogni", selection: $interval) {
-                ForEach(1..<31) { i in
-                    Text("\(i) \(i == 1 ? "giorno" : "giorni")").tag(i)
-                }
-            }
-            .pickerStyle(.wheel)
-        }
-            
-    }
-    
-    private var specificDaysSectionView: some View {
-        Section("In giorni specifici") {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(allDaysICS, id: \.self) { day in
-                        let isSelected = byDay.contains(day)
-                        Text(day)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(isSelected ? Color.blue.opacity(0.2) : Color.gray.opacity(0.2))
-                            .cornerRadius(16)
-                            .onTapGesture {
-                                toggleDay(day)
-                            }
-                    }
-                }
-                .padding(.vertical, 6)
-            }
-            
-        }
-    }
-    
-    // MARK: - Helpers
-    
-    private func frequencyRow(_ option: FrequencyType) -> some View {
-        Button {
-            selectedFrequencyType = option
-            switch option {
-            case .daily:
-                freq = "DAILY"
-            case .specificDays:
-                freq = "WEEKLY"
-            }
-        } label: {
-            HStack {
-                Text(option.label)
-                Spacer()
-                if selectedFrequencyType == option {
-                    Image(systemName: "checkmark")
-                        .foregroundColor(.blue)
-                }
-            }
-        }
-    }
-    
-    private func toggleDay(_ day: String) {
-        if let idx = byDay.firstIndex(of: day) {
-            byDay.remove(at: idx)
-        } else {
-            byDay.append(day)
-        }
-    }
-    
-    
-}
-
 struct DurationSelectionView: View {
+    var startDate: Date
     @Binding var courseEnabled: Bool
     @Binding var courseTotalDays: Int
     @Binding var useUntil: Bool
@@ -1180,6 +1240,7 @@ struct DurationSelectionView: View {
                 durationRow(.days)
                 durationRow(.count)
             }
+            .listRowBackground(Color(.systemGroupedBackground))
 
             if selectedMode == .days {
                 daysSectionView
@@ -1217,10 +1278,11 @@ struct DurationSelectionView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            Text("Calcolato da oggi.")
+            Text("Calcolato dalla data di inizio.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
+        .listRowBackground(Color(.systemGroupedBackground))
     }
 
     private var countSectionView: some View {
@@ -1230,6 +1292,7 @@ struct DurationSelectionView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
+        .listRowBackground(Color(.systemGroupedBackground))
     }
 
     private func durationRow(_ mode: DurationMode) -> some View {
@@ -1264,9 +1327,9 @@ struct DurationSelectionView: View {
     }
 
     private var courseEndDate: Date? {
-        let startDate = Calendar.current.startOfDay(for: Date())
+        let start = Calendar.current.startOfDay(for: startDate)
         let offset = max(0, courseTotalDays - 1)
-        return Calendar.current.date(byAdding: .day, value: offset, to: startDate)
+        return Calendar.current.date(byAdding: .day, value: offset, to: start)
     }
 
     private func syncCourseUntilIfNeeded() {
@@ -1323,6 +1386,7 @@ struct TaperStepEditorView: View {
                     )
                 }
             }
+            .listRowBackground(Color(.systemGroupedBackground))
         }
         .navigationTitle("Scala terapeutica")
         .navigationBarTitleDisplayMode(.inline)

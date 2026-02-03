@@ -11,6 +11,7 @@ import Foundation
 @objc(Dose)
 public class Dose: NSManagedObject, Identifiable {
     @NSManaged public var id: UUID
+    @NSManaged public var amount: NSNumber?
     @NSManaged public var time: Date      // orario specifico
     @NSManaged public var therapy: Therapy
 }
@@ -18,6 +19,11 @@ public class Dose: NSManagedObject, Identifiable {
 
 
 extension Dose{
+    var amountValue: Double {
+        let value = amount?.doubleValue ?? 1
+        return value > 0 ? value : 1
+    }
+
     static func extractDoses() -> NSFetchRequest<Dose> {
     
         let request:NSFetchRequest<Dose> = Dose.fetchRequest() as! NSFetchRequest <Dose>
@@ -29,4 +35,3 @@ extension Dose{
 
     }
 }
-

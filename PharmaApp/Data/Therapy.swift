@@ -67,22 +67,41 @@ extension Therapy {
         let freq = parsedRule.freq.uppercased()   // "DAILY", "WEEKLY", etc.
         let interval = max(1, parsedRule.interval)
         let byDayCount = parsedRule.byDay.count
-        let doseCount = doses?.count ?? 1
+        let baseDoseUnits = max(1, totalDoseUnitsPerDay)
         
         switch freq {
         case "DAILY":
             // doseCount al giorno / interval
             // (es. interval=2 => doseCount / 2 al giorno)
-            return Double(doseCount) / Double(interval)
+            return baseDoseUnits / Double(interval)
             
         case "WEEKLY":
             // doseCount * byDayCount a settimana => / (7*interval)
-            let settimanali = Double(doseCount * max(byDayCount, 1))
+            let settimanali = baseDoseUnits * Double(max(byDayCount, 1))
             let daily = settimanali / Double(7 * interval)
             return daily
             
         default:
             return 0
         }
+    }
+}
+
+extension Therapy {
+    var doseAmounts: [Double] {
+        guard let doses, !doses.isEmpty else { return [] }
+        return doses.map { $0.amountValue }
+    }
+
+    var totalDoseUnitsPerDay: Double {
+        let sum = doseAmounts.reduce(0, +)
+        return sum > 0 ? sum : 0
+    }
+
+    var commonDoseAmount: Double? {
+        let amounts = doseAmounts
+        guard let first = amounts.first else { return nil }
+        let isUniform = amounts.allSatisfy { abs($0 - first) < 0.0001 }
+        return isUniform ? first : nil
     }
 }

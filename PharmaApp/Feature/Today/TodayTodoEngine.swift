@@ -486,6 +486,21 @@ struct TodayTodoEngine {
         return upcoming.filter { calendar.isDateInToday($0) }.sorted().first
     }
 
+    static func nextUpcomingDoseDate(
+        for medicine: Medicine,
+        recurrenceManager: RecurrenceManager,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Date? {
+        _ = calendar
+        guard let therapies = medicine.therapies, !therapies.isEmpty else { return nil }
+        let upcoming = therapies.compactMap { therapy in
+            nextUpcomingDoseDate(for: therapy, medicine: medicine, now: now, recurrenceManager: recurrenceManager)
+        }
+        guard let next = upcoming.sorted().first else { return nil }
+        return next
+    }
+
     private static func nextUpcomingDoseDate(
         for therapy: Therapy,
         medicine: Medicine,
@@ -776,9 +791,11 @@ struct TodayTodoEngine {
         calendar: Calendar = .current
     ) -> TodayDoseInfo? {
         guard let therapies = medicine.therapies, !therapies.isEmpty else { return nil }
+        let manualEnabled = manualIntakeEnabled(for: medicine, option: nil, therapies: therapies)
+        guard manualEnabled else { return nil }
 
         var best: (date: Date, personName: String?, therapy: Therapy)? = nil
-        for therapy in therapies where therapy.manual_intake_registration {
+        for therapy in therapies {
             guard let next = nextUpcomingDoseDateConsideringIntake(
                 for: therapy,
                 medicine: medicine,
@@ -796,6 +813,20 @@ struct TodayTodoEngine {
         }
         guard let best else { return nil }
         return TodayDoseInfo(date: best.date, personName: best.personName, therapy: best.therapy)
+    }
+
+    private static func manualIntakeEnabled(
+        for medicine: Medicine,
+        option: Option?,
+        therapies: Set<Therapy>? = nil
+    ) -> Bool {
+        if let option { return option.manual_intake_registration }
+        if let resolved = Option.current(in: medicine.managedObjectContext) {
+            return resolved.manual_intake_registration
+        }
+        if medicine.manual_intake_registration { return true }
+        let list = therapies ?? medicine.therapies ?? []
+        return list.contains(where: { $0.manual_intake_registration })
     }
 
     private static func displayName(for person: Person) -> String? {

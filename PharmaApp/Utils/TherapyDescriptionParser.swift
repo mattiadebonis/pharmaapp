@@ -54,6 +54,11 @@ final class TherapyDescriptionParser {
         )
     }
 
+    func parseFrequencyOnly(_ raw: String) -> ParsedTherapyDescription.Frequency? {
+        let normalized = Self.normalize(raw)
+        return parseFrequency(from: normalized)
+    }
+
     // MARK: - Person
     private func matchPerson(in normalized: String) -> Person? {
         if normalized.range(of: #"\bper\s+me\b"#, options: .regularExpression) != nil {

@@ -53,14 +53,28 @@ struct TodayView: View {
         let showPharmacyCard = state.showPharmacyCard
 
         let content = List {
-            ForEach(Array(therapyItems.enumerated()), id: \.element.id) { entry in
-                let item = entry.element
-                let isLast = entry.offset == therapyItems.count - 1
-                todoListRow(
-                    for: item,
-                    isCompleted: completedTodoIDs.contains(viewModel.completionKey(for: item)),
-                    isLast: isLast
-                )
+            if !therapyItems.isEmpty {
+                Section {
+                    ForEach(Array(therapyItems.enumerated()), id: \.element.id) { entry in
+                        let item = entry.element
+                        let isLast = entry.offset == therapyItems.count - 1
+                        todoListRow(
+                            for: item,
+                            isCompleted: completedTodoIDs.contains(viewModel.completionKey(for: item)),
+                            isLast: isLast
+                        )
+                    }
+                } header: {
+                    HStack {
+                        Text("Assunzioni")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.black)
+                            .textCase(nil)
+                        Spacer()
+                    }
+                    .padding(.top, 18)
+                    .padding(.bottom, 6)
+                }
             }
             if !purchaseItems.isEmpty {
                 Section {
@@ -231,7 +245,7 @@ struct TodayView: View {
                 pharmacyHeader(primaryLine: primaryLine, statusLine: statusLine)
                 pharmacyMiniMap()
             }
-            .padding(12)
+            .padding(.vertical, 12)
             
         }
         .buttonStyle(.plain)
@@ -277,16 +291,16 @@ struct TodayView: View {
                 .foregroundStyle(.secondary)
             HStack(spacing: 4) {
                 Text(primaryLine)
-                    .font(.system(size: 14, design: .rounded))
+                    .font(.system(size: 16, design: .rounded))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 if let statusLine {
                     Text("·")
-                        .font(.system(size: 14, design: .rounded))
+                        .font(.system(size: 16, design: .rounded))
                         .foregroundStyle(.secondary)
                     Text(statusLine)
-                        .font(.system(size: 14, design: .rounded))
+                        .font(.system(size: 16, design: .rounded))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -369,7 +383,7 @@ struct TodayView: View {
         content
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 14))
+            .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
             .listRowSeparator(.hidden)
     }
 
@@ -385,6 +399,7 @@ struct TodayView: View {
     private func todoListRow(for item: TodayTodoItem, isCompleted: Bool, isLast: Bool) -> some View {
         let med = medicine(for: item)
         let leadingTime = rowTimeLabel(for: item)
+        let canToggle = canToggleTodo(for: item)
 
         if let blocked = blockedTherapyInfo(for: item) {
             blockedTherapyCard(for: item, info: blocked, leadingTime: leadingTime, isLast: isLast)
@@ -398,7 +413,7 @@ struct TodayView: View {
             let title = mainLineText(for: item)
             let medSummary = med.map { medicineSubtitle(for: $0) }
             let subtitle = subtitleLine(for: item, medicine: med, summary: medSummary)
-            let auxiliaryLine = auxiliaryLineText(for: item)
+            let auxiliaryInfo = auxiliaryLineInfo(for: item)
             let actionText = actionText(for: item, isCompleted: isCompleted)
             let titleColor: Color = isCompleted ? .secondary : .primary
             let prescriptionMedicine = med
@@ -432,9 +447,11 @@ struct TodayView: View {
                             leadingTime: leadingTime,
                             title: title,
                             subtitle: subtitle,
-                            auxiliaryLine: auxiliaryLine,
+                            auxiliaryLine: auxiliaryInfo?.text,
+                            auxiliaryUsesDefaultStyle: auxiliaryInfo?.usesDefaultStyle ?? true,
                             isCompleted: isCompleted,
-                            onToggle: { toggleCompletion(for: item) },
+                            showToggle: canToggle,
+                            onToggle: { if canToggle { toggleCompletion(for: item) } },
                             subtitleFont: usesCondensedSubtitleStyle ? condensedSubtitleFont : nil,
                             subtitleColor: usesCondensedSubtitleStyle ? condensedSubtitleColor : nil,
                             auxiliaryFont: usesCondensedSubtitleStyle ? condensedSubtitleFont : nil,
@@ -452,11 +469,11 @@ struct TodayView: View {
             }()
 
             rowContent
-            .padding(.vertical, 4)
-            .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 14))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-            .opacity(rowOpacity)
+                .padding(.vertical, 4)
+                .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .opacity(rowOpacity)
         }
     }
 
@@ -489,6 +506,13 @@ struct TodayView: View {
     }
 
     private func mainLineText(for item: TodayTodoItem) -> String {
+        if item.category == .therapy, let medicine = medicine(for: item) {
+            let medName = medicineTitleWithDosage(for: medicine)
+            if let person = personNameForTherapy(medicine) {
+                return "Dose di \(medName) per \(person)"
+            }
+            return "Dose di \(medName)"
+        }
         if let medicine = medicine(for: item) {
             return medicineTitleWithDosage(for: medicine)
         }
@@ -509,9 +533,6 @@ struct TodayView: View {
         if item.category == .therapy {
             if let route = therapyRouteSubtitle(for: medicine) {
                 return route
-            }
-            if let med = medicine {
-                return personNameForTherapy(med)
             }
             return nil
         }
@@ -563,32 +584,98 @@ struct TodayView: View {
         return unique.joined(separator: ", ")
     }
 
-    private func auxiliaryLineText(for item: TodayTodoItem) -> Text? {
+    private func auxiliaryLineInfo(for item: TodayTodoItem) -> (text: Text, usesDefaultStyle: Bool)? {
         if item.category == .therapy {
-            let med = medicine(for: item)
-            let isShowingRoute = therapyRouteSubtitle(for: med) != nil
-            if isShowingRoute, let person = med.flatMap(personNameForTherapy) {
-                return Text(person)
-            }
             return nil
         }
         if item.category == .purchase, let med = medicine(for: item) {
-            var parts: [String] = []
-            if item.id.hasPrefix("purchase|deadline|"), let detail = item.detail, !detail.isEmpty {
-                parts.append(detail)
-            }
-            if hasPrescriptionRequest(med) {
-                let doctor = prescriptionDoctor(for: med)
-                let docName = doctor.map(doctorFullName) ?? "medico"
-                parts.append("Richiesta ricetta inviata a \(docName)")
-            }
-            if let status = purchaseStockStatusLabel(for: med) {
-                parts.append(status)
-            }
-            guard !parts.isEmpty else { return nil }
-            return Text(parts.joined(separator: "\n"))
+            guard let text = purchaseAuxiliaryLineText(for: item, medicine: med) else { return nil }
+            return (text, false)
         }
         return nil
+    }
+
+    private func purchaseAuxiliaryLineText(for item: TodayTodoItem, medicine: Medicine) -> Text? {
+        var lines: [Text] = []
+        var metaParts: [String] = []
+        let suppressRequestLine = medicine.obbligo_ricetta && isStockDepleted(medicine)
+
+        if item.id.hasPrefix("purchase|deadline|"), let detail = item.detail, !detail.isEmpty {
+            metaParts.append(detail)
+        }
+        if hasPrescriptionRequest(medicine), !suppressRequestLine {
+            let doctor = prescriptionDoctor(for: medicine)
+            let docName = doctor.map(doctorFullName) ?? "medico"
+            metaParts.append("Richiesta ricetta inviata a \(docName)")
+        }
+        if !metaParts.isEmpty {
+            lines.append(Text(metaParts.joined(separator: " • ")).foregroundStyle(.secondary))
+        }
+
+        if let stockLine = purchaseStockStatusLine(for: medicine) {
+            lines.append(stockLine)
+        }
+
+        if let therapyLine = upcomingTherapyLine(for: medicine) {
+            lines.append(therapyLine)
+        }
+
+        guard !lines.isEmpty else { return nil }
+        return joinTextLines(lines).font(.system(size: 15))
+    }
+
+    private func purchaseStockStatusLine(for medicine: Medicine) -> Text? {
+        guard let status = purchaseStockStatusLabel(for: medicine) else { return nil }
+        let statusColor: Color
+        if viewModel.state.medicineStatuses[medicine.objectID]?.isDepleted == true {
+            statusColor = .red
+        } else if viewModel.state.medicineStatuses[medicine.objectID]?.isOutOfStock == true {
+            statusColor = .orange
+        } else {
+            statusColor = .secondary
+        }
+        return Text(status).foregroundStyle(statusColor)
+    }
+
+    private func upcomingTherapyLine(for medicine: Medicine) -> Text? {
+        guard let next = viewModel.nextUpcomingDoseDate(for: medicine) else { return nil }
+        let (label, color) = formattedUpcomingTherapyLabel(for: next)
+        return Text(label).foregroundStyle(color)
+    }
+
+    private func formattedUpcomingTherapyLabel(for date: Date) -> (String, Color) {
+        let calendar = Calendar.current
+        let now = Date()
+        let today = calendar.startOfDay(for: now)
+        let targetDay = calendar.startOfDay(for: date)
+        let dayDelta = calendar.dateComponents([.day], from: today, to: targetDay).day ?? 0
+        let timeText = TodayFormatters.time.string(from: date)
+
+        if calendar.isDateInToday(date) {
+            return ("Terapia imminente: oggi alle \(timeText)", .red)
+        }
+        if calendar.isDateInTomorrow(date) {
+            return ("Terapia imminente: domani alle \(timeText)", .red)
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        let label = "Terapia imminente: \(formatter.string(from: date))"
+
+        if dayDelta <= 7 {
+            return (label, .orange)
+        }
+        return (label, .secondary)
+    }
+
+    private func joinTextLines(_ lines: [Text]) -> Text {
+        guard let first = lines.first else { return Text("") }
+        var result = first
+        for line in lines.dropFirst() {
+            result = result + Text("\n") + line
+        }
+        return result
     }
 
     private func personNameForTherapy(_ medicine: Medicine) -> String? {
@@ -634,9 +721,10 @@ struct TodayView: View {
     @ViewBuilder
     private func blockedTherapyCard(for item: TodayTodoItem, info: BlockedTherapyInfo, leadingTime: String?, isLast: Bool) -> some View {
         let medName = medicineTitleWithDosage(for: info.medicine)
+        let canToggle = canToggleTodo(for: item)
         todoCard(
             blockedStepRow(
-                title: "Assumi \(medName)",
+                title: medName,
                 status: nil,
                 subtitle: info.personName,
                 subtitleColor: .secondary,
@@ -644,9 +732,9 @@ struct TodayView: View {
                 iconName: "pills",
                 trailingBadge: (info.isOutOfStock && info.isDepleted) ? ("Da rifornire", .orange) : nil,
                 leadingTime: leadingTime,
-                showCircle: true,
+                showCircle: canToggle,
                 isDone: isBlockedSubtaskDone(type: "intake", medicine: info.medicine),
-                onCheck: { completeBlockedIntake(for: info, item: item) }
+                onCheck: canToggle ? { completeBlockedIntake(for: info, item: item) } : nil
             )
         )
     }
@@ -659,6 +747,7 @@ struct TodayView: View {
         let refillDone = requestDone && purchaseDone
         let purchaseLocked = !hasPrescriptionReceived(medicine)
         let doctorName = prescriptionDoctor(for: medicine).map(doctorFullName) ?? "medico"
+        let auxiliaryInfo = auxiliaryLineInfo(for: item)
 
         VStack(spacing: 10) {
             TodayTodoRowView(
@@ -667,7 +756,8 @@ struct TodayView: View {
                 leadingTime: leadingTime,
                 title: medName,
                 subtitle: nil,
-                auxiliaryLine: nil,
+                auxiliaryLine: auxiliaryInfo?.text,
+                auxiliaryUsesDefaultStyle: auxiliaryInfo?.usesDefaultStyle ?? true,
                 isCompleted: refillDone,
                 showToggle: false,
                 onToggle: {}
@@ -899,7 +989,8 @@ struct TodayView: View {
                 leadingTime: leadingTime,
                 title: "",
                 subtitle: subtitle,
-                auxiliaryLine: status.map { Text($0).foregroundColor(.orange) },
+                auxiliaryLine: status.map { Text($0).foregroundStyle(.orange) },
+                auxiliaryUsesDefaultStyle: false,
                 isCompleted: isDone,
                 showToggle: showCircle && onCheck != nil && isEnabled,
                 trailingBadge: trailingBadge,
@@ -1073,7 +1164,7 @@ struct TodayView: View {
         let med = medicine(for: item)
         switch item.category {
         case .therapy:
-            return isCompleted ? "Assunto" : "Assumi"
+            return ""
         case .monitoring:
             if isCompleted { return "Misurato" }
             let kind = monitoringKindLabel(for: item)?.lowercased()
@@ -1099,6 +1190,10 @@ struct TodayView: View {
         case .upcoming, .pharmacy:
             return isCompleted ? "Fatto" : "Fai"
         }
+    }
+
+    private func canToggleTodo(for item: TodayTodoItem) -> Bool {
+        item.category != .therapy
     }
 
     private func monitoringKindLabel(for item: TodayTodoItem) -> String? {
@@ -1133,9 +1228,6 @@ struct TodayView: View {
         var parts: [String] = []
         if awaitingRx {
             parts.append("Richiesta ricetta inviata a \(doctorName)")
-        }
-        if let status = purchaseStockStatusLabel(for: medicine) {
-            parts.append(status)
         }
         return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }

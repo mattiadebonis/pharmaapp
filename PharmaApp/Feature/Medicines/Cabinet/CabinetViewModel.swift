@@ -1,38 +1,11 @@
 import SwiftUI
 import CoreData
 
-enum CabinetSortOrder: String, CaseIterable, Identifiable {
-    case relevance
-    case byType
-    case nextDose
-    case stockDepletion
-
-    var id: String { rawValue }
-
-    static var selectableCases: [CabinetSortOrder] {
-        [.byType, .nextDose, .stockDepletion]
-    }
-
-    var title: String {
-        switch self {
-        case .relevance:
-            return "Rilevanza"
-        case .byType:
-            return "Per tipologia"
-        case .nextDose:
-            return "Dose imminente"
-        case .stockDepletion:
-            return "Fine scorte imminente"
-        }
-    }
-}
-
 /// ViewModel dedicato al tab "Armadietto".
 class CabinetViewModel: ObservableObject {
     // Stato di selezione (solo per il tab Armadietto)
     @Published var selectedEntries: Set<MedicinePackage> = []
     @Published var isSelecting: Bool = false
-    @Published var sortOrder: CabinetSortOrder = .byType
 
     let actionService: MedicineActionService
 
@@ -125,12 +98,7 @@ class CabinetViewModel: ObservableObject {
             return lhs.priority < rhs.priority
         }
 
-        switch sortOrder {
-        case .byType:
-            return cabinetEntries.sorted(by: sorter) + medicineEntries.sorted(by: sorter)
-        case .relevance, .nextDose, .stockDepletion:
-            return (medicineEntries + cabinetEntries).sorted(by: sorter)
-        }
+        return (medicineEntries + cabinetEntries).sorted(by: sorter)
     }
 
     func sortedEntries(in cabinet: Cabinet, entries: [MedicinePackage], logs: [Log], option: Option?) -> [MedicinePackage] {
@@ -157,99 +125,8 @@ class CabinetViewModel: ObservableObject {
         logs: [Log],
         option: Option?
     ) -> [MedicinePackage] {
-        switch sortOrder {
-        case .relevance, .byType:
-            let sections = computeSections(for: entries, logs: logs, option: option)
-            return sections.purchase + sections.oggi + sections.ok
-        case .nextDose:
-            let recurrenceManager = RecurrenceManager(context: viewContext)
-            let now = Date()
-            return sortByNextDose(
-                entries,
-                now: now,
-                recurrenceManager: recurrenceManager
-            )
-        case .stockDepletion:
-            let recurrenceManager = RecurrenceManager(context: viewContext)
-            return sortByStockDepletion(
-                entries,
-                option: option,
-                recurrenceManager: recurrenceManager
-            )
-        }
-    }
-
-    private func sortByNextDose(
-        _ entries: [MedicinePackage],
-        now: Date,
-        recurrenceManager: RecurrenceManager
-    ) -> [MedicinePackage] {
-        entries.sorted { lhs, rhs in
-            let d1 = nextDoseDate(for: lhs, now: now, recurrenceManager: recurrenceManager) ?? .distantFuture
-            let d2 = nextDoseDate(for: rhs, now: now, recurrenceManager: recurrenceManager) ?? .distantFuture
-            if d1 != d2 { return d1 < d2 }
-            return lhs.medicine.nome.localizedCaseInsensitiveCompare(rhs.medicine.nome) == .orderedAscending
-        }
-    }
-
-    private func sortByStockDepletion(
-        _ entries: [MedicinePackage],
-        option: Option?,
-        recurrenceManager: RecurrenceManager
-    ) -> [MedicinePackage] {
-        entries.sorted { lhs, rhs in
-            let v1 = stockSortValue(for: lhs, option: option, recurrenceManager: recurrenceManager)
-            let v2 = stockSortValue(for: rhs, option: option, recurrenceManager: recurrenceManager)
-            if v1 != v2 { return v1 < v2 }
-            return lhs.medicine.nome.localizedCaseInsensitiveCompare(rhs.medicine.nome) == .orderedAscending
-        }
-    }
-
-    private func nextDoseDate(
-        for entry: MedicinePackage,
-        now: Date,
-        recurrenceManager: RecurrenceManager
-    ) -> Date? {
-        let therapies = therapies(for: entry)
-        guard !therapies.isEmpty else { return nil }
-        var best: Date?
-        for therapy in therapies {
-            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-            let startDate = therapy.start_date ?? now
-            if let next = recurrenceManager.nextOccurrence(
-                rule: rule,
-                startDate: startDate,
-                after: now,
-                doses: therapy.doses as NSSet?
-            ) {
-                if best == nil || next < best! { best = next }
-            }
-        }
-        return best
-    }
-
-    private func stockSortValue(
-        for entry: MedicinePackage,
-        option: Option?,
-        recurrenceManager: RecurrenceManager
-    ) -> Double {
-        let therapies = therapies(for: entry)
-        if !therapies.isEmpty {
-            var totalLeftover: Double = 0
-            var totalDailyUsage: Double = 0
-            for therapy in therapies {
-                totalLeftover += Double(therapy.leftover())
-                totalDailyUsage += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
-            }
-            guard totalDailyUsage > 0 else {
-                return totalLeftover > 0 ? .greatestFiniteMagnitude : 0
-            }
-            return max(0, totalLeftover / totalDailyUsage)
-        }
-
-        let stockService = StockService(context: viewContext)
-        let remaining = stockService.units(for: entry.package)
-        return Double(max(0, remaining))
+        let sections = computeSections(for: entries, logs: logs, option: option)
+        return sections.purchase + sections.oggi + sections.ok
     }
 
     private func therapies(for entry: MedicinePackage) -> [Therapy] {

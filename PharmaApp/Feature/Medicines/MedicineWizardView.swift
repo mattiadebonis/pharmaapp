@@ -47,9 +47,8 @@ struct MedicineWizardView: View {
         var useCount: Bool = false
         var countNumber: Int = 1
 
-        var doseAmount: Double = 1
         var doseUnit: String = "compressa"
-        var times: [Date] = [Date()]
+        var doses: [DoseEntry] = [DoseEntry(time: Date(), amount: 1)]
 
         var courseEnabled: Bool = false
         var courseTotalDays: Int = 7
@@ -80,6 +79,9 @@ struct MedicineWizardView: View {
     @State private var selectedItem: CatalogItem?
     @State private var selectedPackage: CatalogPackage?
     @State private var therapyDraft = TherapyDraft()
+    @State private var recurrenceInput: String = ""
+    @State private var lastAutoRecurrenceText: String = ""
+    @State private var isRecurrenceValid: Bool = false
     @State private var stockUnits: Int = 0
     @State private var wizardDetent: PresentationDetent = .medium
     @State private var deadlineMonthInput: String = ""
@@ -89,8 +91,6 @@ struct MedicineWizardView: View {
     private var stockService: MedicineStockService {
         MedicineStockService(context: context)
     }
-
-    private let allDaysICS = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
 
     init(prefill: CatalogSelection? = nil, onFinish: (() -> Void)? = nil) {
         self.prefill = prefill
@@ -116,6 +116,7 @@ struct MedicineWizardView: View {
         .onAppear {
             applyPrefillIfNeeded()
             ensureSelectedPerson()
+            updateRecurrenceInputIfNeeded(force: true)
         }
         .onChange(of: step) { newStep in
             wizardDetent = defaultDetent(for: newStep)
@@ -186,17 +187,25 @@ struct MedicineWizardView: View {
 
     private var recurrenceDurationStep: some View {
         Form {
-            Section(header: Text("Ripetizione")) {
-                frequencyRow(.daily)
-                frequencyRow(.specificDays)
-            }
-
-            if therapyDraft.selectedFrequencyType == .daily {
-                dailySectionView
-            }
-
-            if therapyDraft.selectedFrequencyType == .specificDays {
-                specificDaysSectionView
+            Section(header: Text("Frequenza")) {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        TextField("Es: ogni giorno / lunedì, mercoledì", text: $recurrenceInput)
+                            .multilineTextAlignment(.leading)
+                            .textInputAutocapitalization(.never)
+                            .disableAutocorrection(true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .onChange(of: recurrenceInput) { newValue in
+                                applyRecurrenceInput(newValue)
+                            }
+                        Divider()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if isRecurrenceValid {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                }
             }
 
             Section(header: Text("Durata")) {
@@ -233,15 +242,17 @@ struct MedicineWizardView: View {
     private var scheduleStep: some View {
         Form {
             Section(header: Text("Orari")) {
-                ForEach(therapyDraft.times.indices, id: \.self) { index in
+                ForEach(therapyDraft.doses.indices, id: \.self) { index in
                     HStack {
-                        DatePicker("", selection: $therapyDraft.times[index], displayedComponents: .hourAndMinute)
+                        DatePicker("", selection: $therapyDraft.doses[index].time, displayedComponents: .hourAndMinute)
                             .labelsHidden()
-                        Text(doseDisplayText)
-                            .foregroundStyle(.secondary)
+                        Stepper(value: $therapyDraft.doses[index].amount, in: 0.5...12, step: 0.5) {
+                            Text(doseDisplayText(amount: therapyDraft.doses[index].amount, unit: doseUnitLabel))
+                                .foregroundStyle(.secondary)
+                        }
                         Spacer()
                         Button {
-                            therapyDraft.times.remove(at: index)
+                            therapyDraft.doses.remove(at: index)
                         } label: {
                             Image(systemName: "minus.circle.fill")
                                 .foregroundStyle(.red)
@@ -249,7 +260,7 @@ struct MedicineWizardView: View {
                     }
                 }
                 Button {
-                    therapyDraft.times.append(Date())
+                    therapyDraft.doses.append(DoseEntry(time: Date(), amount: defaultDoseAmount))
                 } label: {
                     Label("Aggiungi un orario", systemImage: "plus.circle")
                 }
@@ -477,59 +488,75 @@ struct MedicineWizardView: View {
         return .none
     }
 
-    private func frequencyRow(_ option: FrequencyType) -> some View {
-        Button {
-            therapyDraft.selectedFrequencyType = option
-        } label: {
-            HStack {
-                Text(option.label)
-                Spacer()
-                if therapyDraft.selectedFrequencyType == option {
-                    Image(systemName: "checkmark")
-                        .foregroundColor(.blue)
-                }
-            }
+    private var recurrenceSummaryText: String {
+        switch therapyDraft.selectedFrequencyType {
+        case .daily:
+            if therapyDraft.interval == 1 { return "Ogni giorno" }
+            return "Ogni \(therapyDraft.interval) giorni"
+        case .specificDays:
+            let dayNames = therapyDraft.byDay.map { dayName(for: $0) }
+            return dayNames.isEmpty ? "In giorni specifici" : dayNames.joined(separator: ", ")
         }
     }
 
-    private var dailySectionView: some View {
-        Section("Scegli intervallo") {
-            Picker("Ogni", selection: $therapyDraft.interval) {
-                ForEach(1..<31) { value in
-                    Text("\(value) \(value == 1 ? "giorno" : "giorni")")
-                        .tag(value)
-                }
-            }
-            .pickerStyle(.wheel)
+    private func dayName(for icsDay: String) -> String {
+        switch icsDay {
+        case "MO": return "Lunedì"
+        case "TU": return "Martedì"
+        case "WE": return "Mercoledì"
+        case "TH": return "Giovedì"
+        case "FR": return "Venerdì"
+        case "SA": return "Sabato"
+        case "SU": return "Domenica"
+        default: return icsDay
         }
     }
 
-    private var specificDaysSectionView: some View {
-        Section("In giorni specifici") {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(allDaysICS, id: \.self) { day in
-                        let isSelected = therapyDraft.byDay.contains(day)
-                        Text(day)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(isSelected ? Color.blue.opacity(0.2) : Color.gray.opacity(0.2))
-                            .cornerRadius(16)
-                            .onTapGesture {
-                                toggleDay(day)
-                            }
-                    }
-                }
-                .padding(.vertical, 6)
-            }
+    private func applyRecurrenceInput(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            isRecurrenceValid = false
+            return
+        }
+
+        let parser = TherapyDescriptionParser(persons: Array(persons), defaultPerson: persons.first)
+        guard let frequency = parser.parseFrequencyOnly(trimmed),
+              isAllowedFrequency(frequency) else {
+            isRecurrenceValid = false
+            return
+        }
+
+        switch frequency {
+        case .daily(let intervalDays):
+            therapyDraft.selectedFrequencyType = .daily
+            therapyDraft.interval = max(1, intervalDays)
+        case .weekly(let weekDays):
+            therapyDraft.selectedFrequencyType = .specificDays
+            therapyDraft.byDay = weekDays
+        }
+        isRecurrenceValid = true
+    }
+
+    private func isAllowedFrequency(_ frequency: ParsedTherapyDescription.Frequency) -> Bool {
+        switch frequency {
+        case .daily(let intervalDays):
+            return (1...30).contains(intervalDays)
+        case .weekly(let weekDays):
+            let allowed = Set(["MO", "TU", "WE", "TH", "FR", "SA", "SU"])
+            return !weekDays.isEmpty && weekDays.allSatisfy { allowed.contains($0) }
         }
     }
 
-    private func toggleDay(_ day: String) {
-        if let idx = therapyDraft.byDay.firstIndex(of: day) {
-            therapyDraft.byDay.remove(at: idx)
-        } else {
-            therapyDraft.byDay.append(day)
+    private func updateRecurrenceInputIfNeeded(force: Bool) {
+        let summary = recurrenceSummaryText
+        let trimmed = recurrenceInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if summary.isEmpty { return }
+        if force || trimmed.isEmpty || recurrenceInput == lastAutoRecurrenceText {
+            if recurrenceInput != summary {
+                recurrenceInput = summary
+            }
+            lastAutoRecurrenceText = summary
+            isRecurrenceValid = true
         }
     }
 
@@ -593,18 +620,35 @@ struct MedicineWizardView: View {
         }
     }
 
-    private var doseDisplayText: String {
-        let unit = therapyDraft.doseUnit
-        if therapyDraft.doseAmount == 0.5 {
+    private var doseUnitLabel: String {
+        if let tipologia = selectedPackage?.tipologia.lowercased() {
+            if tipologia.contains("capsul") { return "capsula" }
+            if tipologia.contains("compress") { return "compressa" }
+        }
+        if let unit = selectedPackage?.dosageUnit.trimmingCharacters(in: .whitespacesAndNewlines), !unit.isEmpty {
+            return unit.lowercased()
+        }
+        return therapyDraft.doseUnit
+    }
+
+    private var defaultDoseAmount: Double {
+        let amounts = therapyDraft.doses.map { $0.amount }
+        guard let first = amounts.first else { return 1 }
+        let isUniform = amounts.allSatisfy { abs($0 - first) < 0.0001 }
+        return isUniform ? first : 1
+    }
+
+    private func doseDisplayText(amount: Double, unit: String) -> String {
+        if amount == 0.5 {
             return "1/2 \(unit)"
         }
-        let isInt = abs(therapyDraft.doseAmount.rounded() - therapyDraft.doseAmount) < 0.0001
+        let isInt = abs(amount.rounded() - amount) < 0.0001
         let numberString: String = {
-            if isInt { return String(Int(therapyDraft.doseAmount.rounded())) }
-            return String(therapyDraft.doseAmount).replacingOccurrences(of: ".", with: ",")
+            if isInt { return String(Int(amount.rounded())) }
+            return String(amount).replacingOccurrences(of: ".", with: ",")
         }()
         let unitString: String = {
-            guard therapyDraft.doseAmount > 1 else { return unit }
+            guard amount > 1 else { return unit }
             if unit == "compressa" { return "compresse" }
             if unit == "capsula" { return "capsule" }
             return unit
@@ -696,12 +740,12 @@ struct MedicineWizardView: View {
             count: therapyDraft.useCount ? therapyDraft.countNumber : nil,
             byDay: byDay,
             startDate: startDateToday,
-            times: therapyDraft.times,
+            doses: therapyDraft.doses,
             package: package,
             medicinePackage: medicinePackage,
             importance: "standard",
             person: effectivePerson,
-            manualIntake: medicine.manual_intake_registration,
+            manualIntake: options.first?.manual_intake_registration ?? false,
             clinicalRules: clinicalRules
         )
     }
@@ -717,9 +761,6 @@ struct MedicineWizardView: View {
         medicine.principio_attivo = item.principle
         medicine.obbligo_ricetta = item.requiresPrescription || pkg.requiresPrescription
         medicine.in_cabinet = true
-        let option = options.first
-        medicine.custom_stock_threshold = option?.day_threeshold_stocks_alarm ?? Int32(7)
-        medicine.manual_intake_registration = true
 
         let package = Package(context: context)
         package.id = UUID()

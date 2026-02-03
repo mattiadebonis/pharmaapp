@@ -17,6 +17,7 @@
         <relationship name="medicines" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Medicine" inverseName="prescribingDoctor" inverseEntity="Medicine"/>
     </entity>
     <entity name="Dose" representedClassName=".Dose" syncable="YES">
+        <attribute name="amount" optional="YES" attributeType="Double" usesScalarValueType="NO"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="time" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="therapy" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Therapy" inverseName="doses" inverseEntity="Therapy"/>

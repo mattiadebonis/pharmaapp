@@ -70,7 +70,6 @@ struct SearchIndex: View {
         medicine.nome = nome.trimmingCharacters(in: .whitespaces)
         medicine.principio_attivo = ""
         medicine.obbligo_ricetta = obbligoRicetta
-        medicine.manual_intake_registration = true
 
         let package = Package(context: context)
         package.id = UUID()

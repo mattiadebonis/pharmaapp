@@ -316,8 +316,9 @@ extension Medicine {
     }
     
     func stockThreshold(option: Option?) -> Int {
-        let custom = Int(custom_stock_threshold)
-        return custom > 0 ? custom : 7
+        let resolvedOption = option ?? Option.current(in: managedObjectContext)
+        let value = Int(resolvedOption?.day_threeshold_stocks_alarm ?? 0)
+        return value > 0 ? value : 7
     }
 
     enum DeadlineStatus {

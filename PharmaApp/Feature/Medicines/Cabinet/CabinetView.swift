@@ -51,32 +51,13 @@ struct CabinetView: View {
                         Button {
                             isNewCabinetPresented = true
                         } label: {
-                            ZStack(alignment: .bottomTrailing) {
-                                Image(systemName: "cross.case")
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .offset(x: 4, y: 4)
+                            HStack(spacing: 4) {
+                                Image(systemName: "cross.case.fill")
+                                Image(systemName: "plus")
+                                    .font(.system(size: 14, weight: .bold))
                             }
                         }
                         .accessibilityLabel("Nuovo armadietto")
-
-                        Menu {
-                            ForEach(CabinetSortOrder.selectableCases) { order in
-                                Button {
-                                    viewModel.sortOrder = order
-                                } label: {
-                                    HStack {
-                                        Text(order.title)
-                                        if viewModel.sortOrder == order {
-                                            Image(systemName: "checkmark")
-                                        }
-                                    }
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "arrow.up.arrow.down")
-                        }
-                        .accessibilityLabel("Ordina")
                     }
                     .foregroundStyle(.primary)
                 }
