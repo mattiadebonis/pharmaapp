@@ -35,34 +35,30 @@ struct MedicineSummaryBuilder {
         let hasScheduledWindow = hasScheduledToday || hasUpcoming
 
         let line1: String
-        if therapies.isEmpty {
-            line1 = ""
+        if let next = nextScheduledDose {
+            if calendar.isDateInToday(next) {
+                line1 = timeFormatter.string(from: next)
+            } else if calendar.isDateInTomorrow(next) {
+                line1 = "Domani"
+            } else {
+                let startOfNextDoseDay = calendar.startOfDay(for: next)
+                let weekday = calendar.component(.weekday, from: startOfToday)
+                let daysToSunday = (1 - weekday + 7) % 7
+                let upcomingSunday = calendar.date(byAdding: .day, value: daysToSunday, to: startOfToday)!
+                
+                if startOfNextDoseDay <= upcomingSunday {
+                    let f = DateFormatter()
+                    f.locale = Locale(identifier: "it_IT")
+                    f.dateFormat = "EEEE"
+                    line1 = f.string(from: next).capitalized
+                } else {
+                    let days = calendar.dateComponents([.day], from: startOfToday, to: startOfNextDoseDay).day ?? 0
+                    line1 = "Tra \(days) giorni"
+                }
+            }
         } else if hasScheduledToday {
             let doseText = formatCount(dosesToday, singular: "dose", plural: "dosi")
-            if let nextScheduledDose {
-                let timeText = timeFormatter.string(from: nextScheduledDose)
-                if calendar.isDateInToday(nextScheduledDose) {
-                    line1 = "Oggi: \(doseText) • Prossima \(timeText)"
-                } else if calendar.isDateInTomorrow(nextScheduledDose) {
-                    line1 = "Oggi: \(doseText) • Prossima domani \(timeText)"
-                } else {
-                    line1 = "Oggi: \(doseText) • Prossima \(timeText)"
-                }
-            } else {
-                line1 = "Oggi: \(doseText)"
-            }
-        } else if let nextScheduledDose {
-            let timeText = timeFormatter.string(from: nextScheduledDose)
-            if calendar.isDateInTomorrow(nextScheduledDose) {
-                if let frequency = frequencyLabel(for: therapies, recurrenceManager: recurrenceManager) {
-                    line1 = "Prossima: domani \(timeText) • \(frequency)"
-                } else {
-                    line1 = "Prossima: domani \(timeText)"
-                }
-            } else {
-                let dayText = dayLabel(for: nextScheduledDose)
-                line1 = "Prossima: \(dayText) \(timeText)"
-            }
+            line1 = "Oggi: \(doseText)"
         } else if let frequency = frequencyLabel(for: therapies, recurrenceManager: recurrenceManager) {
             line1 = "Nessuna dose oggi • \(frequency)"
         } else {

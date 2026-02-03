@@ -321,54 +321,12 @@ struct MedicineRowView: View {
         return packageDosageLabel(pkg)
     }
 
-    private enum StockLevel {
-        case empty, low, ok
-    }
-
     private var leadingIconName: String {
         "pill"
     }
 
     private var leadingIconColor: Color {
-        if medicine.deadlineStatus == .expired {
-            return .red
-        }
-        switch stockLevel {
-        case .empty:
-            return .red
-        case .low:
-            return .orange
-        case .ok:
-            return therapies.isEmpty ? .green : .blue
-        }
-    }
-
-    private var stockLevel: StockLevel {
-        if let warning = stocksWarning {
-            // Map warnings back to severity.
-            if warning.color == .red {
-                return .empty
-            }
-            if warning.color == .orange {
-                return .low
-            }
-        }
-
-        if !therapies.isEmpty {
-            if let days = autonomyDays {
-                if days <= 0 { return .empty }
-                if days < coverageThreshold { return .low }
-            }
-            return .ok
-        }
-
-        if let rem = remainingUnits {
-            if rem <= 0 { return .empty }
-            if rem < 5 { return .low }
-            return .ok
-        }
-
-        return .ok
+        .accentColor
     }
 
     private var leadingIcon: some View {

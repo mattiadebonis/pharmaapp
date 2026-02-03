@@ -21,6 +21,12 @@ public class Log : NSManagedObject , Identifiable{
     @NSManaged public var package: Package?
 }
 
+extension Log: NSCopying {
+    public func copy(with zone: NSZone? = nil) -> Any {
+        self
+    }
+}
+
 extension Log{
     static func extractLogs() -> NSFetchRequest<Log> {
         let request:NSFetchRequest<Log> = Log.fetchRequest() as! NSFetchRequest <Log>

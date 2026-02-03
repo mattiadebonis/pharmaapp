@@ -25,7 +25,7 @@ public class Therapy: NSManagedObject, Identifiable {
     @NSManaged public var doses: Set<Dose>?
     @NSManaged public var package: Package
     @NSManaged public var importance: String?
-    @NSManaged public var logs: Set<Log>?
+    @NSManaged public var logs: Log?
     @NSManaged public var manual_intake_registration: Bool
     @NSManaged public var clinicalRules: Data?
     @NSManaged public var medicinePackage: MedicinePackage?

@@ -26,7 +26,8 @@ final class FavoritesStore: ObservableObject {
     }
 
     func isFavorite(_ medicine: Medicine) -> Bool {
-        favoriteMedicineIDs.contains(medicine.id)
+        guard let id = safeMedicineId(medicine) else { return false }
+        return favoriteMedicineIDs.contains(id)
     }
 
     func isFavorite(_ entry: MedicinePackage) -> Bool {
@@ -34,7 +35,8 @@ final class FavoritesStore: ObservableObject {
     }
 
     func isFavorite(_ cabinet: Cabinet) -> Bool {
-        favoriteCabinetIDs.contains(cabinet.id)
+        guard let id = safeCabinetId(cabinet) else { return false }
+        return favoriteCabinetIDs.contains(id)
     }
 
     func toggleFavorite(_ medicine: Medicine) {
@@ -52,10 +54,11 @@ final class FavoritesStore: ObservableObject {
     }
 
     func setFavorite(_ medicine: Medicine, favorite: Bool) {
+        guard let id = safeMedicineId(medicine) else { return }
         if favorite {
-            favoriteMedicineIDs.insert(medicine.id)
+            favoriteMedicineIDs.insert(id)
         } else {
-            favoriteMedicineIDs.remove(medicine.id)
+            favoriteMedicineIDs.remove(id)
         }
         persist()
     }
@@ -65,12 +68,23 @@ final class FavoritesStore: ObservableObject {
     }
 
     func setFavorite(_ cabinet: Cabinet, favorite: Bool) {
+        guard let id = safeCabinetId(cabinet) else { return }
         if favorite {
-            favoriteCabinetIDs.insert(cabinet.id)
+            favoriteCabinetIDs.insert(id)
         } else {
-            favoriteCabinetIDs.remove(cabinet.id)
+            favoriteCabinetIDs.remove(id)
         }
         persist()
+    }
+
+    private func safeMedicineId(_ medicine: Medicine) -> UUID? {
+        guard !medicine.isDeleted else { return nil }
+        return medicine.value(forKey: "id") as? UUID
+    }
+
+    private func safeCabinetId(_ cabinet: Cabinet) -> UUID? {
+        guard !cabinet.isDeleted else { return nil }
+        return cabinet.value(forKey: "id") as? UUID
     }
 
     private func persist() {

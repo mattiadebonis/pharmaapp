@@ -106,6 +106,22 @@ enum TestCoreDataFactory {
         return package
     }
 
+    static func makeTherapy(
+        context: NSManagedObjectContext,
+        medicine: Medicine,
+        id: UUID = UUID()
+    ) throws -> Therapy {
+        guard let entity = NSEntityDescription.entity(forEntityName: "Therapy", in: context) else {
+            throw NSError(domain: "TestCoreDataFactory", code: 6, userInfo: [NSLocalizedDescriptionKey: "Therapy entity not found"])
+        }
+        let therapy = Therapy(entity: entity, insertInto: context)
+        therapy.id = id
+        therapy.medicine = medicine
+        therapy.start_date = Date()
+        medicine.addToTherapies(therapy)
+        return therapy
+    }
+
     static func fetchLogs(context: NSManagedObjectContext, operationId: UUID) throws -> [Log] {
         let request: NSFetchRequest<Log> = Log.fetchRequest() as! NSFetchRequest<Log>
         request.predicate = NSPredicate(format: "operation_id == %@", operationId as CVarArg)

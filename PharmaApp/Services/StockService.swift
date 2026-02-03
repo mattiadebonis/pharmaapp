@@ -10,7 +10,20 @@ final class StockService {
         self.context = context
     }
 
+    private func inContext<T: NSManagedObject>(_ object: T) -> T {
+        if object.managedObjectContext === context {
+            return object
+        }
+        return context.object(with: object.objectID) as! T
+    }
+
+    private func inContextOptional<T: NSManagedObject>(_ object: T?) -> T? {
+        guard let object else { return nil }
+        return inContext(object)
+    }
+
     func ensureStockEntries(for medicine: Medicine, contextKey: String = StockService.defaultContextKey) {
+        let medicine = inContext(medicine)
         let packages = medicine.packages
         guard !packages.isEmpty else { return }
         for package in packages {
@@ -19,6 +32,7 @@ final class StockService {
     }
 
     func units(for medicine: Medicine, contextKey: String = StockService.defaultContextKey) -> Int {
+        let medicine = inContext(medicine)
         let packages = medicine.packages
         guard !packages.isEmpty else { return 0 }
         return packages.reduce(0) { total, package in
@@ -27,11 +41,13 @@ final class StockService {
     }
 
     func units(for package: Package, contextKey: String = StockService.defaultContextKey) -> Int {
+        let package = inContext(package)
         let stock = stock(for: package, contextKey: contextKey, bootstrapFromLogs: true)
         return Int(stock.stock_units)
     }
 
     func setUnits(_ units: Int, for package: Package, contextKey: String = StockService.defaultContextKey) {
+        let package = inContext(package)
         let stock = stock(for: package, contextKey: contextKey, bootstrapFromLogs: true)
         stock.stock_units = Int32(units)
         stock.updated_at = Date()
@@ -40,6 +56,7 @@ final class StockService {
     @discardableResult
     func apply(delta: Int, for package: Package, contextKey: String = StockService.defaultContextKey) -> Int {
         guard delta != 0 else { return 0 }
+        let package = inContext(package)
         let stock = stock(for: package, contextKey: contextKey, bootstrapFromLogs: true)
         let current = Int(stock.stock_units)
         let proposed = current + delta
@@ -73,6 +90,9 @@ final class StockService {
         if let existing = existingLog(operationId: operationId) {
             return existing
         }
+        let medicine = inContext(medicine)
+        let package = inContextOptional(package)
+        let therapy = inContextOptional(therapy)
         guard let newLog = makeLog() else {
             errorHandler?(NSError(domain: "StockService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing Log entity description"]))
             return nil
@@ -131,6 +151,7 @@ final class StockService {
 
     @discardableResult
     func applyLogDelta(type: String, package: Package, contextKey: String = StockService.defaultContextKey) -> Int {
+        let package = inContext(package)
         let delta = Self.deltaUnits(for: type, package: package)
         guard delta != 0 else { return 0 }
         return apply(delta: delta, for: package, contextKey: contextKey)
@@ -154,6 +175,7 @@ final class StockService {
     }
 
     private func stock(for package: Package, contextKey: String, bootstrapFromLogs: Bool) -> Stock {
+        let package = inContext(package)
         if let existing = stockFromRelationship(for: package, contextKey: contextKey) {
             return existing
         }

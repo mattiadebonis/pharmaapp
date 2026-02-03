@@ -33,7 +33,7 @@ final class AutoIntakeProcessor {
         let events = generator.generateEvents(therapies: therapies, from: start, to: now)
         guard !events.isEmpty else { return 0 }
 
-        let lookup = Dictionary(uniqueKeysWithValues: therapies.map { ($0.objectID, $0) })
+        let lookup = Dictionary(therapies.map { ($0.objectID, $0) }, uniquingKeysWith: { first, _ in first })
         let stockService = StockService(context: context)
         var createdCount = 0
         var processedCount = 0

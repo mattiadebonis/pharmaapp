@@ -160,7 +160,9 @@ struct TherapyFormView: View {
                             }
                             ToolbarItem(placement: .confirmationAction) {
                                 Button("Salva") {
-                                    applyTherapyDescription(therapyDescriptionText)
+                                    if shouldParseDescriptionText {
+                                        applyTherapyDescription(therapyDescriptionText)
+                                    }
                                     saveTherapy()
                                 }
                                 .disabled(!canSave)
@@ -199,25 +201,24 @@ struct TherapyFormView: View {
             }
 
             Section(header: Text("Orari")) {
-                VStack {
-                    ForEach(times.indices, id: \.self) { index in
-                        HStack {
-                            DatePicker("", selection: $times[index], displayedComponents: .hourAndMinute)
-                                .labelsHidden()
-                            Text(doseDisplayText)
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Button { times.remove(at: index) } label: {
-                                Image(systemName: "minus.circle.fill")
-                                    .foregroundColor(.red)
-                            }
+                ForEach(times.indices, id: \.self) { index in
+                    HStack {
+                        DatePicker("", selection: $times[index], displayedComponents: .hourAndMinute)
+                            .labelsHidden()
+                        Text(doseDisplayText)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Button { times.remove(at: index) } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundColor(.red)
                         }
+                        .buttonStyle(.borderless)
                     }
-                    Button {
-                        times.append(Date())
-                    } label: {
-                        Label("Aggiungi un orario", systemImage: "plus.circle")
-                    }
+                }
+                Button {
+                    times.append(Date())
+                } label: {
+                    Label("Aggiungi un orario", systemImage: "plus.circle")
                 }
             }
 
@@ -238,7 +239,9 @@ struct TherapyFormView: View {
             if isEmbedded {
                 Section {
                     Button {
-                        applyTherapyDescription(therapyDescriptionText)
+                        if shouldParseDescriptionText {
+                            applyTherapyDescription(therapyDescriptionText)
+                        }
                         saveTherapy()
                     } label: {
                         Label("Salva terapia", systemImage: "checkmark.circle.fill")
@@ -429,6 +432,7 @@ struct TherapyFormView: View {
             )
             .lineLimit(2...6)
             .onChange(of: therapyDescriptionText) { newValue in
+                guard newValue != lastAutoDescriptionText else { return }
                 applyTherapyDescription(newValue)
             }
         }
@@ -624,6 +628,12 @@ struct TherapyFormView: View {
             return confirmation
         }
         return "\(parts.joined(separator: " ")), \(confirmation)"
+    }
+
+    private var shouldParseDescriptionText: Bool {
+        let trimmed = therapyDescriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return trimmed != lastAutoDescriptionText
     }
 
     private func updateTherapyDescriptionIfNeeded(force: Bool) {

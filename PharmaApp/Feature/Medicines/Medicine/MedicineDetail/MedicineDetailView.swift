@@ -529,15 +529,23 @@ struct MedicineDetailView: View {
     
     private func formattedDate(_ date: Date) -> String {
         let calendar = Calendar.current
-        if calendar.isDateInToday(date) {
+        let startOfToday = calendar.startOfDay(for: Date())
+        let startOfTarget = calendar.startOfDay(for: date)
+        let dayDiff = calendar.dateComponents([.day], from: startOfToday, to: startOfTarget).day ?? 0
+
+        if dayDiff <= 0 {
             return DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .short)
-        } else if calendar.isDateInTomorrow(date) {
+        }
+        if dayDiff == 1 {
             return "Domani"
         }
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        if dayDiff <= 6 {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "it_IT")
+            formatter.dateFormat = "EEEE"
+            return formatter.string(from: date).capitalized(with: formatter.locale)
+        }
+        return "Tra \(dayDiff) giorni"
     }
     
     private var estimatedDepletionDate: Date? {
@@ -665,13 +673,12 @@ struct MedicineDetailView: View {
     }
     
     private func deletePackage() {
-        let relatedLogs = (medicine.logs ?? []).filter { $0.package?.objectID == package.objectID }
-        let relatedTherapies = package.therapies ?? []
-        let relatedStocks = package.stocks ?? []
+        let relatedTherapies = (package.therapies ?? []).filter { $0.medicine == medicine }
         let relatedEntries = (package.medicinePackages ?? []).filter { $0.medicine == medicine }
 
-        for log in relatedLogs {
-            context.delete(log)
+        let currentUnits = StockService(context: context).units(for: package)
+        if currentUnits > 0 {
+            stockService.setStockUnits(medicine: medicine, package: package, targetUnits: 0)
         }
 
         for therapy in relatedTherapies {
@@ -680,23 +687,12 @@ struct MedicineDetailView: View {
                     context.delete(dose)
                 }
             }
-            if let logs = therapy.logs {
-                for log in logs {
-                    context.delete(log)
-                }
-            }
             context.delete(therapy)
-        }
-
-        for stock in relatedStocks {
-            context.delete(stock)
         }
 
         for entry in relatedEntries {
             context.delete(entry)
         }
-
-        context.delete(package)
 
         do {
             try context.save()

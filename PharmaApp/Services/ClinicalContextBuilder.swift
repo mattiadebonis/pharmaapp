@@ -33,7 +33,7 @@ struct ClinicalContextBuilder {
         let startOfToday = calendar.startOfDay(for: now)
         let endOfToday = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: startOfToday) ?? now
         let events = generator.generateEvents(therapies: therapies, from: startOfToday, to: endOfToday)
-        let therapiesByID = Dictionary(uniqueKeysWithValues: therapies.map { ($0.objectID, $0) })
+        let therapiesByID = Dictionary(therapies.map { ($0.objectID, $0) }, uniquingKeysWith: { first, _ in first })
 
         let monitoringTodos = buildMonitoringTodos(
             events: events,

@@ -62,7 +62,7 @@ struct TodayTodoEngine {
         let therapyItems = nonPurchaseItems.filter { $0.category == .therapy }
         let otherItems = nonPurchaseItems.filter { $0.category != .therapy }
         let timeLabels: [String: String] = Dictionary(
-            uniqueKeysWithValues: pendingItems.compactMap { item in
+            pendingItems.compactMap { item in
                 guard let label = timeLabel(
                     for: item,
                     medicines: medicines,
@@ -72,7 +72,8 @@ struct TodayTodoEngine {
                     calendar: calendar
                 ) else { return nil }
                 return (item.id, label)
-            }
+            },
+            uniquingKeysWith: { first, _ in first }
         )
         let medicineStatuses = buildMedicineStatuses(
             medicines: medicines,
@@ -133,10 +134,14 @@ struct TodayTodoEngine {
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> AIInsightsContext? {
-        let purchaseLines = sections.purchase.map { medicine in
+        // [FIX] Ghost Medicine: Filter out medicines not in cabinet from highlights
+        let validPurchase = sections.purchase.filter { $0.in_cabinet }
+        let validOggi = sections.oggi.filter { $0.in_cabinet }
+        
+        let purchaseLines = validPurchase.map { medicine in
             "\(medicine.nome): \(purchaseHighlight(for: medicine, option: option, recurrenceManager: recurrenceManager, now: now, calendar: calendar))"
         }
-        let therapySources = sections.oggi + sections.purchase
+        let therapySources = validOggi + validPurchase // Note: Check if validPurchase duplication is intended here?
         let therapyLines = therapySources.compactMap { medicine in
             nextDoseTodayHighlight(for: medicine, recurrenceManager: recurrenceManager, now: now, calendar: calendar)
         }
@@ -486,6 +491,9 @@ struct TodayTodoEngine {
         option: Option?,
         recurrenceManager: RecurrenceManager
     ) -> Bool {
+        // [FIX] Ghost Medicine: Ignore medicines not in cabinet
+        guard medicine.in_cabinet else { return false }
+        
         if let therapies = medicine.therapies, !therapies.isEmpty {
             var totalLeft: Double = 0
             var dailyUsage: Double = 0
@@ -509,6 +517,9 @@ struct TodayTodoEngine {
         recurrenceManager: RecurrenceManager
     ) -> Bool {
         guard medicine.obbligo_ricetta else { return false }
+        // [FIX] Ghost Medicine: Ignore medicines not in cabinet
+        guard medicine.in_cabinet else { return false }
+        
         if medicine.hasEffectivePrescriptionReceived() { return false }
         if let therapies = medicine.therapies, !therapies.isEmpty {
             var totalLeft: Double = 0
@@ -538,7 +549,14 @@ struct TodayTodoEngine {
     ) -> Bool {
         guard isOutOfStock(medicine, option: option, recurrenceManager: recurrenceManager) else { return false }
 
-        if existingItems.contains(where: { $0.category == .purchase && $0.medicineID == medicine.objectID }) {
+        // [FIX] Duplicates: Check robustly if a purchase item already exists for this medicine.
+        // We check ID match OR Name match to be safe against builder mismatches.
+        if existingItems.contains(where: { item in
+            guard item.category == .purchase else { return false }
+            if item.medicineID == medicine.objectID { return true }
+            if item.title.compare(medicine.nome, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame { return true }
+            return false
+        }) {
             return false
         }
         return true

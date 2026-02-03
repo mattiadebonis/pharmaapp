@@ -136,7 +136,7 @@ struct NotificationPlanner {
         let events = generator.generateEvents(therapies: therapies, from: now, to: endDate)
         guard !events.isEmpty else { return [] }
 
-        let therapyLookup = Dictionary(uniqueKeysWithValues: therapies.map { ($0.objectID, $0) })
+        let therapyLookup = Dictionary(therapies.map { ($0.objectID, $0) }, uniquingKeysWith: { first, _ in first })
         var items: [NotificationPlanItem] = []
 
         let graceWindow = Double(config.therapyGraceWindowSeconds)

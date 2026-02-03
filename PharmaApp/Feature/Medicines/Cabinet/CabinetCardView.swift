@@ -79,17 +79,7 @@ struct CabinetCardView: View {
     
     
     private var baseAccentColor: Color {
-        if entries.isEmpty {
-            return .gray
-        }
-        switch stockState {
-        case .empty:
-            return .red
-        case .low:
-            return .orange
-        case .ok:
-            return therapiesInCabinet.isEmpty ? .green : .blue
-        }
+        .accentColor
     }
     
     private func evaluateStock(for entry: MedicinePackage) -> StockEvaluation? {
