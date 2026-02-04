@@ -54,7 +54,7 @@ final class TodayTodoEngineReproductionTests: XCTestCase {
         )
 
         // THEN: We should have exactly 1 purchase item, not 2
-        let purchaseItems = state.computedTodos.filter { $0.category == .purchase && $0.medicineID == medicine.objectID }
+        let purchaseItems = state.computedTodos.filter { $0.category == .purchase && $0.medicineId == MedicineId(medicine.id) }
         
         // Fails if duplicates exist (which we suspect they do)
         // One comes from "insights" -> makeTodos -> checks `purchaseHighlights`
@@ -89,7 +89,7 @@ final class TodayTodoEngineReproductionTests: XCTestCase {
 
         // THEN: Should NOT satisfy isOutOfStock for Today page purposes if we don't care about it
         // Or at least shouldn't generate a todo.
-        let purchaseItems = state.computedTodos.filter { $0.category == .purchase && $0.medicineID == medicine.objectID }
+        let purchaseItems = state.computedTodos.filter { $0.category == .purchase && $0.medicineId == MedicineId(medicine.id) }
         XCTAssertEqual(purchaseItems.count, 0, "Should NOT have purchase items for ghost medicine")
     }
 
@@ -131,7 +131,7 @@ final class TodayTodoEngineReproductionTests: XCTestCase {
         )
 
         // THEN: We should find a therapy todo item
-        let therapyItems = state.computedTodos.filter { $0.category == .therapy && $0.medicineID == medicine.objectID }
+        let therapyItems = state.computedTodos.filter { $0.category == .therapy && $0.medicineId == MedicineId(medicine.id) }
         
         XCTAssertFalse(therapyItems.isEmpty, "Therapy scheduled for today should be shown")
     }

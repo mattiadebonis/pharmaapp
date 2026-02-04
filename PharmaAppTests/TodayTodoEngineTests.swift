@@ -9,7 +9,7 @@ final class TodayTodoEngineTests: XCTestCase {
             title: "Monitoraggio",
             detail: nil,
             category: .monitoring,
-            medicineID: nil
+            medicineId: nil
         )
         XCTAssertEqual(TodayTodoEngine.completionKey(for: monitoring), monitoring.id)
 
@@ -18,7 +18,7 @@ final class TodayTodoEngineTests: XCTestCase {
             title: "Dose mancata",
             detail: nil,
             category: .missedDose,
-            medicineID: nil
+            medicineId: nil
         )
         XCTAssertEqual(TodayTodoEngine.completionKey(for: missed), missed.id)
     }
@@ -29,7 +29,7 @@ final class TodayTodoEngineTests: XCTestCase {
             title: "Terapia",
             detail: "08:00",
             category: .therapy,
-            medicineID: nil
+            medicineId: nil
         )
         let token1 = TodayTodoEngine.syncToken(for: [base])
 
@@ -38,7 +38,7 @@ final class TodayTodoEngineTests: XCTestCase {
             title: "Terapia",
             detail: "09:00",
             category: .therapy,
-            medicineID: nil
+            medicineId: nil
         )
         let token2 = TodayTodoEngine.syncToken(for: [updated])
 
@@ -64,7 +64,7 @@ final class TodayTodoEngineTests: XCTestCase {
             title: "Pressione",
             detail: nil,
             category: .monitoring,
-            medicineID: nil
+            medicineId: nil
         )
 
         let sortValue = TodayTodoEngine.timeSortValue(
@@ -153,7 +153,7 @@ final class TodayTodoEngineTests: XCTestCase {
             calendar: calendar
         )
 
-        let therapyItems = state.computedTodos.filter { $0.category == .therapy && $0.medicineID == medicine.objectID }
+        let therapyItems = state.computedTodos.filter { $0.category == .therapy && $0.medicineId == MedicineId(medicine.id) }
         XCTAssertEqual(therapyItems.count, 0, "Therapy without doses should not be shown for today")
     }
 
@@ -200,7 +200,7 @@ final class TodayTodoEngineTests: XCTestCase {
             clinicalContext: clinicalContext
         )
 
-        let therapyItems = state.computedTodos.filter { $0.category == .therapy && $0.medicineID == medicine.objectID }
+        let therapyItems = state.computedTodos.filter { $0.category == .therapy && $0.medicineId == MedicineId(medicine.id) }
         XCTAssertEqual(therapyItems.count, 1, "Legacy medicines with therapies should still show today")
     }
 

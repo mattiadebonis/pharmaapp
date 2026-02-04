@@ -7,6 +7,7 @@ class TodayViewModel: ObservableObject {
     let actionService: MedicineActionService
     private let recordIntakeUseCase: RecordIntakeUseCase
     private let operationIdProvider: OperationIdProviding
+    private let todayStateProvider: CoreDataTodayStateProvider
     @Published private(set) var state: TodayState = .empty
 
     init(
@@ -15,11 +16,15 @@ class TodayViewModel: ObservableObject {
             eventStore: CoreDataEventStore(context: PersistenceController.shared.container.viewContext),
             clock: SystemClock()
         ),
-        operationIdProvider: OperationIdProviding = OperationIdProvider.shared
+        operationIdProvider: OperationIdProviding = OperationIdProvider.shared,
+        todayStateProvider: CoreDataTodayStateProvider = CoreDataTodayStateProvider(
+            context: PersistenceController.shared.container.viewContext
+        )
     ) {
         self.actionService = actionService
         self.recordIntakeUseCase = recordIntakeUseCase
         self.operationIdProvider = operationIdProvider
+        self.todayStateProvider = todayStateProvider
     }
 
     private var viewContext: NSManagedObjectContext {
@@ -34,16 +39,12 @@ class TodayViewModel: ObservableObject {
         option: Option?,
         completedTodoIDs: Set<String>
     ) {
-        let recurrenceManager = RecurrenceManager(context: viewContext)
-        let clinicalContext = ClinicalContextBuilder(context: viewContext).build(for: medicines)
-        let newState = TodayTodoEngine.buildState(
+        let newState = todayStateProvider.buildState(
             medicines: medicines,
             logs: logs,
             todos: todos,
             option: option,
-            completedTodoIDs: completedTodoIDs,
-            recurrenceManager: recurrenceManager,
-            clinicalContext: clinicalContext
+            completedTodoIDs: completedTodoIDs
         )
         if newState != state {
             state = newState
@@ -109,7 +110,7 @@ class TodayViewModel: ObservableObject {
     }
 
     func completionKey(for item: TodayTodoItem) -> String {
-        TodayTodoEngine.completionKey(for: item)
+        TodayStateBuilder.completionKey(for: item)
     }
 
     @MainActor
@@ -120,7 +121,6 @@ class TodayViewModel: ObservableObject {
     ) {
         let context = viewContext
         let now = Date()
-        let recurrenceManager = RecurrenceManager(context: context)
         let request: NSFetchRequest<Todo> = Todo.fetchRequest()
         let existing: [Todo]
         do {
@@ -149,13 +149,11 @@ class TodayViewModel: ObservableObject {
             todo.detail = item.detail
             todo.category = item.category.rawValue
             todo.updated_at = now
-            todo.due_at = TodayTodoEngine.todoTimeDate(
+            todo.due_at = todayStateProvider.todoTimeDate(
                 for: item,
                 medicines: medicines,
-                options: option,
-                recurrenceManager: recurrenceManager,
-                now: now,
-                calendar: .current
+                option: option,
+                now: now
             )
             todo.medicine = medicine(for: item, medicines: medicines)
         }
@@ -172,52 +170,36 @@ class TodayViewModel: ObservableObject {
         }
     }
 
-    func earliestDoseToday(for medicine: Medicine, recurrenceManager: RecurrenceManager) -> Date? {
-        TodayTodoEngine.earliestDoseToday(
-            for: medicine,
-            recurrenceManager: recurrenceManager,
-            now: Date(),
-            calendar: .current
-        )
-    }
-
-    func isOutOfStock(_ medicine: Medicine, option: Option?, recurrenceManager: RecurrenceManager) -> Bool {
-        TodayTodoEngine.isOutOfStock(medicine, option: option, recurrenceManager: recurrenceManager)
-    }
-
-    func needsPrescriptionBeforePurchase(_ medicine: Medicine, option: Option?, recurrenceManager: RecurrenceManager) -> Bool {
-        TodayTodoEngine.needsPrescriptionBeforePurchase(medicine, option: option, recurrenceManager: recurrenceManager)
+    struct TodayIntakeInfo: Equatable {
+        let date: Date
+        let personName: String?
+        let therapy: Therapy
     }
 
     @MainActor
-    func nextDoseTodayInfo(for medicine: Medicine) -> TodayTodoEngine.TodayDoseInfo? {
-        let recurrenceManager = RecurrenceManager(context: viewContext)
-        return TodayTodoEngine.nextDoseTodayInfo(
-            for: medicine,
-            recurrenceManager: recurrenceManager,
-            now: Date(),
-            calendar: .current
-        )
+    func nextDoseTodayInfo(for medicine: Medicine) -> TodayIntakeInfo? {
+        let option = Option.current(in: viewContext)
+        guard let info = todayStateProvider.nextDoseTodayInfo(for: medicine, option: option) else { return nil }
+        guard let therapy = resolveTherapy(for: medicine, id: info.therapyId) else { return nil }
+        return TodayIntakeInfo(date: info.date, personName: info.personName, therapy: therapy)
     }
 
     @MainActor
     func nextUpcomingDoseDate(for medicine: Medicine) -> Date? {
-        let recurrenceManager = RecurrenceManager(context: viewContext)
-        return TodayTodoEngine.nextUpcomingDoseDate(
-            for: medicine,
-            recurrenceManager: recurrenceManager,
-            now: Date(),
-            calendar: .current
-        )
+        todayStateProvider.nextUpcomingDoseDate(for: medicine)
     }
 
     // MARK: - Helpers per medicine lookup
     private func medicine(for item: TodayTodoItem, medicines: [Medicine]) -> Medicine? {
-        if let id = item.medicineID, let medicine = medicines.first(where: { $0.objectID == id }) {
+        if let id = item.medicineId, let medicine = medicines.first(where: { $0.id == id.rawValue }) {
             return medicine
         }
         let normalizedTitle = item.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return medicines.first(where: { $0.nome.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalizedTitle })
+    }
+
+    private func resolveTherapy(for medicine: Medicine, id: TherapyId) -> Therapy? {
+        medicine.therapies?.first(where: { $0.id == id.rawValue })
     }
 
     private func resolvePackage(for medicine: Medicine, therapy: Therapy?) -> Package? {

@@ -1,13 +1,14 @@
 import Foundation
 import CoreData
 
+@available(*, deprecated, message: "Use TodayStateBuilder.")
 protocol TodoBuilderProtocol {
     func makeTodos(from context: AIInsightsContext, medicines: [Medicine], urgentIDs: Set<NSManagedObjectID>) -> [TodayTodoItem]
 }
 
-/// Adapter che riusa l'implementazione esistente TodayTodoBuilder.
+@available(*, deprecated, message: "Use TodayStateBuilder.")
 struct TodoBuilderService: TodoBuilderProtocol {
     func makeTodos(from context: AIInsightsContext, medicines: [Medicine], urgentIDs: Set<NSManagedObjectID>) -> [TodayTodoItem] {
-        TodayTodoBuilder.makeTodos(from: context, medicines: medicines, urgentIDs: urgentIDs)
+        []
     }
 }

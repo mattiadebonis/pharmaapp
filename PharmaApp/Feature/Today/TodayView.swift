@@ -38,7 +38,7 @@ struct TodayView: View {
     @State private var completionUndoOperationKey: OperationKey?
     @State private var completedTodoIDs: Set<String> = []
     @State private var completedBlockedSubtasks: Set<String> = []
-    @State private var pendingPrescriptionMedIDs: Set<NSManagedObjectID> = []
+    @State private var pendingPrescriptionMedIDs: Set<MedicineId> = []
     @State private var lastCompletionResetDay: Date?
     @State private var mailComposeData: MailComposeData?
     @State private var messageComposeData: MessageComposeData?
@@ -627,9 +627,9 @@ struct TodayView: View {
     private func purchaseStockStatusLine(for medicine: Medicine) -> Text? {
         guard let status = purchaseStockStatusLabel(for: medicine) else { return nil }
         let statusColor: Color
-        if viewModel.state.medicineStatuses[medicine.objectID]?.isDepleted == true {
+        if viewModel.state.medicineStatuses[MedicineId(medicine.id)]?.isDepleted == true {
             statusColor = .red
-        } else if viewModel.state.medicineStatuses[medicine.objectID]?.isOutOfStock == true {
+        } else if viewModel.state.medicineStatuses[MedicineId(medicine.id)]?.isOutOfStock == true {
             statusColor = .orange
         } else {
             statusColor = .secondary
@@ -679,7 +679,7 @@ struct TodayView: View {
     }
 
     private func personNameForTherapy(_ medicine: Medicine) -> String? {
-        guard let person = viewModel.state.medicineStatuses[medicine.objectID]?.personName else { return nil }
+        guard let person = viewModel.state.medicineStatuses[MedicineId(medicine.id)]?.personName else { return nil }
         return person.isEmpty ? nil : person
     }
 
@@ -807,7 +807,7 @@ struct TodayView: View {
     }
 
     private func blockedSubtaskKey(_ type: String, for medicine: Medicine) -> String {
-        "\(type)|\(medicine.objectID.uriRepresentation().absoluteString)"
+        "\(type)|\(medicine.id.uuidString)"
     }
 
     private func isBlockedSubtaskDone(type: String, medicine: Medicine) -> Bool {
@@ -815,7 +815,7 @@ struct TodayView: View {
     }
 
     private func hasPrescriptionRequest(_ medicine: Medicine) -> Bool {
-        pendingPrescriptionMedIDs.contains(medicine.objectID) || medicine.hasNewPrescritpionRequest()
+        pendingPrescriptionMedIDs.contains(MedicineId(medicine.id)) || medicine.hasNewPrescritpionRequest()
     }
 
     private func hasPrescriptionReceived(_ medicine: Medicine) -> Bool {
@@ -826,7 +826,7 @@ struct TodayView: View {
         let token = viewModel.operationToken(action: .prescriptionRequest, medicine: medicine)
         let log = viewModel.actionService.requestPrescription(for: medicine, operationId: token.id)
         if log != nil {
-            pendingPrescriptionMedIDs.insert(medicine.objectID)
+            pendingPrescriptionMedIDs.insert(MedicineId(medicine.id))
             completedBlockedSubtasks.insert(blockedSubtaskKey("prescription", for: medicine))
             scheduleOperationClear(for: token.key)
         } else {
@@ -836,7 +836,7 @@ struct TodayView: View {
 
     private func completeBlockedIntake(for info: BlockedTherapyInfo, item: TodayTodoItem) {
         let med = info.medicine
-        if viewModel.state.medicineStatuses[med.objectID]?.needsPrescription == true,
+        if viewModel.state.medicineStatuses[MedicineId(med.id)]?.needsPrescription == true,
            !hasPrescriptionRequest(med) && !hasPrescriptionReceived(med) {
             sendPrescriptionRequest(for: med)
         }
@@ -1233,11 +1233,11 @@ struct TodayView: View {
     }
 
     private func isStockDepleted(_ medicine: Medicine) -> Bool {
-        viewModel.state.medicineStatuses[medicine.objectID]?.isDepleted ?? false
+        viewModel.state.medicineStatuses[MedicineId(medicine.id)]?.isDepleted ?? false
     }
 
     private func purchaseStockStatusLabel(for medicine: Medicine) -> String? {
-        viewModel.state.medicineStatuses[medicine.objectID]?.purchaseStockStatus
+        viewModel.state.medicineStatuses[MedicineId(medicine.id)]?.purchaseStockStatus
     }
 
     private func metaInfo(for item: TodayTodoItem) -> (icon: String, text: String)? {
@@ -1263,7 +1263,7 @@ struct TodayView: View {
     private func toggleCompletion(for item: TodayTodoItem) {
         if item.category == .purchase,
            let med = medicine(for: item) {
-            if viewModel.state.medicineStatuses[med.objectID]?.needsPrescription == true,
+            if viewModel.state.medicineStatuses[MedicineId(med.id)]?.needsPrescription == true,
                !hasPrescriptionReceived(med) {
                 return
             }
@@ -1476,7 +1476,7 @@ struct TodayView: View {
                 let token = viewModel.operationToken(action: .prescriptionReceived, medicine: medicine)
                 log = viewModel.actionService.markPrescriptionReceived(for: medicine, operationId: token.id)
                 if log != nil {
-                    pendingPrescriptionMedIDs.remove(medicine.objectID)
+                    pendingPrescriptionMedIDs.remove(MedicineId(medicine.id))
                 }
                 operationId = token.id
                 operationKey = token.key
@@ -1573,7 +1573,13 @@ struct TodayView: View {
 
     private func rowTimeLabel(for item: TodayTodoItem) -> String? {
         guard item.category != .purchase, item.category != .deadline else { return nil }
-        return viewModel.state.timeLabel(for: item)
+        guard let label = viewModel.state.timeLabel(for: item) else { return nil }
+        switch label {
+        case .time(let date):
+            return TodayFormatters.time.string(from: date)
+        case .category:
+            return nil
+        }
     }
 
     private func prescriptionDoctorName(for medicine: Medicine) -> String {
@@ -1631,8 +1637,8 @@ struct TodayView: View {
     }
 
     private func medicine(for item: TodayTodoItem) -> Medicine? {
-        guard let id = item.medicineID else { return nil }
-        return medicines.first(where: { $0.objectID == id })
+        guard let id = item.medicineId else { return nil }
+        return medicines.first(where: { $0.id == id.rawValue })
     }
 
     private func getPackage(for medicine: Medicine) -> Package? {
