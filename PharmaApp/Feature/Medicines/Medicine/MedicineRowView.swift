@@ -222,7 +222,7 @@ struct MedicineRowView: View {
             if !value.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(value.line1)
                     .font(condensedSubtitleFont)
-                    .foregroundStyle(subtitleColor)
+                    .foregroundColor(subtitleColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
@@ -232,7 +232,7 @@ struct MedicineRowView: View {
             if let indicator = deadlineIndicator {
                 Text(indicator.label)
                     .font(condensedSubtitleFont)
-                    .foregroundStyle(indicator.color)
+                    .foregroundColor(indicator.color)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
@@ -247,20 +247,20 @@ struct MedicineRowView: View {
 
         if line.hasPrefix(emptyPrefix) {
             let suffix = String(line.dropFirst(emptyPrefix.count))
-            (Text(emptyPrefix).foregroundStyle(.red) + Text(suffix).foregroundStyle(subtitleColor))
+            (Text(emptyPrefix).foregroundColor(.red) + Text(suffix).foregroundColor(subtitleColor))
                 .font(baseFont)
                 .lineLimit(1)
                 .truncationMode(.tail)
         } else if line.hasPrefix(lowPrefix) {
             Text(line)
                 .font(baseFont)
-                .foregroundStyle(.orange)
+                .foregroundColor(.orange)
                 .lineLimit(1)
                 .truncationMode(.tail)
         } else {
             Text(line)
                 .font(baseFont)
-                .foregroundStyle(subtitleColor)
+                .foregroundColor(subtitleColor)
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
@@ -293,12 +293,12 @@ struct MedicineRowView: View {
         return HStack(alignment: .bottom, spacing: 4) {
             Text(name)
                 .font(.system(size: 16, weight: .regular))
-                .foregroundStyle(.primary)
+                .foregroundColor(.primary)
                 .lineLimit(2)
             if let dosage {
                 Text(" \(dosage)")
                     .font(.system(size: 16, weight: .regular))
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
                     .lineLimit(1)
             }
         }
@@ -332,7 +332,7 @@ struct MedicineRowView: View {
     private var leadingIcon: some View {
         Image(systemName: leadingIconName)
             .font(.system(size: 17, weight: .regular))
-            .foregroundStyle(leadingIconColor)
+            .foregroundColor(leadingIconColor)
             .frame(width: 22, height: 22, alignment: .center)
     }
     

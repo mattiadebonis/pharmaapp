@@ -40,35 +40,38 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             // TAB 1 – Insights
-            Tab(value: AppTab.oggi) {
-                NavigationStack {
-                    TodayView()
-                }
-            } label: {
-                Label {
-                    Text("Oggi")
-                } icon: {
+            NavigationStack {
+                TodayView()
+            }
+            .tabItem {
+                VStack(spacing: 4) {
                     TodayCalendarIcon(day: todayDayNumber)
+                    Text("Oggi")
                 }
             }
+            .tag(AppTab.oggi)
 
             // TAB 2 – Medicine
-            Tab("Medicine", systemImage: "pills", value: AppTab.medicine) {
-                NavigationStack {
-                    CabinetView()
-                        .navigationTitle("Armadio dei farmaci")
-                        .navigationBarTitleDisplayMode(.large)
-                }
+            NavigationStack {
+                CabinetView()
+                    .navigationTitle("Armadio dei farmaci")
+                    .navigationBarTitleDisplayMode(.large)
             }
+            .tabItem {
+                Label("Medicine", systemImage: "pills")
+            }
+            .tag(AppTab.medicine)
 
-            // TAB 3 – Cerca (ruolo search)
-            Tab("Cerca", systemImage: "plus", value: AppTab.search, role: .search) {
-                NavigationStack {
-                    CatalogSearchScreen { selection in
-                        catalogSelection = selection
-                    }
+            // TAB 3 – Cerca
+            NavigationStack {
+                CatalogSearchScreen { selection in
+                    catalogSelection = selection
                 }
             }
+            .tabItem {
+                Label("Cerca", systemImage: "plus")
+            }
+            .tag(AppTab.search)
         }
         .sheet(isPresented: Binding(
             get: { appVM.isSettingsPresented },

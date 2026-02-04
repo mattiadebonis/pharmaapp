@@ -207,7 +207,7 @@ struct TodayView: View {
                         Text("Aggiungi una confezione dalla schermata dettaglio per utilizzare le funzioni avanzate.")
                             .multilineTextAlignment(.center)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundColor(.secondary)
                     }
                     .padding()
                     .presentationDetents([.medium])
@@ -251,7 +251,7 @@ struct TodayView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Codice Fiscale")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.black)
+                .foregroundColor(.black)
 
             if let codice = codiceFiscaleStore.codiceFiscale {
                 Code39View(codice)
@@ -262,11 +262,11 @@ struct TodayView: View {
 
                 Text(codice)
                     .font(.system(.callout, design: .monospaced))
-                    .foregroundStyle(.black)
+                    .foregroundColor(.black)
             } else {
                 Text("Aggiungi il Codice Fiscale dal profilo.")
                     .font(.callout)
-                    .foregroundStyle(.black.opacity(0.7))
+                    .foregroundColor(.black.opacity(0.7))
             }
         }
         .padding(16)
@@ -295,20 +295,20 @@ struct TodayView: View {
         HStack(spacing: 8) {
             Image(systemName: "location.fill")
                 .font(.system(size: 16, design: .rounded))
-                .foregroundStyle(.secondary)
+                .foregroundColor(.secondary)
             HStack(spacing: 4) {
                 Text(primaryLine)
                     .font(.system(size: 16, design: .rounded))
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 if let statusLine {
                     Text("·")
                         .font(.system(size: 16, design: .rounded))
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(.secondary)
                     Text(statusLine)
                         .font(.system(size: 16, design: .rounded))
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -367,7 +367,7 @@ struct TodayView: View {
             HStack(spacing: 10) {
                 Image(systemName: mode.systemImage)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundColor(.white)
                     .frame(width: 22, height: 22)
                     .background(
                         Circle()
@@ -376,10 +376,10 @@ struct TodayView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(mode.title)
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundColor(.primary)
                     Text(minutesText)
                         .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(.secondary)
                 }
                 Spacer(minLength: 0)
             }
@@ -685,7 +685,7 @@ struct TodayView: View {
             metaParts.append("Richiesta ricetta inviata a \(docName)")
         }
         if !metaParts.isEmpty {
-            lines.append(Text(metaParts.joined(separator: " • ")).foregroundStyle(.secondary))
+            lines.append(Text(metaParts.joined(separator: " • ")).foregroundColor(.secondary))
         }
 
         if let stockLine = purchaseStockStatusLine(for: medicine) {
@@ -710,13 +710,13 @@ struct TodayView: View {
         } else {
             statusColor = .secondary
         }
-        return Text(status).foregroundStyle(statusColor)
+        return Text(status).foregroundColor(statusColor)
     }
 
     private func upcomingTherapyLine(for medicine: Medicine) -> Text? {
         guard let next = viewModel.nextUpcomingDoseDate(for: medicine) else { return nil }
         let (label, color) = formattedUpcomingTherapyLabel(for: next)
-        return Text(label).foregroundStyle(color)
+        return Text(label).foregroundColor(color)
     }
 
     private func formattedUpcomingTherapyLabel(for date: Date) -> (String, Color) {
@@ -1065,7 +1065,7 @@ struct TodayView: View {
                 leadingTime: leadingTime,
                 title: "",
                 subtitle: subtitle,
-                auxiliaryLine: status.map { Text($0).foregroundStyle(.orange) },
+                auxiliaryLine: status.map { Text($0).foregroundColor(.orange) },
                 auxiliaryUsesDefaultStyle: false,
                 isCompleted: isDone,
                 showToggle: showCircle && onCheck != nil && isEnabled,
@@ -1081,11 +1081,11 @@ struct TodayView: View {
                             if let icon = button.icon {
                                 Image(systemName: icon)
                                     .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundColor(Color.accentColor)
                             } else {
                                 Text(button.label)
                                     .font(.callout)
-                                    .foregroundStyle(Color.primary)
+                                    .foregroundColor(Color.primary)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 6)
                             }
@@ -1147,7 +1147,7 @@ struct TodayView: View {
             if let leadingTime, !leadingTime.isEmpty {
                 Text(leadingTime)
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
                     .monospacedDigit()
                     .frame(minWidth: 46, alignment: .leading)
             }
@@ -1155,7 +1155,7 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(prescriptionMainText(for: item, medicine: prescriptionMedicine))
                     .font(.title3)
-                    .foregroundStyle(titleColor)
+                    .foregroundColor(titleColor)
                     .multilineTextAlignment(.leading)
                 Button {
                     onSend()
@@ -1165,7 +1165,7 @@ struct TodayView: View {
                         Text("Invia richiesta")
                     }
                     .font(.callout)
-                    .foregroundStyle(isEnabled ? Color.accentColor : .secondary)
+                    .foregroundColor(isEnabled ? Color.accentColor : .secondary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
                     .background(
@@ -1616,7 +1616,7 @@ struct TodayView: View {
                             .stroke(Color.accentColor.opacity(0.35), lineWidth: 1)
                     )
             }
-            .foregroundStyle(Color.accentColor)
+            .foregroundColor(Color.accentColor)
             .buttonStyle(.plain)
             Spacer()
         }
@@ -1634,7 +1634,7 @@ struct TodayView: View {
                     .font(.title3.weight(.semibold))
                 Text(message)
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                 HStack(spacing: 12) {
                     Button("Annulla") { onCancel() }
@@ -1743,7 +1743,7 @@ struct TodayView: View {
             VStack(spacing: 14) {
                 Image(systemName: "leaf.circle.fill")
                     .font(.system(size: 42, weight: .semibold))
-                    .foregroundStyle(Color.mint.opacity(0.85))
+                    .foregroundColor(Color.mint.opacity(0.85))
                 VStack(spacing: 10) {
                     Text("non è richiesta alcuna azione da parte tua")
                         .font(.title3)
@@ -1752,7 +1752,7 @@ struct TodayView: View {
                         .font(.body)
                         .multilineTextAlignment(.center)
                 }
-                .foregroundStyle(.secondary)
+                .foregroundColor(.secondary)
             }
             Spacer(minLength: 0)
         }
