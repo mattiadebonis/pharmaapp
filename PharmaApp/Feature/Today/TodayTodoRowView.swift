@@ -116,16 +116,13 @@ struct TodayTodoRowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Button(action: onToggle) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(isCompleted ? circleStrokeColor.opacity(0.2) : .clear)
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .strokeBorder(circleStrokeColor, lineWidth: 1.3)
-                }
-                .frame(width: 18, height: 18)
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                .accessibilityLabel(Text(iconName))
+                let size: CGFloat = 18
+                Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: size, weight: .regular))
+                    .foregroundStyle(circleStrokeColor)
+                    .frame(width: size, height: size)
+                    .contentShape(Circle())
+                    .accessibilityLabel(Text(iconName))
             }
             .buttonStyle(.plain)
             .disabled(!showToggle)
