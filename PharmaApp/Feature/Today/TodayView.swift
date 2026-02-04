@@ -366,8 +366,13 @@ struct TodayView: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: mode.systemImage)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(mode.tint)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 22, height: 22)
+                    .background(
+                        Circle()
+                            .fill(mode.tint)
+                    )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(mode.title)
                         .font(.system(size: 14, weight: .semibold))
