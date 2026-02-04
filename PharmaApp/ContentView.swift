@@ -103,6 +103,7 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environmentObject(AppViewModel())
+        .environmentObject(CodiceFiscaleStore())
         .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
 }
 

@@ -3,10 +3,12 @@ import CoreData
 import MapKit
 import UIKit
 import MessageUI
+import Code39
 
 /// Vista dedicata al tab "Oggi" (ex insights) con logica locale
 struct TodayView: View {
     @EnvironmentObject private var appVM: AppViewModel
+    @EnvironmentObject private var codiceFiscaleStore: CodiceFiscaleStore
     @Environment(\.openURL) private var openURL
 
     @FetchRequest(fetchRequest: Medicine.extractMedicines())
@@ -80,6 +82,10 @@ struct TodayView: View {
                     if showPharmacyCard {
                         pharmacySuggestionCard()
                             .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                        codiceFiscaleBarcodeCard()
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 12, trailing: 16))
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                     }
@@ -238,6 +244,39 @@ struct TodayView: View {
             pharmacyRouteButtons()
         }
         .padding(.vertical, 12)
+    }
+
+    @ViewBuilder
+    private func codiceFiscaleBarcodeCard() -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Codice Fiscale")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.black)
+
+            if let codice = codiceFiscaleStore.codiceFiscale {
+                Code39View(codice)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 90)
+                    .accessibilityLabel("Barcode Codice Fiscale")
+                    .accessibilityValue(codice)
+
+                Text(codice)
+                    .font(.system(.callout, design: .monospaced))
+                    .foregroundStyle(.black)
+            } else {
+                Text("Aggiungi il Codice Fiscale dal profilo.")
+                    .font(.callout)
+                    .foregroundStyle(.black.opacity(0.7))
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.black.opacity(0.2), lineWidth: 1)
+        )
     }
 
     private var canOpenMaps: Bool {
