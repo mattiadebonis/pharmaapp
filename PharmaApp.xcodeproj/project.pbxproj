@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		D881D84BDE1CAA89D28F6787 /* Code39 in Frameworks */ = {isa = PBXBuildFile; productRef = 3E175392B5572D45497B960D /* Code39 */; };
 		7826F6862F27CCF4007E55C4 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 7826F6852F27CCF4007E55C4 /* GoogleSignIn */; };
 		7826F6882F27CCF4007E55C4 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7826F6872F27CCF4007E55C4 /* GoogleSignInSwift */; };
 		7826F68A2F27D44B007E55C4 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 7826F6892F27D44B007E55C4 /* GoogleService-Info.plist */; };
@@ -17,6 +16,7 @@
 		7826F6932F27DD78007E55C4 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 7826F6922F27DD78007E55C4 /* FirebaseAnalytics */; };
 		7826F6952F27DD78007E55C4 /* FirebaseAnalyticsCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7826F6942F27DD78007E55C4 /* FirebaseAnalyticsCore */; };
 		7826F6972F27DD78007E55C4 /* FirebaseAnalyticsIdentitySupport in Frameworks */ = {isa = PBXBuildFile; productRef = 7826F6962F27DD78007E55C4 /* FirebaseAnalyticsIdentitySupport */; };
+		D881D84BDE1CAA89D28F6787 /* Code39 in Frameworks */ = {isa = PBXBuildFile; productRef = 3E175392B5572D45497B960D /* Code39 */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -667,6 +667,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		3E175392B5572D45497B960D /* Code39 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E058FA926A3CBF6E0312EB36 /* XCRemoteSwiftPackageReference "swiftui-code39" */;
+			productName = Code39;
+		};
 		7826F6852F27CCF4007E55C4 /* GoogleSignIn */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 7826F6842F27CCF4007E55C4 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
@@ -701,11 +706,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 7826F68D2F27DD5F007E55C4 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseAnalyticsIdentitySupport;
-		};
-		3E175392B5572D45497B960D /* Code39 */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E058FA926A3CBF6E0312EB36 /* XCRemoteSwiftPackageReference "swiftui-code39" */;
-			productName = Code39;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
