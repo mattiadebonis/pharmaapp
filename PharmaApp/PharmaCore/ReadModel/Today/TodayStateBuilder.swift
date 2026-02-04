@@ -16,7 +16,7 @@ public struct TodayStateBuilder {
     public init() {}
 
     public static func buildState(input: TodayStateInput) -> TodayState {
-        let recurrenceService = RecurrenceService()
+        let recurrenceService = TodayRecurrenceService()
         let sections = computeSections(
             for: input.medicines,
             option: input.option,
@@ -145,7 +145,7 @@ public struct TodayStateBuilder {
         now: Date,
         calendar: Calendar
     ) -> Date? {
-        let recurrenceService = RecurrenceService()
+        let recurrenceService = TodayRecurrenceService()
         if item.category == .deadline,
            let medicine = medicine(for: item, medicines: medicines),
            let date = medicine.deadlineMonthStartDate {
@@ -183,7 +183,7 @@ public struct TodayStateBuilder {
         now: Date,
         calendar: Calendar = .current
     ) -> Date? {
-        let recurrenceService = RecurrenceService()
+        let recurrenceService = TodayRecurrenceService()
         guard !medicine.therapies.isEmpty else { return nil }
         let upcoming = medicine.therapies.compactMap { therapy in
             nextUpcomingDoseDate(
@@ -202,7 +202,7 @@ public struct TodayStateBuilder {
         now: Date,
         calendar: Calendar = .current
     ) -> TodayDoseInfo? {
-        let recurrenceService = RecurrenceService()
+        let recurrenceService = TodayRecurrenceService()
         guard !medicine.therapies.isEmpty else { return nil }
         let manualEnabled = manualIntakeEnabled(for: medicine, option: option, therapies: medicine.therapies)
         guard manualEnabled else { return nil }
@@ -232,7 +232,7 @@ public struct TodayStateBuilder {
         now: Date,
         calendar: Calendar
     ) -> Bool {
-        let recurrenceService = RecurrenceService()
+        let recurrenceService = TodayRecurrenceService()
         return isOutOfStock(
             medicine,
             option: option,
@@ -248,7 +248,7 @@ public struct TodayStateBuilder {
         now: Date,
         calendar: Calendar
     ) -> Bool {
-        let recurrenceService = RecurrenceService()
+        let recurrenceService = TodayRecurrenceService()
         return needsPrescriptionBeforePurchase(
             medicine,
             option: option,
@@ -279,7 +279,7 @@ public struct TodayStateBuilder {
         sections: (purchase: [MedicineSnapshot], oggi: [MedicineSnapshot], ok: [MedicineSnapshot]),
         medicines: [MedicineSnapshot],
         option: OptionSnapshot?,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> TodayInsightsContext? {
@@ -319,7 +319,7 @@ public struct TodayStateBuilder {
         medicines: [MedicineSnapshot],
         urgentIds: Set<MedicineId>,
         option: OptionSnapshot?,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         clinicalContext: TodayClinicalContext,
         now: Date,
         calendar: Calendar
@@ -503,7 +503,7 @@ public struct TodayStateBuilder {
         _ items: [TodayTodoItem],
         medicines: [MedicineSnapshot],
         option: OptionSnapshot?,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> [TodayTodoItem] {
@@ -541,7 +541,7 @@ public struct TodayStateBuilder {
         for item: TodayTodoItem,
         medicines: [MedicineSnapshot],
         option: OptionSnapshot?,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> TodayTimeLabel? {
@@ -568,7 +568,7 @@ public struct TodayStateBuilder {
     private static func urgentMedicineIDs(
         for sections: (purchase: [MedicineSnapshot], oggi: [MedicineSnapshot], ok: [MedicineSnapshot]),
         option: OptionSnapshot?,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> Set<MedicineId> {
@@ -584,7 +584,7 @@ public struct TodayStateBuilder {
     private static func computeSections(
         for medicines: [MedicineSnapshot],
         option: OptionSnapshot?,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> (purchase: [MedicineSnapshot], oggi: [MedicineSnapshot], ok: [MedicineSnapshot]) {
@@ -734,7 +734,7 @@ public struct TodayStateBuilder {
     private static func purchaseHighlight(
         for medicine: MedicineSnapshot,
         option: OptionSnapshot?,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> String {
@@ -773,7 +773,7 @@ public struct TodayStateBuilder {
 
     private static func nextDoseHighlight(
         for medicine: MedicineSnapshot,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> String? {
@@ -798,7 +798,7 @@ public struct TodayStateBuilder {
 
     private static func nextDoseTodayHighlight(
         for medicine: MedicineSnapshot,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> String? {
@@ -828,7 +828,7 @@ public struct TodayStateBuilder {
         for item: TodayTodoItem,
         medicines: [MedicineSnapshot],
         option: OptionSnapshot?,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> Int? {
@@ -857,7 +857,7 @@ public struct TodayStateBuilder {
 
     private static func hasUpcomingTherapyInNextWeek(
         for medicine: MedicineSnapshot,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> Bool {
@@ -877,7 +877,7 @@ public struct TodayStateBuilder {
 
     private static func earliestDoseToday(
         for medicine: MedicineSnapshot,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> Date? {
@@ -897,7 +897,7 @@ public struct TodayStateBuilder {
         for therapy: TherapySnapshot,
         medicine: MedicineSnapshot,
         now: Date,
-        recurrenceService: RecurrenceService
+        recurrenceService: TodayRecurrenceService
     ) -> Date? {
         recurrenceService.nextOccurrence(
             rule: recurrenceService.parseRecurrenceString(therapy.rrule ?? ""),
@@ -910,7 +910,7 @@ public struct TodayStateBuilder {
     private static func isOutOfStock(
         _ medicine: MedicineSnapshot,
         option: OptionSnapshot?,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> Bool {
@@ -936,7 +936,7 @@ public struct TodayStateBuilder {
     private static func needsPrescriptionBeforePurchase(
         _ medicine: MedicineSnapshot,
         option: OptionSnapshot?,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> Bool {
@@ -968,7 +968,7 @@ public struct TodayStateBuilder {
         existingItems: [TodayTodoItem],
         option: OptionSnapshot?,
         urgentIds: Set<MedicineId>,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> Bool {
@@ -992,7 +992,7 @@ public struct TodayStateBuilder {
         for medicine: MedicineSnapshot,
         option: OptionSnapshot?,
         urgentIds: Set<MedicineId>,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> String? {
@@ -1010,7 +1010,7 @@ public struct TodayStateBuilder {
     private static func supplementalTherapyItems(
         medicines: [MedicineSnapshot],
         existingItems: [TodayTodoItem],
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> [TodayTodoItem] {
@@ -1070,7 +1070,7 @@ public struct TodayStateBuilder {
     private static func purchaseStockStatusLabel(
         for medicine: MedicineSnapshot,
         option: OptionSnapshot?,
-        recurrenceService: RecurrenceService
+        recurrenceService: TodayRecurrenceService
     ) -> String? {
         let threshold = medicine.stockThreshold(option: option)
         if !medicine.therapies.isEmpty {
@@ -1095,7 +1095,7 @@ public struct TodayStateBuilder {
     private static func buildMedicineStatuses(
         medicines: [MedicineSnapshot],
         option: OptionSnapshot?,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> [MedicineId: TodayMedicineStatus] {
@@ -1177,7 +1177,7 @@ public struct TodayStateBuilder {
     private static func personNameForTherapy(
         _ medicine: MedicineSnapshot,
         option: OptionSnapshot?,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> String? {
@@ -1206,7 +1206,7 @@ public struct TodayStateBuilder {
     private static func scheduledTimesToday(
         for therapy: TherapySnapshot,
         now: Date,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         calendar: Calendar
     ) -> [Date] {
         let today = calendar.startOfDay(for: now)
@@ -1228,7 +1228,7 @@ public struct TodayStateBuilder {
     private static func allowedEvents(
         on day: Date,
         for therapy: TherapySnapshot,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         calendar: Calendar
     ) -> Int {
         let rule = recurrenceService.parseRecurrenceString(therapy.rrule ?? "")
@@ -1289,7 +1289,7 @@ public struct TodayStateBuilder {
 
     private static func hasPendingIntakeToday(
         for medicine: MedicineSnapshot,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> Bool {
@@ -1331,7 +1331,7 @@ public struct TodayStateBuilder {
         for therapy: TherapySnapshot,
         medicine: MedicineSnapshot,
         now: Date,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         calendar: Calendar
     ) -> Date? {
         let rule = recurrenceService.parseRecurrenceString(therapy.rrule ?? "")
@@ -1388,7 +1388,7 @@ public struct TodayStateBuilder {
         for item: TodayTodoItem,
         medicines: [MedicineSnapshot],
         option: OptionSnapshot?,
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> MedicineSnapshot? {
@@ -1431,7 +1431,7 @@ public struct TodayStateBuilder {
     private static func filterDueTherapyItems(
         _ items: [TodayTodoItem],
         medicines: [MedicineSnapshot],
-        recurrenceService: RecurrenceService,
+        recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
     ) -> [TodayTodoItem] {
@@ -1497,7 +1497,7 @@ public struct TodayStateBuilder {
 
     private static func nextDoseTodayText(for medicine: MedicineSnapshot) -> String? {
         guard !medicine.therapies.isEmpty else { return nil }
-        let recurrenceService = RecurrenceService()
+        let recurrenceService = TodayRecurrenceService()
         let now = Date()
         let calendar = Calendar.current
         let upcoming = medicine.therapies.compactMap { therapy -> Date? in
@@ -1691,7 +1691,7 @@ private extension TherapySnapshot {
         return sum > 0 ? sum : 0
     }
 
-    func stimaConsumoGiornaliero(recurrenceService: RecurrenceService) -> Double {
+    func stimaConsumoGiornaliero(recurrenceService: TodayRecurrenceService) -> Double {
         let rruleString = rrule ?? ""
         if rruleString.isEmpty { return 0 }
 

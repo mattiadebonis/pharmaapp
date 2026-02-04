@@ -15,11 +15,11 @@ public struct TodayClinicalContext {
 }
 
 public struct TodayClinicalContextBuilder {
-    private let recurrenceService: RecurrenceService
+    private let recurrenceService: TodayRecurrenceService
     private let calendar: Calendar
     private let timeFormatter: DateFormatter
 
-    public init(recurrenceService: RecurrenceService = RecurrenceService(), calendar: Calendar = .current) {
+    public init(recurrenceService: TodayRecurrenceService = TodayRecurrenceService(), calendar: Calendar = .current) {
         self.recurrenceService = recurrenceService
         self.calendar = calendar
         let formatter = DateFormatter()
@@ -290,10 +290,10 @@ private struct TodayDoseEvent {
 }
 
 private struct TodayDoseEventGenerator {
-    private let recurrenceService: RecurrenceService
+    private let recurrenceService: TodayRecurrenceService
     private let calendar: Calendar
 
-    init(recurrenceService: RecurrenceService, calendar: Calendar = .current) {
+    init(recurrenceService: TodayRecurrenceService, calendar: Calendar = .current) {
         self.recurrenceService = recurrenceService
         self.calendar = calendar
     }

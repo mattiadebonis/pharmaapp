@@ -1,65 +1,128 @@
 import Foundation
 
-struct ClinicalRules: Codable, Equatable {
-    var safety: SafetyRules?
-    var course: CoursePlan?
-    var taper: TaperPlan?
-    var interactions: InteractionRules?
-    var monitoring: [MonitoringAction]?
-    var missedDosePolicy: MissedDosePolicy?
+public struct ClinicalRules: Codable, Equatable {
+    public var safety: SafetyRules?
+    public var course: CoursePlan?
+    public var taper: TaperPlan?
+    public var interactions: InteractionRules?
+    public var monitoring: [MonitoringAction]?
+    public var missedDosePolicy: MissedDosePolicy?
 
-    func encoded() -> Data? {
+    public init(
+        safety: SafetyRules? = nil,
+        course: CoursePlan? = nil,
+        taper: TaperPlan? = nil,
+        interactions: InteractionRules? = nil,
+        monitoring: [MonitoringAction]? = nil,
+        missedDosePolicy: MissedDosePolicy? = nil
+    ) {
+        self.safety = safety
+        self.course = course
+        self.taper = taper
+        self.interactions = interactions
+        self.monitoring = monitoring
+        self.missedDosePolicy = missedDosePolicy
+    }
+
+    public func encoded() -> Data? {
         ClinicalRulesCodec.encode(self)
     }
 
-    static func decode(from data: Data?) -> ClinicalRules? {
+    public static func decode(from data: Data?) -> ClinicalRules? {
         ClinicalRulesCodec.decode(from: data)
     }
 }
 
-struct SafetyRules: Codable, Equatable {
-    var maxPerDay: Int?
-    var minIntervalHours: Int?
-    var noDriving: Bool?
+public struct SafetyRules: Codable, Equatable {
+    public var maxPerDay: Int?
+    public var minIntervalHours: Int?
+    public var noDriving: Bool?
+
+    public init(maxPerDay: Int? = nil, minIntervalHours: Int? = nil, noDriving: Bool? = nil) {
+        self.maxPerDay = maxPerDay
+        self.minIntervalHours = minIntervalHours
+        self.noDriving = noDriving
+    }
 }
 
-struct CoursePlan: Codable, Equatable {
-    var totalDays: Int
+public struct CoursePlan: Codable, Equatable {
+    public var totalDays: Int
+
+    public init(totalDays: Int) {
+        self.totalDays = totalDays
+    }
 }
 
-struct TaperPlan: Codable, Equatable {
-    var steps: [TaperStep]
+public struct TaperPlan: Codable, Equatable {
+    public var steps: [TaperStep]
+
+    public init(steps: [TaperStep]) {
+        self.steps = steps
+    }
 }
 
-struct TaperStep: Codable, Equatable {
-    var startDate: Date?
-    var durationDays: Int?
-    var dosageLabel: String
+public struct TaperStep: Codable, Equatable {
+    public var startDate: Date?
+    public var durationDays: Int?
+    public var dosageLabel: String
+
+    public init(startDate: Date? = nil, durationDays: Int? = nil, dosageLabel: String) {
+        self.startDate = startDate
+        self.durationDays = durationDays
+        self.dosageLabel = dosageLabel
+    }
 }
 
-struct InteractionRules: Codable, Equatable {
-    var spacing: [SpacingRule]?
+public struct InteractionRules: Codable, Equatable {
+    public var spacing: [SpacingRule]?
+
+    public init(spacing: [SpacingRule]? = nil) {
+        self.spacing = spacing
+    }
 }
 
-struct MonitoringAction: Codable, Equatable {
-    var kind: MonitoringKind
-    var requiredBeforeDose: Bool
-    var schedule: MonitoringSchedule?
-    var leadMinutes: Int?
+public struct MonitoringAction: Codable, Equatable {
+    public var kind: MonitoringKind
+    public var requiredBeforeDose: Bool
+    public var schedule: MonitoringSchedule?
+    public var leadMinutes: Int?
+
+    public init(
+        kind: MonitoringKind,
+        requiredBeforeDose: Bool,
+        schedule: MonitoringSchedule? = nil,
+        leadMinutes: Int? = nil
+    ) {
+        self.kind = kind
+        self.requiredBeforeDose = requiredBeforeDose
+        self.schedule = schedule
+        self.leadMinutes = leadMinutes
+    }
 }
 
-struct MonitoringSchedule: Codable, Equatable {
-    var rrule: String?
-    var times: [Date]?
+public struct MonitoringSchedule: Codable, Equatable {
+    public var rrule: String?
+    public var times: [Date]?
+
+    public init(rrule: String? = nil, times: [Date]? = nil) {
+        self.rrule = rrule
+        self.times = times
+    }
 }
 
-struct SpacingRule: Codable, Equatable {
-    var substance: SpacingSubstance
-    var hours: Int
-    var direction: String?
+public struct SpacingRule: Codable, Equatable {
+    public var substance: SpacingSubstance
+    public var hours: Int
+    public var direction: String?
+
+    public init(substance: SpacingSubstance, hours: Int, direction: String? = nil) {
+        self.substance = substance
+        self.hours = hours
+        self.direction = direction
+    }
 }
 
-enum MissedDosePolicy: Codable, Equatable {
+public enum MissedDosePolicy: Codable, Equatable {
     case none
     case info(title: String?, text: String)
 
@@ -74,7 +137,7 @@ enum MissedDosePolicy: Codable, Equatable {
         case info
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let type = try container.decode(PolicyType.self, forKey: .type)
         switch type {
@@ -87,7 +150,7 @@ enum MissedDosePolicy: Codable, Equatable {
         }
     }
 
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
         case .none:
@@ -100,15 +163,15 @@ enum MissedDosePolicy: Codable, Equatable {
     }
 }
 
-enum MissedDosePreset: String, CaseIterable, Identifiable {
+public enum MissedDosePreset: String, CaseIterable, Identifiable {
     case none
     case followPlan
     case contactDoctor
     case checkReminder
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
-    var label: String {
+    public var label: String {
         switch self {
         case .none:
             return "Nessuna indicazione"
@@ -121,7 +184,7 @@ enum MissedDosePreset: String, CaseIterable, Identifiable {
         }
     }
 
-    var policy: MissedDosePolicy? {
+    public var policy: MissedDosePolicy? {
         switch self {
         case .none:
             return nil
@@ -134,7 +197,7 @@ enum MissedDosePreset: String, CaseIterable, Identifiable {
         }
     }
 
-    static func from(policy: MissedDosePolicy?) -> MissedDosePreset {
+    public static func from(policy: MissedDosePolicy?) -> MissedDosePreset {
         guard let policy else { return .none }
         switch policy {
         case .none:
@@ -154,12 +217,12 @@ enum MissedDosePreset: String, CaseIterable, Identifiable {
     }
 }
 
-enum SpacingSubstance: String, Codable, CaseIterable {
+public enum SpacingSubstance: String, Codable, CaseIterable {
     case iron
     case calcium
     case antacid
 
-    var label: String {
+    public var label: String {
         switch self {
         case .iron: return "Ferro"
         case .calcium: return "Calcio"
@@ -168,11 +231,11 @@ enum SpacingSubstance: String, Codable, CaseIterable {
     }
 }
 
-enum MonitoringKind: String, Codable, CaseIterable {
+public enum MonitoringKind: String, Codable, CaseIterable {
     case bloodPressure
     case bloodGlucose
 
-    var label: String {
+    public var label: String {
         switch self {
         case .bloodPressure: return "Pressione"
         case .bloodGlucose: return "Glicemia"
