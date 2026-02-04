@@ -15,7 +15,7 @@ struct CodiceFiscaleScannerView: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> DataScannerViewController {
         let scanner = DataScannerViewController(
-            recognizedDataTypes: [.barcode(symbologies: [.code39, .code39Mod43])],
+            recognizedDataTypes: [.barcode(symbologies: [.code39])],
             qualityLevel: .balanced,
             recognizesMultipleItems: true,
             isHighFrameRateTrackingEnabled: false,

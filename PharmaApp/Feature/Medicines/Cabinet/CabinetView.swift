@@ -100,7 +100,7 @@ struct CabinetView: View {
             .listRowSeparator(.hidden)
             .listSectionSeparator(.hidden)
             .listRowSeparator(.hidden, edges: .all)
-            .listSectionSpacing(4)
+            .listSectionSpacingIfAvailable(4)
             .listRowSpacing(18)
             .listStyle(.plain)
             .padding(.top, 16)

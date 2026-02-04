@@ -33,7 +33,7 @@ struct CabinetDetailView: View {
         .listStyle(.plain)
         .listRowSeparator(.hidden)
         .listRowSeparator(.hidden, edges: .all)
-        .listSectionSpacing(4)
+        .listSectionSpacingIfAvailable(4)
         .listRowSpacing(8)
         .scrollContentBackground(.hidden)
         .navigationTitle(cabinet.name)

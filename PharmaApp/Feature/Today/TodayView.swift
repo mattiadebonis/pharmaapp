@@ -127,7 +127,7 @@ struct TodayView: View {
         }
         .listStyle(.plain)
         .listSectionSeparator(.hidden)
-        .listSectionSpacing(4)
+        .listSectionSpacingIfAvailable(4)
         .listRowSpacing(2)
         .safeAreaInset(edge: .bottom) {
             if completionToastItemID != nil {
