@@ -29,7 +29,6 @@ struct TodayView: View {
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.66)
     @State private var prescriptionEmailMedicine: Medicine?
     @State private var prescriptionToConfirm: Medicine?
-    @State private var selectedMapItem: MKMapItem?
     @State private var completionToastItemID: String?
     @State private var completionToastWorkItem: DispatchWorkItem?
     @State private var completionUndoOperationId: UUID?
@@ -95,7 +94,7 @@ struct TodayView: View {
                     }
                 } header: {
                     HStack {
-                        Text("Rifornimenti")
+                        Text("Da comprare")
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(.black)
                             .textCase(nil)
@@ -234,53 +233,22 @@ struct TodayView: View {
     private func pharmacySuggestionCard() -> some View {
         let primaryLine = pharmacyPrimaryText()
         let statusLine = pharmacyStatusText()
-        Button {
-            if #available(iOS 17.0, *), let item = locationVM.pinItem?.mapItem {
-                selectedMapItem = item
-            } else {
-                locationVM.openInMaps()
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                pharmacyHeader(primaryLine: primaryLine, statusLine: statusLine)
-                pharmacyMiniMap()
-            }
-            .padding(.vertical, 12)
-            
+        VStack(alignment: .leading, spacing: 12) {
+            pharmacyHeader(primaryLine: primaryLine, statusLine: statusLine)
+            pharmacyRouteButtons()
         }
-        .buttonStyle(.plain)
-        .disabled(!canOpenMaps)
-        .opacity(canOpenMaps ? 1 : 0.6)
+        .padding(.vertical, 12)
     }
 
     private var canOpenMaps: Bool {
         locationVM.pinItem != nil
     }
 
-    private func shortDistanceText() -> String? {
-        guard let raw = locationVM.distanceString else { return nil }
-        var parts = raw
-            .split(separator: "·")
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-        if let first = parts.first {
-            let cleaned = first.replacingOccurrences(of: "∼", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-            parts[0] = cleaned
-        }
-        return parts.first
-    }
-
     private func pharmacyPrimaryText() -> String {
         guard let pin = locationVM.pinItem else {
             return "Attiva la posizione per la farmacia consigliata"
         }
-        var parts: [String] = []
-        if let meters = distanceMetersText() {
-            parts.append(meters)
-        } else if let distance = shortDistanceText() {
-            parts.append(distance)
-        }
-        parts.append(pin.title)
-        return parts.joined(separator: " · ")
+        return pin.title
     }
 
     @ViewBuilder
@@ -311,45 +279,119 @@ struct TodayView: View {
         .lineLimit(1)
     }
 
-    private struct PharmacyMapPin: Identifiable {
-        let id = UUID()
-        let coordinate: CLLocationCoordinate2D
-    }
-
     @ViewBuilder
-    private func pharmacyMiniMap() -> some View {
-        if let coordinate = locationVM.pinItem?.mapItem?.placemark.coordinate {
-            let region = MKCoordinateRegion(
-                center: coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.004, longitudeDelta: 0.004)
-            )
-            Map(
-                coordinateRegion: .constant(region),
-                interactionModes: [],
-                annotationItems: [PharmacyMapPin(coordinate: coordinate)]
-            ) { pin in
-                MapMarker(coordinate: pin.coordinate, tint: .red)
-            }
-            .frame(height: 180)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.black.opacity(0.06), lineWidth: 1)
-            )
-            .allowsHitTesting(false)
-        } else {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(.systemGray6))
-                .frame(height: 180)
-                .overlay(
-                    Text("Attiva la posizione")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                )
+    private func pharmacyRouteButtons() -> some View {
+        HStack(spacing: 10) {
+            pharmacyRouteButton(for: .walking)
+            pharmacyRouteButton(for: .driving)
         }
     }
 
+    private enum PharmacyRouteMode {
+        case walking
+        case driving
+
+        var title: String {
+            switch self {
+            case .walking: return "A piedi"
+            case .driving: return "In auto"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .walking: return "figure.walk"
+            case .driving: return "car.fill"
+            }
+        }
+
+        var tint: Color {
+            switch self {
+            case .walking: return .blue
+            case .driving: return .green
+            }
+        }
+
+        var launchOption: String {
+            switch self {
+            case .walking: return MKLaunchOptionsDirectionsModeWalking
+            case .driving: return MKLaunchOptionsDirectionsModeDriving
+            }
+        }
+    }
+
+    private func pharmacyRouteButton(for mode: PharmacyRouteMode) -> some View {
+        let minutesText = pharmacyRouteMinutesText(for: mode)
+        return Button {
+            openDirections(mode)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: mode.systemImage)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(mode.tint)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mode.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Text(minutesText)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(mode.tint.opacity(0.12))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(mode.tint.opacity(0.28), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!canOpenMaps)
+        .opacity(canOpenMaps ? 1 : 0.55)
+    }
+
+    private func pharmacyRouteMinutesText(for mode: PharmacyRouteMode) -> String {
+        guard let minutes = pharmacyRouteMinutes(for: mode) else {
+            return "Attiva la posizione"
+        }
+        return "\(minutes) min"
+    }
+
+    private func pharmacyRouteMinutes(for mode: PharmacyRouteMode) -> Int? {
+        guard let distance = locationVM.distanceMeters else { return nil }
+        switch mode {
+        case .walking:
+            return max(1, Int(round(distance / 83.0)))
+        case .driving:
+            return max(1, Int(round(distance / 750.0)))
+        }
+    }
+
+    private func openDirections(_ mode: PharmacyRouteMode) {
+        guard let item = pharmacyMapItem() else { return }
+        let launchOptions = [MKLaunchOptionsDirectionsModeKey: mode.launchOption]
+        MKMapItem.openMaps(with: [MKMapItem.forCurrentLocation(), item], launchOptions: launchOptions)
+    }
+
+    private func pharmacyMapItem() -> MKMapItem? {
+        guard let pin = locationVM.pinItem else { return nil }
+        if let item = pin.mapItem {
+            return item
+        }
+        let placemark = MKPlacemark(coordinate: pin.coordinate)
+        let item = MKMapItem(placemark: placemark)
+        item.name = pin.title
+        return item
+    }
+
     private func pharmacyStatusText() -> String? {
+        guard locationVM.pinItem != nil else { return nil }
         if locationVM.closingTimeText != nil {
             return "Aperta"
         }
@@ -363,16 +405,6 @@ struct TodayView: View {
             }
         }
         return "Chiuso"
-    }
-
-    private func distanceMetersText() -> String? {
-        guard let distance = locationVM.distanceMeters else { return nil }
-        let formatter = MeasurementFormatter()
-        formatter.locale = Locale(identifier: "it_IT")
-        formatter.unitStyle = .short
-        formatter.numberFormatter.maximumFractionDigits = 1
-        let measurement = Measurement(value: distance, unit: UnitLength.meters)
-        return formatter.string(from: measurement)
     }
 
     // MARK: - Todo rows
@@ -1658,12 +1690,7 @@ struct TodayView: View {
     // MARK: - Map wrapper
     @ViewBuilder
     private func mapItemWrappedView<Content: View>(_ content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content
-                .mapItemDetailSheet(item: $selectedMapItem, displaysMap: true)
-        } else {
-            content
-        }
+        content
     }
 
     private var insightsPlaceholder: some View {
