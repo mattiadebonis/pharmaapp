@@ -36,8 +36,8 @@ struct CabinetDetailView: View {
         .listSectionSpacingIfAvailable(4)
         .listRowSpacing(8)
         .scrollContentBackground(.hidden)
-        .navigationTitle(cabinet.name)
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(cabinet.displayName)
+        .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -224,7 +224,7 @@ private struct MoveCabinetSelectionSheet: View {
                             onSelect(cabinet)
                             dismiss()
                         } label: {
-                            Text(cabinet.name)
+                            Text(cabinet.displayName)
                         }
                     }
                 } header: {

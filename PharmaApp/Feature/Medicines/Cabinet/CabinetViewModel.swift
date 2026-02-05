@@ -88,7 +88,7 @@ class CabinetViewModel: ObservableObject {
             let cabinetEntryItems = orderedEntries.filter { $0.cabinet?.objectID == cabinet.objectID }
             let idxs = cabinetEntryItems.compactMap { indexMap[$0.objectID] }
             let priority = idxs.min() ?? (baseIndex + cabIdx)
-            cabinetEntries.append(ShelfEntry(id: cabinet.objectID, priority: priority, name: cabinet.name, kind: .cabinet(cabinet)))
+            cabinetEntries.append(ShelfEntry(id: cabinet.objectID, priority: priority, name: cabinet.displayName, kind: .cabinet(cabinet)))
         }
 
         let sorter: (ShelfEntry, ShelfEntry) -> Bool = { lhs, rhs in

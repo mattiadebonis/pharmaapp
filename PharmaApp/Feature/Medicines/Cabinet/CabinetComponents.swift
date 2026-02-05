@@ -151,7 +151,7 @@ struct MoveToCabinetSheet: View {
                             dismiss()
                         } label: {
                             HStack {
-                                Text(cabinet.name)
+                                Text(cabinet.displayName)
                                 Spacer()
                                 if entry.cabinet?.objectID == cabinet.objectID {
                                     Image(systemName: "checkmark")

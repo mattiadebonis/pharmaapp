@@ -34,6 +34,10 @@ public struct TodayRecurrenceService {
                         rule.byMonthDay = val.split(separator: ",").compactMap { Int($0) }
                     case "WKST":
                         rule.wkst = val
+                    case "X-PHARMAPP-ON":
+                        rule.cycleOnDays = Int(val)
+                    case "X-PHARMAPP-OFF":
+                        rule.cycleOffDays = Int(val)
                     default:
                         break
                     }
@@ -123,7 +127,8 @@ public struct TodayRecurrenceService {
             return nil
         }
 
-        let maxOccurrences = 30
+        let cycleLength = normalizedCycle(rule).map { $0.on + $0.off } ?? 0
+        let maxOccurrences = max(30, cycleLength + 1)
         var candidateDates: [Date] = []
         let nowDay = calendar.startOfDay(for: now)
 
@@ -248,6 +253,15 @@ public struct TodayRecurrenceService {
             let startSOD = calendar.startOfDay(for: startDate)
             let daySOD = calendar.startOfDay(for: day)
             if let days = calendar.dateComponents([.day], from: startSOD, to: daySOD).day, days >= 0 {
+                if let cycle = normalizedCycle(rule) {
+                    let cycleLength = cycle.on + cycle.off
+                    if cycleLength > 0 {
+                        let dayIndex = days % cycleLength
+                        if dayIndex >= cycle.on {
+                            return false
+                        }
+                    }
+                }
                 return days % interval == 0
             }
             return false
@@ -299,6 +313,17 @@ public struct TodayRecurrenceService {
 
     private func normalizedInterval(_ interval: Int) -> Int {
         max(1, interval)
+    }
+
+    private func normalizedCycle(_ rule: RecurrenceRule) -> (on: Int, off: Int)? {
+        guard let on = rule.cycleOnDays,
+              let off = rule.cycleOffDays,
+              on > 0,
+              off > 0,
+              rule.freq.uppercased() == "DAILY" else {
+            return nil
+        }
+        return (on, off)
     }
 
     private func firstAlignedDay(

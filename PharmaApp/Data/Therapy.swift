@@ -68,6 +68,15 @@ extension Therapy {
         let interval = max(1, parsedRule.interval)
         let byDayCount = parsedRule.byDay.count
         let baseDoseUnits = max(1, totalDoseUnitsPerDay)
+
+        if let on = parsedRule.cycleOnDays,
+           let off = parsedRule.cycleOffDays,
+           on > 0,
+           off > 0,
+           freq == "DAILY" {
+            let cycleLength = Double(on + off)
+            return baseDoseUnits * Double(on) / cycleLength
+        }
         
         switch freq {
         case "DAILY":

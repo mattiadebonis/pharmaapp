@@ -3,32 +3,27 @@ import CoreData
 
 struct CabinetCardView: View {
     let cabinet: Cabinet
-    var medicineCount: Int
-    
+
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
     private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+
+    static let textIndent: CGFloat = Layout.leadingIconWidth + Layout.leadingSpacing
+
+    private enum Layout {
+        static let leadingIconWidth: CGFloat = 24
+        static let leadingSpacing: CGFloat = 18
+    }
     
     var body: some View {
         let subtitle = makeDrawerSubtitle(drawer: cabinet, now: Date())
-        HStack(alignment: .top, spacing: 18) {
+        HStack(alignment: .top, spacing: Layout.leadingSpacing) {
             leadingIcon
             VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(cabinet.name)
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                        .layoutPriority(1)
-                    Spacer(minLength: 8)
-                    HStack(spacing: 6) {
-                        Text("\(medicineCount)")
-                            .font(.system(size: 16, weight: .regular))
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 16, weight: .regular))
-                            .padding(.leading)
-                    }
-                    .foregroundStyle(Color.primary.opacity(0.45))
-                }
+                Text(cabinet.displayName)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .layoutPriority(1)
                 if let subtitle {
                     Text(subtitle.line1)
                         .font(condensedSubtitleFont)
@@ -42,7 +37,6 @@ struct CabinetCardView: View {
                         .truncationMode(.tail)
                 }
             }
-            Spacer(minLength: 0)
         }
         .padding(.vertical, 8)
         .padding(.trailing, 4)
@@ -54,7 +48,7 @@ struct CabinetCardView: View {
         Image(systemName: "cross.case.fill")
             .font(.system(size: 19, weight: .regular))
             .foregroundStyle(baseAccentColor)
-            .frame(width: 24, height: 24, alignment: .center)
+            .frame(width: Layout.leadingIconWidth, height: Layout.leadingIconWidth, alignment: .center)
     }
     
     private var subtitleColor: Color {

@@ -18,6 +18,8 @@ public struct RecurrenceRule {
     public var wkst: String?
     public var exdates: [Date]
     public var rdates: [Date]
+    public var cycleOnDays: Int?
+    public var cycleOffDays: Int?
 
     public init(
         freq: String,
@@ -29,7 +31,9 @@ public struct RecurrenceRule {
         byMonthDay: [Int] = [],
         wkst: String? = nil,
         exdates: [Date] = [],
-        rdates: [Date] = []
+        rdates: [Date] = [],
+        cycleOnDays: Int? = nil,
+        cycleOffDays: Int? = nil
     ) {
         self.freq = freq
         self.interval = interval
@@ -41,5 +45,7 @@ public struct RecurrenceRule {
         self.wkst = wkst
         self.exdates = exdates
         self.rdates = rdates
+        self.cycleOnDays = cycleOnDays
+        self.cycleOffDays = cycleOffDays
     }
 }

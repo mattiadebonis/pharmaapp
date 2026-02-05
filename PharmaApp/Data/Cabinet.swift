@@ -24,4 +24,20 @@ extension Cabinet{
         request.sortDescriptors = [sortDescriptor]
         return request
     }
+
+    private static let garassettoToken = "Garassetto"
+    private static let nameTrimSet = CharacterSet.whitespacesAndNewlines
+        .union(CharacterSet(charactersIn: "-:"))
+
+    var displayName: String {
+        let raw = name.trimmingCharacters(in: Self.nameTrimSet)
+        guard !raw.isEmpty else { return name }
+        let cleaned = raw.replacingOccurrences(
+            of: Self.garassettoToken,
+            with: "",
+            options: [.caseInsensitive, .diacriticInsensitive]
+        )
+        let trimmed = cleaned.trimmingCharacters(in: Self.nameTrimSet)
+        return trimmed.isEmpty ? raw : trimmed
+    }
 }

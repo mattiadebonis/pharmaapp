@@ -19,12 +19,11 @@ struct ContentView: View {
     @Environment(\.managedObjectContext) private var moc
     @EnvironmentObject private var appVM: AppViewModel
     @State private var isNewMedicinePresented = false
-    @State private var catalogSelection: CatalogSelection?
 
     enum AppTab: Hashable {
         case oggi
+        case aderenza
         case medicine
-        case search
     }
 
     @State private var selectedTab: AppTab = .oggi
@@ -38,55 +37,38 @@ struct ContentView: View {
 
     // MARK: – UI
     var body: some View {
-        TabView(selection: $selectedTab) {
-            // TAB 1 – Insights
-            NavigationStack {
-                TodayView()
-            }
-            .tabItem {
-                VStack(spacing: 4) {
-                    TodayCalendarIcon(day: todayDayNumber)
-                    Text("Oggi")
+        if #available(iOS 18.0, *) {
+            TabView(selection: $selectedTab) {
+                // TAB 1 – Insights
+                Tab(value: AppTab.oggi) {
+                    NavigationStack {
+                        TodayView()
+                    }
+                } label: {
+                    Label {
+                        Text("Oggi")
+                    } icon: {
+                        TodayCalendarIcon(day: todayDayNumber)
+                    }
+                }
+
+                // TAB 2 – Medicine
+                Tab("Medicine", systemImage: "pills", value: AppTab.medicine) {
+                    NavigationStack {
+                        CabinetView()
+                            .navigationTitle("Armadio dei farmaci")
+                            .navigationBarTitleDisplayMode(.large)
+                    }
                 }
             }
-            .tag(AppTab.oggi)
-
-            // TAB 2 – Medicine
-            NavigationStack {
-                CabinetView()
-                    .navigationTitle("Armadio dei farmaci")
-                    .navigationBarTitleDisplayMode(.large)
+            .sheet(isPresented: Binding(
+                get: { appVM.isProfilePresented },
+                set: { appVM.isProfilePresented = $0 }
+            )) {
+                NavigationStack { ProfileView() }
             }
-            .tabItem {
-                Label("Medicine", systemImage: "pills")
-            }
-            .tag(AppTab.medicine)
-
-            // TAB 3 – Cerca
-            NavigationStack {
-                CatalogSearchScreen { selection in
-                    catalogSelection = selection
-                }
-            }
-            .tabItem {
-                Label("Cerca", systemImage: "plus")
-            }
-            .tag(AppTab.search)
-        }
-        .sheet(isPresented: Binding(
-            get: { appVM.isSettingsPresented },
-            set: { appVM.isSettingsPresented = $0 }
-        )) {
-            NavigationStack { OptionsView() }
-        }
-        .sheet(item: $catalogSelection) { selection in
-            MedicineWizardView(prefill: selection) {
-                selectedTab = .medicine
-                catalogSelection = nil
-            }
-            .environmentObject(appVM)
-            .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
-            .presentationDetents([.fraction(0.5), .large])
+        } else {
+            // Fallback on earlier versions
         }
     }
 
@@ -101,7 +83,6 @@ struct ContentView: View {
         Calendar.current.component(.day, from: Date())
     }
 }
-
 // MARK: – Preview
 #Preview {
     ContentView()
@@ -186,11 +167,11 @@ struct CatalogSearchScreen: View {
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button {
-                    appVM.isSettingsPresented = true
-                } label: {
-                    Image(systemName: "gearshape")
+                        appVM.isProfilePresented = true
+                    } label: {
+                    Image(systemName: "person.crop.circle")
                 }
-                .accessibilityLabel("Impostazioni")
+                .accessibilityLabel("Profilo")
             }
         }
         .onAppear { isSearching = true }

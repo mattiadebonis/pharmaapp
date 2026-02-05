@@ -21,6 +21,7 @@ struct ParsedTherapyDescription {
     enum Frequency {
         case daily(intervalDays: Int)
         case weekly(weekDays: [String])
+        case cycle(onDays: Int, offDays: Int)
     }
 
     var person: Person?
@@ -43,13 +44,14 @@ final class TherapyDescriptionParser {
 
     func parse(_ raw: String) -> ParsedTherapyDescription {
         let normalized = Self.normalize(raw)
+        let frequency = parseFrequency(from: normalized)
 
         return ParsedTherapyDescription(
             person: matchPerson(in: normalized),
             dose: parseDose(from: normalized),
-            frequency: parseFrequency(from: normalized),
+            frequency: frequency,
             times: parseTimes(from: normalized),
-            duration: parseDuration(from: normalized),
+            duration: parseDuration(from: normalized, frequency: frequency),
             requiresConfirmation: parseConfirmation(from: normalized)
         )
     }
@@ -128,6 +130,10 @@ final class TherapyDescriptionParser {
 
     // MARK: - Frequency
     private func parseFrequency(from normalized: String) -> ParsedTherapyDescription.Frequency? {
+        if let cycle = parseCycle(from: normalized) {
+            return .cycle(onDays: cycle.on, offDays: cycle.off)
+        }
+
         if let days = parseWeekDays(from: normalized), !days.isEmpty {
             return .weekly(weekDays: days)
         }
@@ -145,6 +151,25 @@ final class TherapyDescriptionParser {
             return .daily(intervalDays: 1)
         }
 
+        return nil
+    }
+
+    private func parseCycle(from normalized: String) -> (on: Int, off: Int)? {
+        let patterns = [
+            #"\b(\d{1,3})\s+giorni?\s+(?:di\s+)?terapia\b.*?\b(\d{1,3})\s+giorni?\s+(?:di\s+)?pausa\b"#,
+            #"\bper\s+(\d{1,3})\s+giorni?\b.*?\b(\d{1,3})\s+giorni?\s+(?:di\s+)?pausa\b"#,
+            #"\bciclo\s+(\d{1,3})\s*/\s*(\d{1,3})\b"#
+        ]
+
+        for pattern in patterns {
+            if let match = firstMatch(pattern: pattern, in: normalized),
+               let on = Int(match[1]),
+               let off = Int(match[2]),
+               on > 0,
+               off > 0 {
+                return (on, off)
+            }
+        }
         return nil
     }
 
@@ -211,7 +236,13 @@ final class TherapyDescriptionParser {
     }
 
     // MARK: - Duration
-    private func parseDuration(from normalized: String) -> ParsedTherapyDescription.Duration? {
+    private func parseDuration(
+        from normalized: String,
+        frequency: ParsedTherapyDescription.Frequency?
+    ) -> ParsedTherapyDescription.Duration? {
+        if case .cycle = frequency {
+            return nil
+        }
         let pattern = #"\bper\s+(\d{1,3})\s+(giorni?|settimane?|mesi?)\b"#
         guard let match = firstMatch(pattern: pattern, in: normalized),
               let value = Int(match[1]), value > 0 else { return nil }

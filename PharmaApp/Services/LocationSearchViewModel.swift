@@ -22,11 +22,16 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
 
     private let manager = CLLocationManager()
     private let maxSearchSpanDelta: CLLocationDegrees = 5.0
+    private let desiredAccuracy: CLLocationAccuracy = 80
+    private let maxLocationAge: TimeInterval = 20
+    private let minRequeryDistance: CLLocationDistance = 60
     private var userLocation: CLLocation?
 
     override init() {
         super.init()
         manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+        manager.distanceFilter = 20
     }
 
     func ensureStarted() {
@@ -47,10 +52,28 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let loc = locations.last else { return }
-        userLocation = loc
-        manager.stopUpdatingLocation()
-        searchNearestPharmacy(around: loc)
+        let now = Date()
+        let fresh = locations
+            .filter { $0.horizontalAccuracy >= 0 }
+            .filter { now.timeIntervalSince($0.timestamp) <= maxLocationAge }
+        guard let best = fresh.min(by: { $0.horizontalAccuracy < $1.horizontalAccuracy }) else { return }
+
+        let shouldSearch: Bool
+        if let previous = userLocation {
+            let moved = best.distance(from: previous) > minRequeryDistance
+            let improved = best.horizontalAccuracy + 5 < previous.horizontalAccuracy
+            shouldSearch = moved || improved
+        } else {
+            shouldSearch = true
+        }
+
+        userLocation = best
+        if shouldSearch {
+            searchNearestPharmacy(around: best)
+        }
+        if best.horizontalAccuracy <= desiredAccuracy {
+            manager.stopUpdatingLocation()
+        }
     }
 
     private func searchNearestPharmacy(
@@ -63,6 +86,10 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
         request.resultTypes = .pointOfInterest
+        request.pointOfInterestFilter = MKPointOfInterestFilter(including: [.pharmacy])
+        if #available(iOS 18.0, *) {
+            request.regionPriority = .required
+        }
         request.region = MKCoordinateRegion(
             center: location.coordinate,
             span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
@@ -85,16 +112,26 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
 
             let sorted = self.sorted(items, from: location)
             let updatedFallback = fallback ?? sorted.first
-            if let nearest = sorted.first {
-                let status = self.openingStatus(forName: nearest.name)
-                let assumedOpen: Bool? = {
-                    switch status {
-                    case .open: return true
-                    case .closed: return false
-                    case .unknown: return isOpenQuery ? true : nil
-                    }
-                }()
-                self.applySelection(for: nearest, userLocation: location, assumedOpen: assumedOpen)
+
+            if isOpenQuery, let nearest = sorted.first {
+                self.applySelection(for: nearest, userLocation: location, assumedOpen: true)
+                return
+            }
+
+            let ranked = sorted.map { item in
+                (item: item, status: self.openingStatus(forName: item.name))
+            }
+            if let openItem = ranked.first(where: { $0.status == .open })?.item {
+                self.applySelection(for: openItem, userLocation: location, assumedOpen: true)
+                return
+            }
+            if let unknownItem = ranked.first(where: { $0.status == .unknown })?.item {
+                let assumedOpen = isOpenQuery ? true : nil
+                self.applySelection(for: unknownItem, userLocation: location, assumedOpen: assumedOpen)
+                return
+            }
+            if let nearestClosed = ranked.first?.item {
+                self.applySelection(for: nearestClosed, userLocation: location, assumedOpen: false)
                 return
             }
 
@@ -238,18 +275,30 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
     private func matchPharmacy(named name: String) -> PharmacyJSON? {
         let normalizedTarget = normalize(name)
         let targetTokens = tokenize(normalizedTarget)
+        guard !targetTokens.isEmpty else { return nil }
         let scored = pharmacies.map { pharmacy -> (PharmacyJSON, Int) in
             let tokens = tokenize(normalize(pharmacy.Nome))
             return (pharmacy, scoreTokens(targetTokens, tokens))
         }
         let best = scored.max { $0.1 < $1.1 }
-        if let best, best.1 > 0 { return best.0 }
+        if let best {
+            let minScore: Int
+            if targetTokens.count <= 1 {
+                minScore = 1
+            } else {
+                minScore = max(2, Int(ceil(Double(targetTokens.count) * 0.4)))
+            }
+            if best.1 >= minScore {
+                return best.0
+            }
+        }
 
         // Fallback: substring containment to catch slight naming differences.
-        if let direct = pharmacies.first(where: { candidate in
-            let norm = normalize(candidate.Nome)
-            return norm.contains(normalizedTarget) || normalizedTarget.contains(norm)
-        }) {
+        if targetTokens.count >= 2,
+           let direct = pharmacies.first(where: { candidate in
+               let norm = normalize(candidate.Nome)
+               return norm.contains(normalizedTarget) || normalizedTarget.contains(norm)
+           }) {
             return direct
         }
         return nil

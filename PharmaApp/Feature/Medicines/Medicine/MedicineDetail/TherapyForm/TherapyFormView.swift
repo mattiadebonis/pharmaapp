@@ -13,6 +13,7 @@ import CoreData
 enum FrequencyType: String, CaseIterable {
     case daily        = "Giornaliera" // Sostituisce "A intervalli regolari"
     case specificDays = "In giorni specifici" // Settimana personalizzata
+    case cycle        = "Ciclica" // Giorni ON/OFF
     
     var label: String {
         switch self {
@@ -20,6 +21,8 @@ enum FrequencyType: String, CaseIterable {
             return "Giornaliera"
         case .specificDays:
             return "In giorni specifici"
+        case .cycle:
+            return "Ciclica"
         }
     }
 }
@@ -98,6 +101,8 @@ struct TherapyFormView: View {
     @State private var useCount: Bool = false
     @State private var countNumber: Int = 1
     @State private var interval: Int = 1
+    @State private var cycleOnDays: Int = 7
+    @State private var cycleOffDays: Int = 21
     @State private var therapyDescriptionText: String = ""
     @State private var lastAutoDescriptionText: String = ""
     @State private var recurrenceInput: String = ""
@@ -121,6 +126,7 @@ struct TherapyFormView: View {
     @State private var monitoringKind: MonitoringKind = .bloodPressure
     @State private var monitoringLeadMinutes: Int = 30
     @State private var missedDosePreset: MissedDosePreset = .none
+    private let showClinicalRuleControls = false
 
     private var manualIntakeEnabled: Bool {
         options.first?.manual_intake_registration ?? false
@@ -185,7 +191,7 @@ struct TherapyFormView: View {
             Section(header: Text("Frequenza")) {
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 6) {
-                        TextField("Es: ogni giorno / lunedì, mercoledì", text: $recurrenceInput)
+                        TextField("Es: ogni giorno / lunedì, mercoledì / 7 giorni terapia, 21 giorni pausa", text: $recurrenceInput)
                             .multilineTextAlignment(.leading)
                             .textInputAutocapitalization(.never)
                             .disableAutocorrection(true)
@@ -263,9 +269,11 @@ struct TherapyFormView: View {
             }
             .listRowBackground(Color(.systemGroupedBackground))
 
-            taperSection
-            monitoringOverviewSection
-            missedDoseSection
+            if showClinicalRuleControls {
+                taperSection
+                monitoringOverviewSection
+                missedDoseSection
+            }
 
             if isEmbedded {
                 Section {
@@ -331,6 +339,12 @@ struct TherapyFormView: View {
             updateRecurrenceInputIfNeeded(force: false)
         }
         .onChange(of: interval) { _ in
+            updateRecurrenceInputIfNeeded(force: false)
+        }
+        .onChange(of: cycleOnDays) { _ in
+            updateRecurrenceInputIfNeeded(force: false)
+        }
+        .onChange(of: cycleOffDays) { _ in
             updateRecurrenceInputIfNeeded(force: false)
         }
         .onChange(of: startDate) { _ in
@@ -691,6 +705,8 @@ struct TherapyFormView: View {
         case .specificDays:
             let dayNames = byDay.map { dayName(for: $0) }
             return dayNames.isEmpty ? "In giorni specifici" : dayNames.joined(separator: ", ")
+        case .cycle:
+            return "\(cycleOnDays) giorni di terapia, \(cycleOffDays) giorni di pausa"
         }
     }
 
@@ -787,6 +803,13 @@ struct TherapyFormView: View {
             selectedFrequencyType = .specificDays
             freq = "WEEKLY"
             byDay = weekDays
+        case .cycle(let onDays, let offDays):
+            selectedFrequencyType = .cycle
+            freq = "DAILY"
+            interval = 1
+            byDay = []
+            cycleOnDays = onDays
+            cycleOffDays = offDays
         }
         isRecurrenceValid = true
     }
@@ -798,6 +821,8 @@ struct TherapyFormView: View {
         case .weekly(let weekDays):
             let allowed = Set(["MO", "TU", "WE", "TH", "FR", "SA", "SU"])
             return !weekDays.isEmpty && weekDays.allSatisfy { allowed.contains($0) }
+        case .cycle(let onDays, let offDays):
+            return (1...365).contains(onDays) && (1...365).contains(offDays)
         }
     }
 
@@ -826,13 +851,56 @@ struct TherapyFormView: View {
         let calendar = Calendar.current
         let startDay = calendar.startOfDay(for: start)
         let endDay = calendar.startOfDay(for: end)
-        let diff = calendar.dateComponents([.day], from: startDay, to: endDay).day ?? 0
-        return max(1, diff + 1)
+        if selectedFrequencyType != .cycle || cycleOnDays <= 0 || cycleOffDays <= 0 {
+            let diff = calendar.dateComponents([.day], from: startDay, to: endDay).day ?? 0
+            return max(1, diff + 1)
+        }
+
+        var count = 0
+        var cursor = startDay
+        while cursor <= endDay {
+            if isCycleOnDay(cursor, startDay: startDay) {
+                count += 1
+            }
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+        return max(1, count)
     }
 
     private func courseEndDate(from start: Date, totalDays: Int) -> Date? {
         let offset = max(0, totalDays - 1)
-        return Calendar.current.date(byAdding: .day, value: offset, to: start)
+        let calendar = Calendar.current
+        let startDay = calendar.startOfDay(for: start)
+        guard selectedFrequencyType == .cycle,
+              cycleOnDays > 0,
+              cycleOffDays > 0 else {
+            return calendar.date(byAdding: .day, value: offset, to: startDay)
+        }
+
+        var remaining = max(1, totalDays)
+        var cursor = startDay
+        while remaining > 0 {
+            if isCycleOnDay(cursor, startDay: startDay) {
+                remaining -= 1
+                if remaining == 0 { return cursor }
+            }
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+        return nil
+    }
+
+    private func isCycleOnDay(_ day: Date, startDay: Date) -> Bool {
+        guard cycleOnDays > 0, cycleOffDays > 0 else { return true }
+        let calendar = Calendar.current
+        let daySOD = calendar.startOfDay(for: day)
+        let diff = calendar.dateComponents([.day], from: startDay, to: daySOD).day ?? 0
+        if diff < 0 { return false }
+        let cycleLength = cycleOnDays + cycleOffDays
+        guard cycleLength > 0 else { return true }
+        let dayIndex = diff % cycleLength
+        return dayIndex < cycleOnDays
     }
 
     private func syncCourseUntilFromCourse() {
@@ -868,6 +936,13 @@ struct TherapyFormView: View {
                 selectedFrequencyType = .specificDays
                 freq = "WEEKLY"
                 byDay = weekDays
+            case .cycle(let onDays, let offDays):
+                selectedFrequencyType = .cycle
+                freq = "DAILY"
+                interval = 1
+                byDay = []
+                cycleOnDays = onDays
+                cycleOffDays = offDays
             }
         }
 
@@ -1019,6 +1094,13 @@ extension TherapyFormView {
         let effectivePackage = editingTherapy?.package ?? package
         let effectiveMedicinePackage = medicinePackage ?? editingTherapy?.medicinePackage
 
+        let isCycle = selectedFrequencyType == .cycle
+        let effectiveFreq = selectedFrequencyType == .specificDays ? "WEEKLY" : "DAILY"
+        let effectiveByDay = selectedFrequencyType == .specificDays ? byDay : []
+        let effectiveInterval = isCycle ? 1 : interval
+        let cycleOn = isCycle ? cycleOnDays : nil
+        let cycleOff = isCycle ? cycleOffDays : nil
+
         // Persona associata: in modifica usa quella della therapy; altrimenti usa selezione/first/crea
         let effectivePerson: Person = {
             if let sel = selectedPerson { return sel }
@@ -1033,78 +1115,44 @@ extension TherapyFormView {
 
         // Se stiamo modificando, aggiorna sempre quella therapy
         if let therapyToUpdate = editingTherapy {
-            if selectedFrequencyType == .daily {
-                therapyFormViewModel.updateTherapy(
-                    therapy: therapyToUpdate,
-                    freq: "DAILY",
-                    interval: interval,
-                    until: useUntil ? untilDate : nil,
-                    count: useCount ? countNumber : nil,
-                    byDay: [],
-                    startDate: effectiveStartDate,
-                    doses: doses,
-                    package: effectivePackage,
-                    medicinePackage: effectiveMedicinePackage,
-                    importance: effectiveImportance,
-                    person: effectivePerson,
-                    manualIntake: manualIntakeEnabled,
-                    clinicalRules: clinicalRules
-                )
-            } else {
-                therapyFormViewModel.updateTherapy(
-                    therapy: therapyToUpdate,
-                    freq: "WEEKLY",
-                    interval: interval,
-                    until: useUntil ? untilDate : nil,
-                    count: useCount ? countNumber : nil,
-                    byDay: byDay,
-                    startDate: effectiveStartDate,
-                    doses: doses,
-                    package: effectivePackage,
-                    medicinePackage: effectiveMedicinePackage,
-                    importance: effectiveImportance,
-                    person: effectivePerson,
-                    manualIntake: manualIntakeEnabled,
-                    clinicalRules: clinicalRules
-                )
-            }
+            therapyFormViewModel.updateTherapy(
+                therapy: therapyToUpdate,
+                freq: effectiveFreq,
+                interval: effectiveInterval,
+                until: useUntil ? untilDate : nil,
+                count: useCount ? countNumber : nil,
+                byDay: effectiveByDay,
+                cycleOnDays: cycleOn,
+                cycleOffDays: cycleOff,
+                startDate: effectiveStartDate,
+                doses: doses,
+                package: effectivePackage,
+                medicinePackage: effectiveMedicinePackage,
+                importance: effectiveImportance,
+                person: effectivePerson,
+                manualIntake: manualIntakeEnabled,
+                clinicalRules: clinicalRules
+            )
         } else {
             // In creazione: aggiungi sempre una nuova therapy per la combinazione selezionata.
-            if selectedFrequencyType == .daily {
-                therapyFormViewModel.saveTherapy(
-                    medicine: medicine,
-                    freq: "DAILY",
-                    interval: interval,
-                    until: useUntil ? untilDate : nil,
-                    count: useCount ? countNumber : nil,
-                    byDay: [],
-                    startDate: effectiveStartDate,
-                    doses: doses,
-                    package: effectivePackage,
-                    medicinePackage: effectiveMedicinePackage,
-                    importance: "standard",
-                    person: effectivePerson,
-                    manualIntake: manualIntakeEnabled,
-                    clinicalRules: clinicalRules
-                )
-            } else {
-                therapyFormViewModel.saveTherapy(
-                    medicine: medicine,
-                    freq: "WEEKLY",
-                    interval: interval,
-                    until: useUntil ? untilDate : nil,
-                    count: useCount ? countNumber : nil,
-                    byDay: byDay,
-                    startDate: effectiveStartDate,
-                    doses: doses,
-                    package: effectivePackage,
-                    medicinePackage: effectiveMedicinePackage,
-                    importance: "standard",
-                    person: effectivePerson,
-                    manualIntake: manualIntakeEnabled,
-                    clinicalRules: clinicalRules
-                )
-            }
+            therapyFormViewModel.saveTherapy(
+                medicine: medicine,
+                freq: effectiveFreq,
+                interval: effectiveInterval,
+                until: useUntil ? untilDate : nil,
+                count: useCount ? countNumber : nil,
+                byDay: effectiveByDay,
+                cycleOnDays: cycleOn,
+                cycleOffDays: cycleOff,
+                startDate: effectiveStartDate,
+                doses: doses,
+                package: effectivePackage,
+                medicinePackage: effectiveMedicinePackage,
+                importance: "standard",
+                person: effectivePerson,
+                manualIntake: manualIntakeEnabled,
+                clinicalRules: clinicalRules
+            )
         }
 
         appViewModel.isSearchIndexPresented = false
@@ -1141,6 +1189,8 @@ extension TherapyFormView {
             freq = parsedRule.freq
             byDay = parsedRule.byDay
             interval = max(1, parsedRule.interval ?? 1)
+            cycleOnDays = parsedRule.cycleOnDays ?? cycleOnDays
+            cycleOffDays = parsedRule.cycleOffDays ?? cycleOffDays
             
             if let count = parsedRule.count {
                 useCount = true
@@ -1156,7 +1206,12 @@ extension TherapyFormView {
                 }
             }
             
-            if freq == "DAILY" {
+            if let on = parsedRule.cycleOnDays, let off = parsedRule.cycleOffDays, on > 0, off > 0 {
+                selectedFrequencyType = .cycle
+                freq = "DAILY"
+                interval = 1
+                byDay = []
+            } else if freq == "DAILY" {
                 selectedFrequencyType = .daily
             } else {
                 selectedFrequencyType = .specificDays

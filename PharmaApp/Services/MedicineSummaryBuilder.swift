@@ -131,13 +131,45 @@ struct MedicineSummaryBuilder {
 
             let startDay = calendar.startOfDay(for: startDate)
             let today = calendar.startOfDay(for: now)
-            let dayIndex = max(1, (calendar.dateComponents([.day], from: startDay, to: today).day ?? 0) + 1)
+            let dayIndex: Int
+            if let rrule = therapy.rrule {
+                let rule = recurrenceManager.parseRecurrenceString(rrule)
+                if let on = rule.cycleOnDays, let off = rule.cycleOffDays, on > 0, off > 0, rule.freq.uppercased() == "DAILY" {
+                    dayIndex = cycleDayIndex(from: startDay, to: today, onDays: on, offDays: off)
+                } else {
+                    dayIndex = max(1, (calendar.dateComponents([.day], from: startDay, to: today).day ?? 0) + 1)
+                }
+            } else {
+                dayIndex = max(1, (calendar.dateComponents([.day], from: startDay, to: today).day ?? 0) + 1)
+            }
             let clamped = min(dayIndex, course.totalDays)
             let label = "Giorno \(clamped)/\(course.totalDays)"
             return (startDate, label)
         }
 
         return candidates.sorted { $0.date < $1.date }.first?.label
+    }
+
+    private func cycleDayIndex(from startDay: Date, to today: Date, onDays: Int, offDays: Int) -> Int {
+        guard onDays > 0, offDays > 0 else { return 1 }
+        if today < startDay { return 1 }
+
+        let cycleLength = onDays + offDays
+        guard cycleLength > 0 else { return 1 }
+        var count = 0
+        var cursor = startDay
+        while cursor <= today {
+            let diff = calendar.dateComponents([.day], from: startDay, to: cursor).day ?? 0
+            if diff >= 0 {
+                let dayIndex = diff % cycleLength
+                if dayIndex < onDays {
+                    count += 1
+                }
+            }
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+        return max(1, count)
     }
 }
 

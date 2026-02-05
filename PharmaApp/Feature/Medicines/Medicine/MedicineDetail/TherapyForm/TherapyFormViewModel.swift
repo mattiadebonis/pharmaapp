@@ -62,6 +62,8 @@ class TherapyFormViewModel: ObservableObject {
         until: Date?,
         count: Int?,
         byDay: [String],
+        cycleOnDays: Int?,
+        cycleOffDays: Int?,
         startDate: Date,
         doses: [DoseEntry],
         package: Package,
@@ -87,6 +89,8 @@ class TherapyFormViewModel: ObservableObject {
         rule.until = until
         rule.count = count
         rule.byDay = byDay
+        rule.cycleOnDays = cycleOnDays
+        rule.cycleOffDays = cycleOffDays
 
         let icsString = RecurrenceManager(context: context)
             .buildRecurrenceString(from: rule)
@@ -128,6 +132,8 @@ class TherapyFormViewModel: ObservableObject {
         until: Date?,
         count: Int?,
         byDay: [String],
+        cycleOnDays: Int?,
+        cycleOffDays: Int?,
         startDate: Date,
         doses: [DoseEntry],
         package: Package,
@@ -151,6 +157,8 @@ class TherapyFormViewModel: ObservableObject {
         rule.until = until
         rule.count = count
         rule.byDay = byDay
+        rule.cycleOnDays = cycleOnDays
+        rule.cycleOffDays = cycleOffDays
         
         let icsString = RecurrenceManager(context: context).buildRecurrenceString(from: rule)
         therapy.rrule = icsString

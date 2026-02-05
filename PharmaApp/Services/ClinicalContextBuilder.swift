@@ -223,6 +223,17 @@ struct ClinicalContextBuilder {
             let startSOD = calendar.startOfDay(for: startDate)
             let daySOD = calendar.startOfDay(for: day)
             if let days = calendar.dateComponents([.day], from: startSOD, to: daySOD).day, days >= 0 {
+                if let on = rule.cycleOnDays,
+                   let off = rule.cycleOffDays,
+                   on > 0,
+                   off > 0,
+                   freq == "DAILY" {
+                    let cycleLength = on + off
+                    if cycleLength > 0 {
+                        let dayIndex = days % cycleLength
+                        if dayIndex >= on { return false }
+                    }
+                }
                 return days % max(1, interval) == 0
             }
             return false

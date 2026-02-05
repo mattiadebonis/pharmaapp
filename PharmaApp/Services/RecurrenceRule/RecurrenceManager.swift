@@ -46,7 +46,16 @@ struct RecurrenceManager {
             let byMonthDayString = rule.byMonthDay.map { String($0) }.joined(separator: ",")
             rruleComponents.append("BYMONTHDAY=\(byMonthDayString)")
         }
-        
+
+        if rule.freq.uppercased() == "DAILY",
+           let onDays = rule.cycleOnDays,
+           let offDays = rule.cycleOffDays,
+           onDays > 0,
+           offDays > 0 {
+            rruleComponents.append("X-PHARMAPP-ON=\(onDays)")
+            rruleComponents.append("X-PHARMAPP-OFF=\(offDays)")
+        }
+
         if let wkst = rule.wkst {
             rruleComponents.append("WKST=\(wkst)")
         }
@@ -100,6 +109,10 @@ struct RecurrenceManager {
                         rule.byMonthDay = val.split(separator: ",").compactMap { Int($0) }
                     case "WKST":
                         rule.wkst = val
+                    case "X-PHARMAPP-ON":
+                        rule.cycleOnDays = Int(val)
+                    case "X-PHARMAPP-OFF":
+                        rule.cycleOffDays = Int(val)
                     default:
                         break
                     }
@@ -128,20 +141,24 @@ struct RecurrenceManager {
 
         var description = ""
 
-        switch rule.freq {
-        case "DAILY":
-            description += "ogni giorno"
-        case "WEEKLY":
-            description += "ogni settimana"
-        case "MONTHLY":
-            description += "ogni mese"
-        case "YEARLY":
-            description += "ogni anno"
-        default:
-            description += "con frequenza non specificata"
+        if let cycle = normalizedCycle(rule) {
+            description += "\(cycle.on) giorni di terapia, \(cycle.off) giorni di pausa"
+        } else {
+            switch rule.freq {
+            case "DAILY":
+                description += "ogni giorno"
+            case "WEEKLY":
+                description += "ogni settimana"
+            case "MONTHLY":
+                description += "ogni mese"
+            case "YEARLY":
+                description += "ogni anno"
+            default:
+                description += "con frequenza non specificata"
+            }
         }
 
-        if rule.interval > 1 {
+        if rule.interval > 1, normalizedCycle(rule) == nil {
             description += " ogni \(rule.interval)"
             switch rule.freq {
             case "DAILY":
@@ -271,6 +288,15 @@ struct RecurrenceManager {
             let startSOD = calendar.startOfDay(for: startDate)
             let daySOD = calendar.startOfDay(for: day)
             if let days = calendar.dateComponents([.day], from: startSOD, to: daySOD).day, days >= 0 {
+                if let cycle = normalizedCycle(rule) {
+                    let cycleLength = cycle.on + cycle.off
+                    if cycleLength > 0 {
+                        let dayIndex = days % cycleLength
+                        if dayIndex >= cycle.on {
+                            return false
+                        }
+                    }
+                }
                 return days % interval == 0
             }
             return false
@@ -362,7 +388,8 @@ struct RecurrenceManager {
         // (o i prossimi 30 giorni, se "DAILY") e vediamo quale cade dopo "now".
         
         // Ci aiuta un piccolo enumeratore di date
-        let maxOccurrences = 30
+        let cycleLength = normalizedCycle(rule).map { $0.on + $0.off } ?? 0
+        let maxOccurrences = max(30, cycleLength + 1)
         var candidateDates: [Date] = []
         
         // Creiamo un calendario per i calcoli
@@ -523,6 +550,17 @@ struct RecurrenceManager {
 
     private func normalizedInterval(_ interval: Int) -> Int {
         max(1, interval)
+    }
+
+    private func normalizedCycle(_ rule: RecurrenceRule) -> (on: Int, off: Int)? {
+        guard let on = rule.cycleOnDays,
+              let off = rule.cycleOffDays,
+              on > 0,
+              off > 0,
+              rule.freq.uppercased() == "DAILY" else {
+            return nil
+        }
+        return (on, off)
     }
 
     private func firstAlignedDay(

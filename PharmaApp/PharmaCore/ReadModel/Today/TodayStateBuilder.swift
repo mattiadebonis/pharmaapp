@@ -157,6 +157,11 @@ public struct TodayStateBuilder {
            let date = medicine.deadlineMonthStartDate {
             return date
         }
+        if item.category == .therapy,
+           let detail = item.detail,
+           let match = timeComponents(from: detail) {
+            return calendar.date(bySettingHour: match.hour, minute: match.minute, second: 0, of: now)
+        }
         if item.category == .monitoring || item.category == .missedDose {
             if let date = timestampFromID(item) {
                 return date
@@ -376,14 +381,15 @@ public struct TodayStateBuilder {
             }
         }
 
-        let missingTherapies = supplementalTherapyItems(
+        baseItems = baseItems.filter { $0.category != .therapy }
+
+        let therapyDoseItems = therapyDoseTodoItems(
             medicines: medicines,
-            existingItems: baseItems,
             recurrenceService: recurrenceService,
             now: now,
             calendar: calendar
         )
-        baseItems.append(contentsOf: missingTherapies)
+        baseItems.append(contentsOf: therapyDoseItems)
 
         let depletedPurchaseItems = medicines.compactMap { medicine -> TodayTodoItem? in
             guard shouldAddDepletedPurchase(
@@ -1007,9 +1013,8 @@ public struct TodayStateBuilder {
         return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }
 
-    private static func supplementalTherapyItems(
+    private static func therapyDoseTodoItems(
         medicines: [MedicineSnapshot],
-        existingItems: [TodayTodoItem],
         recurrenceService: TodayRecurrenceService,
         now: Date,
         calendar: Calendar
@@ -1024,39 +1029,79 @@ public struct TodayStateBuilder {
                 calendar: calendar
             ) else { continue }
 
-            if existingItems.contains(where: { item in
-                guard item.category == .therapy else { return false }
-                if item.medicineId == medicine.id { return true }
-                return normalizedName(item.title) == normalizedName(medicine.name)
-            }) {
-                continue
+            let name = medicine.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            var grouped: [String: [TherapySnapshot]] = [:]
+            var timeByKey: [String: Date] = [:]
+
+            for therapy in medicine.therapies {
+                let pendingTimes = pendingDoseTimesToday(
+                    for: therapy,
+                    medicine: medicine,
+                    now: now,
+                    recurrenceService: recurrenceService,
+                    calendar: calendar
+                )
+                guard !pendingTimes.isEmpty else { continue }
+
+                for scheduled in pendingTimes {
+                    let timeKey = compactTimeFormatter.string(from: scheduled)
+                    grouped[timeKey, default: []].append(therapy)
+                    timeByKey[timeKey] = scheduled
+                }
             }
 
-            let detail: String? = {
-                guard let next = earliestDoseToday(
-                    for: medicine,
-                    recurrenceService: recurrenceService,
-                    now: now,
-                    calendar: calendar
-                ) else { return nil }
-                let timeText = timeFormatter.string(from: next)
-                return "alle \(timeText)"
-            }()
+            let sortedKeys = grouped.keys.sorted { lhs, rhs in
+                let lDate = timeByKey[lhs] ?? .distantFuture
+                let rDate = timeByKey[rhs] ?? .distantFuture
+                return lDate < rDate
+            }
 
-            let name = medicine.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            let identifier = "\(name.lowercased())|\(detail?.lowercased() ?? "")"
-            let id = "therapy|\(identifier)|\(medicine.latestLogSalt)"
-            results.append(
-                TodayTodoItem(
-                    id: id,
-                    title: name,
-                    detail: detail,
-                    category: .therapy,
-                    medicineId: medicine.id
+            for timeKey in sortedKeys {
+                guard let therapies = grouped[timeKey], let time = timeByKey[timeKey] else { continue }
+                let timeText = timeFormatter.string(from: time)
+                let detail = "alle \(timeText)"
+                let therapyIds = Array(Set(therapies.map { $0.id.rawValue.uuidString }))
+                    .sorted()
+                    .joined(separator: ",")
+                let id = "therapy|group|\(medicine.id.rawValue.uuidString)|\(timeKey)|\(therapyIds)|\(medicine.latestLogSalt)"
+                results.append(
+                    TodayTodoItem(
+                        id: id,
+                        title: name,
+                        detail: detail,
+                        category: .therapy,
+                        medicineId: medicine.id
+                    )
                 )
-            )
+            }
         }
         return results
+    }
+
+    private static func pendingDoseTimesToday(
+        for therapy: TherapySnapshot,
+        medicine: MedicineSnapshot,
+        now: Date,
+        recurrenceService: TodayRecurrenceService,
+        calendar: Calendar
+    ) -> [Date] {
+        let timesToday = scheduledTimesToday(
+            for: therapy,
+            now: now,
+            recurrenceService: recurrenceService,
+            calendar: calendar
+        ).sorted()
+        guard !timesToday.isEmpty else { return [] }
+        let completedCount = completedDoseCountToday(
+            for: therapy,
+            medicine: medicine,
+            now: now,
+            calendar: calendar,
+            scheduledTimes: timesToday
+        )
+        if completedCount <= 0 { return timesToday }
+        let trimmed = timesToday.dropFirst(min(completedCount, timesToday.count))
+        return Array(trimmed)
     }
 
     private static func isVisibleInToday(_ medicine: MedicineSnapshot) -> Bool {
@@ -1573,6 +1618,13 @@ public struct TodayStateBuilder {
         formatter.timeStyle = .short
         return formatter
     }()
+
+    private static let compactTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HHmm"
+        return formatter
+    }()
 }
 
 extension MedicineSnapshot {
@@ -1700,6 +1752,15 @@ private extension TherapySnapshot {
         let interval = max(1, parsedRule.interval)
         let byDayCount = parsedRule.byDay.count
         let baseDoseUnits = max(1, totalDoseUnitsPerDay)
+
+        if let on = parsedRule.cycleOnDays,
+           let off = parsedRule.cycleOffDays,
+           on > 0,
+           off > 0,
+           freq == "DAILY" {
+            let cycleLength = Double(on + off)
+            return baseDoseUnits * Double(on) / cycleLength
+        }
 
         switch freq {
         case "DAILY":
