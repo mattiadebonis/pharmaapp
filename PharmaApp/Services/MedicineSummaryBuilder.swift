@@ -67,13 +67,11 @@ struct MedicineSummaryBuilder {
 
         let line2: String
         if let stockDays = stockDays(for: medicine, therapies: therapies, recurrenceManager: recurrenceManager) {
-            let threshold = medicine.stockThreshold(option: nil)
             if stockDays <= 0 {
-                line2 = "Scorte finite"
-            } else if stockDays <= threshold {
-                line2 = "Scorte basse: \(stockDays) gg"
+                line2 = "Autonomia zero giorni"
             } else {
-                line2 = "Scorte: \(stockDays) gg"
+                let daysText = formatCount(stockDays, singular: "giorno", plural: "giorni")
+                line2 = "Autonomia \(daysText)"
             }
         } else if therapies.isEmpty, let remainingUnits = stockUnitsFallback ?? medicine.remainingUnitsWithoutTherapy() {
             let clamped = max(0, remainingUnits)

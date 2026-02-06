@@ -19,22 +19,35 @@ struct CabinetCardView: View {
         HStack(alignment: .top, spacing: Layout.leadingSpacing) {
             leadingIcon
             VStack(alignment: .leading, spacing: 6) {
-                Text(cabinet.displayName)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                    .layoutPriority(1)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(cabinet.displayName)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .layoutPriority(1)
+                    Spacer(minLength: 6)
+                    HStack(spacing: 4) {
+                        Text("\(therapyCount)")
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                }
                 if let subtitle {
                     Text(subtitle.line1)
                         .font(condensedSubtitleFont)
                         .foregroundStyle(subtitleColor)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                    Text(subtitle.line2)
-                        .font(condensedSubtitleFont)
-                        .foregroundStyle(subtitleColor)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(subtitle.therapyLines.enumerated()), id: \.offset) { _, line in
+                            therapyLineText(line)
+                                .font(condensedSubtitleFont)
+                                .foregroundStyle(subtitleColor)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                    }
                 }
             }
         }
@@ -56,7 +69,18 @@ struct CabinetCardView: View {
     }
 
     private var condensedSubtitleFont: Font {
-        Font.custom("SFProDisplay-CondensedLight", size: 14)
+        Font.custom("SFProDisplay-CondensedLight", size: 15)
+    }
+
+    private func therapyLineText(_ line: TherapyLine) -> Text {
+        if let prefix = line.prefix, !prefix.isEmpty {
+            return Text(prefix)
+                + Text(" ")
+                + Text(Image(systemName: "repeat"))
+                + Text(" ")
+                + Text(line.description)
+        }
+        return Text(line.description)
     }
     
     // MARK: - Stock summary
@@ -74,6 +98,11 @@ struct CabinetCardView: View {
     
     private var baseAccentColor: Color {
         .accentColor
+    }
+
+    private var therapyCount: Int {
+        let unique = Set(therapiesInCabinet.map(\.objectID))
+        return unique.count
     }
     
     private func evaluateStock(for entry: MedicinePackage) -> StockEvaluation? {

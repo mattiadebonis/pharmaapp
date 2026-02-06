@@ -15,6 +15,7 @@ struct MedicineSwipeRow: View {
     var onMarkPurchased: () -> Void
     var onRequestPrescription: (() -> Void)?
     var onMove: (() -> Void)?
+    var subtitleMode: MedicineSubtitleMode = .nextDose
     private var medicine: Medicine { entry.medicine }
     @EnvironmentObject private var favoritesStore: FavoritesStore
 
@@ -22,6 +23,7 @@ struct MedicineSwipeRow: View {
         MedicineRowView(
             medicine: medicine,
             medicinePackage: entry,
+            subtitleMode: subtitleMode,
             isSelected: isSelected,
             isInSelectionMode: isInSelectionMode
         )

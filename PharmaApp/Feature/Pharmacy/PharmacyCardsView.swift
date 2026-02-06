@@ -8,17 +8,19 @@ struct PharmacyCardsView: View {
     @State private var showCodiceFiscaleFullScreen = false
 
     private let pharmacyCardCornerRadius: CGFloat = 16
-    private let pharmacyCardFillColor = Color(red: 0.94, green: 0.97, blue: 1.0)
+    private let pharmacyAccentColor = Color(red: 0.20, green: 0.62, blue: 0.36)
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            VStack(spacing: 8) {
                 pharmacySuggestionCard()
-                codiceFiscaleCard()
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
             .padding(.bottom, 32)
+        }
+        .fullScreenCover(isPresented: $showCodiceFiscaleFullScreen) {
+            codiceFiscaleFullScreen()
         }
         .navigationTitle("Farmacia")
         .navigationBarTitleDisplayMode(.large)
@@ -31,55 +33,48 @@ struct PharmacyCardsView: View {
     @ViewBuilder
     private func pharmacySuggestionCard() -> some View {
         let isClosed = locationVM.isLikelyOpen == false
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 6) {
             if locationVM.pinItem != nil {
                 pharmacyMapHeader()
             }
             if !isClosed {
-                pharmacyRouteButtons(distanceLine: nil, statusLine: nil)
+                pharmacyRouteButtons(
+                    distanceLine: pharmacyDistanceText(),
+                    statusLine: nil
+                )
             } else {
                 Text("Riprova più tardi o spostati di qualche centinaio di metri.")
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(pharmacyCardFillColor)
-        .clipShape(RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous)
-                .stroke(Color.black.opacity(0.12), lineWidth: 1)
-        )
     }
 
     @ViewBuilder
     private func pharmacyMapPreview() -> some View {
         if let region = locationVM.region {
-            VStack(alignment: .leading, spacing: 10) {
-                if locationVM.pinItem != nil {
-                    pharmacyMapHeader()
-                }
-                ZStack {
-                    Map(coordinateRegion: Binding(
-                        get: { locationVM.region ?? region },
-                        set: { locationVM.region = $0 }
-                    ))
-                    .allowsHitTesting(false)
+            ZStack {
+                Map(coordinateRegion: Binding(
+                    get: { locationVM.region ?? region },
+                    set: { locationVM.region = $0 }
+                ))
+                .allowsHitTesting(false)
 
-                    if locationVM.pinItem != nil {
-                        Image(systemName: "mappin.circle.fill")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundColor(.red)
-                            .shadow(color: Color.black.opacity(0.15), radius: 2, x: 0, y: 1)
-                    }
+                if locationVM.pinItem != nil {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.red)
+                        .shadow(color: Color.black.opacity(0.15), radius: 2, x: 0, y: 1)
                 }
-                .frame(height: 140)
-                .clipShape(RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous)
-                        .stroke(Color.black.opacity(0.08), lineWidth: 1)
-                )
             }
+            .frame(height: 140)
+            .clipShape(RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous)
+                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
+            )
         } else {
             ZStack {
                 RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous)
@@ -103,7 +98,6 @@ struct PharmacyCardsView: View {
     private func pharmacyMapHeader() -> some View {
         if let pin = locationVM.pinItem {
             let statusLine = pharmacyStatusText()
-            let distanceLine = pharmacyDistanceText()
             HStack(spacing: 6) {
                 Text(pin.title)
                     .font(.system(size: 17, weight: .regular))
@@ -115,18 +109,8 @@ struct PharmacyCardsView: View {
                         .font(.system(size: 16))
                         .foregroundColor(.secondary)
                     Text(statusLine)
-                        .font(.system(size: 16, weight: .regular))
-                        .foregroundColor(statusLine == "Aperta" ? .green : .secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                if let distanceLine {
-                    Text("·")
-                        .font(.system(size: 16))
-                        .foregroundColor(.secondary)
-                    Text(distanceLine)
-                        .font(.system(size: 16))
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 17, weight: statusLine == "Aperta" ? .semibold : .regular))
+                        .foregroundColor(statusLine == "Aperta" ? pharmacyAccentColor : .secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -140,21 +124,27 @@ struct PharmacyCardsView: View {
 
     @ViewBuilder
     private func pharmacyRouteButtons(distanceLine: String?, statusLine: String?) -> some View {
-        HStack(spacing: 10) {
-            if let distanceLine {
-                Text(distanceLine)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 16) {
+            if distanceLine != nil || statusLine != nil {
+                HStack(spacing: 10) {
+                    if let distanceLine {
+                        Text("Distanza \(distanceLine)")
+                            .font(.system(size: 17, weight: .regular))
+                            .foregroundColor(.secondary)
+                    }
+                    if let statusLine {
+                        Text(statusLine)
+                            .font(.system(size: 17, weight: statusLine == "Aperta" ? .semibold : .regular))
+                            .foregroundColor(statusLine == "Aperta" ? pharmacyAccentColor : .secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
             }
-            if let statusLine {
-                Text(statusLine)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(statusLine == "Aperta" ? .green : .secondary)
+            HStack(spacing: 8) {
+                pharmacyRouteButton(for: .walking)
+                pharmacyRouteButton(for: .driving)
+                pharmacyCodiceFiscaleButton()
             }
-            Spacer(minLength: 0)
-            pharmacyRouteButton(for: .walking)
-            Spacer(minLength: 10)
-            pharmacyRouteButton(for: .driving)
         }
     }
 
@@ -189,21 +179,50 @@ struct PharmacyCardsView: View {
         return Button {
             openDirections(mode)
         } label: {
-            HStack(spacing: 6) {
+            VStack(spacing: 4) {
                 Image(systemName: mode.systemImage)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.secondary)
-                Text("\(mode.title) · \(minutesText)")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.secondary)
-                Spacer(minLength: 0)
+                    .foregroundColor(.white)
+                Text(minutesText)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
             }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 2)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.blue)
+            )
         }
         .buttonStyle(.plain)
         .disabled(!canOpenMaps)
         .opacity(canOpenMaps ? 1 : 0.55)
+    }
+
+    private func pharmacyCodiceFiscaleButton() -> some View {
+        Button {
+            showCodiceFiscaleFullScreen = true
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: "creditcard")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                Text("Codice fiscale")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.blue)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private var canOpenMaps: Bool {
@@ -282,34 +301,30 @@ struct PharmacyCardsView: View {
     @ViewBuilder
     private func codiceFiscaleCard() -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "creditcard")
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundColor(Color(red: 0.22, green: 0.34, blue: 0.62))
-                Text("Mostra codice fiscale")
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundColor(.black)
-            }
             if let codice = codiceFiscaleStore.codiceFiscale?.trimmingCharacters(in: .whitespacesAndNewlines),
                !codice.isEmpty {
-                Text(codiceFiscaleDisplayText(codice))
-                    .font(.system(.callout, design: .monospaced))
+                let displayCodice = codiceFiscaleDisplayText(codice)
+                VStack(spacing: 8) {
+                    Code39View(displayCodice)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 70)
+                        .accessibilityLabel("Barcode Codice Fiscale")
+                        .accessibilityValue(displayCodice)
+                    Text(displayCodice)
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                Text("Aggiungi il codice fiscale dal profilo.")
+                    .font(.system(size: 15))
                     .foregroundColor(.secondary)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .center)
         .padding(16)
-        .background(pharmacyCardFillColor)
-        .clipShape(RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous)
-                .stroke(Color.black.opacity(0.12), lineWidth: 1)
-        )
         .contentShape(Rectangle())
         .onTapGesture {
             showCodiceFiscaleFullScreen = true
-        }
-        .fullScreenCover(isPresented: $showCodiceFiscaleFullScreen) {
-            codiceFiscaleFullScreen()
         }
     }
 

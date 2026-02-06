@@ -136,7 +136,8 @@ struct CabinetDetailView: View {
                 let log = viewModel.actionService.requestPrescription(for: entry, operationId: token.id)
                 handleOperationResult(log, key: token.key)
             } : nil,
-            onMove: { entryToMove = entry }
+            onMove: { entryToMove = entry },
+            subtitleMode: .activeTherapies
         )
         .listRowSeparator(.hidden, edges: .all)
         .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))

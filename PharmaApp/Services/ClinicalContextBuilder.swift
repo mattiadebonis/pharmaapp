@@ -100,7 +100,7 @@ struct ClinicalContextBuilder {
                 for scheduleDate in scheduleEvents {
                     guard scheduleDate >= now else { continue }
                     let timeText = timeFormatter.string(from: scheduleDate)
-                    let detail = "Alle \(timeText)"
+                    let detail = "\(timeText)"
                     let id = "monitoring|schedule|\(action.kind.rawValue)|\(therapy.objectID.uriRepresentation().absoluteString)|\(Int(scheduleDate.timeIntervalSince1970))"
                     todos.append(
                         TodayTodoItem(

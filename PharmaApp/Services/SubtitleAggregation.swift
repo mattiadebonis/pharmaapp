@@ -9,7 +9,7 @@ struct MedicineAggregateSubtitle {
 
 struct DrawerAggregateSubtitle {
     let line1: String
-    let line2: String
+    let therapyLines: [TherapyLine]
 }
 
 
@@ -41,56 +41,63 @@ func makeDrawerSubtitle(drawer: Cabinet, now: Date = Date()) -> DrawerAggregateS
     let context = drawer.managedObjectContext ?? PersistenceController.shared.container.viewContext
     let recurrenceManager = RecurrenceManager(context: context)
 
-    let todayDoseCount = entries.reduce(0) { total, entry in
-        let therapies = therapies(for: entry)
-        return total + dosesTodayCount(for: therapies, now: now, recurrenceManager: recurrenceManager)
-    }
-
-    var outOfStockCount = 0
-    var lowStockCount = 0
+    var uniqueTherapies: [Therapy] = []
+    var therapyIds = Set<NSManagedObjectID>()
     for entry in entries {
-        let therapies = therapies(for: entry)
-        let threshold = entry.medicine.stockThreshold(option: nil)
-        if let days = stockDays(for: entry, therapies: therapies, recurrenceManager: recurrenceManager) {
-            if days <= 0 {
-                outOfStockCount += 1
-            } else if days <= threshold {
-                lowStockCount += 1
+        for therapy in therapies(for: entry) where therapyIds.insert(therapy.objectID).inserted {
+            uniqueTherapies.append(therapy)
+        }
+    }
+
+    var lowestAutonomyDays: Int?
+    for entry in entries {
+        let t = therapies(for: entry)
+        guard !t.isEmpty else { continue }
+        if let days = stockDays(for: entry, therapies: t, recurrenceManager: recurrenceManager) {
+            if let current = lowestAutonomyDays {
+                lowestAutonomyDays = min(current, days)
+            } else {
+                lowestAutonomyDays = days
             }
-            continue
-        }
-        let remaining = StockService(context: context).units(for: entry.package)
-        if remaining <= 0 {
-            outOfStockCount += 1
-        } else if remaining <= threshold {
-            lowStockCount += 1
         }
     }
 
-    let line1: String
-    if todayDoseCount == 0 {
-        line1 = "Nessuna dose oggi"
+    let builder = TherapySummaryBuilder(recurrenceManager: recurrenceManager)
+    let therapiesWithNext = uniqueTherapies.map { therapy in
+        (therapy, nextTherapyOccurrence(for: therapy, now: now, recurrenceManager: recurrenceManager))
+    }
+    let activeTherapies = therapiesWithNext.compactMap { entry -> (Therapy, Date)? in
+        guard let date = entry.1 else { return nil }
+        return (entry.0, date)
+    }
+    let sorted: [Therapy]
+    if !activeTherapies.isEmpty {
+        sorted = activeTherapies.sorted { $0.1 < $1.1 }.map { $0.0 }
     } else {
-        let doseText = formatCount(todayDoseCount, singular: "dose", plural: "dosi")
-        line1 = "Oggi: \(doseText)"
+        sorted = therapiesWithNext.sorted {
+            let lhsDate = $0.1 ?? .distantFuture
+            let rhsDate = $1.1 ?? .distantFuture
+            if lhsDate != rhsDate { return lhsDate < rhsDate }
+            return ($0.0.start_date ?? .distantPast) < ($1.0.start_date ?? .distantPast)
+        }
+        .map { $0.0 }
     }
-
+    let summaries = sorted.map { builder.line(for: $0, now: now) }
     let line2: String
-    if outOfStockCount > 0 {
-        let outText = formatCount(outOfStockCount, singular: "finito", plural: "finiti")
-        if lowStockCount > 0 {
-            let lowText = formatCount(lowStockCount, singular: "scorta bassa", plural: "scorte basse")
-            line2 = "\(outText) • \(lowText)"
+    if let days = lowestAutonomyDays {
+        if days <= 0 {
+            line2 = "Autonomia zero giorni"
         } else {
-            line2 = outText
+            let daysText = formatCount(days, singular: "giorno", plural: "giorni")
+            line2 = "Autonomia minima: \(daysText)"
         }
-    } else if lowStockCount > 0 {
-        line2 = formatCount(lowStockCount, singular: "scorta bassa", plural: "scorte basse")
     } else {
-        line2 = "Tutto ok"
+        line2 = "Autonomia: —"
     }
 
-    return DrawerAggregateSubtitle(line1: line1, line2: line2)
+    let therapyLines = summaries.isEmpty ? [TherapyLine(prefix: nil, description: "Nessuna terapia attiva")] : summaries
+
+    return DrawerAggregateSubtitle(line1: line2, therapyLines: therapyLines)
 }
 
 private func dosesTodayCount(for therapies: Set<Therapy>, now: Date, recurrenceManager: RecurrenceManager) -> Int {
@@ -233,6 +240,17 @@ private func combine(day: Date, withTime time: Date) -> Date? {
 
 private func formatCount(_ count: Int, singular: String, plural: String) -> String {
     count == 1 ? "1 \(singular)" : "\(count) \(plural)"
+}
+
+private func nextTherapyOccurrence(for therapy: Therapy, now: Date, recurrenceManager: RecurrenceManager) -> Date? {
+    let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+    let start = therapy.start_date ?? now
+    return recurrenceManager.nextOccurrence(
+        rule: rule,
+        startDate: start,
+        after: now,
+        doses: therapy.doses as NSSet?
+    )
 }
 
 private func dayLabel(for date: Date) -> String {

@@ -1,6 +1,11 @@
 import SwiftUI
 import CoreData
 
+enum MedicineSubtitleMode {
+    case nextDose
+    case activeTherapies
+}
+
 struct MedicineRowView: View {
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
     private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
@@ -9,6 +14,7 @@ struct MedicineRowView: View {
     // MARK: - Input
     @ObservedObject var medicine: Medicine
     var medicinePackage: MedicinePackage? = nil
+    var subtitleMode: MedicineSubtitleMode = .nextDose
     var isSelected: Bool = false
     var isInSelectionMode: Bool = false
     enum RowSection { case purchase, tuttoOk }
@@ -213,21 +219,28 @@ struct MedicineRowView: View {
     }
     
     private var subtitle: MedicineAggregateSubtitle {
-        makeMedicineSubtitle(medicine: medicine, medicinePackage: medicinePackage, now: Date())
+        let base = makeMedicineSubtitle(medicine: medicine, medicinePackage: medicinePackage, now: Date())
+        guard subtitleMode == .activeTherapies else { return base }
+        return MedicineAggregateSubtitle(line1: base.line2, line2: "", chip: base.chip)
     }
 
     private var subtitleBlock: some View {
         let value = subtitle
-        return VStack(alignment: .leading, spacing: 3) {
+        return VStack(alignment: .leading, spacing: subtitleBlockSpacing) {
             if !value.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(value.line1)
                     .font(condensedSubtitleFont)
                     .foregroundColor(subtitleColor)
                     .lineLimit(1)
+                    .multilineTextAlignment(.leading)
                     .truncationMode(.tail)
             }
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                line2View(for: value.line2)
+            if subtitleMode == .activeTherapies {
+                therapyLinesView(activeTherapyLines)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    line2View(for: value.line2)
+                }
             }
             if let indicator = deadlineIndicator {
                 Text(indicator.label)
@@ -241,29 +254,12 @@ struct MedicineRowView: View {
 
     @ViewBuilder
     private func line2View(for line: String) -> some View {
-        let baseFont = condensedSubtitleFont
-        let lowPrefix = "Scorte basse"
-        let emptyPrefix = "Scorte finite"
-
-        if line.hasPrefix(emptyPrefix) {
-            let suffix = String(line.dropFirst(emptyPrefix.count))
-            (Text(emptyPrefix).foregroundColor(.red) + Text(suffix).foregroundColor(subtitleColor))
-                .font(baseFont)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        } else if line.hasPrefix(lowPrefix) {
-            Text(line)
-                .font(baseFont)
-                .foregroundColor(.orange)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        } else {
-            Text(line)
-                .font(baseFont)
-                .foregroundColor(subtitleColor)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
+        Text(line)
+            .font(condensedSubtitleFont)
+            .foregroundColor(subtitleColor)
+            .lineLimit(subtitleMode == .activeTherapies ? nil : 1)
+            .multilineTextAlignment(.leading)
+            .truncationMode(.tail)
     }
 
     private var subtitleColor: Color {
@@ -272,6 +268,62 @@ struct MedicineRowView: View {
 
     private var condensedSubtitleFont: Font {
         Font.custom("SFProDisplay-CondensedLight", size: 15)
+    }
+
+    private var therapySummaryBuilder: TherapySummaryBuilder {
+        TherapySummaryBuilder(recurrenceManager: recurrenceManager)
+    }
+
+    private var activeTherapyLines: [TherapyLine] {
+        guard !therapies.isEmpty else { return [] }
+        let now = Date()
+        let builder = therapySummaryBuilder
+        let active = therapies.compactMap { therapy -> (Therapy, Date)? in
+            guard let next = nextUpcomingDoseDate(for: therapy, now: now) else { return nil }
+            return (therapy, next)
+        }
+        if !active.isEmpty {
+            let sorted = active.sorted { $0.1 < $1.1 }
+            return sorted.map { builder.line(for: $0.0, now: now) }
+        }
+        let fallback = therapies.sorted { ($0.start_date ?? .distantPast) < ($1.start_date ?? .distantPast) }
+        return fallback.map { builder.line(for: $0, now: now) }
+    }
+
+    @ViewBuilder
+    private func therapyLinesView(_ lines: [TherapyLine]) -> some View {
+        if lines.isEmpty {
+            Text("Nessuna terapia attiva")
+                .font(condensedSubtitleFont)
+                .foregroundColor(subtitleColor)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        } else {
+            VStack(alignment: .leading, spacing: subtitleBlockSpacing) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    therapyLineText(line)
+                        .font(condensedSubtitleFont)
+                        .foregroundColor(subtitleColor)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+        }
+    }
+
+    private func therapyLineText(_ line: TherapyLine) -> Text {
+        if let prefix = line.prefix, !prefix.isEmpty {
+            return Text(prefix)
+                + Text(" ")
+                + Text(Image(systemName: "repeat"))
+                + Text(" ")
+                + Text(line.description)
+        }
+        return Text(line.description)
+    }
+
+    private var subtitleBlockSpacing: CGFloat {
+        subtitleMode == .activeTherapies ? 6 : 3
     }
 
     private var deadlineIndicator: (symbol: String, color: Color, label: String)? {

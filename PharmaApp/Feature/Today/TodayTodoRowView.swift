@@ -2,10 +2,11 @@ import SwiftUI
 
 /// Riga generica per i todo di "Oggi" (versione senza sotto-task).
 struct TodayTodoRowView: View {
+    @ScaledMetric(relativeTo: .body) private var timingColumnWidth: CGFloat = 100
+
     let iconName: String
     let actionText: String?
     let leadingTime: String?
-    let reserveLeadingTimeSpace: Bool
     let title: String
     let subtitle: String?
     let auxiliaryLine: Text?
@@ -23,7 +24,6 @@ struct TodayTodoRowView: View {
         iconName: String,
         actionText: String? = nil,
         leadingTime: String? = nil,
-        reserveLeadingTimeSpace: Bool = true,
         title: String,
         subtitle: String? = nil,
         auxiliaryLine: Text? = nil,
@@ -41,7 +41,6 @@ struct TodayTodoRowView: View {
         self.iconName = iconName
         self.actionText = actionText
         self.leadingTime = leadingTime
-        self.reserveLeadingTimeSpace = reserveLeadingTimeSpace
         self.title = title
         self.subtitle = subtitle
         self.auxiliaryLine = auxiliaryLine
@@ -59,19 +58,21 @@ struct TodayTodoRowView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
-            if reserveLeadingTimeSpace {
-                leadingTimeView
-            } else if let leadingTime, !leadingTime.isEmpty {
-                let isMultiline = leadingTime.contains("\n")
-                Text(leadingTime)
-                    .foregroundStyle(secondaryTextColor)
-                    .monospacedDigit()
-                    .multilineTextAlignment(isMultiline ? .center : .leading)
-                    .frame(minWidth: 60, alignment: isMultiline ? .center : .leading)
-                    .padding(.top, 2)
-            }
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if let leadingTime, !leadingTime.isEmpty {
+                        Text(leadingTime)
+                            .font(.system(size: 16, weight: .regular))
+                            .foregroundStyle(secondaryTextColor)
+                            .monospacedDigit()
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .minimumScaleFactor(0.85)
+                            .frame(width: timingColumnWidth, alignment: .leading)
+                            .layoutPriority(2)
+                    }
+
                     if let actionText, !actionText.isEmpty {
                         Text(actionText)
                             .font(.system(size: 16, weight: .regular))
@@ -91,20 +92,7 @@ struct TodayTodoRowView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
-                    if let subtitle {
-                        HStack(alignment: .firstTextBaseline, spacing: 0) {
-                            Text(subtitle)
-                                .font(subtitleFont ?? .system(size: 15))
-                                .foregroundStyle(subtitleColor ?? secondaryTextColor)
-                                .multilineTextAlignment(.leading)
-                                .lineLimit(2)
-                                .truncationMode(.tail)
-                                .layoutPriority(1)
-                            if let badge = trailingBadge {
-                                badgeView(text: badge.0, color: badge.1)
-                            }
-                        }
-                    } else if let badge = trailingBadge {
+                    if let badge = trailingBadge {
                         badgeView(text: badge.0, color: badge.1)
                     }
                     if let auxiliaryLine {
@@ -124,42 +112,23 @@ struct TodayTodoRowView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture { if showToggle && !hideToggle { onToggle() } }
 
             if !hideToggle {
-                VStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    Button(action: onToggle) {
-                        let size: CGFloat = 18
-                        Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: size, weight: .regular))
-                            .foregroundStyle(circleStrokeColor)
-                            .frame(width: size, height: size)
-                            .contentShape(Circle())
-                            .accessibilityLabel(Text(iconName))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!showToggle)
-                    Spacer(minLength: 0)
+                Button(action: onToggle) {
+                    let size: CGFloat = 18
+                    Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: size, weight: .regular))
+                        .foregroundStyle(circleStrokeColor)
+                        .frame(width: size, height: size)
+                        .contentShape(Circle())
+                        .accessibilityLabel(Text(iconName))
                 }
-                .frame(maxHeight: .infinity)
+                .buttonStyle(.plain)
+                .disabled(!showToggle)
             }
         }
-        .contentShape(Rectangle())
-        .onTapGesture { if showToggle && !hideToggle { onToggle() } }
-    }
-
-    private var leadingTimeView: some View {
-        let text = leadingTime ?? ""
-        let isMultiline = text.contains("\n")
-        return Text(text)
-            .foregroundStyle(secondaryTextColor)
-            .monospacedDigit()
-            .multilineTextAlignment(isMultiline ? .center : .leading)
-            .lineLimit(2)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(width: 60, alignment: isMultiline ? .center : .leading)
-            .padding(.top, 2)
-            .opacity(text.isEmpty ? 0 : 1)
     }
 
     private var titleColor: Color {

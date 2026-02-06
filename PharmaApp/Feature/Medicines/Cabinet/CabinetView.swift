@@ -17,16 +17,14 @@ struct CabinetView: View {
     @FetchRequest(fetchRequest: Cabinet.extractCabinets())
     private var cabinets: FetchedResults<Cabinet>
 
-    @State private var selectedEntry: MedicinePackage?
     @State private var activeCabinetID: NSManagedObjectID?
-    @State private var detailSheetDetent: PresentationDetent = .fraction(0.66)
+    @State private var activeMedicineID: NSManagedObjectID?
     @State private var entryToMove: MedicinePackage?
     @State private var isNewCabinetPresented = false
     @State private var newCabinetName = ""
     @State private var isSearchPresented = false
     @State private var catalogSelection: CatalogSelection?
-    @State private var expandedCabinetIDs: Set<NSManagedObjectID> = []
-    @State private var visibleCabinetIDs: Set<NSManagedObjectID> = []
+    @State private var pendingCatalogSelection: CatalogSelection?
 
     var body: some View {
         cabinetRootView
@@ -77,13 +75,18 @@ struct CabinetView: View {
             .sheet(isPresented: $isNewCabinetPresented, onDismiss: { newCabinetName = "" }) {
                 newCabinetSheet
             }
-            .sheet(isPresented: $isSearchPresented) {
+            .sheet(isPresented: $isSearchPresented, onDismiss: {
+                if let pending = pendingCatalogSelection {
+                    pendingCatalogSelection = nil
+                    DispatchQueue.main.async {
+                        catalogSelection = pending
+                    }
+                }
+            }) {
                 NavigationStack {
                     CatalogSearchScreen { selection in
+                        pendingCatalogSelection = selection
                         isSearchPresented = false
-                        DispatchQueue.main.async {
-                            catalogSelection = selection
-                        }
                     }
                 }
             }
@@ -100,9 +103,6 @@ struct CabinetView: View {
     private var cabinetListWithDetailSheet: some View {
         cabinetListStyled
             .id(logs.count)
-            .sheet(isPresented: isDetailSheetPresented) {
-                medicineDetailSheet
-            }
             .sheet(item: $entryToMove) { entry in
                 MoveToCabinetSheet(
                     entry: entry,
@@ -113,11 +113,6 @@ struct CabinetView: View {
                     }
                 )
                 .presentationDetents([.medium, .large])
-            }
-            .onChange(of: selectedEntry) { newValue in
-                if newValue == nil {
-                    viewModel.clearSelection()
-                }
             }
     }
 
@@ -143,7 +138,16 @@ struct CabinetView: View {
             cabinets: Array(cabinets)
         )
         let favoriteEntries = entries.filter { isFavoriteEntry($0) }
-        let otherEntries = entries.filter { !isFavoriteEntry($0) }
+        let cabinetEntries = entries.filter { entry in
+            guard !isFavoriteEntry(entry) else { return false }
+            if case .cabinet = entry.kind { return true }
+            return false
+        }
+        let otherMedicineEntries = entries.filter { entry in
+            guard !isFavoriteEntry(entry) else { return false }
+            if case .medicinePackage = entry.kind { return true }
+            return false
+        }
         return AnyView(List {
             if appVM.suggestNearestPharmacies {
                 Section {
@@ -163,8 +167,22 @@ struct CabinetView: View {
                 .listSectionSeparator(.hidden)
             }
 
-            ForEach(otherEntries, id: \.id) { entry in
-                shelfRow(for: entry)
+            if !cabinetEntries.isEmpty {
+                Section(header: sectionHeader("Armadietti")) {
+                    ForEach(cabinetEntries, id: \.id) { entry in
+                        shelfRow(for: entry)
+                    }
+                }
+                .listSectionSeparator(.hidden)
+            }
+
+            if !otherMedicineEntries.isEmpty {
+                Section(header: sectionHeader("Altri medicinali")) {
+                    ForEach(otherMedicineEntries, id: \.id) { entry in
+                        shelfRow(for: entry)
+                    }
+                }
+                .listSectionSeparator(.hidden)
             }
         })
     }
@@ -174,7 +192,6 @@ struct CabinetView: View {
         switch entry.kind {
         case .cabinet(let cabinet):
             cabinetRow(for: cabinet)
-            cabinetExpandedRows(for: cabinet)
         case .medicinePackage(let entry):
             row(for: entry)
         }
@@ -212,30 +229,6 @@ struct CabinetView: View {
     }
 
     // MARK: - Helpers
-    private var isDetailSheetPresented: Binding<Bool> {
-        Binding(
-            get: { selectedEntry != nil },
-            set: { newValue in
-                if !newValue { selectedEntry = nil }
-            }
-        )
-    }
-
-    @ViewBuilder
-    private var medicineDetailSheet: some View {
-        if let entry = selectedEntry {
-            MedicineDetailView(
-                medicine: entry.medicine,
-                package: entry.package,
-                medicinePackage: entry
-            )
-            .presentationDetents([.fraction(0.66), .large], selection: $detailSheetDetent)
-            .presentationDragIndicator(.visible)
-        } else {
-            EmptyView()
-        }
-    }
-
     private var newCabinetSheet: some View {
         NavigationStack {
             Form {
@@ -289,11 +282,11 @@ struct CabinetView: View {
                 if viewModel.isSelecting {
                     viewModel.toggleSelection(for: entry)
                 } else {
-                    selectedEntry = entry
+                    activeMedicineID = entry.objectID
                 }
             },
             onLongPress: {
-                selectedEntry = entry
+                activeMedicineID = entry.objectID
                 Haptics.impact(.medium)
             },
             onToggleSelection: { viewModel.toggleSelection(for: entry) },
@@ -312,11 +305,30 @@ struct CabinetView: View {
                 let log = viewModel.actionService.requestPrescription(for: entry, operationId: token.id)
                 handleOperationResult(log, key: token.key)
             } : nil,
-            onMove: { entryToMove = entry }
+            onMove: { entryToMove = entry },
+            subtitleMode: .activeTherapies
         )
         .accessibilityIdentifier("MedicineRow_\(entry.objectID)")
         .listRowSeparator(.hidden, edges: .all)
         .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
+        .background(
+            NavigationLink(
+                destination: MedicineDetailView(
+                    medicine: entry.medicine,
+                    package: entry.package,
+                    medicinePackage: entry
+                ),
+                isActive: Binding(
+                    get: { activeMedicineID == entry.objectID },
+                    set: { newValue in
+                        if !newValue { activeMedicineID = nil }
+                    }
+                )
+            ) {
+                EmptyView()
+            }
+            .hidden()
+        )
     }
 
     private func cabinetRow(for cabinet: Cabinet) -> some View {
@@ -328,26 +340,13 @@ struct CabinetView: View {
         )
 
         let isFavoriteCabinet = favoritesStore.isFavorite(cabinet)
-        let isExpanded = expandedCabinetIDs.contains(cabinet.objectID)
-        return VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Button {
-                    activeCabinetID = cabinet.objectID
-                } label: {
-                    CabinetCardView(cabinet: cabinet)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    toggleCabinetExpansion(for: cabinet)
-                } label: {
-                    cabinetExpandControl(count: entries.count, isExpanded: isExpanded)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isExpanded ? "Comprimi armadietto" : "Espandi armadietto")
-            }
+        return Button {
+            activeCabinetID = cabinet.objectID
+        } label: {
+            CabinetCardView(cabinet: cabinet)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .buttonStyle(.plain)
         .background(
             NavigationLink(
                 destination: CabinetDetailView(cabinet: cabinet, entries: entries, viewModel: viewModel),
@@ -376,263 +375,6 @@ struct CabinetView: View {
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden, edges: .all)
         .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
-    }
-
-    private func toggleCabinetExpansion(for cabinet: Cabinet) {
-        let id = cabinet.objectID
-        let fadeDuration = 0.28
-        let revealDelay = 0.08
-
-        if expandedCabinetIDs.contains(id) {
-            expandedCabinetIDs.remove(id)
-            withAnimation(.easeInOut(duration: fadeDuration)) {
-                visibleCabinetIDs.remove(id)
-            }
-        } else {
-            expandedCabinetIDs.insert(id)
-            visibleCabinetIDs.remove(id)
-            DispatchQueue.main.asyncAfter(deadline: .now() + revealDelay) {
-                guard expandedCabinetIDs.contains(id) else { return }
-                withAnimation(.easeInOut(duration: fadeDuration)) {
-                    visibleCabinetIDs.insert(id)
-                }
-            }
-        }
-    }
-
-    private func cabinetExpandControl(count: Int, isExpanded: Bool) -> some View {
-        HStack(spacing: 14) {
-            Text("\(count)")
-                .font(.system(size: 16, weight: .regular))
-            Image(systemName: "chevron.right")
-                .font(.system(size: 16, weight: .regular))
-                .rotationEffect(.degrees(isExpanded ? 90 : 0))
-        }
-        .foregroundStyle(Color.primary.opacity(0.45))
-        .padding(.top, 2)
-        .padding(.horizontal, 4)
-        .contentShape(Rectangle())
-    }
-
-    @ViewBuilder
-    private func cabinetExpandedRows(for cabinet: Cabinet) -> some View {
-        let id = cabinet.objectID
-        if expandedCabinetIDs.contains(id) {
-            let entries = viewModel.sortedEntries(
-                in: cabinet,
-                entries: Array(medicinePackages),
-                logs: Array(logs),
-                option: options.first
-            )
-            let isVisible = visibleCabinetIDs.contains(id)
-
-            if entries.isEmpty {
-                cabinetExpandedEmptyRow()
-                    .opacity(isVisible ? 1 : 0)
-                    .animation(.easeInOut(duration: 0.28), value: isVisible)
-            } else {
-                ForEach(Array(entries.enumerated()), id: \.element.objectID) { index, entry in
-                    cabinetExpandedRow(for: entry, isFirst: index == 0)
-                        .opacity(isVisible ? 1 : 0)
-                        .animation(.easeInOut(duration: 0.28), value: isVisible)
-                }
-            }
-        } else {
-            EmptyView()
-        }
-    }
-
-    private func cabinetExpandedRow(for entry: MedicinePackage, isFirst: Bool) -> some View {
-        let shouldShowRx = viewModel.shouldShowPrescriptionAction(for: entry)
-        let isFavorite = favoritesStore.isFavorite(entry)
-        let isSelected = viewModel.selectedEntries.contains(entry)
-        return cabinetExpandedReview(for: entry)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                if viewModel.isSelecting {
-                    viewModel.toggleSelection(for: entry)
-                } else {
-                    selectedEntry = entry
-                }
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                Button {
-                    entryToMove = entry
-                } label: {
-                    swipeLabel("Sposta", systemImage: "tray.and.arrow.up.fill")
-                }
-                .tint(.indigo)
-
-                Button {
-                    let opId = operationToken(for: .intake, entry: entry).id
-                    viewModel.actionService.markAsTaken(for: entry, operationId: opId)
-                } label: {
-                    swipeLabel("Assunto", systemImage: "checkmark.circle.fill")
-                }
-                .tint(.green)
-
-                Button {
-                    let token = operationToken(for: .purchase, entry: entry)
-                    let log = viewModel.actionService.markAsPurchased(for: entry, operationId: token.id)
-                    handleOperationResult(log, key: token.key)
-                } label: {
-                    swipeLabel("Acquistato", systemImage: "cart.fill")
-                }
-                .tint(.blue)
-
-                if shouldShowRx {
-                    Button {
-                        let token = operationToken(for: .prescriptionRequest, entry: entry)
-                        let log = viewModel.actionService.requestPrescription(for: entry, operationId: token.id)
-                        handleOperationResult(log, key: token.key)
-                    } label: {
-                        swipeLabel("Ricetta", systemImage: "doc.text.fill")
-                    }
-                    .tint(.orange)
-                }
-            }
-            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                Button {
-                    favoritesStore.toggleFavorite(entry)
-                } label: {
-                    swipeLabel(
-                        isFavorite ? "Rimuovi preferiti" : "Preferito",
-                        systemImage: isFavorite ? "heart.fill" : "heart"
-                    )
-                }
-                .tint(isFavorite ? .red : .pink)
-
-                Button {
-                    if viewModel.isSelecting {
-                        viewModel.toggleSelection(for: entry)
-                    } else {
-                        viewModel.enterSelectionMode(with: entry)
-                    }
-                } label: {
-                    swipeLabel(
-                        isSelected ? "Deseleziona" : "Seleziona",
-                        systemImage: isSelected ? "minus.circle" : "plus.circle"
-                    )
-                }
-                .tint(.accentColor)
-            }
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden, edges: .all)
-            .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
-            .padding(.top, isFirst ? -7 : 0)
-    }
-
-    private func cabinetExpandedEmptyRow() -> some View {
-        Text("Nessun farmaco")
-            .font(medicineReviewSubtitleFont)
-            .foregroundStyle(medicineReviewSubtitleColor)
-            .padding(.leading, CabinetCardView.textIndent)
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden, edges: .all)
-            .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
-            .padding(.top, -7)
-    }
-
-    private func cabinetExpandedReview(for entry: MedicinePackage) -> some View {
-        let subtitle = makeMedicineSubtitle(medicine: entry.medicine, medicinePackage: entry, now: Date())
-        return HStack(alignment: .top, spacing: medicineReviewIconSpacing) {
-            medicineReviewIcon
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .bottom, spacing: 4) {
-                    Text(formattedMedicineName(entry))
-                        .font(.system(size: 16, weight: .regular))
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                    if let dosage = medicineDosageLabel(entry) {
-                        Text(" \(dosage)")
-                            .font(.system(size: 16, weight: .regular))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-                if !subtitle.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(subtitle.line1)
-                        .font(medicineReviewSubtitleFont)
-                        .foregroundStyle(medicineReviewSubtitleColor)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                line2View(for: subtitle.line2)
-            }
-        }
-        .padding(.leading, CabinetCardView.textIndent)
-    }
-
-    @ViewBuilder
-    private func line2View(for line: String) -> some View {
-        let lowPrefix = "Scorte basse"
-        let emptyPrefix = "Scorte finite"
-
-        if line.hasPrefix(emptyPrefix) {
-            let suffix = String(line.dropFirst(emptyPrefix.count))
-            (Text(emptyPrefix).foregroundColor(.red) + Text(suffix).foregroundColor(medicineReviewSubtitleColor))
-                .font(medicineReviewSubtitleFont)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        } else if line.hasPrefix(lowPrefix) {
-            Text(line)
-                .font(medicineReviewSubtitleFont)
-                .foregroundColor(.orange)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        } else {
-            Text(line)
-                .font(medicineReviewSubtitleFont)
-                .foregroundColor(medicineReviewSubtitleColor)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
-    }
-
-    private var medicineReviewSubtitleColor: Color {
-        Color.primary.opacity(0.45)
-    }
-
-    private var medicineReviewSubtitleFont: Font {
-        Font.custom("SFProDisplay-CondensedLight", size: 15)
-    }
-
-    private var medicineReviewIcon: some View {
-        Image(systemName: "pill")
-            .font(.system(size: 16, weight: .regular))
-            .foregroundStyle(Color.accentColor)
-            .frame(width: medicineReviewIconSize, height: medicineReviewIconSize, alignment: .center)
-    }
-
-    private var medicineReviewIconSize: CGFloat { 22 }
-
-    private var medicineReviewIconSpacing: CGFloat { 8 }
-
-    private func formattedMedicineName(_ entry: MedicinePackage) -> String {
-        let raw = entry.medicine.nome.trimmingCharacters(in: .whitespacesAndNewlines)
-        let base = raw.isEmpty ? "Medicinale" : raw
-        return camelCase(base)
-    }
-
-    private func medicineDosageLabel(_ entry: MedicinePackage) -> String? {
-        packageDosageLabel(entry.package)
-    }
-
-    private func packageDosageLabel(_ pkg: Package) -> String? {
-        guard pkg.valore > 0 else { return nil }
-        let unit = pkg.unita.trimmingCharacters(in: .whitespacesAndNewlines)
-        return unit.isEmpty ? "\(pkg.valore)" : "\(pkg.valore) \(unit)"
-    }
-
-    private func camelCase(_ text: String) -> String {
-        let lowered = text.lowercased()
-        return lowered
-            .split(separator: " ")
-            .map { part in
-                guard let first = part.first else { return "" }
-                return String(first).uppercased() + part.dropFirst()
-            }
-            .joined(separator: " ")
     }
 
     private func operationToken(for action: OperationAction, entry: MedicinePackage) -> (id: UUID, key: OperationKey) {

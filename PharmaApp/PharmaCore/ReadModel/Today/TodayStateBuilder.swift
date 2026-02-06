@@ -71,11 +71,17 @@ public struct TodayStateBuilder {
             now: input.now,
             calendar: input.calendar
         )
-        let pendingItems = filtered.filter { item in
-            if item.category == .therapy { return true }
-            return !input.completedTodoIDs.contains(completionKey(for: item))
-        }
-        let purchaseItems = pendingItems.filter { $0.category == .purchase }
+        let pendingItems = filtered
+        let purchaseItems = pendingItems
+            .filter { $0.category == .purchase }
+            .sorted { lhs, rhs in
+                let lhsValue = purchaseSortValue(for: lhs, medicines: input.medicines, recurrenceService: recurrenceService)
+                let rhsValue = purchaseSortValue(for: rhs, medicines: input.medicines, recurrenceService: recurrenceService)
+                if lhsValue != rhsValue { return lhsValue < rhsValue }
+                let lhsName = medicine(for: lhs, medicines: input.medicines)?.name ?? lhs.title
+                let rhsName = medicine(for: rhs, medicines: input.medicines)?.name ?? rhs.title
+                return lhsName.localizedCaseInsensitiveCompare(rhsName) == .orderedAscending
+            }
         let nonPurchaseItems = pendingItems.filter { $0.category != .purchase }
         let therapyItems = nonPurchaseItems.filter { $0.category == .therapy }
         let otherItems = nonPurchaseItems.filter { $0.category != .therapy }
@@ -121,13 +127,24 @@ public struct TodayStateBuilder {
     }
 
     public static func completionKey(for item: TodayTodoItem) -> String {
-        if item.category == .monitoring || item.category == .missedDose || item.category == .therapy {
+        switch item.category {
+        case .therapy, .purchase, .prescription:
+            return stableCompletionKey(from: item.id)
+        case .monitoring, .missedDose:
+            return item.id
+        default:
             return item.id
         }
-        if let medId = item.medicineId {
-            return "\(item.category.rawValue)|\(medId.rawValue.uuidString)"
+    }
+
+    private static func stableCompletionKey(from rawId: String) -> String {
+        let parts = rawId.split(separator: "|", omittingEmptySubsequences: false)
+        guard parts.count >= 2 else { return rawId }
+        let last = parts[parts.count - 1]
+        if last.allSatisfy({ $0.isNumber }) {
+            return parts.dropLast().joined(separator: "|")
         }
-        return item.id
+        return rawId
     }
 
     public static func syncToken(for items: [TodayTodoItem]) -> String {
@@ -1427,6 +1444,37 @@ public struct TodayStateBuilder {
         }
         let normalizedTitle = normalizedName(item.title)
         return medicines.first { normalizedName($0.name) == normalizedTitle }
+    }
+
+    private static func purchaseSortValue(
+        for item: TodayTodoItem,
+        medicines: [MedicineSnapshot],
+        recurrenceService: TodayRecurrenceService
+    ) -> Int {
+        guard let medicine = medicine(for: item, medicines: medicines) else { return Int.max }
+        if let days = autonomyDays(for: medicine, recurrenceService: recurrenceService) {
+            return days
+        }
+        if let units = medicine.stockUnitsWithoutTherapy {
+            return max(0, units)
+        }
+        return Int.max
+    }
+
+    private static func autonomyDays(
+        for medicine: MedicineSnapshot,
+        recurrenceService: TodayRecurrenceService
+    ) -> Int? {
+        guard !medicine.therapies.isEmpty else { return nil }
+        var totalLeft: Double = 0
+        var dailyUsage: Double = 0
+        for therapy in medicine.therapies {
+            totalLeft += Double(therapy.leftoverUnits)
+            dailyUsage += therapy.stimaConsumoGiornaliero(recurrenceService: recurrenceService)
+        }
+        guard dailyUsage > 0 else { return nil }
+        let days = Int(floor(totalLeft / dailyUsage))
+        return max(0, days)
     }
 
     private static func blockedTherapyInfo(

@@ -32,13 +32,14 @@ struct TodayView: View {
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.66)
     @State private var prescriptionEmailMedicine: Medicine?
     @State private var prescriptionToConfirm: Medicine?
-    @State private var completionToastItemID: String?
+    @State private var completionToastKey: String?
     @State private var completionToastWorkItem: DispatchWorkItem?
     @State private var completionUndoOperationIds: [UUID] = []
     @State private var completionUndoLogID: NSManagedObjectID?
     @State private var completionUndoKey: String?
     @State private var completionUndoOperationKey: OperationKey?
     @State private var completedTodoIDs: Set<String> = []
+    @State private var completedTodoCache: [String: CompletedTodoSnapshot] = [:]
     @State private var completedBlockedSubtasks: Set<String> = []
     @State private var pendingPrescriptionMedIDs: Set<MedicineId> = []
     @State private var lastCompletionResetDay: Date?
@@ -49,18 +50,37 @@ struct TodayView: View {
     @State private var isOptionsPresented = false
     @State private var showPharmacyDetails = false
 
+    @ScaledMetric(relativeTo: .body) private var timingColumnWidth: CGFloat = 112
     private let pharmacyCardCornerRadius: CGFloat = 16
+    private let pharmacyAccentColor = Color(red: 0.20, green: 0.62, blue: 0.36)
+
+    private enum CompletedSection {
+        case therapy
+        case purchase
+        case other
+    }
+
+    private struct CompletedTodoSnapshot {
+        let item: TodayTodoItem
+        let section: CompletedSection
+        let index: Int
+    }
 
     var body: some View {
         let state = viewModel.state
         let pendingItems = state.pendingItems
-        let purchaseItems = state.purchaseItems
-        let therapyItems = state.therapyItems
-        let otherItems = state.otherItems
+        let basePurchaseItems = state.purchaseItems
+        let baseTherapyItems = state.therapyItems
+        let baseOtherItems = state.otherItems
+        let therapyItems = mergedItems(base: baseTherapyItems, section: .therapy)
+        let purchaseItems = mergedItems(base: basePurchaseItems, section: .purchase)
+        let otherItems = mergedItems(base: baseOtherItems, section: .other)
+        let hasVisibleItems = !(therapyItems.isEmpty && purchaseItems.isEmpty && otherItems.isEmpty)
         let showPharmacyCard = state.showPharmacyCard
         let shouldShowPharmacyCard = showPharmacyCard
 
         let content = List {
+            // Card farmacia temporaneamente nascosta.
             if !therapyItems.isEmpty {
                 Section {
                     ForEach(Array(therapyItems.enumerated()), id: \.element.id) { entry in
@@ -68,7 +88,7 @@ struct TodayView: View {
                         let isLast = entry.offset == therapyItems.count - 1
                         todoListRow(
                             for: item,
-                            isCompleted: completedTodoIDs.contains(viewModel.completionKey(for: item)),
+                            isCompleted: completedTodoIDs.contains(completionKey(for: item)),
                             isLast: isLast
                         )
                     }
@@ -91,21 +111,9 @@ struct TodayView: View {
                         let isLast = entry.offset == purchaseItems.count - 1
                         todoListRow(
                             for: item,
-                            isCompleted: completedTodoIDs.contains(viewModel.completionKey(for: item)),
+                            isCompleted: completedTodoIDs.contains(completionKey(for: item)),
                             isLast: isLast
                         )
-                    }
-                    if showPharmacyCard {
-                        if shouldShowPharmacyCard {
-                            pharmacySuggestionCard()
-                                .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-                            codiceFiscaleCard()
-                                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 36, trailing: 16))
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-                        }
                     }
                 } header: {
                     HStack {
@@ -124,22 +132,25 @@ struct TodayView: View {
                 let isLast = entry.offset == otherItems.count - 1
                 todoListRow(
                     for: item,
-                    isCompleted: completedTodoIDs.contains(viewModel.completionKey(for: item)),
+                    isCompleted: completedTodoIDs.contains(completionKey(for: item)),
                     isLast: isLast
                 )
             }
         }
         .overlay {
-            if pendingItems.isEmpty {
+            if pendingItems.isEmpty && !hasVisibleItems {
                 insightsPlaceholder
             }
+        }
+        .fullScreenCover(isPresented: $showCodiceFiscaleFullScreen) {
+            codiceFiscaleFullScreen()
         }
         .listStyle(.plain)
         .listSectionSeparator(.hidden)
         .listSectionSpacingIfAvailable(4)
         .listRowSpacing(2)
         .safeAreaInset(edge: .bottom) {
-            if completionToastItemID != nil {
+            if completionToastKey != nil {
                 completionToastView
                     .padding(.horizontal, 14)
                     .padding(.bottom, 8)
@@ -261,11 +272,54 @@ struct TodayView: View {
             }
     }
 
+    private func completionKey(for item: TodayTodoItem) -> String {
+        viewModel.completionKey(for: item)
+    }
+
+    private func cacheCompletedItem(_ item: TodayTodoItem) {
+        let key = completionKey(for: item)
+        guard completedTodoCache[key] == nil else { return }
+        if let snapshot = completedTodoSnapshot(for: item) {
+            completedTodoCache[key] = snapshot
+        }
+    }
+
+    private func completedTodoSnapshot(for item: TodayTodoItem) -> CompletedTodoSnapshot? {
+        if let index = viewModel.state.therapyItems.firstIndex(of: item) {
+            return CompletedTodoSnapshot(item: item, section: .therapy, index: index)
+        }
+        if let index = viewModel.state.purchaseItems.firstIndex(of: item) {
+            return CompletedTodoSnapshot(item: item, section: .purchase, index: index)
+        }
+        if let index = viewModel.state.otherItems.firstIndex(of: item) {
+            return CompletedTodoSnapshot(item: item, section: .other, index: index)
+        }
+        return nil
+    }
+
+    private func mergedItems(base: [TodayTodoItem], section: CompletedSection) -> [TodayTodoItem] {
+        var result = base
+        let existingKeys = Set(base.map { completionKey(for: $0) })
+        let cached = completedTodoCache
+            .filter { $0.value.section == section && completedTodoIDs.contains($0.key) }
+            .map { $0.value }
+            .sorted { $0.index < $1.index }
+        var inserted = 0
+        for snapshot in cached {
+            let key = completionKey(for: snapshot.item)
+            if existingKeys.contains(key) { continue }
+            let insertionIndex = min(snapshot.index + inserted, result.count)
+            result.insert(snapshot.item, at: insertionIndex)
+            inserted += 1
+        }
+        return result
+    }
+
     // MARK: - Helpers insights
     @ViewBuilder
     private func pharmacySuggestionCard() -> some View {
         let isClosed = locationVM.isLikelyOpen == false
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 6) {
             if let pin = locationVM.pinItem {
                 pharmacyHeader(
                     primaryLine: pin.title,
@@ -274,20 +328,18 @@ struct TodayView: View {
                 )
             }
             if !isClosed {
-                pharmacyRouteButtons(distanceLine: nil, statusLine: nil)
+                pharmacyRouteButtons(
+                    distanceLine: pharmacyDistanceText(),
+                    statusLine: nil
+                )
             } else {
                 Text("Riprova più tardi o spostati di qualche centinaio di metri.")
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous)
-                .stroke(Color.black.opacity(0.12), lineWidth: 1)
-        )
     }
 
     private var canOpenMaps: Bool {
@@ -299,7 +351,7 @@ struct TodayView: View {
         HStack(spacing: 8) {
             Image(systemName: "cross.fill")
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundColor(.green)
+                .foregroundColor(pharmacyAccentColor)
             HStack(spacing: 4) {
                 Text(primaryLine)
                     .font(.system(size: 17, weight: .regular, design: .rounded))
@@ -311,18 +363,8 @@ struct TodayView: View {
                         .font(.system(size: 16, design: .rounded))
                         .foregroundColor(.secondary)
                     Text(statusLine)
-                        .font(.system(size: 16, design: .rounded))
-                        .foregroundColor(statusLine == "Aperta" ? .green : .secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                if let distanceLine {
-                    Text("·")
-                        .font(.system(size: 16, design: .rounded))
-                        .foregroundColor(.secondary)
-                    Text(distanceLine)
-                        .font(.system(size: 16, design: .rounded))
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 17, weight: statusLine == "Aperta" ? .semibold : .regular, design: .rounded))
+                        .foregroundColor(statusLine == "Aperta" ? pharmacyAccentColor : .secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -339,38 +381,29 @@ struct TodayView: View {
     @ViewBuilder
     private func pharmacyMapPreview() -> some View {
         if let region = locationVM.region {
-            VStack(alignment: .leading, spacing: 10) {
-                if let pin = locationVM.pinItem {
-                    pharmacyHeader(
-                        primaryLine: pin.title,
-                        statusLine: pharmacyStatusText(),
-                        distanceLine: pharmacyDistanceText()
-                    )
-                }
-                ZStack {
-                    Map(coordinateRegion: Binding(
-                        get: { locationVM.region ?? region },
-                        set: { locationVM.region = $0 }
-                    ))
-                    .allowsHitTesting(false)
+            ZStack {
+                Map(coordinateRegion: Binding(
+                    get: { locationVM.region ?? region },
+                    set: { locationVM.region = $0 }
+                ))
+                .allowsHitTesting(false)
 
-                    if locationVM.pinItem != nil {
-                        Image(systemName: "mappin.circle.fill")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundColor(.red)
-                            .shadow(color: Color.black.opacity(0.15), radius: 2, x: 0, y: 1)
-                    }
+                if locationVM.pinItem != nil {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.red)
+                        .shadow(color: Color.black.opacity(0.15), radius: 2, x: 0, y: 1)
                 }
-                .frame(height: 140)
-                .clipShape(RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous)
-                        .stroke(Color.black.opacity(0.08), lineWidth: 1)
-                )
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    openPharmacyDetailsIfAvailable()
-                }
+            }
+            .frame(height: 140)
+            .clipShape(RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous)
+                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                openPharmacyDetailsIfAvailable()
             }
         } else {
             ZStack {
@@ -398,21 +431,27 @@ struct TodayView: View {
 
     @ViewBuilder
     private func pharmacyRouteButtons(distanceLine: String?, statusLine: String?) -> some View {
-        HStack(spacing: 10) {
-            if let distanceLine {
-                Text(distanceLine)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 16) {
+            if distanceLine != nil || statusLine != nil {
+                HStack(spacing: 10) {
+                    if let distanceLine {
+                        Text("Distanza \(distanceLine)")
+                            .font(.system(size: 17, weight: .regular, design: .rounded))
+                            .foregroundColor(.secondary)
+                    }
+                    if let statusLine {
+                        Text(statusLine)
+                            .font(.system(size: 17, weight: statusLine == "Aperta" ? .semibold : .regular, design: .rounded))
+                            .foregroundColor(statusLine == "Aperta" ? pharmacyAccentColor : .secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
             }
-            if let statusLine {
-                Text(statusLine)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(statusLine == "Aperta" ? .green : .secondary)
+            HStack(spacing: 8) {
+                pharmacyRouteButton(for: .walking)
+                pharmacyRouteButton(for: .driving)
+                pharmacyCodiceFiscaleButton()
             }
-            Spacer(minLength: 0)
-            pharmacyRouteButton(for: .walking)
-            Spacer(minLength: 10)
-            pharmacyRouteButton(for: .driving)
         }
     }
 
@@ -447,21 +486,50 @@ struct TodayView: View {
         return Button {
             openDirections(mode)
         } label: {
-            HStack(spacing: 6) {
+            VStack(spacing: 4) {
                 Image(systemName: mode.systemImage)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.secondary)
-                Text("\(mode.title) · \(minutesText)")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.secondary)
-                Spacer(minLength: 0)
+                    .foregroundColor(.white)
+                Text(minutesText)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
             }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 2)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.blue)
+            )
         }
         .buttonStyle(.plain)
         .disabled(!canOpenMaps)
         .opacity(canOpenMaps ? 1 : 0.55)
+    }
+
+    private func pharmacyCodiceFiscaleButton() -> some View {
+        Button {
+            showCodiceFiscaleFullScreen = true
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: "creditcard")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                Text("Codice fiscale")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.blue)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func pharmacyRouteMinutesText(for mode: PharmacyRouteMode) -> String {
@@ -484,35 +552,30 @@ struct TodayView: View {
     @ViewBuilder
     private func codiceFiscaleCard() -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "creditcard")
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundColor(Color(red: 0.22, green: 0.34, blue: 0.62))
-                Text("Mostra codice fiscale")
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundColor(.black)
-            }
             if let codice = codiceFiscaleStore.codiceFiscale?.trimmingCharacters(in: .whitespacesAndNewlines),
                !codice.isEmpty {
-                Text(codiceFiscaleDisplayText(codice))
-                    .font(.system(.callout, design: .monospaced))
+                let displayCodice = codiceFiscaleDisplayText(codice)
+                VStack(spacing: 8) {
+                    Code39View(displayCodice)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 70)
+                        .accessibilityLabel("Barcode Codice Fiscale")
+                        .accessibilityValue(displayCodice)
+                    Text(displayCodice)
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                Text("Aggiungi il codice fiscale dal profilo.")
+                    .font(.system(size: 15))
                     .foregroundColor(.secondary)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
         .padding(16)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: pharmacyCardCornerRadius, style: .continuous)
-                .stroke(Color.black.opacity(0.12), lineWidth: 1)
-        )
         .contentShape(Rectangle())
         .onTapGesture {
             showCodiceFiscaleFullScreen = true
-        }
-        .fullScreenCover(isPresented: $showCodiceFiscaleFullScreen) {
-            codiceFiscaleFullScreen()
         }
     }
 
@@ -626,7 +689,6 @@ struct TodayView: View {
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
-            .listRowSeparator(.hidden)
     }
 
     private var condensedSubtitleFont: Font {
@@ -637,22 +699,31 @@ struct TodayView: View {
         Color.primary.opacity(0.45)
     }
 
+    private var completedRowFill: Color {
+        .clear
+    }
+
     @ViewBuilder
     private func todoListRow(for item: TodayTodoItem, isCompleted: Bool, isLast: Bool) -> some View {
         let med = medicine(for: item)
         let leadingTime = rowTimeLabel(for: item)
         let canToggle = canToggleTodo(for: item)
         let hideToggle = shouldHideToggle(for: item)
+        let rowOpacity: Double = isCompleted ? 0.55 : 1
+        let rowBackground = isCompleted ? completedRowFill : .clear
 
         if let blocked = blockedTherapyInfo(for: item) {
             blockedTherapyCard(for: item, info: blocked, leadingTime: leadingTime, isLast: isLast, hideToggle: hideToggle)
+                .listRowBackground(rowBackground)
+                .opacity(rowOpacity)
         } else if item.category == .purchase,
                   let med,
                   med.obbligo_ricetta,
                   isStockDepleted(med) {
             purchaseWithPrescriptionRow(for: item, medicine: med, leadingTime: leadingTime, isCompleted: isCompleted, isLast: isLast)
+                .listRowBackground(rowBackground)
+                .opacity(rowOpacity)
         } else {
-            let rowOpacity: Double = isCompleted ? 0.55 : 1
             let title = mainLineText(for: item)
             let medSummary = med.map { medicineSubtitle(for: $0) }
             let subtitle = subtitleLine(for: item, medicine: med, summary: medSummary)
@@ -715,8 +786,7 @@ struct TodayView: View {
             rowContent
                 .padding(.vertical, 4)
                 .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
+                .listRowBackground(rowBackground)
                 .opacity(rowOpacity)
         }
     }
@@ -974,9 +1044,9 @@ struct TodayView: View {
             let timeText = formatter.string(from: dose.time)
             if includeAmounts {
                 let amountText = doseDisplayText(amount: dose.amountValue, unit: doseUnit(for: therapy))
-                return "alle \(timeText) (\(amountText))"
+                return "\(timeText) (\(amountText))"
             }
-            return "alle \(timeText)"
+            return timeText
         }
         guard !segments.isEmpty else { return nil }
         if segments.count == 1 { return segments[0] }
@@ -1285,7 +1355,6 @@ struct TodayView: View {
                     title: "Chiedi ricetta al medico \(doctorName)",
                     status: nil,
                     iconName: "heart.text.square",
-                    reserveLeadingTimeSpace: false,
                     showCircle: true,
                     isDone: requestDone,
                     onCheck: requestDone ? nil : { sendPrescriptionRequest(for: medicine) }
@@ -1299,7 +1368,6 @@ struct TodayView: View {
                     subtitleColor: .secondary,
                     subtitleAsBadge: false,
                     iconName: "cart",
-                    reserveLeadingTimeSpace: false,
                     showCircle: true,
                     isDone: purchaseDone,
                     isEnabled: !purchaseLocked,
@@ -1310,7 +1378,6 @@ struct TodayView: View {
         }
         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
         .padding(.vertical, 4)
-        .listRowSeparator(.hidden)
     }
 
     private func blockedStatusText(for info: BlockedTherapyInfo) -> String? {
@@ -1358,7 +1425,7 @@ struct TodayView: View {
            !hasPrescriptionRequest(med) && !hasPrescriptionReceived(med) {
             sendPrescriptionRequest(for: med)
         }
-        let key = viewModel.completionKey(for: item)
+        let key = completionKey(for: item)
         let contexts = therapyContexts(for: item, medicine: med)
         if !contexts.isEmpty {
             let multiple = contexts.count > 1
@@ -1542,13 +1609,12 @@ struct TodayView: View {
     }
 
     @ViewBuilder
-    private func blockedStepRow(title: String, status: String? = nil, subtitle: String? = nil, subtitleColor: Color = .secondary, subtitleAsBadge: Bool = false, iconName: String? = nil, buttons: [SubtaskButton] = [], trailingBadge: (String, Color)? = nil, leadingTime: String? = nil, reserveLeadingTimeSpace: Bool = true, showCircle: Bool = true, hideToggle: Bool = false, isDone: Bool = false, isEnabled: Bool = true, onCheck: (() -> Void)? = nil) -> some View {
+    private func blockedStepRow(title: String, status: String? = nil, subtitle: String? = nil, subtitleColor: Color = .secondary, subtitleAsBadge: Bool = false, iconName: String? = nil, buttons: [SubtaskButton] = [], trailingBadge: (String, Color)? = nil, leadingTime: String? = nil, showCircle: Bool = true, hideToggle: Bool = false, isDone: Bool = false, isEnabled: Bool = true, onCheck: (() -> Void)? = nil) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             TodayTodoRowView(
                 iconName: iconName ?? "circle",
                 actionText: title,
                 leadingTime: leadingTime,
-                reserveLeadingTimeSpace: reserveLeadingTimeSpace,
                 title: "",
                 subtitle: subtitle,
                 auxiliaryLine: status.map { Text($0).foregroundColor(.orange) },
@@ -1632,13 +1698,15 @@ struct TodayView: View {
             .buttonStyle(.plain)
 
             if let leadingTime, !leadingTime.isEmpty {
-                let isMultiline = leadingTime.contains("\n")
                 Text(leadingTime)
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .foregroundColor(.secondary)
                     .monospacedDigit()
-                    .multilineTextAlignment(isMultiline ? .center : .leading)
-                    .frame(minWidth: 60, alignment: isMultiline ? .center : .leading)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .minimumScaleFactor(0.85)
+                    .frame(width: timingColumnWidth, alignment: .leading)
             }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -1849,10 +1917,20 @@ struct TodayView: View {
             }
         }
 
-        let key = viewModel.completionKey(for: item)
+        let key = completionKey(for: item)
         if completedTodoIDs.contains(key) {
             _ = withAnimation(.easeInOut(duration: 0.2)) {
                 completedTodoIDs.remove(key)
+            }
+            completedTodoCache.removeValue(forKey: key)
+            if completionToastKey == key {
+                completionToastWorkItem?.cancel()
+                completionToastWorkItem = nil
+                completionToastKey = nil
+                completionUndoOperationIds = []
+                completionUndoLogID = nil
+                completionUndoKey = nil
+                completionUndoOperationKey = nil
             }
             if let actionKey = operationKey(for: item) {
                 viewModel.clearOperationId(for: actionKey)
@@ -1950,7 +2028,8 @@ struct TodayView: View {
         operationIds: [UUID] = [],
         operationKey: OperationKey? = nil
     ) {
-        let key = viewModel.completionKey(for: item)
+        let key = completionKey(for: item)
+        cacheCompletedItem(item)
         completionUndoKey = key
         completionUndoOperationIds = operationIds
         if completionUndoOperationIds.isEmpty, let logId = log?.operation_id {
@@ -1959,7 +2038,7 @@ struct TodayView: View {
         completionUndoLogID = log?.objectID
         completionUndoOperationKey = operationKey
         _ = withAnimation(.easeInOut(duration: 0.2)) {
-            completedTodoIDs.insert(viewModel.completionKey(for: item))
+            completedTodoIDs.insert(key)
         }
         showCompletionToast(for: item)
     }
@@ -1983,7 +2062,7 @@ struct TodayView: View {
         intakeGuardrailPrompt = nil
         let opKey = therapies.count == 1
             ? OperationKey.intake(
-                completionKey: viewModel.completionKey(for: prompt.item),
+                completionKey: completionKey(for: prompt.item),
                 source: .today
             )
             : nil
@@ -1998,13 +2077,13 @@ struct TodayView: View {
     private func showCompletionToast(for item: TodayTodoItem) {
         completionToastWorkItem?.cancel()
         withAnimation(.easeInOut(duration: 0.2)) {
-            completionToastItemID = item.id
+            completionToastKey = completionKey(for: item)
         }
         let undoKey = completionUndoKey
         let undoOperationKey = completionUndoOperationKey
         let workItem = DispatchWorkItem {
             withAnimation(.easeInOut(duration: 0.2)) {
-                completionToastItemID = nil
+                completionToastKey = nil
             }
             if let undoOperationKey {
                 viewModel.clearOperationId(for: undoOperationKey)
@@ -2022,13 +2101,10 @@ struct TodayView: View {
     }
 
     private func undoLastCompletion() {
-        guard let id = completionToastItemID else { return }
+        guard let key = completionToastKey else { return }
         completionToastWorkItem?.cancel()
         completionToastWorkItem = nil
-        withAnimation(.easeInOut(duration: 0.2)) {
-            completedTodoIDs.remove(id)
-            completionToastItemID = nil
-        }
+        completionToastKey = nil
         if let logObjectID = completionUndoLogID {
             viewModel.undoCompletion(
                 operationId: nil,
@@ -2044,10 +2120,15 @@ struct TodayView: View {
         } else if let key = completionUndoKey {
             viewModel.clearIntakeOperationId(for: key)
         }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            completedTodoIDs.remove(key)
+        }
+        completedTodoCache.removeValue(forKey: key)
         completionUndoOperationIds = []
         completionUndoLogID = nil
         completionUndoKey = nil
         completionUndoOperationKey = nil
+        refreshState()
     }
 
     private struct CompletionRecord {
@@ -2090,7 +2171,7 @@ struct TodayView: View {
             _ = viewModel.recordIntake(
                 medicine: medicine,
                 therapy: therapy,
-                operationId: viewModel.intakeOperationId(for: viewModel.completionKey(for: item))
+                operationId: viewModel.intakeOperationId(for: completionKey(for: item))
             )
             log = nil
             operationId = nil
@@ -2154,6 +2235,7 @@ struct TodayView: View {
         }
         lastCompletionResetDay = today
         if !completedTodoIDs.isEmpty { completedTodoIDs.removeAll() }
+        if !completedTodoCache.isEmpty { completedTodoCache.removeAll() }
         if !completedBlockedSubtasks.isEmpty { completedBlockedSubtasks.removeAll() }
         if !pendingPrescriptionMedIDs.isEmpty { pendingPrescriptionMedIDs.removeAll() }
     }
@@ -2218,7 +2300,8 @@ struct TodayView: View {
         guard let label = viewModel.state.timeLabel(for: item) else { return nil }
         switch label {
         case .time(let date):
-            return TodayFormatters.time.string(from: date)
+            let timeText = TodayFormatters.time.string(from: date)
+            return timeText
         case .category:
             return nil
         }
@@ -2232,9 +2315,9 @@ struct TodayView: View {
 
     private func purchaseAutonomyLabel(for days: Int) -> String {
         if days == 1 {
-            return "Entro\n1 giorno"
+            return "Entro 1 giorno"
         }
-        return "Entro\n\(days) giorni"
+        return "Entro \(days) giorni"
     }
 
     private func prescriptionDoctorName(for medicine: Medicine) -> String {
