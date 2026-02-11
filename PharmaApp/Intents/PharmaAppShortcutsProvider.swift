@@ -69,6 +69,17 @@ struct PharmaAppShortcutsProvider: AppShortcutsProvider {
             systemImageName: "cart.badge.plus"
         )
         AppShortcut(
+            intent: OpenPurchaseListIntent(),
+            phrases: [
+                "In \(.applicationName) apri lista rifornimenti",
+                "In \(.applicationName) apri da comprare",
+                "In \(.applicationName) mostra rifornimenti",
+                "In \(.applicationName) apri acquisti"
+            ],
+            shortTitle: "Apri rifornimenti",
+            systemImageName: "list.bullet"
+        )
+        AppShortcut(
             intent: ShowCodiceFiscaleIntent(),
             phrases: [
                 "In \(.applicationName) mostra codice fiscale",

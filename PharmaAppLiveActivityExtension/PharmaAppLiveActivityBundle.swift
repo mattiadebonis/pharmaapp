@@ -5,5 +5,6 @@ import SwiftUI
 struct PharmaAppLiveActivityBundle: WidgetBundle {
     var body: some Widget {
         CriticalDoseLiveActivityWidget()
+        RefillLiveActivityWidget()
     }
 }

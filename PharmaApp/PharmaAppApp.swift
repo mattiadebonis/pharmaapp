@@ -86,6 +86,7 @@ struct PharmaAppApp: App {
     @StateObject private var notificationCoordinator = NotificationCoordinator(
         context: PersistenceController.shared.container.viewContext
     )
+    private let refillLiveActivityCoordinator = RefillLiveActivityCoordinator.shared
 
     var body: some Scene {
         WindowGroup {
@@ -98,7 +99,10 @@ struct PharmaAppApp: App {
                 .onOpenURL { url in
                     Task { @MainActor in
                         let handledLiveActivityAction = await LiveActivityURLActionHandler.shared.handle(url: url)
-                        guard !handledLiveActivityAction else { return }
+                        if handledLiveActivityAction {
+                            appRouter.consumePendingRouteIfAny()
+                            return
+                        }
                         authViewModel.handleOpenURL(url)
                     }
                 }
@@ -116,6 +120,7 @@ struct PharmaAppApp: App {
                     AccountPersonService.shared.syncAccountDisplayName(from: authViewModel.user, in: context)
                     appRouter.consumePendingRouteIfAny()
                     notificationCoordinator.start()
+                    refillLiveActivityCoordinator.start()
                 }
         }
     }

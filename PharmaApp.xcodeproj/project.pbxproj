@@ -521,7 +521,11 @@
 				DEVELOPMENT_TEAM = P8V8X3MUBK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = pharmaapp;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = pharmaapp;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Necessario per scansionare etichette di medicinali";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Usiamo la posizione solo per mostrarti farmacie aperte vicine quando hai rifornimenti da fare, senza tracciamento continuo.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Usiamo la tua posizione per suggerirti la farmacia più vicina quando le scorte sono basse.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Necessario per dettare il nome del medicinale";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Necessario per allegare foto ai commenti";
@@ -531,6 +535,7 @@
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UIBackgroundModes_0 = location;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
@@ -567,7 +572,11 @@
 				DEVELOPMENT_TEAM = P8V8X3MUBK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = pharmaapp;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = pharmaapp;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Necessario per scansionare etichette di medicinali";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Usiamo la posizione solo per mostrarti farmacie aperte vicine quando hai rifornimenti da fare, senza tracciamento continuo.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Usiamo la tua posizione per suggerirti la farmacia più vicina quando le scorte sono basse.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Necessario per dettare il nome del medicinale";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Necessario per allegare foto ai commenti";
@@ -577,6 +586,7 @@
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UIBackgroundModes_0 = location;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
@@ -693,6 +703,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = P8V8X3MUBK;
+				ENABLE_DEBUG_DYLIB = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "PharmaAppLiveActivityExtension-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
