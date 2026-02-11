@@ -3,19 +3,35 @@ import CoreData
 @testable import PharmaApp
 
 enum TestCoreDataFactory {
+    private static let requiredEntityNames = [
+        "Medicine",
+        "Package",
+        "Log",
+        "Stock",
+        "Therapy",
+        "Dose",
+        "Person",
+        "Todo",
+        "Option"
+    ]
+
     static func makeModel() throws -> NSManagedObjectModel {
         let bundles = [Bundle.main, Bundle(for: Medicine.self)]
         if let model = NSManagedObjectModel.mergedModel(from: bundles),
-           model.entitiesByName["Medicine"] != nil {
+           requiredEntityNames.allSatisfy({ model.entitiesByName[$0] != nil }) {
             return model
         }
         let bundle = Bundle(for: Medicine.self)
         if let url = bundle.url(forResource: "PharmaApp", withExtension: "momd"),
            let model = NSManagedObjectModel(contentsOf: url),
-           model.entitiesByName["Medicine"] != nil {
+           requiredEntityNames.allSatisfy({ model.entitiesByName[$0] != nil }) {
             return model
         }
-        throw NSError(domain: "TestCoreDataFactory", code: 2, userInfo: [NSLocalizedDescriptionKey: "Missing Medicine entity in PharmaApp model"])
+        throw NSError(
+            domain: "TestCoreDataFactory",
+            code: 2,
+            userInfo: [NSLocalizedDescriptionKey: "Missing required entities in PharmaApp model"]
+        )
     }
 
     static func makeContainer() throws -> NSPersistentContainer {
@@ -34,14 +50,10 @@ enum TestCoreDataFactory {
         semaphore.wait()
         if let loadError { throw loadError }
         guard let entities = container.viewContext.persistentStoreCoordinator?.managedObjectModel.entitiesByName,
-              entities["Medicine"] != nil,
-              entities["Package"] != nil,
-              entities["Log"] != nil,
-              entities["Stock"] != nil else {
+              requiredEntityNames.allSatisfy({ entities[$0] != nil }) else {
             throw NSError(domain: "TestCoreDataFactory", code: 3, userInfo: [NSLocalizedDescriptionKey: "Required entities missing from context model"])
         }
         let context = container.viewContext
-        let requiredEntityNames = ["Medicine", "Package", "Log", "Stock"]
         for name in requiredEntityNames {
             if NSEntityDescription.entity(forEntityName: name, in: context) == nil {
                 throw NSError(domain: "TestCoreDataFactory", code: 6, userInfo: [NSLocalizedDescriptionKey: "Entity \(name) not resolved in context"])

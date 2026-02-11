@@ -8,6 +8,7 @@ import Code39
 /// Vista dedicata al tab "Oggi" (ex insights) con logica locale
 struct TodayView: View {
     @EnvironmentObject private var appVM: AppViewModel
+    @EnvironmentObject private var appRouter: AppRouter
     @EnvironmentObject private var codiceFiscaleStore: CodiceFiscaleStore
     @Environment(\.openURL) private var openURL
     @Environment(\.managedObjectContext) private var viewContext
@@ -65,6 +66,7 @@ struct TodayView: View {
     private let completionHoldDuration: TimeInterval = 3.0
     private let completionDisappearDuration: TimeInterval = 0.18
     private let completionToastDuration: TimeInterval = 2.0
+    private let purchaseSectionAnchorID = "today.purchase.section.anchor"
 
     private enum CompletedSection {
         case therapy
@@ -136,10 +138,7 @@ struct TodayView: View {
         let purchaseItems = visibleItems(mergedItems(base: basePurchaseItems, section: .purchase))
         let otherItems = visibleItems(mergedItems(base: baseOtherItems, section: .other))
         let hasVisibleItems = !(therapyItems.isEmpty && purchaseItems.isEmpty && otherItems.isEmpty)
-        let showPharmacyCard = state.showPharmacyCard
-        let shouldShowPharmacyCard = showPharmacyCard
-
-        let content = List {
+        let contentList = List {
             // Card farmacia temporaneamente nascosta.
             if !therapyItems.isEmpty {
                 Section {
@@ -166,6 +165,10 @@ struct TodayView: View {
             }
             if !purchaseItems.isEmpty {
                 Section {
+                    Color.clear
+                        .frame(height: 1)
+                        .id(purchaseSectionAnchorID)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
                     ForEach(Array(purchaseItems.enumerated()), id: \.element.id) { entry in
                         let item = entry.element
                         let isLast = entry.offset == purchaseItems.count - 1
@@ -197,13 +200,27 @@ struct TodayView: View {
                 )
             }
         }
+
+        let content = ScrollViewReader { proxy in
+            contentList
+                .onAppear {
+                    handlePendingRoute(with: proxy)
+                }
+                .onChange(of: appRouter.pendingRoute) { _ in
+                    handlePendingRoute(with: proxy)
+                }
+        }
         .overlay {
             if pendingItems.isEmpty && !hasVisibleItems {
                 insightsPlaceholder
             }
         }
         .fullScreenCover(isPresented: $showCodiceFiscaleFullScreen) {
-            codiceFiscaleFullScreen()
+            CodiceFiscaleFullscreenView(
+                codiceFiscale: codiceFiscaleStore.codiceFiscale
+            ) {
+                showCodiceFiscaleFullScreen = false
+            }
         }
         .listStyle(.plain)
         .listSectionSeparator(.hidden)
@@ -366,6 +383,24 @@ struct TodayView: View {
             .navigationDestination(isPresented: $showPharmacyDetails) {
                 PharmacyCardsView()
             }
+    }
+
+    private func handlePendingRoute(with proxy: ScrollViewProxy) {
+        guard let route = appRouter.pendingRoute else { return }
+        switch route {
+        case .today:
+            appRouter.markRouteHandled(route)
+        case .todayPurchaseList:
+            withAnimation(.easeInOut(duration: 0.25)) {
+                proxy.scrollTo(purchaseSectionAnchorID, anchor: .top)
+            }
+            appRouter.markRouteHandled(route)
+        case .pharmacy:
+            showPharmacyDetails = true
+            appRouter.markRouteHandled(route)
+        case .codiceFiscaleFullscreen, .profile:
+            break
+        }
     }
 
     private func completionKey(for item: TodayTodoItem) -> String {

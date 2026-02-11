@@ -2,7 +2,7 @@ import Foundation
 import CoreData
 
 @objc(MedicineCommentAttachment)
-public final class MedicineCommentAttachment: NSManagedObject, Identifiable {
+public class MedicineCommentAttachment: NSManagedObject, Identifiable {
     @NSManaged public var id: UUID
     @NSManaged public var kind: String?
     @NSManaged public var filename: String?

@@ -80,6 +80,7 @@ struct PharmaAppApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
 
     @StateObject var appViewModel = AppViewModel()
+    @StateObject private var appRouter = AppRouter()
     @StateObject var authViewModel = AuthViewModel()
     @StateObject private var favoritesStore = FavoritesStore()
     @StateObject private var codiceFiscaleStore = CodiceFiscaleStore()
@@ -92,6 +93,7 @@ struct PharmaAppApp: App {
             ContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .environmentObject(appViewModel)
+                .environmentObject(appRouter)
                 .environmentObject(authViewModel)
                 .environmentObject(favoritesStore)
                 .environmentObject(codiceFiscaleStore)
@@ -100,6 +102,7 @@ struct PharmaAppApp: App {
                 }
                 .task {
                     UserIdentityProvider.shared.ensureProfile(in: persistenceController.container.viewContext)
+                    appRouter.consumePendingRouteIfAny()
                     notificationCoordinator.start()
                 }
         }

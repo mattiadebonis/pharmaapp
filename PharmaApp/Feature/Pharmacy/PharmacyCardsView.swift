@@ -20,7 +20,11 @@ struct PharmacyCardsView: View {
             .padding(.bottom, 32)
         }
         .fullScreenCover(isPresented: $showCodiceFiscaleFullScreen) {
-            codiceFiscaleFullScreen()
+            CodiceFiscaleFullscreenView(
+                codiceFiscale: codiceFiscaleStore.codiceFiscale
+            ) {
+                showCodiceFiscaleFullScreen = false
+            }
         }
         .navigationTitle("Farmacia")
         .navigationBarTitleDisplayMode(.large)
@@ -334,49 +338,6 @@ struct PharmacyCardsView: View {
         return trimmed.uppercased()
     }
 
-    private func codiceFiscaleFullScreen() -> some View {
-        ZStack(alignment: .topTrailing) {
-            Color.white
-                .ignoresSafeArea()
-            GeometryReader { proxy in
-                ZStack {
-                    if let codice = codiceFiscaleStore.codiceFiscale {
-                        let displayCodice = codiceFiscaleDisplayText(codice)
-                        VStack(spacing: 12) {
-                            Code39View(displayCodice)
-                                .frame(maxWidth: min(proxy.size.width * 0.92, 700))
-                                .frame(height: 140)
-                                .accessibilityLabel("Barcode Codice Fiscale")
-                                .accessibilityValue(displayCodice)
-                            Text(displayCodice)
-                                .font(.system(.callout, design: .monospaced))
-                                .foregroundColor(.secondary)
-                        }
-                    } else {
-                        Text("Aggiungi il codice fiscale dal profilo.")
-                            .font(.system(size: 16))
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            Button {
-                showCodiceFiscaleFullScreen = false
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(12)
-                    .background(
-                        Circle()
-                            .fill(Color.black.opacity(0.35))
-                    )
-            }
-            .padding(20)
-        }
-    }
 }
 
 #Preview {

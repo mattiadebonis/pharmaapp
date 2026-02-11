@@ -18,15 +18,10 @@ struct ContentView: View {
     // MARK: – Dependencies
     @Environment(\.managedObjectContext) private var moc
     @EnvironmentObject private var appVM: AppViewModel
+    @EnvironmentObject private var appRouter: AppRouter
+    @EnvironmentObject private var codiceFiscaleStore: CodiceFiscaleStore
     @State private var isNewMedicinePresented = false
-
-    enum AppTab: Hashable {
-        case oggi
-        case aderenza
-        case medicine
-    }
-
-    @State private var selectedTab: AppTab = .oggi
+    @State private var isGlobalCodiceFiscalePresented = false
 
     // Init fake data once
     init() {
@@ -38,9 +33,9 @@ struct ContentView: View {
     // MARK: – UI
     var body: some View {
         if #available(iOS 18.0, *) {
-            TabView(selection: $selectedTab) {
+            TabView(selection: $appRouter.selectedTab) {
                 // TAB 1 – Insights
-                Tab(value: AppTab.oggi) {
+                Tab(value: AppTabRoute.oggi) {
                     NavigationStack {
                         TodayView()
                     }
@@ -53,7 +48,7 @@ struct ContentView: View {
                 }
 
                 // TAB 2 – Medicine
-                Tab("Medicine", systemImage: "pills", value: AppTab.medicine) {
+                Tab("Medicine", systemImage: "pills", value: AppTabRoute.medicine) {
                     NavigationStack {
                         CabinetView()
                             .navigationTitle("Armadio dei farmaci")
@@ -66,6 +61,20 @@ struct ContentView: View {
                 set: { appVM.isProfilePresented = $0 }
             )) {
                 NavigationStack { ProfileView() }
+            }
+            .fullScreenCover(isPresented: $isGlobalCodiceFiscalePresented) {
+                CodiceFiscaleFullscreenView(
+                    codiceFiscale: codiceFiscaleStore.codiceFiscale
+                ) {
+                    isGlobalCodiceFiscalePresented = false
+                }
+            }
+            .onAppear {
+                appRouter.consumePendingRouteIfAny()
+                handleGlobalRoute(appRouter.pendingRoute)
+            }
+            .onChange(of: appRouter.pendingRoute) { route in
+                handleGlobalRoute(route)
             }
         } else {
             // Fallback on earlier versions
@@ -82,11 +91,30 @@ struct ContentView: View {
     private var todayDayNumber: Int {
         Calendar.current.component(.day, from: Date())
     }
+
+    private func handleGlobalRoute(_ route: AppRoute?) {
+        guard let route else { return }
+        switch route {
+        case .profile:
+            appVM.isProfilePresented = true
+            appRouter.markRouteHandled(route)
+        case .codiceFiscaleFullscreen:
+            if codiceFiscaleStore.codiceFiscale?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+                isGlobalCodiceFiscalePresented = true
+            } else {
+                appVM.isProfilePresented = true
+            }
+            appRouter.markRouteHandled(route)
+        case .today, .todayPurchaseList, .pharmacy:
+            break
+        }
+    }
 }
 // MARK: – Preview
 #Preview {
     ContentView()
         .environmentObject(AppViewModel())
+        .environmentObject(AppRouter())
         .environmentObject(CodiceFiscaleStore())
         .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
 }

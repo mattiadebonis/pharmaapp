@@ -87,8 +87,7 @@ struct PdfReportBuilder {
 
             for row in data.rows {
                 let rowHeight: CGFloat = 18
-                let noteHeight: CGFloat = row.note == nil ? 0 : 14
-                let totalHeight = rowHeight + noteHeight + 6
+                let totalHeight = rowHeight + 6
 
                 if y + totalHeight > pageRect.height - 36 {
                     beginPage()
@@ -109,12 +108,36 @@ struct PdfReportBuilder {
 
                 y += rowHeight
 
-                if let note = row.note {
-                    _ = drawText(note, font: noteFont, color: .secondaryLabel, atX: leftX + 6, y: y, width: tableWidth - 12)
-                    y += noteHeight
+                y += 6
+            }
+
+            let comments: [String] = data.rows.compactMap { row in
+                guard let note = row.note?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty else {
+                    return nil
+                }
+                return "\(row.name): \(note)"
+            }
+
+            if !comments.isEmpty {
+                let sectionGap: CGFloat = 10
+                let sectionHeaderHeight = textHeight("Commenti", font: headerFont, width: contentWidth)
+                if y + sectionGap + sectionHeaderHeight + 8 > pageRect.height - 36 {
+                    beginPage()
                 }
 
-                y += 6
+                y += sectionGap
+                y += drawText("Commenti", font: headerFont, atX: leftX, y: y, width: contentWidth)
+                y += 8
+
+                for comment in comments {
+                    let line = "• \(comment)"
+                    let lineHeight = textHeight(line, font: noteFont, width: contentWidth)
+                    if y + lineHeight + 4 > pageRect.height - 36 {
+                        beginPage()
+                    }
+                    y += drawText(line, font: noteFont, color: .secondaryLabel, atX: leftX, y: y, width: contentWidth)
+                    y += 4
+                }
             }
         }
 
@@ -152,6 +175,26 @@ struct PdfReportBuilder {
         ).size
         let rect = CGRect(x: x, y: y, width: width, height: ceil(size.height))
         (text as NSString).draw(in: rect, withAttributes: attributes)
+        return ceil(size.height)
+    }
+
+    private func textHeight(
+        _ text: String,
+        font: UIFont,
+        width: CGFloat
+    ) -> CGFloat {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .paragraphStyle: paragraph
+        ]
+        let size = text.boundingRect(
+            with: CGSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: attributes,
+            context: nil
+        ).size
         return ceil(size.height)
     }
 }

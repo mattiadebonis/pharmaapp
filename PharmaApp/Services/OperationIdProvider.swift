@@ -14,6 +14,7 @@ enum OperationSource: String {
     case cabinet
     case medicineRow
     case autoIntake
+    case siri
     case system
     case unknown
 }
