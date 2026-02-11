@@ -16,11 +16,11 @@ struct OptionsView: View {
 
     var body: some View {
         Form {
-            Section(
-                header: Text("Soglia scorte e assunzione"),
-                footer: Text("Queste impostazioni valgono per tutte le medicine.")
-            ) {
-                if let option = options.first {
+            if let option = options.first {
+                Section(
+                    header: Text("Soglia scorte e assunzione"),
+                    footer: Text("Queste impostazioni valgono per tutte le medicine.")
+                ) {
                     let manualBinding = Binding<Bool>(
                         get: { option.manual_intake_registration },
                         set: { newValue in
@@ -68,7 +68,57 @@ struct OptionsView: View {
                             thresholdInput = String(value > 0 ? value : 7)
                         }
                     }
-                } else {
+                }
+                Section(
+                    header: Text("Notifiche terapia"),
+                    footer: Text("In modalità Tipo sveglia puoi interrompere o rimandare dal lock screen.")
+                ) {
+                    Picker(
+                        "Livello notifiche",
+                        selection: Binding<TherapyNotificationLevel>(
+                            get: {
+                                TherapyNotificationPreferences.normalizedLevel(
+                                    rawValue: option.therapy_notification_level
+                                )
+                            },
+                            set: { newLevel in
+                                option.therapy_notification_level = newLevel.rawValue
+                                saveContext()
+                            }
+                        )
+                    ) {
+                        Text("Normale").tag(TherapyNotificationLevel.normal)
+                        Text("Tipo sveglia").tag(TherapyNotificationLevel.alarm)
+                    }
+                    .pickerStyle(.segmented)
+
+                    if TherapyNotificationPreferences.normalizedLevel(
+                        rawValue: option.therapy_notification_level
+                    ) == .alarm {
+                        Picker(
+                            "Durata rimando",
+                            selection: Binding<Int>(
+                                get: {
+                                    TherapyNotificationPreferences.normalizedSnoozeMinutes(
+                                        rawValue: Int(option.therapy_snooze_minutes)
+                                    )
+                                },
+                                set: { newMinutes in
+                                    option.therapy_snooze_minutes = Int32(
+                                        TherapyNotificationPreferences.normalizedSnoozeMinutes(rawValue: newMinutes)
+                                    )
+                                    saveContext()
+                                }
+                            )
+                        ) {
+                            Text("5 min").tag(5)
+                            Text("10 min").tag(10)
+                            Text("15 min").tag(15)
+                        }
+                    }
+                }
+            } else {
+                Section {
                     Text("Opzioni non disponibili.")
                         .foregroundStyle(.secondary)
                 }
@@ -124,6 +174,7 @@ struct OptionsView: View {
             }
         }
     }
+
 }
 
 #Preview {

@@ -9,11 +9,13 @@ import SwiftUI
 import CoreData
 
 struct ProfileView: View {
+    @Environment(\.managedObjectContext) private var managedObjectContext
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var auth: AuthViewModel
     @EnvironmentObject private var codiceFiscaleStore: CodiceFiscaleStore
     @FetchRequest(fetchRequest: Doctor.extractDoctors()) private var doctors: FetchedResults<Doctor>
     @FetchRequest(fetchRequest: Person.extractPersons()) private var persons: FetchedResults<Person>
+    @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
     @State private var codiceFiscaleInput: String = ""
     @State private var isScannerPresented = false
     @State private var errorMessage: String?
@@ -95,6 +97,21 @@ struct ProfileView: View {
                 .onAppear {
                     if codiceFiscaleInput.isEmpty, let current = codiceFiscaleStore.codiceFiscale {
                         codiceFiscaleInput = current
+                    }
+                }
+            }
+
+            if let option = options.first {
+                Section(
+                    header: Text("Orari eventi"),
+                    footer: Text("Usa questi orari come scorciatoie quando inserisci le dosi.")
+                ) {
+                    ForEach(EventTimeKind.allCases) { kind in
+                        DatePicker(
+                            kind.label,
+                            selection: timeBinding(for: kind, option: option),
+                            displayedComponents: .hourAndMinute
+                        )
                     }
                 }
             }
@@ -182,6 +199,28 @@ struct ProfileView: View {
             } else {
                 errorMessage = "Codice Fiscale non valido."
             }
+        }
+    }
+
+    private func timeBinding(for kind: EventTimeKind, option: Option) -> Binding<Date> {
+        let base = Calendar.current.startOfDay(for: Date())
+        return Binding(
+            get: {
+                EventTimeSettings.time(for: option, kind: kind, base: base)
+            },
+            set: { newValue in
+                let normalized = EventTimeSettings.normalizedTime(from: newValue, base: base)
+                EventTimeSettings.setOptionTime(normalized, kind: kind, option: option)
+                saveContext()
+            }
+        )
+    }
+
+    private func saveContext() {
+        do {
+            try managedObjectContext.save()
+        } catch {
+            print("Errore nel salvataggio: \(error.localizedDescription)")
         }
     }
 }

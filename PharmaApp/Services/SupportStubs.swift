@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import UIKit
 
 // Placeholder per la conferma richiesta ricetta.
 struct PrescriptionRequestConfirmationSheet: View {
@@ -8,6 +9,8 @@ struct PrescriptionRequestConfirmationSheet: View {
     let subject: String
     let messageBody: String
     let onDidSend: () -> Void
+    @Environment(\.openURL) private var openURL
+    @State private var showMailFallbackAlert = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -16,10 +19,54 @@ struct PrescriptionRequestConfirmationSheet: View {
             Text("Invia richiesta a \(doctor.name) per \(medicineName)")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
-            Button("Invia") { onDidSend() }
+            HStack(spacing: 12) {
+                Button {
+                    sendWhatsApp()
+                } label: {
+                    Label("WhatsApp", systemImage: "message.fill")
+                }
                 .buttonStyle(.borderedProminent)
+                .disabled(doctor.phoneInternational == nil)
+
+                Button {
+                    sendMail()
+                } label: {
+                    Label("Mail", systemImage: "envelope.fill")
+                }
+                .buttonStyle(.bordered)
+                .disabled(doctor.email == nil)
+            }
         }
         .padding()
+        .alert("Impossibile aprire Mail", isPresented: $showMailFallbackAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Testo copiato negli appunti. Installa o configura un'app Mail per inviare la richiesta.")
+        }
+    }
+
+    private var communicationService: CommunicationService {
+        CommunicationService(openURL: openURL)
+    }
+
+    private func sendWhatsApp() {
+        guard doctor.phoneInternational != nil else { return }
+        communicationService.sendWhatsApp(to: doctor, text: messageBody)
+        onDidSend()
+    }
+
+    private func sendMail() {
+        guard doctor.email != nil else { return }
+        communicationService.sendEmail(
+            to: doctor,
+            subject: subject,
+            body: messageBody,
+            onFailure: {
+                UIPasteboard.general.string = messageBody
+                showMailFallbackAlert = true
+            }
+        )
+        onDidSend()
     }
 }
 

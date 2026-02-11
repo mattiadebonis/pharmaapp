@@ -9,6 +9,8 @@ import CoreData
 
 @objc(Package)
 public class Package: NSManagedObject {
+    @NSManaged public var source_id: UUID?
+    @NSManaged public var visibility: String?
     @NSManaged public var id: UUID
     @NSManaged public var id_package: String?
     @NSManaged public var denominazione_package: String?

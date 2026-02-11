@@ -10,6 +10,8 @@ import CoreData
 
 @objc(Medicine)
 public class Medicine: NSManagedObject, Identifiable {
+    @NSManaged public var source_id: UUID?
+    @NSManaged public var visibility: String?
     @NSManaged public var id: UUID
     @NSManaged public var nome: String
     @NSManaged public var principio_attivo: String
@@ -63,7 +65,9 @@ public class Medicine: NSManagedObject, Identifiable {
     @NSManaged public var packages: Set<Package>
     @NSManaged public var stocks: Set<Stock>?
     @NSManaged public var logs: Set<Log>?
+    @NSManaged public var comments: Set<MedicineComment>?
     @NSManaged public var todos: Set<Todo>?
+    @NSManaged public var doseEvents: Set<DoseEventRecord>?
     @NSManaged public var cabinet: Cabinet?
     @NSManaged public var medicinePackages: Set<MedicinePackage>?
     
@@ -74,6 +78,10 @@ public class Medicine: NSManagedObject, Identifiable {
     
     func addToLogs(_ log: Log) {
         self.mutableSetValue(forKey: "logs").add(log)
+    }
+
+    func addToComments(_ comment: MedicineComment) {
+        self.mutableSetValue(forKey: "comments").add(comment)
     }
 
     func addToTodos(_ todo: Todo) {

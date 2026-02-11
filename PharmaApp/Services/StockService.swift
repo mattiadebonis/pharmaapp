@@ -106,6 +106,10 @@ final class StockService {
         newLog.medicine = medicine
         newLog.package = package
         newLog.therapy = therapy
+        let identity = UserIdentityProvider.shared
+        newLog.actor_user_id = identity.userId
+        newLog.actor_device_id = identity.deviceId
+        newLog.source = "local"
 
         var delta = 0
         if let package {
@@ -184,10 +188,12 @@ final class StockService {
         }
         let stock = makeStock()
         stock.id = UUID()
+        stock.source_id = stock.id
         stock.context_key = contextKey
         stock.package = package
         stock.medicine = package.medicine
         stock.updated_at = Date()
+        stock.visibility = "local"
         if bootstrapFromLogs && contextKey == StockService.defaultContextKey {
             stock.stock_units = Int32(unitsFromLogs(medicine: package.medicine, package: package))
         } else {

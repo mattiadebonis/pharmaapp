@@ -18,13 +18,14 @@ struct CabinetView: View {
     private var cabinets: FetchedResults<Cabinet>
 
     @State private var activeCabinetID: NSManagedObjectID?
-    @State private var activeMedicineID: NSManagedObjectID?
     @State private var entryToMove: MedicinePackage?
     @State private var isNewCabinetPresented = false
     @State private var newCabinetName = ""
     @State private var isSearchPresented = false
     @State private var catalogSelection: CatalogSelection?
     @State private var pendingCatalogSelection: CatalogSelection?
+    @State private var selectedEntry: MedicinePackage?
+    @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
 
     var body: some View {
         cabinetRootView
@@ -103,6 +104,20 @@ struct CabinetView: View {
     private var cabinetListWithDetailSheet: some View {
         cabinetListStyled
             .id(logs.count)
+            .sheet(isPresented: Binding(
+                get: { selectedEntry != nil },
+                set: { newValue in if !newValue { selectedEntry = nil } }
+            )) {
+                if let entry = selectedEntry {
+                    MedicineDetailView(
+                        medicine: entry.medicine,
+                        package: entry.package,
+                        medicinePackage: entry
+                    )
+                    .presentationDetents([.fraction(0.75), .large], selection: $detailSheetDetent)
+                    .presentationDragIndicator(.visible)
+                }
+            }
             .sheet(item: $entryToMove) { entry in
                 MoveToCabinetSheet(
                     entry: entry,
@@ -177,12 +192,22 @@ struct CabinetView: View {
             }
 
             if !otherMedicineEntries.isEmpty {
-                Section(header: sectionHeader("Altri medicinali")) {
-                    ForEach(otherMedicineEntries, id: \.id) { entry in
-                        shelfRow(for: entry)
+                let showOtherMedicinesHeader = !(favoriteEntries.isEmpty && cabinetEntries.isEmpty)
+                if showOtherMedicinesHeader {
+                    Section(header: sectionHeader("Altri medicinali")) {
+                        ForEach(otherMedicineEntries, id: \.id) { entry in
+                            shelfRow(for: entry)
+                        }
                     }
+                    .listSectionSeparator(.hidden)
+                } else {
+                    Section {
+                        ForEach(otherMedicineEntries, id: \.id) { entry in
+                            shelfRow(for: entry)
+                        }
+                    }
+                    .listSectionSeparator(.hidden)
                 }
-                .listSectionSeparator(.hidden)
             }
         })
     }
@@ -263,6 +288,7 @@ struct CabinetView: View {
         let cabinet = Cabinet(context: managedObjectContext)
         cabinet.id = UUID()
         cabinet.name = name
+        cabinet.created_at = Date()
         saveContext()
         newCabinetName = ""
     }
@@ -282,11 +308,11 @@ struct CabinetView: View {
                 if viewModel.isSelecting {
                     viewModel.toggleSelection(for: entry)
                 } else {
-                    activeMedicineID = entry.objectID
+                    selectedEntry = entry
                 }
             },
             onLongPress: {
-                activeMedicineID = entry.objectID
+                selectedEntry = entry
                 Haptics.impact(.medium)
             },
             onToggleSelection: { viewModel.toggleSelection(for: entry) },
@@ -311,24 +337,6 @@ struct CabinetView: View {
         .accessibilityIdentifier("MedicineRow_\(entry.objectID)")
         .listRowSeparator(.hidden, edges: .all)
         .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
-        .background(
-            NavigationLink(
-                destination: MedicineDetailView(
-                    medicine: entry.medicine,
-                    package: entry.package,
-                    medicinePackage: entry
-                ),
-                isActive: Binding(
-                    get: { activeMedicineID == entry.objectID },
-                    set: { newValue in
-                        if !newValue { activeMedicineID = nil }
-                    }
-                )
-            ) {
-                EmptyView()
-            }
-            .hidden()
-        )
     }
 
     private func cabinetRow(for cabinet: Cabinet) -> some View {

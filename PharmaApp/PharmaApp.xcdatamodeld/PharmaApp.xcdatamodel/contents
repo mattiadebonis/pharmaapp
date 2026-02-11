@@ -1,10 +1,33 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="24299" systemVersion="24G325" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
     <entity name="Cabinet" representedClassName=".Cabinet" syncable="YES">
+        <attribute name="created_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="is_shared" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="name" optional="YES" attributeType="String"/>
         <relationship name="medicines" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Medicine" inverseName="cabinet" inverseEntity="Medicine"/>
         <relationship name="medicinePackages" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="MedicinePackage" inverseName="cabinet" inverseEntity="MedicinePackage"/>
+        <relationship name="memberships" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CabinetMembership" inverseName="cabinet" inverseEntity="CabinetMembership"/>
+        <relationship name="notificationLocks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="NotificationLock" inverseName="cabinet" inverseEntity="NotificationLock"/>
+    </entity>
+    <entity name="CabinetMembership" representedClassName=".CabinetMembership" syncable="YES">
+        <attribute name="created_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="role" optional="YES" attributeType="String"/>
+        <attribute name="status" optional="YES" attributeType="String"/>
+        <attribute name="user_id" optional="YES" attributeType="String"/>
+        <relationship name="cabinet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Cabinet" inverseName="memberships" inverseEntity="Cabinet"/>
+    </entity>
+    <entity name="DoseEvent" representedClassName=".DoseEventRecord" syncable="YES">
+        <attribute name="actor_device_id" optional="YES" attributeType="String"/>
+        <attribute name="actor_user_id" optional="YES" attributeType="String"/>
+        <attribute name="created_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="due_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="status" optional="YES" attributeType="String"/>
+        <attribute name="updated_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="medicine" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="doseEvents" inverseEntity="Medicine"/>
+        <relationship name="therapy" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Therapy" inverseName="doseEvents" inverseEntity="Therapy"/>
     </entity>
     <entity name="Doctor" representedClassName="Doctor" syncable="YES">
         <attribute name="cognome" optional="YES" attributeType="String"/>
@@ -23,20 +46,41 @@
         <relationship name="therapy" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Therapy" inverseName="doses" inverseEntity="Therapy"/>
     </entity>
     <entity name="Log" representedClassName=".Log" syncable="YES">
+        <attribute name="actor_device_id" optional="YES" attributeType="String"/>
+        <attribute name="actor_user_id" optional="YES" attributeType="String"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="operation_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="reversal_of_operation_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="source" optional="YES" attributeType="String"/>
         <attribute name="synced_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="type" optional="YES" attributeType="String"/>
-        <uniquenessConstraints>
-            <uniquenessConstraint>
-                <constraint value="operation_id"/>
-            </uniquenessConstraint>
-        </uniquenessConstraints>
-        <relationship name="medicine" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="logs" inverseEntity="Medicine"/>
+        <relationship name="medicine" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="logs" inverseEntity="Medicine"/>
         <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package" inverseName="logs" inverseEntity="Package"/>
         <relationship name="therapy" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Therapy" inverseName="logs" inverseEntity="Therapy"/>
+    </entity>
+    <entity name="MedicineComment" representedClassName=".MedicineComment" syncable="YES">
+        <attribute name="actor_device_id" optional="YES" attributeType="String"/>
+        <attribute name="actor_user_id" optional="YES" attributeType="String"/>
+        <attribute name="created_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="operation_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="source" optional="YES" attributeType="String"/>
+        <attribute name="text" optional="YES" attributeType="String"/>
+        <attribute name="updated_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="attachments" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="MedicineCommentAttachment" inverseName="comment" inverseEntity="MedicineCommentAttachment"/>
+        <relationship name="medicine" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="comments" inverseEntity="Medicine"/>
+    </entity>
+    <entity name="MedicineCommentAttachment" representedClassName=".MedicineCommentAttachment" syncable="YES">
+        <attribute name="byte_size" optional="YES" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="created_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="filename" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="kind" optional="YES" attributeType="String"/>
+        <attribute name="mime_type" optional="YES" attributeType="String"/>
+        <attribute name="relative_path" optional="YES" attributeType="String"/>
+        <attribute name="uti" optional="YES" attributeType="String"/>
+        <relationship name="comment" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="MedicineComment" inverseName="attachments" inverseEntity="MedicineComment"/>
     </entity>
     <entity name="Todo" representedClassName=".Todo" syncable="YES">
         <attribute name="category" optional="YES" attributeType="String"/>
@@ -50,6 +94,8 @@
         <relationship name="medicine" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="todos" inverseEntity="Medicine"/>
     </entity>
 		    <entity name="Medicine" representedClassName=".Medicine" syncable="YES">
+		        <attribute name="source_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+		        <attribute name="visibility" optional="YES" attributeType="String" defaultValueString="local"/>
 		        <attribute name="custom_stock_threshold" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
 		        <attribute name="deadline_month" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
 		        <attribute name="deadline_year" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
@@ -99,9 +145,11 @@
         <attribute name="commercio" optional="YES" attributeType="String"/>
         <attribute name="stato_amministrativo" optional="YES" attributeType="String"/>
         <relationship name="cabinet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Cabinet" inverseName="medicines" inverseEntity="Cabinet"/>
+        <relationship name="comments" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="MedicineComment" inverseName="medicine" inverseEntity="MedicineComment"/>
+        <relationship name="doseEvents" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="DoseEvent" inverseName="medicine" inverseEntity="DoseEvent"/>
         <relationship name="logs" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Log" inverseName="medicine" inverseEntity="Log"/>
         <relationship name="todos" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Todo" inverseName="medicine" inverseEntity="Todo"/>
-        <relationship name="packages" toMany="YES" deletionRule="Nullify" destinationEntity="Package" inverseName="medicine" inverseEntity="Package"/>
+        <relationship name="packages" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Package" inverseName="medicine" inverseEntity="Package"/>
         <relationship name="stocks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Stock" inverseName="medicine" inverseEntity="Stock"/>
         <relationship name="prescribingDoctor" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Doctor" inverseName="medicines" inverseEntity="Doctor"/>
         <relationship name="therapies" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Therapy" inverseName="medicine" inverseEntity="Therapy"/>
@@ -110,6 +158,8 @@
     <entity name="MedicinePackage" representedClassName=".MedicinePackage" syncable="YES">
         <attribute name="created_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="source_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="visibility" optional="YES" attributeType="String" defaultValueString="local"/>
         <relationship name="cabinet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Cabinet" inverseName="medicinePackages" inverseEntity="Cabinet"/>
         <relationship name="medicine" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="medicinePackages" inverseEntity="Medicine"/>
         <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package" inverseName="medicinePackages" inverseEntity="Package"/>
@@ -122,13 +172,36 @@
         <attribute name="turno" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
         <relationship name="pharmacie" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Pharmacie" inverseName="openingtimes" inverseEntity="Pharmacie"/>
     </entity>
-    <entity name="Option" representedClassName=".Option" syncable="YES">
-        <attribute name="day_threeshold_stocks_alarm" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+    <entity name="NotificationLock" representedClassName=".NotificationLock" syncable="YES">
+        <attribute name="created_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="expires_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="lock_key" optional="YES" attributeType="String"/>
+        <relationship name="cabinet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Cabinet" inverseName="notificationLocks" inverseEntity="Cabinet"/>
+    </entity>
+    <entity name="NotificationSettings" representedClassName=".NotificationSettings" syncable="YES">
+        <attribute name="grace_minutes" optional="YES" attributeType="Integer 32" defaultValueString="30" usesScalarValueType="YES"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="notify_caregivers" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="notify_shared" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="updated_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="user_id" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="Option" representedClassName=".Option" syncable="YES">
+        <attribute name="bedtime_time" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="breakfast_time" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="day_threeshold_stocks_alarm" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="dinner_time" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="lunch_time" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="manual_intake_registration" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="therapy_notification_level" optional="YES" attributeType="String" defaultValueString="normal"/>
+        <attribute name="therapy_snooze_minutes" optional="YES" attributeType="Integer 32" defaultValueString="10" usesScalarValueType="YES"/>
     </entity>
     <entity name="Package" representedClassName=".Package" syncable="YES">
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="source_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="visibility" optional="YES" attributeType="String" defaultValueString="local"/>
         <attribute name="id_package" optional="YES" attributeType="String"/>
         <attribute name="denominazione_package" optional="YES" attributeType="String"/>
         <attribute name="descrizione_fornitura" optional="YES" attributeType="String"/>
@@ -164,7 +237,7 @@
         <attribute name="unita" optional="YES" attributeType="String"/>
         <attribute name="valore" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="volume" optional="YES" attributeType="String"/>
-        <relationship name="medicine" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="packages" inverseEntity="Medicine"/>
+        <relationship name="medicine" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="packages" inverseEntity="Medicine"/>
         <relationship name="stocks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Stock" inverseName="package" inverseEntity="Stock"/>
         <relationship name="therapies" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Therapy" inverseName="package" inverseEntity="Therapy"/>
         <relationship name="logs" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Log" inverseName="package" inverseEntity="Log"/>
@@ -173,10 +246,12 @@
     <entity name="Stock" representedClassName=".Stock" syncable="YES">
         <attribute name="context_key" optional="YES" attributeType="String" defaultValueString="default"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="source_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="stock_units" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="updated_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <relationship name="medicine" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="stocks" inverseEntity="Medicine"/>
-        <relationship name="package" maxCount="1" deletionRule="Nullify" destinationEntity="Package" inverseName="stocks" inverseEntity="Package"/>
+        <attribute name="visibility" optional="YES" attributeType="String" defaultValueString="local"/>
+        <relationship name="medicine" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="stocks" inverseEntity="Medicine"/>
+        <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package" inverseName="stocks" inverseEntity="Package"/>
     </entity>
     <entity name="Person" representedClassName=".Person" syncable="YES">
         <attribute name="cognome" optional="YES" attributeType="String"/>
@@ -197,12 +272,31 @@
         <attribute name="manual_intake_registration" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="clinicalRules" optional="YES" attributeType="Transformable" valueTransformerName="NSSecureUnarchiveFromDataTransformerName"/>
         <attribute name="rrule" optional="YES" attributeType="String"/>
+        <attribute name="source_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="start_date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="visibility" optional="YES" attributeType="String" defaultValueString="local"/>
         <relationship name="doses" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Dose" inverseName="therapy" inverseEntity="Dose"/>
+        <relationship name="doseEvents" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="DoseEvent" inverseName="therapy" inverseEntity="DoseEvent"/>
         <relationship name="logs" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Log" inverseName="therapy" inverseEntity="Log"/>
-        <relationship name="medicine" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="therapies" inverseEntity="Medicine"/>
+        <relationship name="medicine" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="therapies" inverseEntity="Medicine"/>
         <relationship name="medicinePackage" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="MedicinePackage" inverseName="therapies" inverseEntity="MedicinePackage"/>
         <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package" inverseName="therapies" inverseEntity="Package"/>
         <relationship name="person" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Person" inverseName="therapies" inverseEntity="Person"/>
+    </entity>
+    <entity name="UserProfile" representedClassName=".UserProfile" syncable="YES">
+        <attribute name="created_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="device_id" optional="YES" attributeType="String"/>
+        <attribute name="display_name" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="user_id" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="PrivateOverlay" representedClassName=".PrivateOverlay" syncable="YES">
+        <attribute name="created_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="entity_type" optional="YES" attributeType="String"/>
+        <attribute name="flags_json" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="source_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="updated_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
     </entity>
 </model>

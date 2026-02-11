@@ -50,7 +50,7 @@ struct SearchIndex: View {
         .sheet(isPresented: $isMedicineSheetPresented) {
             if let m = createdMedicine, let p = createdPackage {
                 MedicineDetailView(medicine: m, package: p, medicinePackage: createdEntry)
-                    .presentationDetents([.medium, .large])
+                    .presentationDetents([.fraction(0.75), .large])
             } else {
                 Text("Errore creazione medicinale")
             }
@@ -67,12 +67,16 @@ struct SearchIndex: View {
     private func createMedicine() {
         let medicine = Medicine(context: context)
         medicine.id = UUID()
+        medicine.source_id = medicine.id
+        medicine.visibility = "local"
         medicine.nome = nome.trimmingCharacters(in: .whitespaces)
         medicine.principio_attivo = ""
         medicine.obbligo_ricetta = obbligoRicetta
 
         let package = Package(context: context)
         package.id = UUID()
+        package.source_id = package.id
+        package.visibility = "local"
         package.tipologia = ""
         package.unita = ""
         package.volume = ""
@@ -83,6 +87,8 @@ struct SearchIndex: View {
         let entry = MedicinePackage(context: context)
         entry.id = UUID()
         entry.created_at = Date()
+        entry.source_id = entry.id
+        entry.visibility = "local"
         entry.medicine = medicine
         entry.package = package
         entry.cabinet = nil

@@ -35,7 +35,7 @@ struct SearchView: View {
                         medicine: medicine,
                         package: package
                     )
-                    .presentationDetents([.medium, .large])
+                    .presentationDetents([.fraction(0.75), .large])
                     .presentationDragIndicator(.visible)
                 } else {
                     VStack(spacing: 12) {

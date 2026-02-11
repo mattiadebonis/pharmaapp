@@ -16,6 +16,7 @@ struct DoctorDetailView: View {
     @State private var telefono: String
     @State private var indirizzo: String
     @State private var schedule: DoctorScheduleDTO
+    @State private var saveErrorMessage: String?
 
     init(doctor: Doctor) {
         self.doctor = doctor
@@ -49,6 +50,18 @@ struct DoctorDetailView: View {
                 }
             }
         }
+        .alert("Errore salvataggio", isPresented: Binding(
+            get: { saveErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    saveErrorMessage = nil
+                }
+            }
+        )) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(saveErrorMessage ?? "Errore sconosciuto.")
+        }
     }
 
     private func saveChanges() {
@@ -59,9 +72,14 @@ struct DoctorDetailView: View {
         doctor.indirizzo = normalizedValue(from: indirizzo)
         doctor.scheduleDTO = schedule
 
+        let context = doctor.managedObjectContext ?? managedObjectContext
         do {
-            try managedObjectContext.save()
+            if context.hasChanges {
+                try context.save()
+            }
         } catch {
+            context.rollback()
+            saveErrorMessage = error.localizedDescription
             print("Errore nel salvataggio del dottore: \(error.localizedDescription)")
         }
     }

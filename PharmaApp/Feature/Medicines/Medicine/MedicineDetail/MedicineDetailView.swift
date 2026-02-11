@@ -35,6 +35,7 @@ struct MedicineDetailView: View {
     private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
     @State private var showEmailSheet = false
     @State private var showLogsSheet = false
+
     
     private let stockDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -202,6 +203,7 @@ struct MedicineDetailView: View {
                 saveContext()
             }
         }
+
     }
     
     private func openTherapyForm(for therapy: Therapy?) {
@@ -235,6 +237,7 @@ struct MedicineDetailView: View {
     private var currentOption: Option? {
         options.first
     }
+
     
     private var primaryAction: PrimaryAction? {
         if let option = currentOption,
@@ -799,9 +802,7 @@ extension MedicineDetailView {
                     Label(action.label, systemImage: action.icon)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .tint(action.color)
+                .buttonStyle(CapsuleActionButtonStyle(fill: action.color, textColor: .white))
             }
 
             Button {

@@ -10,6 +10,7 @@ struct TodayView: View {
     @EnvironmentObject private var appVM: AppViewModel
     @EnvironmentObject private var codiceFiscaleStore: CodiceFiscaleStore
     @Environment(\.openURL) private var openURL
+    @Environment(\.managedObjectContext) private var viewContext
 
     @FetchRequest(fetchRequest: Medicine.extractMedicines())
     var medicines: FetchedResults<Medicine>
@@ -29,9 +30,14 @@ struct TodayView: View {
     private let therapyRecurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
 
     @State private var selectedMedicine: Medicine?
-    @State private var detailSheetDetent: PresentationDetent = .fraction(0.66)
+    @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
     @State private var prescriptionEmailMedicine: Medicine?
     @State private var prescriptionToConfirm: Medicine?
+    @State private var pendingPrescriptionMedicine: Medicine?
+    @State private var selectedDoctorID: NSManagedObjectID?
+    @State private var showDoctorPicker = false
+    @State private var showAddDoctorSheet = false
+    @State private var doctorIDsBeforeAdd: Set<NSManagedObjectID> = []
     @State private var completionToastKey: String?
     @State private var completionToastWorkItem: DispatchWorkItem?
     @State private var completionUndoOperationIds: [UUID] = []
@@ -39,6 +45,8 @@ struct TodayView: View {
     @State private var completionUndoKey: String?
     @State private var completionUndoOperationKey: OperationKey?
     @State private var completedTodoIDs: Set<String> = []
+    @State private var completingTodoIDs: Set<String> = []
+    @State private var disappearingTodoIDs: Set<String> = []
     @State private var completedTodoCache: [String: CompletedTodoSnapshot] = [:]
     @State private var completedBlockedSubtasks: Set<String> = []
     @State private var pendingPrescriptionMedIDs: Set<MedicineId> = []
@@ -53,6 +61,10 @@ struct TodayView: View {
     @ScaledMetric(relativeTo: .body) private var timingColumnWidth: CGFloat = 112
     private let pharmacyCardCornerRadius: CGFloat = 16
     private let pharmacyAccentColor = Color(red: 0.20, green: 0.62, blue: 0.36)
+    private let completionFillDuration: TimeInterval = 0.16
+    private let completionHoldDuration: TimeInterval = 3.0
+    private let completionDisappearDuration: TimeInterval = 0.18
+    private let completionToastDuration: TimeInterval = 2.0
 
     private enum CompletedSection {
         case therapy
@@ -66,15 +78,63 @@ struct TodayView: View {
         let index: Int
     }
 
+    private struct DoctorPickerSheet: View {
+        let doctors: FetchedResults<Doctor>
+        @Binding var selectedDoctorID: NSManagedObjectID?
+        let onConfirm: (NSManagedObjectID?) -> Void
+        let onAddDoctor: () -> Void
+        @Environment(\.dismiss) private var dismiss
+
+        var body: some View {
+            NavigationStack {
+                Form {
+                    Section {
+                        Picker("Medico", selection: $selectedDoctorID) {
+                            Text("Seleziona medico").tag(NSManagedObjectID?.none)
+                            ForEach(doctors, id: \.objectID) { doc in
+                                Text(doctorFullName(doc)).tag(Optional(doc.objectID))
+                            }
+                        }
+                    }
+                    Section {
+                        Button("Aggiungi medico") {
+                            dismiss()
+                            onAddDoctor()
+                        }
+                    }
+                }
+                .navigationTitle("Medico prescrittore")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Annulla") { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Continua") {
+                            onConfirm(selectedDoctorID)
+                            dismiss()
+                        }
+                        .disabled(selectedDoctorID == nil)
+                    }
+                }
+            }
+        }
+
+        private func doctorFullName(_ doctor: Doctor) -> String {
+            let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return first.isEmpty ? "Medico" : first
+        }
+    }
+
     var body: some View {
         let state = viewModel.state
         let pendingItems = state.pendingItems
         let basePurchaseItems = state.purchaseItems
         let baseTherapyItems = state.therapyItems
         let baseOtherItems = state.otherItems
-        let therapyItems = mergedItems(base: baseTherapyItems, section: .therapy)
-        let purchaseItems = mergedItems(base: basePurchaseItems, section: .purchase)
-        let otherItems = mergedItems(base: baseOtherItems, section: .other)
+        let therapyItems = visibleItems(mergedItems(base: baseTherapyItems, section: .therapy))
+        let purchaseItems = visibleItems(mergedItems(base: basePurchaseItems, section: .purchase))
+        let otherItems = visibleItems(mergedItems(base: baseOtherItems, section: .other))
         let hasVisibleItems = !(therapyItems.isEmpty && purchaseItems.isEmpty && otherItems.isEmpty)
         let showPharmacyCard = state.showPharmacyCard
         let shouldShowPharmacyCard = showPharmacyCard
@@ -88,7 +148,7 @@ struct TodayView: View {
                         let isLast = entry.offset == therapyItems.count - 1
                         todoListRow(
                             for: item,
-                            isCompleted: completedTodoIDs.contains(completionKey(for: item)),
+                            isCompleted: isTodoSemanticallyCompleted(item),
                             isLast: isLast
                         )
                     }
@@ -111,7 +171,7 @@ struct TodayView: View {
                         let isLast = entry.offset == purchaseItems.count - 1
                         todoListRow(
                             for: item,
-                            isCompleted: completedTodoIDs.contains(completionKey(for: item)),
+                            isCompleted: isTodoSemanticallyCompleted(item),
                             isLast: isLast
                         )
                     }
@@ -132,7 +192,7 @@ struct TodayView: View {
                 let isLast = entry.offset == otherItems.count - 1
                 todoListRow(
                     for: item,
-                    isCompleted: completedTodoIDs.contains(completionKey(for: item)),
+                    isCompleted: isTodoSemanticallyCompleted(item),
                     isLast: isLast
                 )
             }
@@ -197,6 +257,42 @@ struct TodayView: View {
                 mailComposeData = nil
             }
         }
+        .sheet(isPresented: $showDoctorPicker) {
+            DoctorPickerSheet(
+                doctors: doctors,
+                selectedDoctorID: $selectedDoctorID,
+                onConfirm: { doctorId in
+                    guard let medicine = pendingPrescriptionMedicine else { return }
+                    guard let doctorId, let doctor = doctors.first(where: { $0.objectID == doctorId }) else { return }
+                    assignPrescribingDoctor(doctor, to: medicine)
+                    pendingPrescriptionMedicine = nil
+                    prescriptionToConfirm = medicine
+                },
+                onAddDoctor: {
+                    showDoctorPicker = false
+                    presentAddDoctorFlow()
+                }
+            )
+        }
+        .sheet(isPresented: $showAddDoctorSheet) {
+            NavigationStack {
+                AddDoctorView()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Chiudi") { showAddDoctorSheet = false }
+                        }
+                    }
+            }
+        }
+        .onChange(of: showDoctorPicker) { isPresented in
+            if !isPresented && !showAddDoctorSheet {
+                pendingPrescriptionMedicine = nil
+            }
+        }
+        .onChange(of: showAddDoctorSheet) { isPresented in
+            guard !isPresented else { return }
+            handleAddDoctorDismiss()
+        }
         .sheet(item: $intakeGuardrailPrompt) { prompt in
             IntakeGuardrailSheet(
                 title: prompt.warning.title,
@@ -218,7 +314,7 @@ struct TodayView: View {
                         medicine: medicine,
                         package: package
                     )
-                    .presentationDetents([.fraction(0.66), .large], selection: $detailSheetDetent)
+                    .presentationDetents([.fraction(0.75), .large], selection: $detailSheetDetent)
                     .presentationDragIndicator(.visible)
                 } else {
                     VStack(spacing: 12) {
@@ -276,6 +372,47 @@ struct TodayView: View {
         viewModel.completionKey(for: item)
     }
 
+    private func handlePrescriptionRequestTap(for medicine: Medicine) {
+        if medicine.prescribingDoctor != nil {
+            prescriptionToConfirm = medicine
+            return
+        }
+        pendingPrescriptionMedicine = medicine
+        if doctors.isEmpty {
+            presentAddDoctorFlow()
+        } else {
+            selectedDoctorID = nil
+            showDoctorPicker = true
+        }
+    }
+
+    private func presentAddDoctorFlow() {
+        doctorIDsBeforeAdd = Set(doctors.map { $0.objectID })
+        showAddDoctorSheet = true
+    }
+
+    private func handleAddDoctorDismiss() {
+        guard let medicine = pendingPrescriptionMedicine else { return }
+        let currentIDs = Set(doctors.map { $0.objectID })
+        let newIDs = currentIDs.subtracting(doctorIDsBeforeAdd)
+        if let newID = newIDs.first, let doctor = doctors.first(where: { $0.objectID == newID }) {
+            assignPrescribingDoctor(doctor, to: medicine)
+            pendingPrescriptionMedicine = nil
+            prescriptionToConfirm = medicine
+            return
+        }
+        pendingPrescriptionMedicine = nil
+    }
+
+    private func assignPrescribingDoctor(_ doctor: Doctor, to medicine: Medicine) {
+        medicine.prescribingDoctor = doctor
+        do {
+            try viewContext.save()
+        } catch {
+            print("Errore salvataggio medico prescrittore: \(error)")
+        }
+    }
+
     private func cacheCompletedItem(_ item: TodayTodoItem) {
         let key = completionKey(for: item)
         guard completedTodoCache[key] == nil else { return }
@@ -313,6 +450,33 @@ struct TodayView: View {
             inserted += 1
         }
         return result
+    }
+
+    private func visibleItems(_ items: [TodayTodoItem]) -> [TodayTodoItem] {
+        items.filter { isTodoVisible($0) }
+    }
+
+    private func isTodoVisible(_ item: TodayTodoItem) -> Bool {
+        let key = completionKey(for: item)
+        if completingTodoIDs.contains(key) || disappearingTodoIDs.contains(key) {
+            return true
+        }
+        return !completedTodoIDs.contains(key)
+    }
+
+    private func isTodoVisuallyCompleted(_ item: TodayTodoItem) -> Bool {
+        let key = completionKey(for: item)
+        return completedTodoIDs.contains(key)
+            || completingTodoIDs.contains(key)
+            || disappearingTodoIDs.contains(key)
+    }
+
+    private func isTodoSemanticallyCompleted(_ item: TodayTodoItem) -> Bool {
+        completedTodoIDs.contains(completionKey(for: item))
+    }
+
+    private func isTodoDisappearing(_ item: TodayTodoItem) -> Bool {
+        disappearingTodoIDs.contains(completionKey(for: item))
     }
 
     // MARK: - Helpers insights
@@ -709,7 +873,8 @@ struct TodayView: View {
         let leadingTime = rowTimeLabel(for: item)
         let canToggle = canToggleTodo(for: item)
         let hideToggle = shouldHideToggle(for: item)
-        let rowOpacity: Double = isCompleted ? 0.55 : 1
+        let isToggleOn = isTodoVisuallyCompleted(item)
+        let rowOpacity: Double = isTodoDisappearing(item) ? 0 : 1
         let rowBackground = isCompleted ? completedRowFill : .clear
 
         if let blocked = blockedTherapyInfo(for: item) {
@@ -719,8 +884,15 @@ struct TodayView: View {
         } else if item.category == .purchase,
                   let med,
                   med.obbligo_ricetta,
-                  isStockDepleted(med) {
-            purchaseWithPrescriptionRow(for: item, medicine: med, leadingTime: leadingTime, isCompleted: isCompleted, isLast: isLast)
+                  !hasPrescriptionReceived(med) {
+            purchaseWithPrescriptionRow(
+                for: item,
+                medicine: med,
+                leadingTime: leadingTime,
+                isCompleted: isCompleted,
+                isToggleOn: isToggleOn,
+                isLast: isLast
+            )
                 .listRowBackground(rowBackground)
                 .opacity(rowOpacity)
         } else {
@@ -746,6 +918,7 @@ struct TodayView: View {
                             iconName: iconName,
                             isEnabled: isPrescriptionActionEnabled,
                             isCompleted: isCompleted,
+                            isToggleOn: isToggleOn,
                             leadingTime: leadingTime,
                             onSend: {
                                 handlePrescriptionTap(for: item, medicine: prescriptionMedicine, isEnabled: isPrescriptionActionEnabled)
@@ -764,6 +937,7 @@ struct TodayView: View {
                             auxiliaryLine: auxiliaryInfo?.text,
                             auxiliaryUsesDefaultStyle: auxiliaryInfo?.usesDefaultStyle ?? true,
                             isCompleted: isCompleted,
+                            isToggleOn: isToggleOn,
                             showToggle: canToggle,
                             hideToggle: hideToggle,
                             onToggle: { if canToggle { toggleCompletion(for: item) } },
@@ -1209,18 +1383,12 @@ struct TodayView: View {
         return nil
     }
 
-    private func purchaseAuxiliaryLineText(for item: TodayTodoItem, medicine: Medicine) -> Text? {
+    private func purchaseAuxiliaryLineText(for item: TodayTodoItem, medicine _: Medicine) -> Text? {
         var lines: [Text] = []
         var metaParts: [String] = []
-        let suppressRequestLine = medicine.obbligo_ricetta && isStockDepleted(medicine)
 
         if item.id.hasPrefix("purchase|deadline|"), let detail = item.detail, !detail.isEmpty {
             metaParts.append(detail)
-        }
-        if hasPrescriptionRequest(medicine), !suppressRequestLine {
-            let doctor = prescriptionDoctor(for: medicine)
-            let docName = doctor.map(doctorFullName) ?? "medico"
-            metaParts.append("Richiesta ricetta inviata a \(docName)")
         }
         if !metaParts.isEmpty {
             lines.append(Text(metaParts.joined(separator: " • ")).foregroundColor(.secondary))
@@ -1320,64 +1488,52 @@ struct TodayView: View {
                 showCircle: canToggle,
                 hideToggle: hideToggle,
                 isDone: isBlockedSubtaskDone(type: "intake", medicine: info.medicine),
+                isToggleOn: isBlockedSubtaskDone(type: "intake", medicine: info.medicine) || isTodoVisuallyCompleted(item),
                 onCheck: canToggle ? { completeBlockedIntake(for: info, item: item) } : nil
             )
         )
     }
 
     @ViewBuilder
-    private func purchaseWithPrescriptionRow(for item: TodayTodoItem, medicine: Medicine, leadingTime: String?, isCompleted: Bool, isLast: Bool) -> some View {
+    private func purchaseWithPrescriptionRow(
+        for item: TodayTodoItem,
+        medicine: Medicine,
+        leadingTime: String?,
+        isCompleted: Bool,
+        isToggleOn: Bool,
+        isLast: Bool
+    ) -> some View {
         let medName = medicineTitleWithDosage(for: medicine)
-        let requestDone = hasPrescriptionRequest(medicine) || hasPrescriptionReceived(medicine)
-        let purchaseDone = isCompleted
-        let refillDone = requestDone && purchaseDone
-        let purchaseLocked = !hasPrescriptionReceived(medicine)
-        let doctorName = prescriptionDoctor(for: medicine).map(doctorFullName) ?? "medico"
         let auxiliaryInfo = auxiliaryLineInfo(for: item)
+        let prescriptionStatus = purchasePrescriptionStatusText(for: medicine)
 
-        VStack(spacing: 10) {
-            TodayTodoRowView(
-                iconName: "cart.badge.plus",
-                actionText: nil,
-                leadingTime: leadingTime,
-                title: medName,
-                subtitle: nil,
-                auxiliaryLine: auxiliaryInfo?.text,
-                auxiliaryUsesDefaultStyle: auxiliaryInfo?.usesDefaultStyle ?? true,
-                isCompleted: refillDone,
-                showToggle: false,
-                onToggle: {}
-            )
-            .padding(.vertical, 4)
-
-            VStack(spacing: 10) {
-                blockedStepRow(
-                    title: "Chiedi ricetta al medico \(doctorName)",
-                    status: nil,
-                    iconName: "heart.text.square",
-                    showCircle: true,
-                    isDone: requestDone,
-                    onCheck: requestDone ? nil : { sendPrescriptionRequest(for: medicine) }
-                )
-                .padding(.leading, nestedRowIndent)
-
-                blockedStepRow(
-                    title: medName,
-                    status: purchaseLocked ? "Bloccato finche non chiedi la ricetta" : nil,
-                    subtitle: purchaseSubtitle(for: medicine, awaitingRx: requestDone, doctorName: doctorName),
-                    subtitleColor: .secondary,
-                    subtitleAsBadge: false,
-                    iconName: "cart",
-                    showCircle: true,
-                    isDone: purchaseDone,
-                    isEnabled: !purchaseLocked,
-                    onCheck: purchaseLocked ? nil : { toggleCompletion(for: item) }
-                )
-                .padding(.leading, nestedRowIndent)
+        return TodayTodoRowView(
+            iconName: "heart.text.square",
+            actionText: nil,
+            leadingTime: leadingTime,
+            title: medName,
+            subtitle: prescriptionStatus,
+            auxiliaryLine: auxiliaryInfo?.text,
+            auxiliaryUsesDefaultStyle: auxiliaryInfo?.usesDefaultStyle ?? true,
+            isCompleted: isCompleted,
+            isToggleOn: isToggleOn,
+            showToggle: true,
+            hideToggle: false,
+            onToggle: { toggleCompletion(for: item) },
+            subtitleColor: .secondary,
+            subtitleAlignsWithTitle: true
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button {
+                handlePrescriptionRequestTap(for: medicine)
+            } label: {
+                Label("Chiedi ricetta", systemImage: "doc.text.fill")
             }
+            .tint(.orange)
         }
-        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-        .padding(.vertical, 4)
+        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+        .padding(.vertical, 2)
     }
 
     private func blockedStatusText(for info: BlockedTherapyInfo) -> String? {
@@ -1407,6 +1563,13 @@ struct TodayView: View {
         medicine.hasEffectivePrescriptionReceived()
     }
 
+    private func purchasePrescriptionStatusText(for medicine: Medicine) -> String {
+        if hasPrescriptionRequest(medicine) {
+            return "Prescrizione richiesta"
+        }
+        return "richiede prescrizione"
+    }
+
     private func sendPrescriptionRequest(for medicine: Medicine) {
         let token = viewModel.operationToken(action: .prescriptionRequest, medicine: medicine)
         let log = viewModel.actionService.requestPrescription(for: medicine, operationId: token.id)
@@ -1421,10 +1584,10 @@ struct TodayView: View {
 
     private func completeBlockedIntake(for info: BlockedTherapyInfo, item: TodayTodoItem) {
         let med = info.medicine
-        if viewModel.state.medicineStatuses[MedicineId(med.id)]?.needsPrescription == true,
-           !hasPrescriptionRequest(med) && !hasPrescriptionReceived(med) {
-            sendPrescriptionRequest(for: med)
-        }
+        let shouldAutoRequestPrescription =
+            viewModel.state.medicineStatuses[MedicineId(med.id)]?.needsPrescription == true &&
+            !hasPrescriptionRequest(med) &&
+            !hasPrescriptionReceived(med)
         let key = completionKey(for: item)
         let contexts = therapyContexts(for: item, medicine: med)
         if !contexts.isEmpty {
@@ -1448,24 +1611,30 @@ struct TodayView: View {
                 }
             }
 
-            var recordedIds: [UUID] = []
-            for (context, operationId) in zip(contexts, operationIds) {
-                let result = viewModel.recordIntake(
-                    medicine: med,
-                    therapy: context.therapy,
-                    operationId: operationId
+            animateCompletionThenPerform(for: item) {
+                if shouldAutoRequestPrescription {
+                    sendPrescriptionRequest(for: med)
+                }
+                var recordedIds: [UUID] = []
+                for (context, operationId) in zip(contexts, operationIds) {
+                    let result = viewModel.recordIntake(
+                        medicine: med,
+                        therapy: context.therapy,
+                        operationId: operationId
+                    )
+                    recordedIds.append(result?.operationId ?? operationId)
+                }
+                if !recordedIds.isEmpty {
+                    completedBlockedSubtasks.insert(blockedSubtaskKey("intake", for: med))
+                }
+                completeItem(
+                    item,
+                    log: nil,
+                    operationIds: recordedIds,
+                    operationKey: operationKey,
+                    shouldMarkCompleted: false
                 )
-                recordedIds.append(result?.operationId ?? operationId)
             }
-            if !recordedIds.isEmpty {
-                completedBlockedSubtasks.insert(blockedSubtaskKey("intake", for: med))
-            }
-            completeItem(
-                item,
-                log: nil,
-                operationIds: recordedIds,
-                operationKey: operationKey
-            )
             return
         }
 
@@ -1489,20 +1658,26 @@ struct TodayView: View {
             return
         }
 
-        let result = viewModel.recordIntake(
-            medicine: med,
-            therapy: decision.therapy,
-            operationId: operationId
-        )
-        if result != nil {
-            completedBlockedSubtasks.insert(blockedSubtaskKey("intake", for: med))
+        animateCompletionThenPerform(for: item) {
+            if shouldAutoRequestPrescription {
+                sendPrescriptionRequest(for: med)
+            }
+            let result = viewModel.recordIntake(
+                medicine: med,
+                therapy: decision.therapy,
+                operationId: operationId
+            )
+            if result != nil {
+                completedBlockedSubtasks.insert(blockedSubtaskKey("intake", for: med))
+            }
+            completeItem(
+                item,
+                log: nil,
+                operationIds: [result?.operationId ?? operationId],
+                operationKey: operationKey,
+                shouldMarkCompleted: false
+            )
         }
-        completeItem(
-            item,
-            log: nil,
-            operationIds: [result?.operationId ?? operationId],
-            operationKey: operationKey
-        )
     }
 
     private func completeBlockedPurchase(for info: BlockedTherapyInfo) {
@@ -1609,7 +1784,7 @@ struct TodayView: View {
     }
 
     @ViewBuilder
-    private func blockedStepRow(title: String, status: String? = nil, subtitle: String? = nil, subtitleColor: Color = .secondary, subtitleAsBadge: Bool = false, iconName: String? = nil, buttons: [SubtaskButton] = [], trailingBadge: (String, Color)? = nil, leadingTime: String? = nil, showCircle: Bool = true, hideToggle: Bool = false, isDone: Bool = false, isEnabled: Bool = true, onCheck: (() -> Void)? = nil) -> some View {
+    private func blockedStepRow(title: String, status: String? = nil, subtitle: String? = nil, subtitleColor: Color = .secondary, subtitleAsBadge: Bool = false, iconName: String? = nil, buttons: [SubtaskButton] = [], trailingBadge: (String, Color)? = nil, leadingTime: String? = nil, showCircle: Bool = true, hideToggle: Bool = false, isDone: Bool = false, isToggleOn: Bool? = nil, isEnabled: Bool = true, onCheck: (() -> Void)? = nil) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             TodayTodoRowView(
                 iconName: iconName ?? "circle",
@@ -1620,6 +1795,7 @@ struct TodayView: View {
                 auxiliaryLine: status.map { Text($0).foregroundColor(.orange) },
                 auxiliaryUsesDefaultStyle: false,
                 isCompleted: isDone,
+                isToggleOn: isToggleOn,
                 showToggle: showCircle && onCheck != nil && isEnabled,
                 hideToggle: hideToggle,
                 trailingBadge: trailingBadge,
@@ -1680,6 +1856,7 @@ struct TodayView: View {
         iconName: String,
         isEnabled: Bool,
         isCompleted: Bool,
+        isToggleOn: Bool,
         leadingTime: String?,
         onSend: @escaping () -> Void,
         onToggle: @escaping () -> Void
@@ -1689,7 +1866,7 @@ struct TodayView: View {
             Button(action: onToggle) {
                 ZStack {
                     Circle()
-                        .fill(isCompleted ? toggleColor.opacity(0.2) : .clear)
+                        .fill(isToggleOn ? toggleColor.opacity(0.2) : .clear)
                     Circle()
                         .stroke(toggleColor, lineWidth: 1.3)
                 }
@@ -1876,14 +2053,6 @@ struct TodayView: View {
         makeMedicineSubtitle(medicine: medicine)
     }
 
-    private func purchaseSubtitle(for medicine: Medicine, awaitingRx: Bool, doctorName: String) -> String? {
-        var parts: [String] = []
-        if awaitingRx {
-            parts.append("Richiesta ricetta inviata a \(doctorName)")
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " • ")
-    }
-
     private func isStockDepleted(_ medicine: Medicine) -> Bool {
         viewModel.state.medicineStatuses[MedicineId(medicine.id)]?.isDepleted ?? false
     }
@@ -1908,20 +2077,38 @@ struct TodayView: View {
         }
     }
 
-    private func toggleCompletion(for item: TodayTodoItem) {
-        if item.category == .purchase,
-           let med = medicine(for: item) {
-            if viewModel.state.medicineStatuses[MedicineId(med.id)]?.needsPrescription == true,
-               !hasPrescriptionReceived(med) {
-                return
-            }
+    private func animateCompletionThenPerform(for item: TodayTodoItem, action: @escaping () -> Void) {
+        let key = completionKey(for: item)
+        guard !completedTodoIDs.contains(key),
+              !completingTodoIDs.contains(key),
+              !disappearingTodoIDs.contains(key) else { return }
+
+        withAnimation(.easeInOut(duration: completionFillDuration)) {
+            completingTodoIDs.insert(key)
         }
 
+        DispatchQueue.main.asyncAfter(deadline: .now() + completionFillDuration + completionHoldDuration) {
+            withAnimation(.easeInOut(duration: completionDisappearDuration)) {
+                completingTodoIDs.remove(key)
+                disappearingTodoIDs.insert(key)
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + completionDisappearDuration) {
+                disappearingTodoIDs.remove(key)
+                completedTodoIDs.insert(key)
+                action()
+            }
+        }
+    }
+
+    private func toggleCompletion(for item: TodayTodoItem) {
         let key = completionKey(for: item)
         if completedTodoIDs.contains(key) {
             _ = withAnimation(.easeInOut(duration: 0.2)) {
                 completedTodoIDs.remove(key)
             }
+            completingTodoIDs.remove(key)
+            disappearingTodoIDs.remove(key)
             completedTodoCache.removeValue(forKey: key)
             if completionToastKey == key {
                 completionToastWorkItem?.cancel()
@@ -1937,6 +2124,10 @@ struct TodayView: View {
             } else {
                 viewModel.clearIntakeOperationId(for: key)
             }
+            return
+        }
+
+        if completingTodoIDs.contains(key) || disappearingTodoIDs.contains(key) {
             return
         }
 
@@ -1966,18 +2157,25 @@ struct TodayView: View {
                     }
                 }
 
-                var recordedIds: [UUID] = []
-                for (context, operationId) in zip(contexts, operationIds) {
-                    let result = viewModel.recordIntake(
-                        medicine: medicine,
-                        therapy: context.therapy,
-                        operationId: operationId
-                    )
-                    recordedIds.append(result?.operationId ?? operationId)
-                }
-
                 let operationKey = multiple ? nil : OperationKey.intake(completionKey: key, source: .today)
-                completeItem(item, log: nil, operationIds: recordedIds, operationKey: operationKey)
+                animateCompletionThenPerform(for: item) {
+                    var recordedIds: [UUID] = []
+                    for (context, operationId) in zip(contexts, operationIds) {
+                        let result = viewModel.recordIntake(
+                            medicine: medicine,
+                            therapy: context.therapy,
+                            operationId: operationId
+                        )
+                        recordedIds.append(result?.operationId ?? operationId)
+                    }
+                    completeItem(
+                        item,
+                        log: nil,
+                        operationIds: recordedIds,
+                        operationKey: operationKey,
+                        shouldMarkCompleted: false
+                    )
+                }
                 return
             }
 
@@ -2001,32 +2199,44 @@ struct TodayView: View {
                 return
             }
 
-            let result = viewModel.recordIntake(
-                medicine: medicine,
-                therapy: decision.therapy,
-                operationId: operationId
-            )
-            completeItem(item, log: nil, operationIds: [result?.operationId ?? operationId], operationKey: operationKey)
+            animateCompletionThenPerform(for: item) {
+                let result = viewModel.recordIntake(
+                    medicine: medicine,
+                    therapy: decision.therapy,
+                    operationId: operationId
+                )
+                completeItem(
+                    item,
+                    log: nil,
+                    operationIds: [result?.operationId ?? operationId],
+                    operationKey: operationKey,
+                    shouldMarkCompleted: false
+                )
+            }
             return
         }
 
-        let record = recordLogCompletion(for: item)
-        if record.log == nil {
-            viewModel.clearOperationId(for: record.operationKey)
+        animateCompletionThenPerform(for: item) {
+            let record = recordLogCompletion(for: item)
+            if record.log == nil {
+                viewModel.clearOperationId(for: record.operationKey)
+            }
+            completeItem(
+                item,
+                log: record.log,
+                operationIds: record.operationId.map { [$0] } ?? [],
+                operationKey: record.log == nil ? nil : record.operationKey,
+                shouldMarkCompleted: false
+            )
         }
-        completeItem(
-            item,
-            log: record.log,
-            operationIds: record.operationId.map { [$0] } ?? [],
-            operationKey: record.log == nil ? nil : record.operationKey
-        )
     }
 
     private func completeItem(
         _ item: TodayTodoItem,
         log: Log?,
         operationIds: [UUID] = [],
-        operationKey: OperationKey? = nil
+        operationKey: OperationKey? = nil,
+        shouldMarkCompleted: Bool = true
     ) {
         let key = completionKey(for: item)
         cacheCompletedItem(item)
@@ -2037,8 +2247,10 @@ struct TodayView: View {
         }
         completionUndoLogID = log?.objectID
         completionUndoOperationKey = operationKey
-        _ = withAnimation(.easeInOut(duration: 0.2)) {
-            completedTodoIDs.insert(key)
+        if shouldMarkCompleted {
+            _ = withAnimation(.easeInOut(duration: 0.2)) {
+                completedTodoIDs.insert(key)
+            }
         }
         showCompletionToast(for: item)
     }
@@ -2097,7 +2309,7 @@ struct TodayView: View {
             completionToastWorkItem = nil
         }
         completionToastWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + completionToastDuration, execute: workItem)
     }
 
     private func undoLastCompletion() {
@@ -2123,6 +2335,8 @@ struct TodayView: View {
         withAnimation(.easeInOut(duration: 0.2)) {
             completedTodoIDs.remove(key)
         }
+        completingTodoIDs.remove(key)
+        disappearingTodoIDs.remove(key)
         completedTodoCache.removeValue(forKey: key)
         completionUndoOperationIds = []
         completionUndoLogID = nil
@@ -2235,6 +2449,8 @@ struct TodayView: View {
         }
         lastCompletionResetDay = today
         if !completedTodoIDs.isEmpty { completedTodoIDs.removeAll() }
+        if !completingTodoIDs.isEmpty { completingTodoIDs.removeAll() }
+        if !disappearingTodoIDs.isEmpty { disappearingTodoIDs.removeAll() }
         if !completedTodoCache.isEmpty { completedTodoCache.removeAll() }
         if !completedBlockedSubtasks.isEmpty { completedBlockedSubtasks.removeAll() }
         if !pendingPrescriptionMedIDs.isEmpty { pendingPrescriptionMedIDs.removeAll() }
@@ -2242,24 +2458,47 @@ struct TodayView: View {
 
     private var completionToastView: some View {
         HStack {
-            Spacer()
             Button {
                 undoLastCompletion()
             } label: {
                 Label("Annulla", systemImage: "arrow.uturn.left")
                     .font(.body.weight(.semibold))
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-                    .background(
-                        Capsule()
-                            .fill(Color.accentColor.opacity(0.16))
-                    )
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 11)
+                    .background(.ultraThinMaterial, in: Capsule(style: .continuous))
                     .overlay(
-                        Capsule()
-                            .stroke(Color.accentColor.opacity(0.35), lineWidth: 1)
+                        Capsule(style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.70),
+                                        Color.white.opacity(0.15)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
                     )
+                    .overlay(alignment: .top) {
+                        Capsule(style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.45),
+                                        Color.white.opacity(0.02)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .padding(1)
+                            .frame(height: 14)
+                    }
+                    .shadow(color: Color.white.opacity(0.22), radius: 1, x: 0, y: 0)
+                    .shadow(color: Color.black.opacity(0.14), radius: 10, x: 0, y: 4)
             }
-            .foregroundColor(Color.accentColor)
+            .foregroundColor(Color.primary)
             .buttonStyle(.plain)
             Spacer()
         }

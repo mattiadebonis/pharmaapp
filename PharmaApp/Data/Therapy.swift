@@ -18,11 +18,14 @@ import CoreData
 @objc(Therapy)
 public class Therapy: NSManagedObject, Identifiable {
     
+    @NSManaged public var source_id: UUID?
+    @NSManaged public var visibility: String?
     @NSManaged public var id: UUID
     @NSManaged public var medicine: Medicine
     @NSManaged public var start_date: Date?
     @NSManaged public var rrule: String?
     @NSManaged public var doses: Set<Dose>?
+    @NSManaged public var doseEvents: Set<DoseEventRecord>?
     @NSManaged public var package: Package
     @NSManaged public var importance: String?
     @NSManaged public var logs: Log?

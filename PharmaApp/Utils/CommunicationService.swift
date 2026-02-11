@@ -26,19 +26,40 @@ final class CommunicationService {
 
     // MARK: Email
 
-    func sendEmail(to doctor: DoctorContact, subject: String, body: String) {
+    func sendEmail(
+        to doctor: DoctorContact,
+        subject: String,
+        body: String,
+        onFailure: (() -> Void)? = nil
+    ) {
         guard let email = doctor.email?.trimmingCharacters(in: .whitespacesAndNewlines),
               !email.isEmpty else {
             print("CommunicationService.sendEmail: email mancante per \(doctor.name)")
+            onFailure?()
             return
         }
 
         guard let url = Self.makeMailtoURL(email: email, subject: subject, body: body) else {
             print("CommunicationService.sendEmail: impossibile creare URL mailto")
+            onFailure?()
             return
         }
 
-        openURL(url)
+        guard UIApplication.shared.canOpenURL(url) else {
+            print("CommunicationService.sendEmail: nessuna app mail disponibile per \(doctor.name)")
+            onFailure?()
+            return
+        }
+
+        openURL(url) { success in
+            if success { return }
+            UIApplication.shared.open(url, options: [:]) { opened in
+                if !opened {
+                    print("CommunicationService.sendEmail: apertura Mail fallita per \(doctor.name)")
+                    onFailure?()
+                }
+            }
+        }
     }
 
     // MARK: WhatsApp

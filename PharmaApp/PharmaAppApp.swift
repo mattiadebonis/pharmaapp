@@ -11,10 +11,15 @@ import UserNotifications
 
 
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+  private lazy var notificationActionHandler = NotificationActionHandler(
+    context: PersistenceController.shared.container.viewContext
+  )
+
   func application(_ application: UIApplication,
                    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
     FirebaseApp.configure()
     UNUserNotificationCenter.current().delegate = self
+    registerNotificationCategories()
 
     return true
   }
@@ -28,6 +33,43 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
       completionHandler([.banner, .list, .sound, .badge])
     } else {
       completionHandler([.alert, .sound, .badge])
+    }
+  }
+
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    Task { @MainActor in
+      defer { completionHandler() }
+      await notificationActionHandler.handle(response: response)
+    }
+  }
+
+  private func registerNotificationCategories() {
+    let stopAction = UNNotificationAction(
+      identifier: TherapyAlarmNotificationConstants.stopActionIdentifier,
+      title: "Stop",
+      options: [.destructive]
+    )
+    let snoozeAction = UNNotificationAction(
+      identifier: TherapyAlarmNotificationConstants.snoozeActionIdentifier,
+      title: "Rimanda",
+      options: []
+    )
+    let therapyAlarmCategory = UNNotificationCategory(
+      identifier: TherapyAlarmNotificationConstants.categoryIdentifier,
+      actions: [stopAction, snoozeAction],
+      intentIdentifiers: [],
+      options: []
+    )
+
+    let notificationCenter = UNUserNotificationCenter.current()
+    notificationCenter.getNotificationCategories { categories in
+      var updated = categories.filter { $0.identifier != therapyAlarmCategory.identifier }
+      updated.insert(therapyAlarmCategory)
+      notificationCenter.setNotificationCategories(updated)
     }
   }
 }
@@ -57,6 +99,7 @@ struct PharmaAppApp: App {
                     authViewModel.handleOpenURL(url)
                 }
                 .task {
+                    UserIdentityProvider.shared.ensureProfile(in: persistenceController.container.viewContext)
                     notificationCoordinator.start()
                 }
         }

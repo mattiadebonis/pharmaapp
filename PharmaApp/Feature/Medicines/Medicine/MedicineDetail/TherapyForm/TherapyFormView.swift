@@ -215,6 +215,9 @@ struct TherapyFormView: View {
                     HStack {
                         DatePicker("", selection: $doses[index].time, displayedComponents: .hourAndMinute)
                             .labelsHidden()
+                        if let option = options.first {
+                            EventTimeMenu(option: option, time: $doses[index].time)
+                        }
                         Stepper(value: $doses[index].amount, in: 0.5...12, step: 0.5) {
                             Text(doseDisplayText(amount: doses[index].amount, unit: doseUnitLabel))
                                 .foregroundColor(.secondary)

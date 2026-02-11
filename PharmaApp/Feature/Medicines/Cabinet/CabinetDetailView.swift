@@ -13,7 +13,7 @@ struct CabinetDetailView: View {
     @FetchRequest(fetchRequest: Cabinet.extractCabinets()) private var cabinets: FetchedResults<Cabinet>
     
     @State private var selectedEntry: MedicinePackage?
-    @State private var detailSheetDetent: PresentationDetent = .fraction(0.66)
+    @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
     @State private var entryToMove: MedicinePackage?
     @State private var isDeleteDialogPresented = false
     @State private var isMoveCabinetSheetPresented = false
@@ -65,7 +65,7 @@ struct CabinetDetailView: View {
                     package: entry.package,
                     medicinePackage: entry
                 )
-                .presentationDetents([.fraction(0.66), .large], selection: $detailSheetDetent)
+                .presentationDetents([.fraction(0.75), .large], selection: $detailSheetDetent)
                 .presentationDragIndicator(.visible)
             }
         }
@@ -80,6 +80,7 @@ struct CabinetDetailView: View {
             )
             .presentationDetents([PresentationDetent.medium, PresentationDetent.large])
         }
+
         .sheet(isPresented: $isMoveCabinetSheetPresented) {
             MoveCabinetSelectionSheet(
                 cabinets: moveTargets,

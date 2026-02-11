@@ -9,13 +9,16 @@ import Foundation
 import CoreData
 
 @objc(Log)
-public class Log : NSManagedObject , Identifiable{    
-    @NSManaged public var id : UUID
+public class Log : NSManagedObject , Identifiable{
+    @NSManaged public var actor_device_id: String?
+    @NSManaged public var actor_user_id: String?
+    @NSManaged public var id: UUID
     @NSManaged public var operation_id: UUID?
     @NSManaged public var reversal_of_operation_id: UUID?
+    @NSManaged public var source: String?
     @NSManaged public var synced_at: Date?
-    @NSManaged public var type : String
-    @NSManaged public var timestamp : Date
+    @NSManaged public var type: String
+    @NSManaged public var timestamp: Date
     @NSManaged public var medicine: Medicine
     @NSManaged public var therapy: Therapy?
     @NSManaged public var package: Package?

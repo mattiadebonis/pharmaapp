@@ -248,6 +248,9 @@ struct MedicineWizardView: View {
                     HStack {
                         DatePicker("", selection: $therapyDraft.doses[index].time, displayedComponents: .hourAndMinute)
                             .labelsHidden()
+                        if let option = options.first {
+                            EventTimeMenu(option: option, time: $therapyDraft.doses[index].time)
+                        }
                         Stepper(value: $therapyDraft.doses[index].amount, in: 0.5...12, step: 0.5) {
                             Text(doseDisplayText(amount: therapyDraft.doses[index].amount, unit: doseUnitLabel))
                                 .foregroundStyle(.secondary)
@@ -805,6 +808,8 @@ struct MedicineWizardView: View {
 
         let medicine = Medicine(context: context)
         medicine.id = UUID()
+        medicine.source_id = medicine.id
+        medicine.visibility = "local"
         medicine.nome = item.name
         medicine.principio_attivo = item.principle
         medicine.obbligo_ricetta = item.requiresPrescription || pkg.requiresPrescription
@@ -812,6 +817,8 @@ struct MedicineWizardView: View {
 
         let package = Package(context: context)
         package.id = UUID()
+        package.source_id = package.id
+        package.visibility = "local"
         package.tipologia = pkg.tipologia
         package.unita = pkg.dosageUnit
         package.volume = pkg.volume
@@ -823,6 +830,8 @@ struct MedicineWizardView: View {
         let entry = MedicinePackage(context: context)
         entry.id = UUID()
         entry.created_at = Date()
+        entry.source_id = entry.id
+        entry.visibility = "local"
         entry.medicine = medicine
         entry.package = package
         entry.cabinet = nil

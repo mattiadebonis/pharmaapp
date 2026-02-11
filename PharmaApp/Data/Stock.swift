@@ -10,9 +10,11 @@ import CoreData
 @objc(Stock)
 public class Stock: NSManagedObject, Identifiable {
     @NSManaged public var id: UUID
+    @NSManaged public var source_id: UUID?
     @NSManaged public var stock_units: Int32
     @NSManaged public var context_key: String
     @NSManaged public var updated_at: Date
+    @NSManaged public var visibility: String?
     @NSManaged public var medicine: Medicine
     @NSManaged public var package: Package
 }

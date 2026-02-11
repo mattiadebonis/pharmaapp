@@ -11,35 +11,33 @@ struct PersistenceController {
     static let shared = PersistenceController()
 
     @MainActor
-    
-
     let container: NSPersistentContainer
 
     init(inMemory: Bool = false) {
         container = NSPersistentContainer(name: "PharmaApp")
-        if let description = container.persistentStoreDescriptions.first {
-            if inMemory {
-                description.url = URL(fileURLWithPath: "/dev/null")
-            }
-            description.shouldMigrateStoreAutomatically = true
-            description.shouldInferMappingModelAutomatically = true
-        }
-        container.loadPersistentStores(completionHandler: { (storeDescription, error) in
-            if let error = error as NSError? {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
 
-                /*
-                 Typical reasons for an error here include:
-                 * The parent directory does not exist, cannot be created, or disallows writing.
-                 * The persistent store is not accessible, due to permissions or data protection when the device is locked.
-                 * The device is out of space.
-                 * The store could not be migrated to the current model version.
-                 Check the error message to determine what the actual problem was.
-                 */
+        let storeURL = inMemory
+            ? URL(fileURLWithPath: "/dev/null")
+            : Self.storeURL(filename: "PharmaApp.shared.sqlite")
+        let description = NSPersistentStoreDescription(url: storeURL)
+        description.shouldMigrateStoreAutomatically = true
+        description.shouldInferMappingModelAutomatically = true
+        description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+        description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        container.persistentStoreDescriptions = [description]
+
+        container.loadPersistentStores { _, error in
+            if let error = error as NSError? {
                 fatalError("Unresolved error \(error), \(error.userInfo)")
             }
-        })
+        }
+
         container.viewContext.automaticallyMergesChangesFromParent = true
+        container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        container.viewContext.transactionAuthor = "local"
+    }
+
+    private static func storeURL(filename: String) -> URL {
+        NSPersistentContainer.defaultDirectoryURL().appendingPathComponent(filename)
     }
 }

@@ -12,12 +12,14 @@ struct TodayTodoRowView: View {
     let auxiliaryLine: Text?
     let auxiliaryUsesDefaultStyle: Bool
     let isCompleted: Bool
+    let isToggleOn: Bool
     let showToggle: Bool
     let hideToggle: Bool
     let trailingBadge: (String, Color)?
     let onToggle: () -> Void
     let subtitleFont: Font?
     let subtitleColor: Color?
+    let subtitleAlignsWithTitle: Bool
     let auxiliaryFont: Font?
     let auxiliaryColor: Color?
     init(
@@ -29,12 +31,14 @@ struct TodayTodoRowView: View {
         auxiliaryLine: Text? = nil,
         auxiliaryUsesDefaultStyle: Bool = true,
         isCompleted: Bool,
+        isToggleOn: Bool? = nil,
         showToggle: Bool = true,
         hideToggle: Bool = false,
         trailingBadge: (String, Color)? = nil,
         onToggle: @escaping () -> Void,
         subtitleFont: Font? = nil,
         subtitleColor: Color? = nil,
+        subtitleAlignsWithTitle: Bool = false,
         auxiliaryFont: Font? = nil,
         auxiliaryColor: Color? = nil
     ) {
@@ -46,12 +50,14 @@ struct TodayTodoRowView: View {
         self.auxiliaryLine = auxiliaryLine
         self.auxiliaryUsesDefaultStyle = auxiliaryUsesDefaultStyle
         self.isCompleted = isCompleted
+        self.isToggleOn = isToggleOn ?? isCompleted
         self.showToggle = showToggle
         self.hideToggle = hideToggle
         self.trailingBadge = trailingBadge
         self.onToggle = onToggle
         self.subtitleFont = subtitleFont
         self.subtitleColor = subtitleColor
+        self.subtitleAlignsWithTitle = subtitleAlignsWithTitle
         self.auxiliaryFont = auxiliaryFont
         self.auxiliaryColor = auxiliaryColor
     }
@@ -95,6 +101,16 @@ struct TodayTodoRowView: View {
                     if let badge = trailingBadge {
                         badgeView(text: badge.0, color: badge.1)
                     }
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(subtitleFont ?? .system(size: 15))
+                            .foregroundStyle(subtitleColor ?? secondaryTextColor)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(3)
+                            .truncationMode(.tail)
+                            .padding(.leading, subtitleLeadingInset)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                     if let auxiliaryLine {
                         let baseLine = auxiliaryLine
                             .multilineTextAlignment(.leading)
@@ -118,7 +134,7 @@ struct TodayTodoRowView: View {
             if !hideToggle {
                 Button(action: onToggle) {
                     let size: CGFloat = 18
-                    Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                    Image(systemName: isToggleOn ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: size, weight: .regular))
                         .foregroundStyle(circleStrokeColor)
                         .frame(width: size, height: size)
@@ -153,5 +169,11 @@ struct TodayTodoRowView: View {
             .foregroundStyle(color)
             .fixedSize(horizontal: true, vertical: true)
             .padding(.horizontal, 2)
+    }
+
+    private var subtitleLeadingInset: CGFloat {
+        guard subtitleAlignsWithTitle else { return 0 }
+        guard let leadingTime, !leadingTime.isEmpty else { return 0 }
+        return timingColumnWidth + 8
     }
 }

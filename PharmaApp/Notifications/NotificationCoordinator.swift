@@ -133,7 +133,7 @@ final class NotificationCoordinator: ObservableObject {
 
     private func isRelevant(_ object: NSManagedObject) -> Bool {
         switch object {
-        case is Therapy, is Dose, is Stock, is Log, is Medicine, is MedicinePackage, is Package:
+        case is Therapy, is Dose, is Stock, is Log, is Medicine, is MedicinePackage, is Package, is Option:
             return true
         default:
             return false

@@ -10,10 +10,14 @@ import CoreData
 
 @objc(Cabinet)
 public class Cabinet : NSManagedObject , Identifiable{
-    @NSManaged public var id : UUID
-    @NSManaged public var name : String
+    @NSManaged public var created_at: Date?
+    @NSManaged public var id: UUID
+    @NSManaged public var is_shared: Bool
+    @NSManaged public var name: String
     @NSManaged public var medicines: Set<Medicine>
     @NSManaged public var medicinePackages: Set<MedicinePackage>?
+    @NSManaged public var memberships: Set<CabinetMembership>?
+    @NSManaged public var notificationLocks: Set<NotificationLock>?
 
 }
 

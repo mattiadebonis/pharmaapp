@@ -12,6 +12,8 @@ import CoreData
 public class MedicinePackage: NSManagedObject, Identifiable {
     @NSManaged public var id: UUID
     @NSManaged public var created_at: Date?
+    @NSManaged public var source_id: UUID?
+    @NSManaged public var visibility: String?
     @NSManaged public var cabinet: Cabinet?
     @NSManaged public var medicine: Medicine
     @NSManaged public var package: Package

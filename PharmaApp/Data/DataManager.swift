@@ -58,6 +58,8 @@ class DataManager {
 
             let medicine = Medicine(context: context)
             medicine.id = medicineId
+            medicine.source_id = medicineId
+            medicine.visibility = "local"
             medicine.nome = nome
             medicine.principio_attivo = principioAttivo
             medicine.obbligo_ricetta = obbligoRicetta
@@ -103,6 +105,8 @@ class DataManager {
                 let package = Package(context: context)
                 let confIdString = conf["idPackage"] as? String ?? ""
                 package.id = UUID(uuidString: confIdString) ?? UUID()
+                package.source_id = package.id
+                package.visibility = "local"
                 let tipologia = conf["denominazionePackage"] as? String ?? "Confezione"
                 package.tipologia = tipologia
                 package.numero = Int32(extractUnitCount(from: tipologia))
@@ -259,17 +263,36 @@ class DataManager {
 
         do {
             let options = try context.fetch(fetchRequest)
+            let baseDate = Calendar.current.startOfDay(for: Date())
             if options.isEmpty {
                 let newOption = Option(context: context)
                 newOption.id = UUID()
                 newOption.manual_intake_registration = false
                 newOption.day_threeshold_stocks_alarm = 7
+                newOption.therapy_notification_level = TherapyNotificationPreferences.defaultLevel.rawValue
+                newOption.therapy_snooze_minutes = Int32(TherapyNotificationPreferences.defaultSnoozeMinutes)
+                EventTimeSettings.ensureDefaults(option: newOption, base: baseDate)
             }else if options.count > 0 {
-                if !options.first!.manual_intake_registration {
-                    options.first!.manual_intake_registration = false
-                }
-                if (options.first!.day_threeshold_stocks_alarm == 0) {
-                    options.first!.day_threeshold_stocks_alarm = 7
+                if let option = options.first {
+                    if !option.manual_intake_registration {
+                        option.manual_intake_registration = false
+                    }
+                    if option.day_threeshold_stocks_alarm == 0 {
+                        option.day_threeshold_stocks_alarm = 7
+                    }
+                    let normalizedLevel = TherapyNotificationPreferences.normalizedLevel(
+                        rawValue: option.therapy_notification_level
+                    )
+                    if option.therapy_notification_level != normalizedLevel.rawValue {
+                        option.therapy_notification_level = normalizedLevel.rawValue
+                    }
+                    let normalizedSnooze = TherapyNotificationPreferences.normalizedSnoozeMinutes(
+                        rawValue: Int(option.therapy_snooze_minutes)
+                    )
+                    if Int(option.therapy_snooze_minutes) != normalizedSnooze {
+                        option.therapy_snooze_minutes = Int32(normalizedSnooze)
+                    }
+                    EventTimeSettings.ensureDefaults(option: option, base: baseDate)
                 }
             }
 
