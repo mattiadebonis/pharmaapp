@@ -19,9 +19,9 @@ struct ContentView: View {
     @Environment(\.managedObjectContext) private var moc
     @EnvironmentObject private var appVM: AppViewModel
     @EnvironmentObject private var appRouter: AppRouter
-    @EnvironmentObject private var codiceFiscaleStore: CodiceFiscaleStore
     @State private var isNewMedicinePresented = false
     @State private var isGlobalCodiceFiscalePresented = false
+    @State private var globalCodiceFiscaleEntries: [PrescriptionCFEntry] = []
 
     // Init fake data once
     init() {
@@ -64,7 +64,7 @@ struct ContentView: View {
             }
             .fullScreenCover(isPresented: $isGlobalCodiceFiscalePresented) {
                 CodiceFiscaleFullscreenView(
-                    codiceFiscale: codiceFiscaleStore.codiceFiscale
+                    entries: globalCodiceFiscaleEntries
                 ) {
                     isGlobalCodiceFiscalePresented = false
                 }
@@ -99,11 +99,8 @@ struct ContentView: View {
             appVM.isProfilePresented = true
             appRouter.markRouteHandled(route)
         case .codiceFiscaleFullscreen:
-            if codiceFiscaleStore.codiceFiscale?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
-                isGlobalCodiceFiscalePresented = true
-            } else {
-                appVM.isProfilePresented = true
-            }
+            globalCodiceFiscaleEntries = PrescriptionCodiceFiscaleResolver().entriesForRxAndLowStock(in: moc)
+            isGlobalCodiceFiscalePresented = true
             appRouter.markRouteHandled(route)
         case .today, .todayPurchaseList, .pharmacy:
             break
@@ -115,7 +112,6 @@ struct ContentView: View {
     ContentView()
         .environmentObject(AppViewModel())
         .environmentObject(AppRouter())
-        .environmentObject(CodiceFiscaleStore())
         .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
 }
 

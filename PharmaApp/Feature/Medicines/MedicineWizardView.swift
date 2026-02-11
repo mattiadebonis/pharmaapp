@@ -248,9 +248,6 @@ struct MedicineWizardView: View {
                     HStack {
                         DatePicker("", selection: $therapyDraft.doses[index].time, displayedComponents: .hourAndMinute)
                             .labelsHidden()
-                        if let option = options.first {
-                            EventTimeMenu(option: option, time: $therapyDraft.doses[index].time)
-                        }
                         Stepper(value: $therapyDraft.doses[index].amount, in: 0.5...12, step: 0.5) {
                             Text(doseDisplayText(amount: therapyDraft.doses[index].amount, unit: doseUnitLabel))
                                 .foregroundStyle(.secondary)

@@ -83,7 +83,6 @@ struct PharmaAppApp: App {
     @StateObject private var appRouter = AppRouter()
     @StateObject var authViewModel = AuthViewModel()
     @StateObject private var favoritesStore = FavoritesStore()
-    @StateObject private var codiceFiscaleStore = CodiceFiscaleStore()
     @StateObject private var notificationCoordinator = NotificationCoordinator(
         context: PersistenceController.shared.container.viewContext
     )
@@ -96,12 +95,25 @@ struct PharmaAppApp: App {
                 .environmentObject(appRouter)
                 .environmentObject(authViewModel)
                 .environmentObject(favoritesStore)
-                .environmentObject(codiceFiscaleStore)
                 .onOpenURL { url in
-                    authViewModel.handleOpenURL(url)
+                    Task { @MainActor in
+                        let handledLiveActivityAction = await LiveActivityURLActionHandler.shared.handle(url: url)
+                        guard !handledLiveActivityAction else { return }
+                        authViewModel.handleOpenURL(url)
+                    }
+                }
+                .onChange(of: authViewModel.user) { user in
+                    AccountPersonService.shared.syncAccountDisplayName(
+                        from: user,
+                        in: persistenceController.container.viewContext
+                    )
                 }
                 .task {
-                    UserIdentityProvider.shared.ensureProfile(in: persistenceController.container.viewContext)
+                    let context = persistenceController.container.viewContext
+                    UserIdentityProvider.shared.ensureProfile(in: context)
+                    AccountPersonService.shared.ensureAccountPerson(in: context)
+                    AccountPersonService.shared.migrateLegacyCodiceFiscaleIfNeeded(in: context)
+                    AccountPersonService.shared.syncAccountDisplayName(from: authViewModel.user, in: context)
                     appRouter.consumePendingRouteIfAny()
                     notificationCoordinator.start()
                 }

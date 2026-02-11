@@ -7,15 +7,18 @@ final class NotificationCoordinator: ObservableObject {
     private let context: NSManagedObjectContext
     private let scheduler: NotificationScheduler
     private let autoIntakeProcessor: AutoIntakeProcessor
+    private let liveActivityCoordinator: CriticalDoseLiveActivityCoordinator
     private var didStart = false
     private var debounceTask: Task<Void, Never>?
     private var autoIntakeTask: Task<Void, Never>?
+    private var liveActivityTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
 
     init(
         context: NSManagedObjectContext,
         scheduler: NotificationScheduler? = nil,
-        autoIntakeProcessor: AutoIntakeProcessor? = nil
+        autoIntakeProcessor: AutoIntakeProcessor? = nil,
+        liveActivityCoordinator: CriticalDoseLiveActivityCoordinator?
     ) {
         self.context = context
         if let scheduler {
@@ -28,6 +31,24 @@ final class NotificationCoordinator: ObservableObject {
         } else {
             self.autoIntakeProcessor = AutoIntakeProcessor(context: context)
         }
+        if let liveActivityCoordinator {
+            self.liveActivityCoordinator = liveActivityCoordinator
+        } else {
+            self.liveActivityCoordinator = CriticalDoseLiveActivityCoordinator(context: context)
+        }
+    }
+
+    convenience init(
+        context: NSManagedObjectContext,
+        scheduler: NotificationScheduler? = nil,
+        autoIntakeProcessor: AutoIntakeProcessor? = nil
+    ) {
+        self.init(
+            context: context,
+            scheduler: scheduler,
+            autoIntakeProcessor: autoIntakeProcessor,
+            liveActivityCoordinator: nil
+        )
     }
 
     func start() {
@@ -97,6 +118,8 @@ final class NotificationCoordinator: ObservableObject {
             guard let self else { return }
             self.autoIntakeProcessor.processDueIntakes(now: Date())
             await self.scheduler.rescheduleAll(reason: reason)
+            let nextLiveActivityRefresh = await self.liveActivityCoordinator.refresh(reason: reason)
+            self.scheduleNextLiveActivityRefresh(nextDate: nextLiveActivityRefresh)
             self.scheduleNextAutoIntake()
         }
     }
@@ -111,7 +134,22 @@ final class NotificationCoordinator: ObservableObject {
             guard let self else { return }
             self.autoIntakeProcessor.processDueIntakes(now: Date())
             await self.scheduler.rescheduleAll(reason: "auto-intake")
+            let nextLiveActivityRefresh = await self.liveActivityCoordinator.refresh(reason: "auto-intake")
+            self.scheduleNextLiveActivityRefresh(nextDate: nextLiveActivityRefresh)
             self.scheduleNextAutoIntake()
+        }
+    }
+
+    private func scheduleNextLiveActivityRefresh(nextDate: Date?) {
+        liveActivityTask?.cancel()
+        guard let nextDate else { return }
+        let now = Date()
+        let delaySeconds = max(1, nextDate.timeIntervalSince(now) + 1)
+        liveActivityTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+            guard let self else { return }
+            let next = await self.liveActivityCoordinator.refresh(reason: "live-activity-checkpoint")
+            self.scheduleNextLiveActivityRefresh(nextDate: next)
         }
     }
 
@@ -144,5 +182,6 @@ final class NotificationCoordinator: ObservableObject {
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         debounceTask?.cancel()
         autoIntakeTask?.cancel()
+        liveActivityTask?.cancel()
     }
 }

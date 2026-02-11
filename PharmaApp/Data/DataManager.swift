@@ -263,7 +263,6 @@ class DataManager {
 
         do {
             let options = try context.fetch(fetchRequest)
-            let baseDate = Calendar.current.startOfDay(for: Date())
             if options.isEmpty {
                 let newOption = Option(context: context)
                 newOption.id = UUID()
@@ -271,7 +270,6 @@ class DataManager {
                 newOption.day_threeshold_stocks_alarm = 7
                 newOption.therapy_notification_level = TherapyNotificationPreferences.defaultLevel.rawValue
                 newOption.therapy_snooze_minutes = Int32(TherapyNotificationPreferences.defaultSnoozeMinutes)
-                EventTimeSettings.ensureDefaults(option: newOption, base: baseDate)
             }else if options.count > 0 {
                 if let option = options.first {
                     if !option.manual_intake_registration {
@@ -292,7 +290,6 @@ class DataManager {
                     if Int(option.therapy_snooze_minutes) != normalizedSnooze {
                         option.therapy_snooze_minutes = Int32(normalizedSnooze)
                     }
-                    EventTimeSettings.ensureDefaults(option: option, base: baseDate)
                 }
             }
 

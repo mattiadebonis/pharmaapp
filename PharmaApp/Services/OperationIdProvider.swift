@@ -15,6 +15,7 @@ enum OperationSource: String {
     case medicineRow
     case autoIntake
     case siri
+    case liveActivity
     case system
     case unknown
 }
@@ -39,6 +40,11 @@ struct OperationKey: Hashable {
     static func autoIntake(therapyId: UUID, scheduledAt: Date) -> OperationKey {
         let bucket = Int(scheduledAt.timeIntervalSince1970 / 60)
         return OperationKey(rawValue: "autoIntake|therapy|\(therapyId.uuidString)|t|\(bucket)")
+    }
+
+    static func liveActivityIntake(therapyId: UUID, scheduledAt: Date) -> OperationKey {
+        let bucket = Int(scheduledAt.timeIntervalSince1970 / 60)
+        return OperationKey(rawValue: "liveActivity|intake|therapy|\(therapyId.uuidString)|t|\(bucket)")
     }
 }
 

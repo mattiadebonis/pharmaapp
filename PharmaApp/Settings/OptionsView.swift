@@ -12,6 +12,7 @@ struct OptionsView: View {
     @Environment(\.managedObjectContext) private var managedObjectContext
     @Environment(\.dismiss) private var dismiss
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
+
     @State private var thresholdInput: String = ""
 
     var body: some View {
@@ -69,6 +70,7 @@ struct OptionsView: View {
                         }
                     }
                 }
+
                 Section(
                     header: Text("Notifiche terapia"),
                     footer: Text("In modalità Tipo sveglia puoi interrompere o rimandare dal lock screen.")
@@ -174,7 +176,6 @@ struct OptionsView: View {
             }
         }
     }
-
 }
 
 #Preview {

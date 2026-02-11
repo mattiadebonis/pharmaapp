@@ -3,13 +3,11 @@ import CoreData
 import MapKit
 import UIKit
 import MessageUI
-import Code39
 
 /// Vista dedicata al tab "Oggi" (ex insights) con logica locale
 struct TodayView: View {
     @EnvironmentObject private var appVM: AppViewModel
     @EnvironmentObject private var appRouter: AppRouter
-    @EnvironmentObject private var codiceFiscaleStore: CodiceFiscaleStore
     @Environment(\.openURL) private var openURL
     @Environment(\.managedObjectContext) private var viewContext
 
@@ -56,6 +54,7 @@ struct TodayView: View {
     @State private var messageComposeData: MessageComposeData?
     @State private var intakeGuardrailPrompt: IntakeGuardrailPrompt?
     @State private var showCodiceFiscaleFullScreen = false
+    @State private var codiceFiscaleEntries: [PrescriptionCFEntry] = []
     @State private var isOptionsPresented = false
     @State private var showPharmacyDetails = false
 
@@ -165,18 +164,23 @@ struct TodayView: View {
             }
             if !purchaseItems.isEmpty {
                 Section {
-                    Color.clear
-                        .frame(height: 1)
-                        .id(purchaseSectionAnchorID)
-                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
                     ForEach(Array(purchaseItems.enumerated()), id: \.element.id) { entry in
                         let item = entry.element
                         let isLast = entry.offset == purchaseItems.count - 1
-                        todoListRow(
-                            for: item,
-                            isCompleted: isTodoSemanticallyCompleted(item),
-                            isLast: isLast
-                        )
+                        if entry.offset == 0 {
+                            todoListRow(
+                                for: item,
+                                isCompleted: isTodoSemanticallyCompleted(item),
+                                isLast: isLast
+                            )
+                            .id(purchaseSectionAnchorID)
+                        } else {
+                            todoListRow(
+                                for: item,
+                                isCompleted: isTodoSemanticallyCompleted(item),
+                                isLast: isLast
+                            )
+                        }
                     }
                 } header: {
                     HStack {
@@ -217,7 +221,7 @@ struct TodayView: View {
         }
         .fullScreenCover(isPresented: $showCodiceFiscaleFullScreen) {
             CodiceFiscaleFullscreenView(
-                codiceFiscale: codiceFiscaleStore.codiceFiscale
+                entries: codiceFiscaleEntries
             ) {
                 showCodiceFiscaleFullScreen = false
             }
@@ -708,6 +712,7 @@ struct TodayView: View {
 
     private func pharmacyCodiceFiscaleButton() -> some View {
         Button {
+            codiceFiscaleEntries = PrescriptionCodiceFiscaleResolver().entriesForRxAndLowStock(in: viewContext)
             showCodiceFiscaleFullScreen = true
         } label: {
             VStack(spacing: 4) {
@@ -746,86 +751,6 @@ struct TodayView: View {
         case .driving:
             return max(1, Int(round(distance / 750.0)))
         }
-    }
-
-    @ViewBuilder
-    private func codiceFiscaleCard() -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let codice = codiceFiscaleStore.codiceFiscale?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !codice.isEmpty {
-                let displayCodice = codiceFiscaleDisplayText(codice)
-                VStack(spacing: 8) {
-                    Code39View(displayCodice)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 70)
-                        .accessibilityLabel("Barcode Codice Fiscale")
-                        .accessibilityValue(displayCodice)
-                    Text(displayCodice)
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .foregroundColor(.secondary)
-                }
-            } else {
-                Text("Aggiungi il codice fiscale dal profilo.")
-                    .font(.system(size: 15))
-                    .foregroundColor(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .center)
-        .padding(16)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            showCodiceFiscaleFullScreen = true
-        }
-    }
-
-    private func codiceFiscaleFullScreen() -> some View {
-        ZStack(alignment: .topTrailing) {
-            Color.white
-                .ignoresSafeArea()
-            GeometryReader { proxy in
-                ZStack {
-                    if let codice = codiceFiscaleStore.codiceFiscale {
-                        let displayCodice = codiceFiscaleDisplayText(codice)
-                        VStack(spacing: 12) {
-                            Code39View(displayCodice)
-                                .frame(maxWidth: min(proxy.size.width * 0.92, 700))
-                                .frame(height: 140)
-                                .accessibilityLabel("Barcode Codice Fiscale")
-                                .accessibilityValue(displayCodice)
-                            Text(displayCodice)
-                                .font(.system(.callout, design: .monospaced))
-                                .foregroundColor(.secondary)
-                        }
-                    } else {
-                        Text("Aggiungi il codice fiscale dal profilo.")
-                            .font(.system(size: 16))
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            Button {
-                showCodiceFiscaleFullScreen = false
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(12)
-                    .background(
-                        Circle()
-                            .fill(Color.black.opacity(0.35))
-                    )
-            }
-            .padding(20)
-        }
-    }
-
-    private func codiceFiscaleDisplayText(_ raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return raw }
-        return trimmed.uppercased()
     }
 
     private func pharmacyDistanceText() -> String? {
@@ -900,6 +825,10 @@ struct TodayView: View {
 
     private var completedRowFill: Color {
         .clear
+    }
+
+    private var prescriptionStateIconName: String {
+        "doc.text.magnifyingglass"
     }
 
     @ViewBuilder
@@ -1505,20 +1434,19 @@ struct TodayView: View {
 
     @ViewBuilder
     private func blockedTherapyCard(for item: TodayTodoItem, info: BlockedTherapyInfo, leadingTime: String?, isLast: Bool, hideToggle: Bool) -> some View {
-        let medName = medicineTitleWithDosage(for: info.medicine)
+        let medName = therapyTitleText(for: item, medicine: info.medicine)
         let canToggle = canToggleTodo(for: item)
-        let summaryText = therapyDoseDetailText(for: item, medicine: info.medicine)
-            ?? therapySummaryText(for: item, medicine: info.medicine)
-            ?? info.personName
+        let stockWarning = info.isOutOfStock && info.isDepleted
         todoCard(
             blockedStepRow(
                 title: medName,
-                status: nil,
-                subtitle: summaryText,
+                status: stockWarning ? "Da rifornire" : nil,
+                statusIconName: stockWarning ? "exclamationmark.triangle" : nil,
+                statusColor: .red,
+                subtitle: nil,
                 subtitleColor: .secondary,
                 subtitleAsBadge: false,
                 iconName: "pills",
-                trailingBadge: (info.isOutOfStock && info.isDepleted) ? ("Da rifornire", .orange) : nil,
                 leadingTime: leadingTime,
                 showCircle: canToggle,
                 hideToggle: hideToggle,
@@ -1541,13 +1469,15 @@ struct TodayView: View {
         let medName = medicineTitleWithDosage(for: medicine)
         let auxiliaryInfo = auxiliaryLineInfo(for: item)
         let prescriptionStatus = purchasePrescriptionStatusText(for: medicine)
+        let prescriptionStatusLine = Text(Image(systemName: prescriptionStateIconName)) + Text(" \(prescriptionStatus)")
 
         return TodayTodoRowView(
-            iconName: "heart.text.square",
+            iconName: prescriptionStateIconName,
             actionText: nil,
             leadingTime: leadingTime,
             title: medName,
-            subtitle: prescriptionStatus,
+            subtitle: nil,
+            subtitleLine: prescriptionStatusLine,
             auxiliaryLine: auxiliaryInfo?.text,
             auxiliaryUsesDefaultStyle: auxiliaryInfo?.usesDefaultStyle ?? true,
             isCompleted: isCompleted,
@@ -1563,7 +1493,7 @@ struct TodayView: View {
             Button {
                 handlePrescriptionRequestTap(for: medicine)
             } label: {
-                Label("Chiedi ricetta", systemImage: "doc.text.fill")
+                Label("Chiedi ricetta", systemImage: prescriptionStateIconName)
             }
             .tint(.orange)
         }
@@ -1600,7 +1530,7 @@ struct TodayView: View {
 
     private func purchasePrescriptionStatusText(for medicine: Medicine) -> String {
         if hasPrescriptionRequest(medicine) {
-            return "Prescrizione richiesta"
+            return "Prescrizione chiesta a \(prescriptionDoctorName(for: medicine))"
         }
         return "richiede prescrizione"
     }
@@ -1819,22 +1749,35 @@ struct TodayView: View {
     }
 
     @ViewBuilder
-    private func blockedStepRow(title: String, status: String? = nil, subtitle: String? = nil, subtitleColor: Color = .secondary, subtitleAsBadge: Bool = false, iconName: String? = nil, buttons: [SubtaskButton] = [], trailingBadge: (String, Color)? = nil, leadingTime: String? = nil, showCircle: Bool = true, hideToggle: Bool = false, isDone: Bool = false, isToggleOn: Bool? = nil, isEnabled: Bool = true, onCheck: (() -> Void)? = nil) -> some View {
+    private func blockedStepRow(title: String, status: String? = nil, statusIconName: String? = nil, statusColor: Color = .orange, subtitle: String? = nil, subtitleColor: Color = .secondary, subtitleAsBadge: Bool = false, iconName: String? = nil, buttons: [SubtaskButton] = [], trailingBadge: (String, Color)? = nil, leadingTime: String? = nil, showCircle: Bool = true, hideToggle: Bool = false, isDone: Bool = false, isToggleOn: Bool? = nil, isEnabled: Bool = true, onCheck: (() -> Void)? = nil) -> some View {
         VStack(alignment: .leading, spacing: 6) {
+            let statusLine: Text? = {
+                guard let status, !status.isEmpty else { return nil }
+                if let statusIconName, !statusIconName.isEmpty {
+                    return (Text(Image(systemName: statusIconName)) + Text(" \(status)"))
+                        .font(.system(size: 15))
+                        .foregroundColor(statusColor)
+                }
+                return Text(status)
+                    .font(.system(size: 15))
+                    .foregroundColor(statusColor)
+            }()
+
             TodayTodoRowView(
                 iconName: iconName ?? "circle",
-                actionText: title,
+                actionText: nil,
                 leadingTime: leadingTime,
-                title: "",
+                title: title,
                 subtitle: subtitle,
-                auxiliaryLine: status.map { Text($0).foregroundColor(.orange) },
+                auxiliaryLine: statusLine,
                 auxiliaryUsesDefaultStyle: false,
                 isCompleted: isDone,
                 isToggleOn: isToggleOn,
                 showToggle: showCircle && onCheck != nil && isEnabled,
                 hideToggle: hideToggle,
                 trailingBadge: trailingBadge,
-                onToggle: { onCheck?() }
+                onToggle: { onCheck?() },
+                subtitleAlignsWithTitle: true
             )
 
             if !buttons.isEmpty {
@@ -1922,10 +1865,13 @@ struct TodayView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(prescriptionMainText(for: item, medicine: prescriptionMedicine))
-                    .font(.title3)
-                    .foregroundColor(titleColor)
-                    .multilineTextAlignment(.leading)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: prescriptionStateIconName)
+                    Text(prescriptionMainText(for: item, medicine: prescriptionMedicine))
+                }
+                .font(.title3)
+                .foregroundColor(titleColor)
+                .multilineTextAlignment(.leading)
                 Button {
                     onSend()
                 } label: {
@@ -1966,7 +1912,7 @@ struct TodayView: View {
         case .deadline:
             return "calendar.badge.exclamationmark"
         case .prescription:
-            return "heart.text.square"
+            return prescriptionStateIconName
         case .upcoming, .pharmacy:
             return "checkmark.circle"
         }
@@ -2637,11 +2583,27 @@ struct TodayView: View {
 
     private func prescriptionEmailBody(for medicines: [Medicine], doctorName: String) -> String {
         let list = medicines.map { "- \($0.nome)" }.joined(separator: "\n")
+        let cfEntries = PrescriptionCodiceFiscaleResolver().entriesForRxAndLowStock(
+            in: viewContext,
+            medicines: medicines
+        )
+        let cfLines: String
+        if cfEntries.isEmpty {
+            cfLines = "- Codice fiscale non disponibile"
+        } else {
+            cfLines = cfEntries.map { entry in
+                "- \(entry.personDisplayName): \(entry.codiceFiscale)"
+            }
+            .joined(separator: "\n")
+        }
         return """
         Gentile \(doctorName),
 
         avrei bisogno della ricetta per:
         \(list)
+
+        Persone associate e codice fiscale:
+        \(cfLines)
 
         Potresti inviarla appena possibile? Grazie!
 

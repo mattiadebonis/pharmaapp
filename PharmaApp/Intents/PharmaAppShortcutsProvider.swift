@@ -5,10 +5,10 @@ struct PharmaAppShortcutsProvider: AppShortcutsProvider {
         AppShortcut(
             intent: MarkMedicineTakenIntent(),
             phrases: [
-                "Segna assunto in \(.applicationName)",
-                "Ho preso \(\.$medicine) in \(.applicationName)",
-                "Segna assunto \(\.$medicine) in \(.applicationName)",
-                "Registra assunzione \(\.$medicine) in \(.applicationName)"
+                "In \(.applicationName) segna assunto",
+                "In \(.applicationName) ho preso \(\.$medicine)",
+                "In \(.applicationName) segna assunto \(\.$medicine)",
+                "In \(.applicationName) registra assunzione \(\.$medicine)"
             ],
             shortTitle: "Segna assunto",
             systemImageName: "checkmark.circle"
@@ -16,10 +16,10 @@ struct PharmaAppShortcutsProvider: AppShortcutsProvider {
         AppShortcut(
             intent: MarkMedicinePurchasedIntent(),
             phrases: [
-                "Segna comprato \(\.$medicine) in \(.applicationName)",
-                "Ho comprato \(\.$medicine) in \(.applicationName)",
-                "Registra acquisto \(\.$medicine) in \(.applicationName)",
-                "Segna acquisto \(\.$medicine) in \(.applicationName)"
+                "In \(.applicationName) segna comprato \(\.$medicine)",
+                "In \(.applicationName) ho comprato \(\.$medicine)",
+                "In \(.applicationName) registra acquisto \(\.$medicine)",
+                "In \(.applicationName) segna acquisto \(\.$medicine)"
             ],
             shortTitle: "Segna comprato",
             systemImageName: "cart"
@@ -27,10 +27,10 @@ struct PharmaAppShortcutsProvider: AppShortcutsProvider {
         AppShortcut(
             intent: MarkPrescriptionReceivedIntent(),
             phrases: [
-                "Ho ricevuto la ricetta per \(\.$medicine) in \(.applicationName)",
-                "Ricetta ricevuta \(\.$medicine) in \(.applicationName)",
-                "Segna ricetta ricevuta per \(\.$medicine) in \(.applicationName)",
-                "Registra ricetta \(\.$medicine) in \(.applicationName)"
+                "In \(.applicationName) ho ricevuto la ricetta per \(\.$medicine)",
+                "In \(.applicationName) ricetta ricevuta \(\.$medicine)",
+                "In \(.applicationName) segna ricetta ricevuta per \(\.$medicine)",
+                "In \(.applicationName) registra ricetta \(\.$medicine)"
             ],
             shortTitle: "Ricetta ricevuta",
             systemImageName: "doc.text"
@@ -38,10 +38,10 @@ struct PharmaAppShortcutsProvider: AppShortcutsProvider {
         AppShortcut(
             intent: WhatShouldITakeNowIntent(),
             phrases: [
-                "Cosa devo prendere in \(.applicationName)",
-                "Cosa devo prendere adesso in \(.applicationName)",
-                "Qual e la prossima assunzione in \(.applicationName)",
-                "Prossima dose in \(.applicationName)"
+                "In \(.applicationName) cosa devo prendere",
+                "In \(.applicationName) cosa devo prendere adesso",
+                "In \(.applicationName) qual e la prossima assunzione",
+                "In \(.applicationName) prossima dose"
             ],
             shortTitle: "Cosa prendere",
             systemImageName: "pills"
@@ -49,10 +49,10 @@ struct PharmaAppShortcutsProvider: AppShortcutsProvider {
         AppShortcut(
             intent: DidITakeEverythingTodayIntent(),
             phrases: [
-                "Ho preso tutto per oggi in \(.applicationName)",
-                "Ho preso tutto oggi in \(.applicationName)",
-                "Verifica assunzioni di oggi in \(.applicationName)",
-                "Controlla terapie di oggi in \(.applicationName)"
+                "In \(.applicationName) ho preso tutto per oggi",
+                "In \(.applicationName) ho preso tutto oggi",
+                "In \(.applicationName) verifica assunzioni di oggi",
+                "In \(.applicationName) controlla terapie di oggi"
             ],
             shortTitle: "Tutto preso?",
             systemImageName: "checkmark.seal"
@@ -60,10 +60,10 @@ struct PharmaAppShortcutsProvider: AppShortcutsProvider {
         AppShortcut(
             intent: WhatShouldIBuyIntent(),
             phrases: [
-                "Cosa devo comprare in \(.applicationName)",
-                "Cosa manca da comprare in \(.applicationName)",
-                "Lista acquisti in \(.applicationName)",
-                "Mostra cosa comprare in \(.applicationName)"
+                "In \(.applicationName) cosa devo comprare",
+                "In \(.applicationName) cosa manca da comprare",
+                "In \(.applicationName) lista acquisti",
+                "In \(.applicationName) mostra cosa comprare"
             ],
             shortTitle: "Cosa comprare",
             systemImageName: "cart.badge.plus"
@@ -71,10 +71,10 @@ struct PharmaAppShortcutsProvider: AppShortcutsProvider {
         AppShortcut(
             intent: ShowCodiceFiscaleIntent(),
             phrases: [
-                "Mostra codice fiscale in \(.applicationName)",
-                "Apri codice fiscale in \(.applicationName)",
-                "Mostra tessera sanitaria in \(.applicationName)",
-                "Apri barcode codice fiscale in \(.applicationName)"
+                "In \(.applicationName) mostra codice fiscale",
+                "In \(.applicationName) apri codice fiscale",
+                "In \(.applicationName) mostra tessera sanitaria",
+                "In \(.applicationName) apri barcode codice fiscale"
             ],
             shortTitle: "Codice fiscale",
             systemImageName: "creditcard"
@@ -82,10 +82,10 @@ struct PharmaAppShortcutsProvider: AppShortcutsProvider {
         AppShortcut(
             intent: NavigateToPharmacyIntent(),
             phrases: [
-                "Portami in farmacia con \(.applicationName)",
-                "Apri farmacia in \(.applicationName)",
-                "Mostra farmacia suggerita in \(.applicationName)",
-                "Vai in farmacia con \(.applicationName)"
+                "In \(.applicationName) portami in farmacia",
+                "In \(.applicationName) apri farmacia",
+                "In \(.applicationName) mostra farmacia suggerita",
+                "In \(.applicationName) vai in farmacia"
             ],
             shortTitle: "Portami in farmacia",
             systemImageName: "mappin.and.ellipse"

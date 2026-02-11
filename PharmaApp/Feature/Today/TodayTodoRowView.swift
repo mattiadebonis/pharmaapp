@@ -9,6 +9,7 @@ struct TodayTodoRowView: View {
     let leadingTime: String?
     let title: String
     let subtitle: String?
+    let subtitleLine: Text?
     let auxiliaryLine: Text?
     let auxiliaryUsesDefaultStyle: Bool
     let isCompleted: Bool
@@ -28,6 +29,7 @@ struct TodayTodoRowView: View {
         leadingTime: String? = nil,
         title: String,
         subtitle: String? = nil,
+        subtitleLine: Text? = nil,
         auxiliaryLine: Text? = nil,
         auxiliaryUsesDefaultStyle: Bool = true,
         isCompleted: Bool,
@@ -47,6 +49,7 @@ struct TodayTodoRowView: View {
         self.leadingTime = leadingTime
         self.title = title
         self.subtitle = subtitle
+        self.subtitleLine = subtitleLine
         self.auxiliaryLine = auxiliaryLine
         self.auxiliaryUsesDefaultStyle = auxiliaryUsesDefaultStyle
         self.isCompleted = isCompleted
@@ -101,7 +104,16 @@ struct TodayTodoRowView: View {
                     if let badge = trailingBadge {
                         badgeView(text: badge.0, color: badge.1)
                     }
-                    if let subtitle, !subtitle.isEmpty {
+                    if let subtitleLine {
+                        subtitleLine
+                            .font(subtitleFont ?? .system(size: 15))
+                            .foregroundStyle(subtitleColor ?? secondaryTextColor)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(3)
+                            .truncationMode(.tail)
+                            .padding(.leading, subtitleLeadingInset)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else if let subtitle, !subtitle.isEmpty {
                         Text(subtitle)
                             .font(subtitleFont ?? .system(size: 15))
                             .foregroundStyle(subtitleColor ?? secondaryTextColor)
@@ -116,6 +128,7 @@ struct TodayTodoRowView: View {
                             .multilineTextAlignment(.leading)
                             .lineLimit(3)
                             .truncationMode(.tail)
+                            .padding(.leading, subtitleLeadingInset)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         if auxiliaryUsesDefaultStyle {
                             baseLine

@@ -16,10 +16,6 @@ public class Option: NSManagedObject, Identifiable {
     @NSManaged public var day_threeshold_stocks_alarm: Int32
     @NSManaged public var therapy_notification_level: String?
     @NSManaged public var therapy_snooze_minutes: Int32
-    @NSManaged public var breakfast_time: Date?
-    @NSManaged public var lunch_time: Date?
-    @NSManaged public var dinner_time: Date?
-    @NSManaged public var bedtime_time: Date?
 
 }
 

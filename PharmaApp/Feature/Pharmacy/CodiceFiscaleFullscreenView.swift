@@ -2,7 +2,7 @@ import SwiftUI
 import Code39
 
 struct CodiceFiscaleFullscreenView: View {
-    let codiceFiscale: String?
+    let entries: [PrescriptionCFEntry]
     let onClose: () -> Void
 
     var body: some View {
@@ -10,28 +10,48 @@ struct CodiceFiscaleFullscreenView: View {
             Color.white
                 .ignoresSafeArea()
 
-            GeometryReader { proxy in
-                ZStack {
-                    if let codice = normalizedCodiceFiscale {
-                        VStack(spacing: 12) {
-                            Code39View(codice)
-                                .frame(maxWidth: min(proxy.size.width * 0.92, 700))
-                                .frame(height: 140)
-                                .accessibilityLabel("Barcode Codice Fiscale")
-                                .accessibilityValue(codice)
-                            Text(codice)
-                                .font(.system(.callout, design: .monospaced))
-                                .foregroundColor(.secondary)
-                        }
-                    } else {
-                        Text("Aggiungi il codice fiscale dal profilo.")
+            GeometryReader { _ in
+                if entries.isEmpty {
+                    VStack {
+                        Spacer()
+                        Text("Nessun CF disponibile per ricette o farmaci in esaurimento.")
                             .font(.system(size: 16))
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 24)
+                        Spacer()
+                    }
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 24) {
+                            ForEach(entries) { entry in
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text(entry.personDisplayName)
+                                        .font(.headline)
+                                    Text(entry.medicineNames.joined(separator: ", "))
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                    Code39View(entry.codiceFiscale)
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 120)
+                                        .accessibilityLabel("Barcode Codice Fiscale")
+                                        .accessibilityValue(entry.codiceFiscale)
+                                    Text(entry.codiceFiscale)
+                                        .font(.system(.callout, design: .monospaced))
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(14)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(Color(.systemGray6))
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 72)
+                        .padding(.bottom, 24)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             Button(action: onClose) {
@@ -46,12 +66,5 @@ struct CodiceFiscaleFullscreenView: View {
             }
             .padding(20)
         }
-    }
-
-    private var normalizedCodiceFiscale: String? {
-        guard let codiceFiscale else { return nil }
-        let trimmed = codiceFiscale.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        return trimmed.uppercased()
     }
 }

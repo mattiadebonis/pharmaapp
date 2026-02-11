@@ -8,6 +8,6 @@ struct ShowCodiceFiscaleIntent: AppIntent {
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         SiriIntentFacade.shared.queueRoute(.codiceFiscaleFullscreen)
-        return .result(dialog: SiriIntentSupport.dialog("Ti apro il codice fiscale. Se non e impostato, apro il profilo."))
+        return .result(dialog: SiriIntentSupport.dialog("Ti apro i codici fiscali associati alle ricette in corso."))
     }
 }

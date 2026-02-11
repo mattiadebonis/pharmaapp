@@ -1,11 +1,12 @@
 import SwiftUI
 import MapKit
-import Code39
+import CoreData
 
 struct PharmacyCardsView: View {
-    @EnvironmentObject private var codiceFiscaleStore: CodiceFiscaleStore
+    @Environment(\.managedObjectContext) private var viewContext
     @StateObject private var locationVM = LocationSearchViewModel()
     @State private var showCodiceFiscaleFullScreen = false
+    @State private var codiceFiscaleEntries: [PrescriptionCFEntry] = []
 
     private let pharmacyCardCornerRadius: CGFloat = 16
     private let pharmacyAccentColor = Color(red: 0.20, green: 0.62, blue: 0.36)
@@ -21,7 +22,7 @@ struct PharmacyCardsView: View {
         }
         .fullScreenCover(isPresented: $showCodiceFiscaleFullScreen) {
             CodiceFiscaleFullscreenView(
-                codiceFiscale: codiceFiscaleStore.codiceFiscale
+                entries: codiceFiscaleEntries
             ) {
                 showCodiceFiscaleFullScreen = false
             }
@@ -206,6 +207,7 @@ struct PharmacyCardsView: View {
 
     private func pharmacyCodiceFiscaleButton() -> some View {
         Button {
+            codiceFiscaleEntries = PrescriptionCodiceFiscaleResolver().entriesForRxAndLowStock(in: viewContext)
             showCodiceFiscaleFullScreen = true
         } label: {
             VStack(spacing: 4) {
@@ -301,48 +303,11 @@ struct PharmacyCardsView: View {
         return String(format: "%.1f km", roundedKm)
     }
 
-    // MARK: - Codice fiscale
-    @ViewBuilder
-    private func codiceFiscaleCard() -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let codice = codiceFiscaleStore.codiceFiscale?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !codice.isEmpty {
-                let displayCodice = codiceFiscaleDisplayText(codice)
-                VStack(spacing: 8) {
-                    Code39View(displayCodice)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 70)
-                        .accessibilityLabel("Barcode Codice Fiscale")
-                        .accessibilityValue(displayCodice)
-                    Text(displayCodice)
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .foregroundColor(.secondary)
-                }
-            } else {
-                Text("Aggiungi il codice fiscale dal profilo.")
-                    .font(.system(size: 15))
-                    .foregroundColor(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .center)
-        .padding(16)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            showCodiceFiscaleFullScreen = true
-        }
-    }
-
-    private func codiceFiscaleDisplayText(_ raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return raw }
-        return trimmed.uppercased()
-    }
-
 }
 
 #Preview {
     NavigationStack {
         PharmacyCardsView()
     }
-    .environmentObject(CodiceFiscaleStore())
+    .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
 }

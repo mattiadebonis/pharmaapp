@@ -188,12 +188,8 @@
         <attribute name="user_id" optional="YES" attributeType="String"/>
     </entity>
     <entity name="Option" representedClassName=".Option" syncable="YES">
-        <attribute name="bedtime_time" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="breakfast_time" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="day_threeshold_stocks_alarm" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="dinner_time" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
-        <attribute name="lunch_time" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="manual_intake_registration" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
         <attribute name="therapy_notification_level" optional="YES" attributeType="String" defaultValueString="normal"/>
         <attribute name="therapy_snooze_minutes" optional="YES" attributeType="Integer 32" defaultValueString="10" usesScalarValueType="YES"/>
@@ -254,8 +250,10 @@
         <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package" inverseName="stocks" inverseEntity="Package"/>
     </entity>
     <entity name="Person" representedClassName=".Person" syncable="YES">
+        <attribute name="codice_fiscale" optional="YES" attributeType="String"/>
         <attribute name="cognome" optional="YES" attributeType="String"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="is_account" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="nome" optional="YES" attributeType="String"/>
         <relationship name="therapies" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Therapy" inverseName="person" inverseEntity="Therapy"/>
     </entity>
