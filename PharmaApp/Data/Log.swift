@@ -38,6 +38,14 @@ extension Log{
         return request
     }
 
+    static func extractRecentLogs(days: Int = 90) -> NSFetchRequest<Log> {
+        let request: NSFetchRequest<Log> = Log.fetchRequest() as! NSFetchRequest<Log>
+        request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: false)]
+        let cutoff = Calendar.current.date(byAdding: .day, value: -max(1, days), to: Date()) ?? .distantPast
+        request.predicate = NSPredicate(format: "timestamp >= %@", cutoff as NSDate)
+        return request
+    }
+
     static func extractIntakeLogs() -> NSFetchRequest<Log> {
         let request:NSFetchRequest<Log> = Log.fetchRequest() as! NSFetchRequest <Log>
         let sortDescriptor = NSSortDescriptor(key: "id", ascending: true)

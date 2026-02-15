@@ -12,13 +12,16 @@ struct CabinetCardView: View {
     private enum Layout {
         static let leadingIconWidth: CGFloat = 24
         static let leadingSpacing: CGFloat = 18
+        static let contentSpacing: CGFloat = 4
+        static let subtitleBlockSpacing: CGFloat = 2
+        static let therapyLineSpacing: CGFloat = 3
     }
     
     var body: some View {
         let subtitle = makeDrawerSubtitle(drawer: cabinet, now: Date())
         HStack(alignment: .top, spacing: Layout.leadingSpacing) {
             leadingIcon
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Layout.contentSpacing) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(cabinet.displayName)
                         .font(.system(size: 16, weight: .bold))
@@ -34,18 +37,21 @@ struct CabinetCardView: View {
                     .foregroundStyle(.secondary)
                 }
                 if let subtitle {
-                    Text(subtitle.line1)
-                        .font(condensedSubtitleFont)
-                        .foregroundStyle(subtitleColor)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(Array(subtitle.therapyLines.enumerated()), id: \.offset) { _, line in
-                            therapyLineText(line)
-                                .font(condensedSubtitleFont)
-                                .foregroundStyle(subtitleColor)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
+                    VStack(alignment: .leading, spacing: Layout.subtitleBlockSpacing) {
+                        Text(subtitle.line1)
+                            .font(subtitleFont)
+                            .foregroundStyle(subtitleColor)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        VStack(alignment: .leading, spacing: Layout.therapyLineSpacing) {
+                            ForEach(Array(subtitle.therapyLines.enumerated()), id: \.offset) { _, line in
+                                therapyLineText(line)
+                                    .font(subtitleFont)
+                                    .foregroundStyle(subtitleColor)
+                                    .lineLimit(nil)
+                                    .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     }
                 }
@@ -68,8 +74,8 @@ struct CabinetCardView: View {
         Color.primary.opacity(0.45)
     }
 
-    private var condensedSubtitleFont: Font {
-        Font.custom("SFProDisplay-CondensedLight", size: 15)
+    private var subtitleFont: Font {
+        .system(size: 15, weight: .regular)
     }
 
     private func therapyLineText(_ line: TherapyLine) -> Text {

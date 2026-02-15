@@ -12,6 +12,12 @@ struct DrawerAggregateSubtitle {
     let therapyLines: [TherapyLine]
 }
 
+struct MedicineActiveTherapiesSubtitlePayload {
+    let line1: String
+    let line2: String
+    let chip: String?
+    let therapyLines: [TherapyLine]
+}
 
 func makeMedicineSubtitle(
     medicine: Medicine,
@@ -33,6 +39,62 @@ func makeMedicineSubtitle(
     }
 
     return builder.build(for: medicine, now: now)
+}
+
+func makeMedicineActiveTherapiesSubtitle(
+    medicine: Medicine,
+    medicinePackage: MedicinePackage? = nil,
+    recurrenceManager: RecurrenceManager,
+    intakeLogsToday: [Log],
+    now: Date = Date()
+) -> MedicineActiveTherapiesSubtitlePayload {
+    let base = makeMedicineSubtitle(medicine: medicine, medicinePackage: medicinePackage, now: now)
+    let therapiesSet: Set<Therapy>
+    if let entry = medicinePackage {
+        therapiesSet = therapies(for: entry)
+    } else {
+        therapiesSet = medicine.therapies as? Set<Therapy> ?? []
+    }
+
+    guard !therapiesSet.isEmpty else {
+        return MedicineActiveTherapiesSubtitlePayload(
+            line1: base.line2,
+            line2: "",
+            chip: base.chip,
+            therapyLines: [TherapyLine(prefix: nil, description: "Nessuna terapia attiva")]
+        )
+    }
+
+    let builder = TherapySummaryBuilder(recurrenceManager: recurrenceManager)
+    let active: [(Therapy, Date)] = therapiesSet.compactMap { therapy in
+        guard let next = nextUpcomingDoseDate(
+            for: therapy,
+            now: now,
+            therapiesCount: therapiesSet.count,
+            intakeLogsToday: intakeLogsToday,
+            recurrenceManager: recurrenceManager
+        ) else {
+            return nil
+        }
+        return (therapy, next)
+    }
+
+    let sortedTherapies: [Therapy]
+    if !active.isEmpty {
+        sortedTherapies = active.sorted(by: { $0.1 < $1.1 }).map(\.0)
+    } else {
+        sortedTherapies = therapiesSet.sorted {
+            ($0.start_date ?? .distantPast) < ($1.start_date ?? .distantPast)
+        }
+    }
+    let lines = sortedTherapies.map { builder.line(for: $0, now: now) }
+
+    return MedicineActiveTherapiesSubtitlePayload(
+        line1: base.line2,
+        line2: "",
+        chip: base.chip,
+        therapyLines: lines.isEmpty ? [TherapyLine(prefix: nil, description: "Nessuna terapia attiva")] : lines
+    )
 }
 
 func makeDrawerSubtitle(drawer: Cabinet, now: Date = Date()) -> DrawerAggregateSubtitle? {
@@ -98,6 +160,91 @@ func makeDrawerSubtitle(drawer: Cabinet, now: Date = Date()) -> DrawerAggregateS
     let therapyLines = summaries.isEmpty ? [TherapyLine(prefix: nil, description: "Nessuna terapia attiva")] : summaries
 
     return DrawerAggregateSubtitle(line1: line2, therapyLines: therapyLines)
+}
+
+private func nextUpcomingDoseDate(
+    for therapy: Therapy,
+    now: Date,
+    therapiesCount: Int,
+    intakeLogsToday: [Log],
+    recurrenceManager: RecurrenceManager
+) -> Date? {
+    let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+    let startDate = therapy.start_date ?? now
+    let calendar = Calendar.current
+    let todayTimes = scheduledTimesToday(
+        for: therapy,
+        now: now,
+        rule: rule,
+        recurrenceManager: recurrenceManager
+    )
+    if calendar.isDateInToday(now), !todayTimes.isEmpty {
+        let takenCount = intakeCountToday(
+            for: therapy,
+            therapiesCount: therapiesCount,
+            intakeLogsToday: intakeLogsToday
+        )
+        if takenCount >= todayTimes.count {
+            let endOfDay = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: calendar.startOfDay(for: now)) ?? now
+            return recurrenceManager.nextOccurrence(
+                rule: rule,
+                startDate: startDate,
+                after: endOfDay,
+                doses: therapy.doses as NSSet?
+            )
+        }
+        let pending = Array(todayTimes.dropFirst(min(takenCount, todayTimes.count)))
+        if let nextToday = pending.first(where: { $0 > now }) {
+            return nextToday
+        }
+    }
+    return recurrenceManager.nextOccurrence(
+        rule: rule,
+        startDate: startDate,
+        after: now,
+        doses: therapy.doses as NSSet?
+    )
+}
+
+private func intakeCountToday(
+    for therapy: Therapy,
+    therapiesCount: Int,
+    intakeLogsToday: [Log]
+) -> Int {
+    let assigned = intakeLogsToday.filter { $0.therapy == therapy }.count
+    if assigned > 0 {
+        return assigned
+    }
+
+    let unassigned = intakeLogsToday.filter { $0.therapy == nil }
+    if therapiesCount == 1 {
+        return unassigned.count
+    }
+    return unassigned.filter { $0.package == therapy.package }.count
+}
+
+private func scheduledTimesToday(
+    for therapy: Therapy,
+    now: Date,
+    rule: RecurrenceRule,
+    recurrenceManager: RecurrenceManager
+) -> [Date] {
+    let today = Calendar.current.startOfDay(for: now)
+    let start = therapy.start_date ?? today
+    let perDay = max(1, therapy.doses?.count ?? 0)
+    let allowed = recurrenceManager.allowedEvents(
+        on: today,
+        rule: rule,
+        startDate: start,
+        dosesPerDay: perDay
+    )
+    guard allowed > 0 else { return [] }
+    guard let doseSet = therapy.doses as? Set<Dose>, !doseSet.isEmpty else { return [] }
+    let sortedDoses = doseSet.sorted { $0.time < $1.time }
+    let limitedDoses = sortedDoses.prefix(min(allowed, sortedDoses.count))
+    return limitedDoses.compactMap { dose in
+        combine(day: today, withTime: dose.time)
+    }
 }
 
 private func dosesTodayCount(for therapies: Set<Therapy>, now: Date, recurrenceManager: RecurrenceManager) -> Int {

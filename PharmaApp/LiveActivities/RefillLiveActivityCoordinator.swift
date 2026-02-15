@@ -18,7 +18,8 @@ protocol RefillLiveActivityDismissHandling: AnyObject {
 @MainActor
 final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshing, RefillLiveActivityDismissHandling {
     static let shared = RefillLiveActivityCoordinator(
-        context: PersistenceController.shared.container.viewContext
+        context: PersistenceController.shared.container.viewContext,
+        policy: PerformancePolicy.current()
     )
 
     private let context: NSManagedObjectContext
@@ -29,10 +30,15 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
     private let client: RefillLiveActivityClientProtocol
     private let clock: Clock
     private let timeoutInterval: TimeInterval
+    private let policy: PerformancePolicy
 
     private var didStart = false
     private var observers: [NSObjectProtocol] = []
     private var timeoutTask: Task<Void, Never>?
+    private var refreshTask: Task<Void, Never>?
+    private var debouncedRefreshTask: Task<Void, Never>?
+    private var queuedRefreshReason: String?
+    private var queuedRefreshNow: Date?
 
     init(
         context: NSManagedObjectContext,
@@ -42,7 +48,8 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         stateStore: RefillActivityStateStoring = UserDefaultsRefillActivityStateStore(),
         client: RefillLiveActivityClientProtocol = RefillLiveActivityClient(),
         clock: Clock = SystemClock(),
-        timeoutInterval: TimeInterval = 90 * 60
+        timeoutInterval: TimeInterval = 90 * 60,
+        policy: PerformancePolicy = .foregroundInteractive
     ) {
         self.context = context
         self.purchaseSummaryProvider = purchaseSummaryProvider ?? RefillPurchaseSummaryProvider(context: context)
@@ -52,6 +59,7 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         self.client = client
         self.clock = clock
         self.timeoutInterval = timeoutInterval
+        self.policy = policy
         super.init()
 
         self.geofenceManager.onCandidateEntered = { [weak self] candidate in
@@ -85,7 +93,11 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
                 queue: nil
             ) { [weak self] _ in
                 Task { @MainActor in
-                    await self?.refresh(reason: "foreground", now: nil)
+                    self?.scheduleDebouncedRefresh(
+                        reason: "foreground",
+                        now: nil,
+                        delayNanoseconds: self?.policy == .foregroundInteractive ? 1_500_000_000 : 350_000_000
+                    )
                 }
             }
         )
@@ -97,7 +109,11 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
                 queue: nil
             ) { [weak self] _ in
                 Task { @MainActor in
-                    await self?.refresh(reason: "active", now: nil)
+                    self?.scheduleDebouncedRefresh(
+                        reason: "active",
+                        now: nil,
+                        delayNanoseconds: self?.policy == .foregroundInteractive ? 1_500_000_000 : 350_000_000
+                    )
                 }
             }
         )
@@ -109,22 +125,27 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
                 queue: nil
             ) { [weak self] _ in
                 Task { @MainActor in
-                    await self?.refresh(reason: "time-change", now: nil)
+                    self?.scheduleDebouncedRefresh(
+                        reason: "time-change",
+                        now: nil,
+                        delayNanoseconds: self?.policy == .foregroundInteractive ? 2_000_000_000 : 350_000_000
+                    )
                 }
             }
         )
 
         geofenceManager.start()
-        Task { @MainActor in
-            await refresh(reason: "startup", now: nil)
-        }
+        requestRefresh(reason: "startup", now: nil)
     }
 
     func refresh(reason: String, now: Date? = nil) async {
         let _ = reason
         let now = now ?? clock.now()
 
-        let summary = purchaseSummaryProvider.summary(maxVisible: 3)
+        let summary = purchaseSummaryProvider.summary(
+            maxVisible: 3,
+            strategy: policy == .foregroundInteractive ? .lightweightTodos : .fullTodayState
+        )
         geofenceManager.refreshMonitoring(hasPendingPurchases: summary.hasItems)
 
         guard summary.hasItems else {
@@ -167,8 +188,10 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
 
     private func handleContextChange(_ notification: Notification) {
         guard hasRelevantChanges(notification) else { return }
-        Task { @MainActor in
-            await refresh(reason: "core-data", now: nil)
+        if policy == .foregroundInteractive {
+            scheduleDebouncedRefresh(reason: "core-data", now: nil, delayNanoseconds: 2_500_000_000)
+        } else {
+            requestRefresh(reason: "core-data", now: nil)
         }
     }
 
@@ -198,7 +221,10 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         guard liveActivitiesEnabled else { return }
 
         let now = clock.now()
-        let summary = purchaseSummaryProvider.summary(maxVisible: 3)
+        let summary = purchaseSummaryProvider.summary(
+            maxVisible: 3,
+            strategy: policy == .foregroundInteractive ? .lightweightTodos : .fullTodayState
+        )
         guard summary.hasItems else {
             await endActiveActivity(reason: "entered-no-purchases")
             return
@@ -247,6 +273,40 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
             scheduleTimeoutIfNeeded()
         } catch {
             // Ignore transient ActivityKit failures; we'll retry on next enter/refresh.
+        }
+    }
+
+    private func requestRefresh(reason: String, now: Date?) {
+        if refreshTask != nil {
+            queuedRefreshReason = reason
+            queuedRefreshNow = now
+            return
+        }
+
+        refreshTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.refresh(reason: reason, now: now)
+            self.refreshTask = nil
+
+            if let queuedReason = self.queuedRefreshReason {
+                let queuedNow = self.queuedRefreshNow
+                self.queuedRefreshReason = nil
+                self.queuedRefreshNow = nil
+                self.requestRefresh(reason: queuedReason, now: queuedNow)
+            }
+        }
+    }
+
+    private func scheduleDebouncedRefresh(
+        reason: String,
+        now: Date?,
+        delayNanoseconds: UInt64
+    ) {
+        debouncedRefreshTask?.cancel()
+        debouncedRefreshTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: delayNanoseconds)
+            guard let self else { return }
+            self.requestRefresh(reason: reason, now: now)
         }
     }
 
@@ -316,5 +376,7 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
     deinit {
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         timeoutTask?.cancel()
+        refreshTask?.cancel()
+        debouncedRefreshTask?.cancel()
     }
 }

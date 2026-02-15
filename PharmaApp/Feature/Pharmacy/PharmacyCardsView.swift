@@ -246,8 +246,14 @@ struct PharmacyCardsView: View {
         guard let distance = locationVM.distanceMeters else { return nil }
         switch mode {
         case .walking:
+            if let exactMinutes = locationVM.walkingRouteMinutes {
+                return exactMinutes
+            }
             return max(1, Int(round(distance / 83.0)))
         case .driving:
+            if let exactMinutes = locationVM.drivingRouteMinutes {
+                return exactMinutes
+            }
             return max(1, Int(round(distance / 750.0)))
         }
     }

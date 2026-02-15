@@ -40,10 +40,30 @@ final class StockService {
         }
     }
 
+    func unitsReadOnly(for medicine: Medicine, contextKey: String = StockService.defaultContextKey) -> Int {
+        let medicine = inContext(medicine)
+        let packages = medicine.packages
+        guard !packages.isEmpty else { return 0 }
+        return packages.reduce(0) { total, package in
+            total + unitsReadOnly(for: package, contextKey: contextKey)
+        }
+    }
+
     func units(for package: Package, contextKey: String = StockService.defaultContextKey) -> Int {
         let package = inContext(package)
         let stock = stock(for: package, contextKey: contextKey, bootstrapFromLogs: true)
         return Int(stock.stock_units)
+    }
+
+    func unitsReadOnly(for package: Package, contextKey: String = StockService.defaultContextKey) -> Int {
+        let package = inContext(package)
+        if let existing = stockFromRelationship(for: package, contextKey: contextKey) {
+            return Int(existing.stock_units)
+        }
+        if let fetched = fetchStock(for: package, contextKey: contextKey) {
+            return Int(fetched.stock_units)
+        }
+        return 0
     }
 
     func setUnits(_ units: Int, for package: Package, contextKey: String = StockService.defaultContextKey) {

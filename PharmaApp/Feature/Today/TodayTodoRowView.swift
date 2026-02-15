@@ -2,12 +2,16 @@ import SwiftUI
 
 /// Riga generica per i todo di "Oggi" (versione senza sotto-task).
 struct TodayTodoRowView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .body) private var timingColumnWidth: CGFloat = 100
 
     let iconName: String
     let actionText: String?
     let leadingTime: String?
     let title: String
+    let titleStatusIconName: String?
+    let titleStatusIconColor: Color?
+    let titleStatusIconAccessibilityLabel: String?
     let subtitle: String?
     let subtitleLine: Text?
     let auxiliaryLine: Text?
@@ -28,6 +32,9 @@ struct TodayTodoRowView: View {
         actionText: String? = nil,
         leadingTime: String? = nil,
         title: String,
+        titleStatusIconName: String? = nil,
+        titleStatusIconColor: Color? = nil,
+        titleStatusIconAccessibilityLabel: String? = nil,
         subtitle: String? = nil,
         subtitleLine: Text? = nil,
         auxiliaryLine: Text? = nil,
@@ -48,6 +55,9 @@ struct TodayTodoRowView: View {
         self.actionText = actionText
         self.leadingTime = leadingTime
         self.title = title
+        self.titleStatusIconName = titleStatusIconName
+        self.titleStatusIconColor = titleStatusIconColor
+        self.titleStatusIconAccessibilityLabel = titleStatusIconAccessibilityLabel
         self.subtitle = subtitle
         self.subtitleLine = subtitleLine
         self.auxiliaryLine = auxiliaryLine
@@ -98,6 +108,13 @@ struct TodayTodoRowView: View {
                         .lineLimit(2)
                         .truncationMode(.tail)
                         .layoutPriority(1)
+
+                    if let titleStatusIconName, !titleStatusIconName.isEmpty {
+                        Image(systemName: titleStatusIconName)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(titleStatusIconColor ?? secondaryTextColor)
+                            .accessibilityLabel(Text(titleStatusIconAccessibilityLabel ?? titleStatusIconName))
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -147,11 +164,21 @@ struct TodayTodoRowView: View {
             if !hideToggle {
                 Button(action: onToggle) {
                     let size: CGFloat = 18
-                    Image(systemName: isToggleOn ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: size, weight: .regular))
-                        .foregroundStyle(circleStrokeColor)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(checkboxBorderColor, lineWidth: 1.5)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(isToggleOn ? checkboxFillColor : .clear)
+                            )
+                        if isToggleOn {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(checkboxCheckmarkColor)
+                        }
+                    }
                         .frame(width: size, height: size)
-                        .contentShape(Circle())
+                        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         .accessibilityLabel(Text(iconName))
                 }
                 .buttonStyle(.plain)
@@ -161,19 +188,39 @@ struct TodayTodoRowView: View {
     }
 
     private var titleColor: Color {
-        isCompleted ? .secondary : .primary
+        isCompleted ? completedTextColor : primaryTextColor
     }
 
     private var labelColor: Color {
-        isCompleted ? .secondary : .primary
+        isCompleted ? completedTextColor : primaryTextColor
     }
 
     private var secondaryTextColor: Color {
-        Color.primary.opacity(0.45)
+        colorScheme == .dark ? .white.opacity(0.8) : Color.primary.opacity(0.45)
     }
 
     private var circleStrokeColor: Color {
-        Color.primary.opacity(0.25)
+        colorScheme == .dark ? .white.opacity(0.85) : Color.primary.opacity(0.25)
+    }
+
+    private var checkboxBorderColor: Color {
+        colorScheme == .dark ? .white.opacity(0.9) : circleStrokeColor
+    }
+
+    private var checkboxFillColor: Color {
+        colorScheme == .dark ? .white.opacity(0.9) : Color.primary.opacity(0.55)
+    }
+
+    private var checkboxCheckmarkColor: Color {
+        colorScheme == .dark ? .black.opacity(0.9) : .white
+    }
+
+    private var primaryTextColor: Color {
+        colorScheme == .dark ? .white : .primary
+    }
+
+    private var completedTextColor: Color {
+        colorScheme == .dark ? .white.opacity(0.8) : .secondary
     }
 
     private func badgeView(text: String, color: Color) -> some View {

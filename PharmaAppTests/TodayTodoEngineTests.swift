@@ -23,6 +23,18 @@ final class TodayTodoEngineTests: XCTestCase {
         XCTAssertEqual(TodayTodoEngine.completionKey(for: missed), missed.id)
     }
 
+    func testCompletionKeyKeepsFullIDForPurchase() {
+        let purchase = TodayTodoItem(
+            id: "purchase|3D0A1F64-6F7E-4BC6-A7A2-53DDF2DA2F20|normal|1739449623123",
+            title: "Acquisto",
+            detail: nil,
+            category: .purchase,
+            medicineId: nil
+        )
+
+        XCTAssertEqual(TodayTodoEngine.completionKey(for: purchase), purchase.id)
+    }
+
     func testSyncTokenChangesWhenDetailChanges() {
         let base = TodayTodoItem(
             id: "therapy|a",

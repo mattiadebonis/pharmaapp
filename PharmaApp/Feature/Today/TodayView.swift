@@ -10,19 +10,18 @@ struct TodayView: View {
     @EnvironmentObject private var appRouter: AppRouter
     @Environment(\.openURL) private var openURL
     @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.colorScheme) private var colorScheme
 
     @FetchRequest(fetchRequest: Medicine.extractMedicines())
     var medicines: FetchedResults<Medicine>
     @FetchRequest(fetchRequest: Option.extractOptions())
     private var options: FetchedResults<Option>
-    @FetchRequest(fetchRequest: Log.extractLogs())
+    @FetchRequest(fetchRequest: Log.extractRecentLogs(days: 90))
     private var logs: FetchedResults<Log>
     @FetchRequest(fetchRequest: Doctor.extractDoctors())
     private var doctors: FetchedResults<Doctor>
     @FetchRequest(fetchRequest: Todo.extractTodos())
     private var storedTodos: FetchedResults<Todo>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(key: "updated_at", ascending: false)])
-    private var stocks: FetchedResults<Stock>
 
     @StateObject private var viewModel = TodayViewModel()
     @StateObject private var locationVM = LocationSearchViewModel()
@@ -50,22 +49,33 @@ struct TodayView: View {
     @State private var completedBlockedSubtasks: Set<String> = []
     @State private var pendingPrescriptionMedIDs: Set<MedicineId> = []
     @State private var lastCompletionResetDay: Date?
+    @State private var didHydrateCompletionState = false
+    @State private var isHydratingCompletionState = false
     @State private var mailComposeData: MailComposeData?
     @State private var messageComposeData: MessageComposeData?
     @State private var intakeGuardrailPrompt: IntakeGuardrailPrompt?
     @State private var showCodiceFiscaleFullScreen = false
     @State private var codiceFiscaleEntries: [PrescriptionCFEntry] = []
     @State private var isOptionsPresented = false
-    @State private var showPharmacyDetails = false
+    @State private var refreshStateWorkItem: DispatchWorkItem?
+    @State private var lastRefreshStateExecutionAt: Date = .distantPast
+    @State private var isTherapySectionExpanded = true
+    @State private var isPurchaseSectionExpanded = true
 
     @ScaledMetric(relativeTo: .body) private var timingColumnWidth: CGFloat = 112
     private let pharmacyCardCornerRadius: CGFloat = 16
     private let pharmacyAccentColor = Color(red: 0.20, green: 0.62, blue: 0.36)
     private let completionFillDuration: TimeInterval = 0.16
-    private let completionHoldDuration: TimeInterval = 3.0
+    private let completionHoldDuration: TimeInterval = 1.0
     private let completionDisappearDuration: TimeInterval = 0.18
     private let completionToastDuration: TimeInterval = 2.0
+    private let refreshDebounceDuration: TimeInterval = 0.5
+    private let refreshThrottleDuration: TimeInterval = 0.5
     private let purchaseSectionAnchorID = "today.purchase.section.anchor"
+    private let completionStateDayKey = "pharmaapp.today.completion.day"
+    private let completionStateTodoIDsKey = "pharmaapp.today.completion.todoIDs"
+    private let completionStateBlockedSubtasksKey = "pharmaapp.today.completion.blockedSubtasks"
+    private let showDoctorOfficeSuggestion = false
 
     private enum CompletedSection {
         case therapy
@@ -138,43 +148,12 @@ struct TodayView: View {
         let otherItems = visibleItems(mergedItems(base: baseOtherItems, section: .other))
         let hasVisibleItems = !(therapyItems.isEmpty && purchaseItems.isEmpty && otherItems.isEmpty)
         let contentList = List {
-            // Card farmacia temporaneamente nascosta.
             if !therapyItems.isEmpty {
                 Section {
-                    ForEach(Array(therapyItems.enumerated()), id: \.element.id) { entry in
-                        let item = entry.element
-                        let isLast = entry.offset == therapyItems.count - 1
-                        todoListRow(
-                            for: item,
-                            isCompleted: isTodoSemanticallyCompleted(item),
-                            isLast: isLast
-                        )
-                    }
-                } header: {
-                    HStack {
-                        Text("Da assumere")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.black)
-                            .textCase(nil)
-                        Spacer()
-                    }
-                    .padding(.top, 18)
-                    .padding(.bottom, 6)
-                }
-            }
-            if !purchaseItems.isEmpty {
-                Section {
-                    ForEach(Array(purchaseItems.enumerated()), id: \.element.id) { entry in
-                        let item = entry.element
-                        let isLast = entry.offset == purchaseItems.count - 1
-                        if entry.offset == 0 {
-                            todoListRow(
-                                for: item,
-                                isCompleted: isTodoSemanticallyCompleted(item),
-                                isLast: isLast
-                            )
-                            .id(purchaseSectionAnchorID)
-                        } else {
+                    if isTherapySectionExpanded {
+                        ForEach(Array(therapyItems.enumerated()), id: \.element.id) { entry in
+                            let item = entry.element
+                            let isLast = entry.offset == therapyItems.count - 1
                             todoListRow(
                                 for: item,
                                 isCompleted: isTodoSemanticallyCompleted(item),
@@ -183,15 +162,43 @@ struct TodayView: View {
                         }
                     }
                 } header: {
-                    HStack {
-                        Text("Da comprare")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.black)
-                            .textCase(nil)
-                        Spacer()
+                    sectionHeader(
+                        title: "Da assumere",
+                        count: therapyItems.count,
+                        isExpanded: isTherapySectionExpanded,
+                        topPadding: 18
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isTherapySectionExpanded.toggle()
+                        }
                     }
-                    .padding(.top, 30)
-                    .padding(.bottom, 6)
+                }
+            }
+            if !purchaseItems.isEmpty {
+                Section {
+                    if isPurchaseSectionExpanded {
+                        ForEach(Array(purchaseItems.enumerated()), id: \.element.id) { entry in
+                            let item = entry.element
+                            let isLast = entry.offset == purchaseItems.count - 1
+                            todoListRow(
+                                for: item,
+                                isCompleted: isTodoSemanticallyCompleted(item),
+                                isLast: isLast
+                            )
+                        }
+                    }
+                } header: {
+                    sectionHeader(
+                        title: "Da comprare",
+                        count: purchaseItems.count,
+                        isExpanded: isPurchaseSectionExpanded,
+                        topPadding: 30
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isPurchaseSectionExpanded.toggle()
+                        }
+                    }
+                    .id(purchaseSectionAnchorID)
                 }
             }
             ForEach(Array(otherItems.enumerated()), id: \.element.id) { entry in
@@ -229,7 +236,7 @@ struct TodayView: View {
         .listStyle(.plain)
         .listSectionSeparator(.hidden)
         .listSectionSpacingIfAvailable(4)
-        .listRowSpacing(2)
+        .listRowSpacing(0)
         .safeAreaInset(edge: .bottom) {
             if completionToastKey != nil {
                 completionToastView
@@ -239,8 +246,14 @@ struct TodayView: View {
             }
         }
         .scrollIndicators(.hidden)
-        .task(id: state.syncToken) {
-            viewModel.syncTodos(from: state.computedTodos, medicines: Array(medicines), option: options.first)
+        .task(id: "\(state.syncToken)|\(isPresentingModal)") {
+            guard !isPresentingModal else { return }
+            viewModel.syncTodos(
+                from: state.computedTodos,
+                medicines: Array(medicines),
+                option: options.first,
+                timeLabels: state.timeLabels
+            )
         }
         .sheet(item: $prescriptionToConfirm) { medicine in
             let doctor = prescriptionDoctorContact(for: medicine)
@@ -370,23 +383,27 @@ struct TodayView: View {
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
             locationVM.ensureStarted()
+            hydrateCompletionStateIfNeeded()
             resetCompletionIfNewDay()
             refreshState()
         }
         .onChange(of: completedTodoIDs) { _ in
+            guard !isHydratingCompletionState else { return }
+            persistCompletionState()
             refreshState()
+        }
+        .onChange(of: completedBlockedSubtasks) { _ in
+            guard !isHydratingCompletionState else { return }
+            persistCompletionState()
         }
         .onReceive(NotificationCenter.default.publisher(
             for: .NSManagedObjectContextObjectsDidChange,
             object: PersistenceController.shared.container.viewContext
-        )) { _ in
-            refreshState()
+        )) { notification in
+            handleContextObjectsDidChange(notification)
         }
 
         mapItemWrappedView(content)
-            .navigationDestination(isPresented: $showPharmacyDetails) {
-                PharmacyCardsView()
-            }
     }
 
     private func handlePendingRoute(with proxy: ScrollViewProxy) {
@@ -400,7 +417,7 @@ struct TodayView: View {
             }
             appRouter.markRouteHandled(route)
         case .pharmacy:
-            showPharmacyDetails = true
+            openPharmacySuggestionInMaps()
             appRouter.markRouteHandled(route)
         case .codiceFiscaleFullscreen, .profile:
             break
@@ -545,6 +562,168 @@ struct TodayView: View {
         .padding(16)
     }
 
+    private var pharmacySuggestionText: String {
+        guard let pharmacy = locationVM.pinItem?.title.trimmingCharacters(in: .whitespacesAndNewlines),
+              !pharmacy.isEmpty else { return pharmacySuggestionFallbackLine }
+        return "\(pharmacy) \(pharmacySuggestionStatusText())"
+    }
+
+    private var pharmacySuggestionFallbackLine: String { "Ricerca farmacia piu vicina..." }
+    private var pharmacySuggestionDrivingMinutes: Int? { pharmacyRouteMinutes(for: .driving) }
+
+    private struct OpenDoctorSuggestion {
+        let name: String
+        let contact: DoctorContact
+    }
+
+    private var openDoctorSuggestion: OpenDoctorSuggestion? {
+        let now = Date()
+        for doctor in doctors {
+            guard activeDoctorInterval(for: doctor, now: now) != nil else { continue }
+            let name = doctorDisplayName(doctor)
+            return OpenDoctorSuggestion(
+                name: name,
+                contact: DoctorContact(
+                    name: name,
+                    email: doctorEmail(doctor),
+                    phoneInternational: doctorPhoneInternational(doctor)
+                )
+            )
+        }
+        return nil
+    }
+
+    private func pharmacySuggestionStatusText() -> String {
+        if locationVM.isLikelyOpen == false {
+            return "chiusa ora"
+        }
+        return "aperta"
+    }
+
+    @ViewBuilder
+    private func pharmacySuggestionRow(text: String, drivingMinutes: Int?) -> some View {
+        Button {
+            openPharmacySuggestionInMaps()
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(text)
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundColor(todaySecondaryTextColor)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+                if let drivingMinutes {
+                    HStack(spacing: 4) {
+                        Image(systemName: "car.fill")
+                        Text("\(max(1, drivingMinutes)) min")
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(todaySecondaryTextColor)
+                }
+            }
+            .padding(.vertical, 0)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func doctorSuggestionRow(_ suggestion: OpenDoctorSuggestion) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("Studio \(suggestion.name) aperto")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundColor(todaySecondaryTextColor)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
+            HStack(spacing: 12) {
+                if suggestion.contact.phoneInternational != nil {
+                    Button {
+                        callDoctor(suggestion.contact)
+                    } label: {
+                        Image(systemName: "phone.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(todaySecondaryTextColor)
+                    }
+                    .buttonStyle(.plain)
+                }
+                if suggestion.contact.email != nil {
+                    Button {
+                        emailDoctor(suggestion.contact)
+                    } label: {
+                        Image(systemName: "envelope.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(todaySecondaryTextColor)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.vertical, 0)
+        .contentShape(Rectangle())
+    }
+
+    private func activeDoctorInterval(for doctor: Doctor, now: Date) -> (start: Date, end: Date)? {
+        guard let todaySlot = doctorTodaySlotText(for: doctor) else { return nil }
+        return OpeningHoursParser.activeInterval(from: todaySlot, now: now)
+    }
+
+    private func doctorTodaySlotText(for doctor: Doctor) -> String? {
+        let schedule = doctor.scheduleDTO
+        let todayWeekday = doctorWeekday(for: Date())
+        guard let daySchedule = schedule.days.first(where: { $0.day == todayWeekday }) else { return nil }
+        switch daySchedule.mode {
+        case .closed:
+            return nil
+        case .continuous:
+            let start = daySchedule.primary.start.trimmingCharacters(in: .whitespacesAndNewlines)
+            let end = daySchedule.primary.end.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !start.isEmpty, !end.isEmpty else { return nil }
+            return "\(start)-\(end)"
+        case .split:
+            let firstStart = daySchedule.primary.start.trimmingCharacters(in: .whitespacesAndNewlines)
+            let firstEnd = daySchedule.primary.end.trimmingCharacters(in: .whitespacesAndNewlines)
+            let secondStart = daySchedule.secondary.start.trimmingCharacters(in: .whitespacesAndNewlines)
+            let secondEnd = daySchedule.secondary.end.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !firstStart.isEmpty, !firstEnd.isEmpty, !secondStart.isEmpty, !secondEnd.isEmpty else { return nil }
+            return "\(firstStart)-\(firstEnd) / \(secondStart)-\(secondEnd)"
+        }
+    }
+
+    private func doctorWeekday(for date: Date) -> DoctorScheduleDTO.DaySchedule.Weekday {
+        let weekday = Calendar.current.component(.weekday, from: date)
+        switch weekday {
+        case 1: return .sunday
+        case 2: return .monday
+        case 3: return .tuesday
+        case 4: return .wednesday
+        case 5: return .thursday
+        case 6: return .friday
+        default: return .saturday
+        }
+    }
+
+    private func doctorDisplayName(_ doctor: Doctor) -> String {
+        let firstName = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let lastName = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let fullName = [firstName, lastName]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return fullName.isEmpty ? "Medico" : fullName
+    }
+
+    private func doctorEmail(_ doctor: Doctor) -> String? {
+        let email = doctor.mail?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (email?.isEmpty == false) ? email : nil
+    }
+
+    private func doctorPhoneInternational(_ doctor: Doctor) -> String? {
+        let phone = doctor.telefono?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let phone, !phone.isEmpty else { return nil }
+        return CommunicationService.normalizeInternationalPhone(phone)
+    }
+
     private var canOpenMaps: Bool {
         locationVM.pinItem != nil
     }
@@ -628,8 +807,7 @@ struct TodayView: View {
     }
 
     private func openPharmacyDetailsIfAvailable() {
-        guard locationVM.pinItem != nil else { return }
-        showPharmacyDetails = true
+        openPharmacySuggestionInMaps()
     }
 
     @ViewBuilder
@@ -747,8 +925,14 @@ struct TodayView: View {
         guard let distance = locationVM.distanceMeters else { return nil }
         switch mode {
         case .walking:
+            if let exactMinutes = locationVM.walkingRouteMinutes {
+                return exactMinutes
+            }
             return max(1, Int(round(distance / 83.0)))
         case .driving:
+            if let exactMinutes = locationVM.drivingRouteMinutes {
+                return exactMinutes
+            }
             return max(1, Int(round(distance / 750.0)))
         }
     }
@@ -768,6 +952,17 @@ struct TodayView: View {
         guard let item = pharmacyMapItem() else { return }
         let launchOptions = [MKLaunchOptionsDirectionsModeKey: mode.launchOption]
         MKMapItem.openMaps(with: [MKMapItem.forCurrentLocation(), item], launchOptions: launchOptions)
+    }
+
+    private func openPharmacySuggestionInMaps() {
+        locationVM.ensureStarted()
+        guard canOpenMaps else {
+            if let url = URL(string: "maps://?q=farmacia") {
+                openURL(url)
+            }
+            return
+        }
+        openDirections(.driving)
     }
 
     private func pharmacyMapItem() -> MKMapItem? {
@@ -810,25 +1005,72 @@ struct TodayView: View {
     @ViewBuilder
     private func todoCard<Content: View>(_ content: Content) -> some View {
         content
-            .padding(.vertical, 6)
+            .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
+            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+            .listRowSeparator(.hidden)
     }
 
     private var condensedSubtitleFont: Font {
-        Font.custom("SFProDisplay-CondensedLight", size: 15)
+        Font.custom("SFProDisplay-CondensedThin", size: 14)
     }
 
     private var condensedSubtitleColor: Color {
-        Color.primary.opacity(0.45)
+        isDarkMode ? .white.opacity(0.8) : Color.primary.opacity(0.45)
+    }
+
+    private var isDarkMode: Bool {
+        colorScheme == .dark
+    }
+
+    private var todayPrimaryTextColor: Color {
+        isDarkMode ? .white : .primary
+    }
+
+    private var todaySecondaryTextColor: Color {
+        isDarkMode ? .white.opacity(0.8) : .secondary
+    }
+
+    private var todaySectionHeaderColor: Color {
+        isDarkMode ? .white : .black
     }
 
     private var completedRowFill: Color {
         .clear
     }
 
+    @ViewBuilder
+    private func sectionHeader(
+        title: String,
+        count: Int,
+        isExpanded: Bool,
+        topPadding: CGFloat,
+        bottomPadding: CGFloat = 6,
+        onTap: @escaping () -> Void
+    ) -> some View {
+        Button(action: onTap) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(todaySectionHeaderColor)
+                Text("\(count)")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(todaySecondaryTextColor)
+                Spacer()
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(todaySecondaryTextColor)
+            }
+            .contentShape(Rectangle())
+            .textCase(nil)
+            .padding(.top, topPadding)
+            .padding(.bottom, bottomPadding)
+        }
+        .buttonStyle(.plain)
+    }
+
     private var prescriptionStateIconName: String {
-        "doc.text.magnifyingglass"
+        "doc.text"
     }
 
     @ViewBuilder
@@ -861,13 +1103,12 @@ struct TodayView: View {
                 .opacity(rowOpacity)
         } else {
             let title = mainLineText(for: item)
-            let medSummary = med.map { medicineSubtitle(for: $0) }
-            let subtitle = subtitleLine(for: item, medicine: med, summary: medSummary)
+            let subtitle = subtitleLine(for: item)
             let auxiliaryInfo = auxiliaryLineInfo(for: item)
             let actionText = actionText(for: item, isCompleted: isCompleted)
-            let titleColor: Color = isCompleted ? .secondary : .primary
+            let titleColor: Color = isCompleted ? todaySecondaryTextColor : todayPrimaryTextColor
             let prescriptionMedicine = med
-            let usesCondensedSubtitleStyle = item.category == .therapy
+            let usesCondensedSubtitleStyle = item.category == .therapy || item.category == .monitoring
             let isPrescriptionActionEnabled = item.category == .prescription
             let iconName = actionIcon(for: item)
             let swipeButtons = (item.category == .prescription && prescriptionMedicine != nil) ? prescriptionButtons(for: prescriptionMedicine!) : []
@@ -922,8 +1163,9 @@ struct TodayView: View {
             }()
 
             rowContent
-                .padding(.vertical, 4)
-                .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
+                .padding(.vertical, 2)
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                .listRowSeparator(.hidden)
                 .listRowBackground(rowBackground)
                 .opacity(rowOpacity)
         }
@@ -1008,11 +1250,7 @@ struct TodayView: View {
         return "Chiedi ricetta per \(medName) al medico \(doctorName)"
     }
 
-    private func subtitleLine(
-        for item: TodayTodoItem,
-        medicine: Medicine?,
-        summary: MedicineAggregateSubtitle?
-    ) -> String? {
+    private func subtitleLine(for item: TodayTodoItem) -> String? {
         if item.category == .therapy {
             return nil
         }
@@ -1364,12 +1602,11 @@ struct TodayView: View {
 
     private func autonomyDays(for medicine: Medicine) -> Int? {
         if let therapies = medicine.therapies, !therapies.isEmpty {
-            let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
             var totalLeft: Double = 0
             var totalDaily: Double = 0
             for therapy in therapies {
                 totalLeft += Double(therapy.leftover())
-                totalDaily += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
+                totalDaily += therapy.stimaConsumoGiornaliero(recurrenceManager: therapyRecurrenceManager)
             }
             if totalLeft <= 0 { return 0 }
             guard totalDaily > 0 else { return nil }
@@ -1442,7 +1679,7 @@ struct TodayView: View {
                 title: medName,
                 status: stockWarning ? "Da rifornire" : nil,
                 statusIconName: stockWarning ? "exclamationmark.triangle" : nil,
-                statusColor: .red,
+                statusColor: .orange,
                 subtitle: nil,
                 subtitleColor: .secondary,
                 subtitleAsBadge: false,
@@ -1468,16 +1705,16 @@ struct TodayView: View {
     ) -> some View {
         let medName = medicineTitleWithDosage(for: medicine)
         let auxiliaryInfo = auxiliaryLineInfo(for: item)
-        let prescriptionStatus = purchasePrescriptionStatusText(for: medicine)
-        let prescriptionStatusLine = Text(Image(systemName: prescriptionStateIconName)) + Text(" \(prescriptionStatus)")
 
         return TodayTodoRowView(
             iconName: prescriptionStateIconName,
             actionText: nil,
             leadingTime: leadingTime,
             title: medName,
+            titleStatusIconName: prescriptionStateIconName,
+            titleStatusIconColor: .orange,
+            titleStatusIconAccessibilityLabel: "Prescrizione",
             subtitle: nil,
-            subtitleLine: prescriptionStatusLine,
             auxiliaryLine: auxiliaryInfo?.text,
             auxiliaryUsesDefaultStyle: auxiliaryInfo?.usesDefaultStyle ?? true,
             isCompleted: isCompleted,
@@ -1485,8 +1722,7 @@ struct TodayView: View {
             showToggle: true,
             hideToggle: false,
             onToggle: { toggleCompletion(for: item) },
-            subtitleColor: .secondary,
-            subtitleAlignsWithTitle: true
+            subtitleColor: .secondary
         )
         .frame(maxWidth: .infinity, alignment: .leading)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -1497,8 +1733,9 @@ struct TodayView: View {
             }
             .tint(.orange)
         }
-        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-        .padding(.vertical, 2)
+        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+        .listRowSeparator(.hidden)
+        .padding(.vertical, 1)
     }
 
     private func blockedStatusText(for info: BlockedTherapyInfo) -> String? {
@@ -1528,13 +1765,6 @@ struct TodayView: View {
         medicine.hasEffectivePrescriptionReceived()
     }
 
-    private func purchasePrescriptionStatusText(for medicine: Medicine) -> String {
-        if hasPrescriptionRequest(medicine) {
-            return "Prescrizione chiesta a \(prescriptionDoctorName(for: medicine))"
-        }
-        return "richiede prescrizione"
-    }
-
     private func sendPrescriptionRequest(for medicine: Medicine) {
         let token = viewModel.operationToken(action: .prescriptionRequest, medicine: medicine)
         let log = viewModel.actionService.requestPrescription(for: medicine, operationId: token.id)
@@ -1549,6 +1779,7 @@ struct TodayView: View {
 
     private func completeBlockedIntake(for info: BlockedTherapyInfo, item: TodayTodoItem) {
         let med = info.medicine
+        Haptics.impact(.light)
         let shouldAutoRequestPrescription =
             viewModel.state.medicineStatuses[MedicineId(med.id)]?.needsPrescription == true &&
             !hasPrescriptionRequest(med) &&
@@ -1792,7 +2023,7 @@ struct TodayView: View {
                             } else {
                                 Text(button.label)
                                     .font(.callout)
-                                    .foregroundColor(Color.primary)
+                                    .foregroundColor(todayPrimaryTextColor)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 6)
                             }
@@ -1817,6 +2048,15 @@ struct TodayView: View {
         guard let phone = doctor?.phoneInternational else { return }
         let number = phone.hasPrefix("+") ? phone : "+\(phone)"
         guard let url = URL(string: "tel://\(number)") else { return }
+        openURL(url)
+    }
+
+    private func emailDoctor(_ doctor: DoctorContact?) {
+        guard let email = doctor?.email?.trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty else { return }
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = email
+        guard let url = components.url else { return }
         openURL(url)
     }
 
@@ -1855,7 +2095,7 @@ struct TodayView: View {
             if let leadingTime, !leadingTime.isEmpty {
                 Text(leadingTime)
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(todaySecondaryTextColor)
                     .monospacedDigit()
                     .multilineTextAlignment(.leading)
                     .lineLimit(1)
@@ -2030,10 +2270,6 @@ struct TodayView: View {
         }
     }
 
-    private func medicineSubtitle(for medicine: Medicine) -> MedicineAggregateSubtitle {
-        makeMedicineSubtitle(medicine: medicine)
-    }
-
     private func isStockDepleted(_ medicine: Medicine) -> Bool {
         viewModel.state.medicineStatuses[MedicineId(medicine.id)]?.isDepleted ?? false
     }
@@ -2110,6 +2346,10 @@ struct TodayView: View {
 
         if completingTodoIDs.contains(key) || disappearingTodoIDs.contains(key) {
             return
+        }
+
+        if item.category == .therapy {
+            Haptics.impact(.light)
         }
 
         if item.category == .missedDose, let medicine = medicine(for: item) {
@@ -2413,6 +2653,7 @@ struct TodayView: View {
     }
 
     private func refreshState() {
+        lastRefreshStateExecutionAt = Date()
         resetCompletionIfNewDay()
         viewModel.refreshState(
             medicines: Array(medicines),
@@ -2421,6 +2662,63 @@ struct TodayView: View {
             option: options.first,
             completedTodoIDs: completedTodoIDs
         )
+    }
+
+    private var isPresentingModal: Bool {
+        selectedMedicine != nil
+            || prescriptionEmailMedicine != nil
+            || prescriptionToConfirm != nil
+            || pendingPrescriptionMedicine != nil
+            || showDoctorPicker
+            || showAddDoctorSheet
+            || mailComposeData != nil
+            || messageComposeData != nil
+            || intakeGuardrailPrompt != nil
+            || showCodiceFiscaleFullScreen
+            || isOptionsPresented
+    }
+
+    private func handleContextObjectsDidChange(_ notification: Notification) {
+        guard hasRelevantContextChanges(notification) else { return }
+        scheduleRefreshState()
+    }
+
+    private func hasRelevantContextChanges(_ notification: Notification) -> Bool {
+        let keys = [
+            NSInsertedObjectsKey,
+            NSUpdatedObjectsKey,
+            NSDeletedObjectsKey,
+            NSRefreshedObjectsKey
+        ]
+
+        for key in keys {
+            guard let objects = notification.userInfo?[key] as? Set<NSManagedObject>, !objects.isEmpty else {
+                continue
+            }
+            if objects.contains(where: { object in
+                object is Medicine
+                    || object is Log
+                    || object is Todo
+                    || object is Option
+                    || object is Stock
+            }) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func scheduleRefreshState() {
+        refreshStateWorkItem?.cancel()
+        let now = Date()
+        let elapsed = now.timeIntervalSince(lastRefreshStateExecutionAt)
+        let throttleDelay = max(0, refreshThrottleDuration - elapsed)
+        let delay = max(refreshDebounceDuration, throttleDelay)
+        let workItem = DispatchWorkItem {
+            refreshState()
+        }
+        refreshStateWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 
     private func resetCompletionIfNewDay() {
@@ -2435,6 +2733,47 @@ struct TodayView: View {
         if !completedTodoCache.isEmpty { completedTodoCache.removeAll() }
         if !completedBlockedSubtasks.isEmpty { completedBlockedSubtasks.removeAll() }
         if !pendingPrescriptionMedIDs.isEmpty { pendingPrescriptionMedIDs.removeAll() }
+        persistCompletionState()
+    }
+
+    private func hydrateCompletionStateIfNeeded() {
+        guard !didHydrateCompletionState else { return }
+        didHydrateCompletionState = true
+        isHydratingCompletionState = true
+        defer { isHydratingCompletionState = false }
+
+        let defaults = UserDefaults.standard
+        let today = Calendar.current.startOfDay(for: Date())
+
+        guard let storedDay = defaults.object(forKey: completionStateDayKey) as? Date else {
+            lastCompletionResetDay = today
+            return
+        }
+
+        guard Calendar.current.isDate(storedDay, inSameDayAs: today) else {
+            defaults.removeObject(forKey: completionStateTodoIDsKey)
+            defaults.removeObject(forKey: completionStateBlockedSubtasksKey)
+            lastCompletionResetDay = today
+            return
+        }
+
+        lastCompletionResetDay = storedDay
+        let storedTodoIDs = Set(defaults.stringArray(forKey: completionStateTodoIDsKey) ?? [])
+        let storedBlockedSubtasks = Set(defaults.stringArray(forKey: completionStateBlockedSubtasksKey) ?? [])
+        if storedTodoIDs != completedTodoIDs {
+            completedTodoIDs = storedTodoIDs
+        }
+        if storedBlockedSubtasks != completedBlockedSubtasks {
+            completedBlockedSubtasks = storedBlockedSubtasks
+        }
+    }
+
+    private func persistCompletionState() {
+        let defaults = UserDefaults.standard
+        let today = Calendar.current.startOfDay(for: Date())
+        defaults.set(today, forKey: completionStateDayKey)
+        defaults.set(Array(completedTodoIDs).sorted(), forKey: completionStateTodoIDsKey)
+        defaults.set(Array(completedBlockedSubtasks).sorted(), forKey: completionStateBlockedSubtasksKey)
     }
 
     private var completionToastView: some View {

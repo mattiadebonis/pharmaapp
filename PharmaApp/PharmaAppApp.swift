@@ -84,7 +84,8 @@ struct PharmaAppApp: App {
     @StateObject var authViewModel = AuthViewModel()
     @StateObject private var favoritesStore = FavoritesStore()
     @StateObject private var notificationCoordinator = NotificationCoordinator(
-        context: PersistenceController.shared.container.viewContext
+        context: PersistenceController.shared.container.viewContext,
+        policy: PerformancePolicy.current()
     )
     private let refillLiveActivityCoordinator = RefillLiveActivityCoordinator.shared
 
@@ -114,6 +115,7 @@ struct PharmaAppApp: App {
                 }
                 .task {
                     let context = persistenceController.container.viewContext
+                    DataManager.shared.performOneTimeBootstrapIfNeeded()
                     UserIdentityProvider.shared.ensureProfile(in: context)
                     AccountPersonService.shared.ensureAccountPerson(in: context)
                     AccountPersonService.shared.migrateLegacyCodiceFiscaleIfNeeded(in: context)

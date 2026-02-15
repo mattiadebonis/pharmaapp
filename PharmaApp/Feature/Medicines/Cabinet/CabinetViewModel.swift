@@ -53,6 +53,11 @@ class CabinetViewModel: ObservableObject {
         let kind: Kind
     }
 
+    struct ShelfViewState {
+        let entries: [ShelfEntry]
+        let orderedEntriesByCabinetID: [NSManagedObjectID: [MedicinePackage]]
+    }
+
     private var viewContext: NSManagedObjectContext {
         PersistenceController.shared.container.viewContext
     }
@@ -64,6 +69,15 @@ class CabinetViewModel: ObservableObject {
         option: Option?,
         cabinets: [Cabinet]
     ) -> [ShelfEntry] {
+        shelfViewState(entries: entries, logs: logs, option: option, cabinets: cabinets).entries
+    }
+
+    func shelfViewState(
+        entries: [MedicinePackage],
+        logs: [Log],
+        option: Option?,
+        cabinets: [Cabinet]
+    ) -> ShelfViewState {
         let orderedEntries = orderedMedicinePackages(
             entries: entries,
             logs: logs,
@@ -98,7 +112,20 @@ class CabinetViewModel: ObservableObject {
             return lhs.priority < rhs.priority
         }
 
-        return (medicineEntries + cabinetEntries).sorted(by: sorter)
+        var orderedEntriesByCabinetID: [NSManagedObjectID: [MedicinePackage]] = [:]
+        for entry in orderedEntries {
+            if let cabinetID = entry.cabinet?.objectID {
+                orderedEntriesByCabinetID[cabinetID, default: []].append(entry)
+            }
+        }
+        for cabinet in cabinets where orderedEntriesByCabinetID[cabinet.objectID] == nil {
+            orderedEntriesByCabinetID[cabinet.objectID] = []
+        }
+
+        return ShelfViewState(
+            entries: (medicineEntries + cabinetEntries).sorted(by: sorter),
+            orderedEntriesByCabinetID: orderedEntriesByCabinetID
+        )
     }
 
     func sortedEntries(in cabinet: Cabinet, entries: [MedicinePackage], logs: [Log], option: Option?) -> [MedicinePackage] {

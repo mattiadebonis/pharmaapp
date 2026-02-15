@@ -3,6 +3,7 @@ import CoreData
 class DataManager {
     let context: NSManagedObjectContext
     static let shared = DataManager(context: PersistenceController.shared.container.viewContext)
+    private let bootstrapCompletedKey = "pharmaapp.bootstrap.completed.v1"
 
     init(context: NSManagedObjectContext) {
         self.context = context
@@ -257,6 +258,15 @@ class DataManager {
             savePharmaciesToCoreData()
         }
     }
+
+    func performOneTimeBootstrapIfNeeded(userDefaults: UserDefaults = .standard) {
+        if userDefaults.bool(forKey: bootstrapCompletedKey) {
+            return
+        }
+        initializePharmaciesDataIfNeeded()
+        initializeOptionsIfEmpty()
+        userDefaults.set(true, forKey: bootstrapCompletedKey)
+    }
     
     func initializeOptionsIfEmpty() {
         let fetchRequest: NSFetchRequest<Option> = Option.fetchRequest()
@@ -293,7 +303,9 @@ class DataManager {
                 }
             }
 
-            try context.save()
+            if context.hasChanges {
+                try context.save()
+            }
             
         } catch {
             fatalError("Errore durante il controllo o l'inizializzazione delle opzioni: \(error.localizedDescription)")

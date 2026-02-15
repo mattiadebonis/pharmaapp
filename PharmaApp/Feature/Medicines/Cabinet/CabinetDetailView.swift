@@ -3,6 +3,12 @@ import CoreData
 
 /// Dettaglio di un cabinet con elenco dei medicinali contenuti.
 struct CabinetDetailView: View {
+    private struct DetailRow: Identifiable {
+        let entry: MedicinePackage
+
+        var id: NSManagedObjectID { entry.objectID }
+    }
+
     let cabinet: Cabinet
     let entries: [MedicinePackage]
     @ObservedObject var viewModel: CabinetViewModel
@@ -19,15 +25,11 @@ struct CabinetDetailView: View {
     @State private var isMoveCabinetSheetPresented = false
     
     var body: some View {
-        let sections = computeSections(for: entries, logs: Array(logs), option: options.first)
-        let rows = sections.purchase.map { ($0, MedicineRowView.RowSection.purchase) }
-            + sections.oggi.map { ($0, MedicineRowView.RowSection.tuttoOk) }
-            + sections.ok.map { ($0, MedicineRowView.RowSection.tuttoOk) }
+        let rows = buildRows()
         
         List {
-            ForEach(rows, id: \.0.objectID) { entry in
-                let medPackage = entry.0
-                row(for: medPackage)
+            ForEach(rows) { item in
+                row(for: item.entry)
             }
         }
         .listStyle(.plain)
@@ -100,6 +102,14 @@ struct CabinetDetailView: View {
         } message: {
             Text("Cosa vuoi fare con i medicinali di questo armadietto?")
         }
+    }
+
+    private func buildRows() -> [DetailRow] {
+        let sections = computeSections(for: entries, logs: Array(logs), option: options.first)
+        let purchase = sections.purchase.map { DetailRow(entry: $0) }
+        let today = sections.oggi.map { DetailRow(entry: $0) }
+        let ok = sections.ok.map { DetailRow(entry: $0) }
+        return purchase + today + ok
     }
     
     private func row(for entry: MedicinePackage) -> some View {

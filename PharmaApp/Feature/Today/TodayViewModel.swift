@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreData
+import os.signpost
 
 /// ViewModel dedicato al tab "Oggi".
 /// Sposta la logica di costruzione dei todo e degli insight fuori dalla view.
@@ -8,6 +9,10 @@ class TodayViewModel: ObservableObject {
     private let recordIntakeUseCase: RecordIntakeUseCase
     private let operationIdProvider: OperationIdProviding
     private let todayStateProvider: CoreDataTodayStateProvider
+    private let refreshEngine = TodayStateRefreshEngine()
+    private var refreshTask: Task<Void, Never>?
+    private let refreshLogLookbackDays = 90
+    private let perfLog = OSLog(subsystem: "PharmaApp", category: "Performance")
     @Published private(set) var state: TodayState = .empty
 
     init(
@@ -39,15 +44,37 @@ class TodayViewModel: ObservableObject {
         option: Option?,
         completedTodoIDs: Set<String>
     ) {
-        let newState = todayStateProvider.buildState(
-            medicines: medicines,
-            logs: logs,
-            todos: todos,
-            option: option,
-            completedTodoIDs: completedTodoIDs
-        )
-        if newState != state {
-            state = newState
+        refreshTask?.cancel()
+
+        let cutoff = Calendar.current.date(byAdding: .day, value: -refreshLogLookbackDays, to: Date()) ?? .distantPast
+        let medicineIDs = medicines.map(\.objectID)
+        let recentLogIDs = logs.filter { $0.timestamp >= cutoff }.map(\.objectID)
+        let todoIDs = todos.map(\.objectID)
+        let optionID = option?.objectID
+        let completedIDs = completedTodoIDs
+
+        refreshTask = Task(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            let token = await self.refreshEngine.issueToken()
+            let signpostID = OSSignpostID(log: self.perfLog)
+            os_signpost(.begin, log: self.perfLog, name: "TodayRefresh", signpostID: signpostID)
+            defer { os_signpost(.end, log: self.perfLog, name: "TodayRefresh", signpostID: signpostID) }
+
+            guard let newState = await Self.buildStateInBackground(
+                medicineIDs: medicineIDs,
+                logIDs: recentLogIDs,
+                todoIDs: todoIDs,
+                optionID: optionID,
+                completedTodoIDs: completedIDs
+            ) else { return }
+            guard !Task.isCancelled else { return }
+            guard await self.refreshEngine.isLatest(token) else { return }
+
+            await MainActor.run {
+                if newState != self.state {
+                    self.state = newState
+                }
+            }
         }
     }
 
@@ -117,7 +144,8 @@ class TodayViewModel: ObservableObject {
     func syncTodos(
         from items: [TodayTodoItem],
         medicines: [Medicine],
-        option: Option?
+        option: Option?,
+        timeLabels: [String: TodayTimeLabel]
     ) {
         let context = viewContext
         let now = Date()
@@ -140,22 +168,52 @@ class TodayViewModel: ObservableObject {
             let sourceID = item.id
             seen.insert(sourceID)
             let todo = bySourceID[sourceID] ?? Todo(context: context)
-            if bySourceID[sourceID] == nil {
+            let isNew = bySourceID[sourceID] == nil
+            if isNew {
                 todo.id = UUID()
                 todo.created_at = now
             }
-            todo.source_id = sourceID
-            todo.title = item.title
-            todo.detail = item.detail
-            todo.category = item.category.rawValue
-            todo.updated_at = now
-            todo.due_at = todayStateProvider.todoTimeDate(
+
+            var didChange = isNew
+
+            if todo.source_id != sourceID {
+                todo.source_id = sourceID
+                didChange = true
+            }
+            if todo.title != item.title {
+                todo.title = item.title
+                didChange = true
+            }
+            if todo.detail != item.detail {
+                todo.detail = item.detail
+                didChange = true
+            }
+            if todo.category != item.category.rawValue {
+                todo.category = item.category.rawValue
+                didChange = true
+            }
+
+            let resolvedDueAt = resolvedDueDate(
                 for: item,
                 medicines: medicines,
                 option: option,
+                timeLabels: timeLabels,
                 now: now
             )
-            todo.medicine = medicine(for: item, medicines: medicines)
+            if todo.due_at != resolvedDueAt {
+                todo.due_at = resolvedDueAt
+                didChange = true
+            }
+
+            let resolvedMedicine = medicine(for: item, medicines: medicines)
+            if todo.medicine?.objectID != resolvedMedicine?.objectID {
+                todo.medicine = resolvedMedicine
+                didChange = true
+            }
+
+            if didChange {
+                todo.updated_at = now
+            }
         }
 
         for todo in existing where !seen.contains(todo.source_id) {
@@ -217,6 +275,31 @@ class TodayViewModel: ObservableObject {
         return nil
     }
 
+    private func resolvedDueDate(
+        for item: TodayTodoItem,
+        medicines: [Medicine],
+        option: Option?,
+        timeLabels: [String: TodayTimeLabel],
+        now: Date
+    ) -> Date? {
+        if let label = timeLabels[item.id] {
+            switch label {
+            case .time(let date):
+                return date
+            case .category:
+                if !item.id.hasPrefix("purchase|deadline|") && item.category != .deadline {
+                    return nil
+                }
+            }
+        }
+        return todayStateProvider.todoTimeDate(
+            for: item,
+            medicines: medicines,
+            option: option,
+            now: now
+        )
+    }
+
     func operationKey(action: OperationAction, medicine: Medicine, source: OperationSource) -> OperationKey {
         let packageId = resolvePackage(for: medicine, therapy: nil)?.id
         return OperationKey.medicineAction(
@@ -225,5 +308,60 @@ class TodayViewModel: ObservableObject {
             packageId: packageId,
             source: source
         )
+    }
+
+    private static func buildStateInBackground(
+        medicineIDs: [NSManagedObjectID],
+        logIDs: [NSManagedObjectID],
+        todoIDs: [NSManagedObjectID],
+        optionID: NSManagedObjectID?,
+        completedTodoIDs: Set<String>
+    ) async -> TodayState? {
+        let container = await MainActor.run { PersistenceController.shared.container }
+        let context = container.newBackgroundContext()
+        context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        return await withCheckedContinuation { continuation in
+            context.perform {
+                let medicines = medicineIDs.compactMap { id in
+                    try? context.existingObject(with: id) as? Medicine
+                }
+                let logs = logIDs.compactMap { id in
+                    try? context.existingObject(with: id) as? Log
+                }
+                let todos = todoIDs.compactMap { id in
+                    try? context.existingObject(with: id) as? Todo
+                }
+                let option = optionID.flatMap { id in
+                    try? context.existingObject(with: id) as? Option
+                }
+
+                let provider = CoreDataTodayStateProvider(context: context)
+                let state = provider.buildState(
+                    medicines: medicines,
+                    logs: logs,
+                    todos: todos,
+                    option: option,
+                    completedTodoIDs: completedTodoIDs
+                )
+                continuation.resume(returning: state)
+            }
+        }
+    }
+
+    deinit {
+        refreshTask?.cancel()
+    }
+}
+
+actor TodayStateRefreshEngine {
+    private var token: UInt64 = 0
+
+    func issueToken() -> UInt64 {
+        token &+= 1
+        return token
+    }
+
+    func isLatest(_ candidate: UInt64) -> Bool {
+        candidate == token
     }
 }

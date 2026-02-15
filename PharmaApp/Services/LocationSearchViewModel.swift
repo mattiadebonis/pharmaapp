@@ -19,13 +19,17 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
     @Published var todayOpeningText: String?
     @Published var closingTimeText: String?
     @Published var isLikelyOpen: Bool?
+    @Published var walkingRouteMinutes: Int?
+    @Published var drivingRouteMinutes: Int?
 
     private let manager = CLLocationManager()
     private let maxSearchSpanDelta: CLLocationDegrees = 5.0
     private let desiredAccuracy: CLLocationAccuracy = 80
     private let maxLocationAge: TimeInterval = 20
+    private let maxFallbackLocationAge: TimeInterval = 300
     private let minRequeryDistance: CLLocationDistance = 60
     private var userLocation: CLLocation?
+    private var routeEstimateToken = UUID()
 
     override init() {
         super.init()
@@ -35,28 +39,20 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
     }
 
     func ensureStarted() {
-        if CLLocationManager.authorizationStatus() == .notDetermined {
-            manager.requestWhenInUseAuthorization()
-        } else if CLLocationManager.authorizationStatus() == .authorizedWhenInUse || CLLocationManager.authorizationStatus() == .authorizedAlways {
-            manager.startUpdatingLocation()
-        }
+        guard CLLocationManager.locationServicesEnabled() else { return }
+        handleAuthorizationStatus(manager.authorizationStatus)
     }
 
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
-        switch status {
-        case .authorizedWhenInUse, .authorizedAlways:
-            manager.startUpdatingLocation()
-        default:
-            break
-        }
+        handleAuthorizationStatus(status)
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        handleAuthorizationStatus(manager.authorizationStatus)
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        let now = Date()
-        let fresh = locations
-            .filter { $0.horizontalAccuracy >= 0 }
-            .filter { now.timeIntervalSince($0.timestamp) <= maxLocationAge }
-        guard let best = fresh.min(by: { $0.horizontalAccuracy < $1.horizontalAccuracy }) else { return }
+        guard let best = bestAvailableLocation(from: locations, now: Date()) else { return }
 
         let shouldSearch: Bool
         if let previous = userLocation {
@@ -76,13 +72,30 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
         }
     }
 
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        guard let clError = error as? CLError else { return }
+        switch clError.code {
+        case .locationUnknown:
+            // Riprova rapidamente: su device reale il primo fix può fallire in indoor o con rete instabile.
+            manager.requestLocation()
+        case .denied:
+            manager.stopUpdatingLocation()
+        default:
+            break
+        }
+    }
+
     private func searchNearestPharmacy(
         around location: CLLocation,
         spanDelta: CLLocationDegrees = 0.05,
         fallback: MKMapItem? = nil,
-        query: String = "pharmacy open now"
+        query: String = "farmacia aperta ora",
+        hasTriedGenericQuery: Bool = false
     ) {
-        let isOpenQuery = query.lowercased().contains("open now")
+        let normalizedQuery = query
+            .folding(options: .diacriticInsensitive, locale: .current)
+            .lowercased()
+        let isOpenQuery = normalizedQuery.contains("open now") || normalizedQuery.contains("aperta")
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
         request.resultTypes = .pointOfInterest
@@ -98,12 +111,36 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
         let search = MKLocalSearch(request: request)
         search.start { [weak self] response, error in
             guard let self else { return }
+            if error != nil, isOpenQuery, !hasTriedGenericQuery {
+                self.searchNearestPharmacy(
+                    around: location,
+                    spanDelta: 0.08,
+                    fallback: fallback,
+                    query: "farmacia",
+                    hasTriedGenericQuery: true
+                )
+                return
+            }
             let rawItems = response?.mapItems ?? []
             let items = self.filtered(items: rawItems)
             guard !items.isEmpty else {
                 let nextSpan = spanDelta * 1.8
                 if nextSpan <= self.maxSearchSpanDelta {
-                    self.searchNearestPharmacy(around: location, spanDelta: nextSpan, fallback: fallback, query: query)
+                    self.searchNearestPharmacy(
+                        around: location,
+                        spanDelta: nextSpan,
+                        fallback: fallback,
+                        query: query,
+                        hasTriedGenericQuery: hasTriedGenericQuery
+                    )
+                } else if !hasTriedGenericQuery {
+                    self.searchNearestPharmacy(
+                        around: location,
+                        spanDelta: 0.08,
+                        fallback: fallback,
+                        query: "farmacia",
+                        hasTriedGenericQuery: true
+                    )
                 } else if let fallback {
                     self.applySelection(for: fallback, userLocation: location, assumedOpen: isOpenQuery)
                 }
@@ -137,7 +174,13 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
 
             let nextSpan = spanDelta * 1.8
             if nextSpan <= self.maxSearchSpanDelta {
-                self.searchNearestPharmacy(around: location, spanDelta: nextSpan, fallback: updatedFallback, query: query)
+                self.searchNearestPharmacy(
+                    around: location,
+                    spanDelta: nextSpan,
+                    fallback: updatedFallback,
+                    query: query,
+                    hasTriedGenericQuery: hasTriedGenericQuery
+                )
                 return
             }
 
@@ -145,6 +188,44 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
                 self.applySelection(for: bestFallback, userLocation: location, assumedOpen: isOpenQuery)
             }
         }
+    }
+
+    private func handleAuthorizationStatus(_ status: CLAuthorizationStatus) {
+        switch status {
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            startLocationAcquisition()
+        case .denied, .restricted:
+            manager.stopUpdatingLocation()
+        @unknown default:
+            break
+        }
+    }
+
+    private func startLocationAcquisition() {
+        if let cached = manager.location {
+            locationManager(manager, didUpdateLocations: [cached])
+        }
+        manager.requestLocation()
+        manager.startUpdatingLocation()
+    }
+
+    private func bestAvailableLocation(from locations: [CLLocation], now: Date) -> CLLocation? {
+        let valid = locations.filter { $0.horizontalAccuracy >= 0 }
+        guard !valid.isEmpty else { return nil }
+
+        let fresh = valid.filter { now.timeIntervalSince($0.timestamp) <= maxLocationAge }
+        if let bestFresh = fresh.min(by: { $0.horizontalAccuracy < $1.horizontalAccuracy }) {
+            return bestFresh
+        }
+
+        let fallback = valid.filter { now.timeIntervalSince($0.timestamp) <= maxFallbackLocationAge }
+        if let bestFallback = fallback.min(by: { $0.horizontalAccuracy < $1.horizontalAccuracy }) {
+            return bestFallback
+        }
+
+        return valid.min(by: { $0.horizontalAccuracy < $1.horizontalAccuracy })
     }
 
     private func filtered(items: [MKMapItem]) -> [MKMapItem] {
@@ -175,6 +256,8 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
         let span = MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
         let effectiveOpen = assumedOpen ?? true
         DispatchQueue.main.async {
+            let token = UUID()
+            self.routeEstimateToken = token
             self.region = MKCoordinateRegion(center: coord, span: span)
             let phone = chosen.phoneNumber?.trimmingCharacters(in: .whitespacesAndNewlines)
             self.pinItem = Pin(
@@ -183,6 +266,8 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
                 phone: (phone?.isEmpty == true) ? nil : phone,
                 mapItem: chosen
             )
+            self.walkingRouteMinutes = nil
+            self.drivingRouteMinutes = nil
             if let dist = chosen.placemark.location?.distance(from: location) {
                 self.distanceMeters = dist
                 self.distanceString = Self.format(distance: dist)
@@ -200,6 +285,53 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
             if effectiveOpen, self.isLikelyOpen != true {
                 self.isLikelyOpen = true
                 self.closingTimeText = self.closingTimeText ?? "Aperta"
+            }
+            self.updateRouteEstimates(from: location, to: chosen, token: token)
+        }
+    }
+
+    private enum RouteEstimateMode {
+        case walking
+        case driving
+
+        var transportType: MKDirectionsTransportType {
+            switch self {
+            case .walking:
+                return .walking
+            case .driving:
+                return .automobile
+            }
+        }
+    }
+
+    private func updateRouteEstimates(from origin: CLLocation, to destination: MKMapItem, token: UUID) {
+        calculateRouteMinutes(mode: .walking, from: origin, to: destination, token: token)
+        calculateRouteMinutes(mode: .driving, from: origin, to: destination, token: token)
+    }
+
+    private func calculateRouteMinutes(
+        mode: RouteEstimateMode,
+        from origin: CLLocation,
+        to destination: MKMapItem,
+        token: UUID
+    ) {
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: origin.coordinate))
+        request.destination = destination
+        request.transportType = mode.transportType
+        request.requestsAlternateRoutes = false
+
+        MKDirections(request: request).calculateETA { [weak self] response, _ in
+            guard let self else { return }
+            let minutes = response.map { max(1, Int(ceil($0.expectedTravelTime / 60.0))) }
+            DispatchQueue.main.async {
+                guard self.routeEstimateToken == token else { return }
+                switch mode {
+                case .walking:
+                    self.walkingRouteMinutes = minutes
+                case .driving:
+                    self.drivingRouteMinutes = minutes
+                }
             }
         }
     }

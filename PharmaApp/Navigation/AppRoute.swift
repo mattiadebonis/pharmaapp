@@ -2,7 +2,9 @@ import Foundation
 
 enum AppTabRoute: String, Hashable, Codable {
     case oggi
+    case statistiche
     case medicine
+    case profilo
 }
 
 enum AppRoute: String, Codable, Equatable {

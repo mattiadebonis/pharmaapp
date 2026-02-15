@@ -11,6 +11,15 @@ import CoreData
 struct RecurrenceManager {
 
     let context: NSManagedObjectContext?
+    private static let recurrenceCacheQueue = DispatchQueue(label: "RecurrenceManager.parse.cache.queue", attributes: .concurrent)
+    private static var recurrenceCache: [String: RecurrenceRule] = [:]
+    private static let utcFormatterLock = NSLock()
+    private static let utcFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        return formatter
+    }()
 
     func buildRecurrenceString(from rule: RecurrenceRule) -> String {
         var lines: [String] = []
@@ -77,6 +86,10 @@ struct RecurrenceManager {
     }
     
     func parseRecurrenceString(_ icsString: String) -> RecurrenceRule {
+        if let cached = Self.cachedRecurrenceRule(for: icsString) {
+            return cached
+        }
+
         var rule = RecurrenceRule(freq: "DAILY")
         
         let lines = icsString.split(separator: "\n")
@@ -130,6 +143,7 @@ struct RecurrenceManager {
             }
         }
         
+        Self.storeRecurrenceRule(rule, for: icsString)
         return rule
     }
 
@@ -318,17 +332,15 @@ struct RecurrenceManager {
     }
     
     private func formatDateUTC(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        return formatter.string(from: date)
+        Self.utcFormatterLock.lock()
+        defer { Self.utcFormatterLock.unlock() }
+        return Self.utcFormatter.string(from: date)
     }
     
     private func parseDateUTC(_ dateString: String) -> Date? {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        return formatter.date(from: dateString)
+        Self.utcFormatterLock.lock()
+        defer { Self.utcFormatterLock.unlock() }
+        return Self.utcFormatter.date(from: dateString)
     }
     // In RecurrenceManager.swift
 
@@ -593,5 +605,19 @@ struct RecurrenceManager {
         if remainder == 0 { return nowWeek }
         let weeksToAdd = intervalWeeks - remainder
         return calendar.date(byAdding: .weekOfYear, value: weeksToAdd, to: nowWeek) ?? nowWeek
+    }
+
+    private static func cachedRecurrenceRule(for raw: String) -> RecurrenceRule? {
+        var result: RecurrenceRule?
+        recurrenceCacheQueue.sync {
+            result = recurrenceCache[raw]
+        }
+        return result
+    }
+
+    private static func storeRecurrenceRule(_ rule: RecurrenceRule, for raw: String) {
+        recurrenceCacheQueue.async(flags: .barrier) {
+            recurrenceCache[raw] = rule
+        }
     }
 }

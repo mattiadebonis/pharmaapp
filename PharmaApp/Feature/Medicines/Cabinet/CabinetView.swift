@@ -3,7 +3,15 @@ import CoreData
 
 /// Vista dedicata al tab "Armadietto" (ex ramo medicines di FeedView)
 struct CabinetView: View {
+    private struct ShelfViewState {
+        let favoriteEntries: [CabinetViewModel.ShelfEntry]
+        let cabinetEntries: [CabinetViewModel.ShelfEntry]
+        let otherMedicineEntries: [CabinetViewModel.ShelfEntry]
+        let orderedEntriesByCabinetID: [NSManagedObjectID: [MedicinePackage]]
+    }
+
     @EnvironmentObject private var appVM: AppViewModel
+    @EnvironmentObject private var appRouter: AppRouter
     @EnvironmentObject private var favoritesStore: FavoritesStore
     @Environment(\.managedObjectContext) private var managedObjectContext
     @StateObject private var viewModel = CabinetViewModel()
@@ -42,7 +50,7 @@ struct CabinetView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        appVM.isProfilePresented = true
+                        appRouter.selectedTab = .profilo
                     } label: {
                         Image(systemName: "person")
                     }
@@ -50,22 +58,12 @@ struct CabinetView: View {
                     .foregroundStyle(.primary)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button {
-                            isNewCabinetPresented = true
-                        } label: {
-                            Label("Nuovo armadietto", systemImage: "cross.case.fill")
-                        }
-
-                        Button {
-                            isSearchPresented = true
-                        } label: {
-                            Label("Nuovo farmaco", systemImage: "pills")
-                        }
+                    Button {
+                        isSearchPresented = true
                     } label: {
                         Image(systemName: "plus")
                     }
-                    .accessibilityLabel("Aggiungi")
+                    .accessibilityLabel("Nuovo farmaco")
                     .foregroundStyle(.primary)
                 }
             }
@@ -103,7 +101,6 @@ struct CabinetView: View {
 
     private var cabinetListWithDetailSheet: some View {
         cabinetListStyled
-            .id(logs.count)
             .sheet(isPresented: Binding(
                 get: { selectedEntry != nil },
                 set: { newValue in if !newValue { selectedEntry = nil } }
@@ -146,23 +143,7 @@ struct CabinetView: View {
     }
 
     private var cabinetListView: AnyView {
-        let entries = viewModel.shelfEntries(
-            entries: Array(medicinePackages),
-            logs: Array(logs),
-            option: options.first,
-            cabinets: Array(cabinets)
-        )
-        let favoriteEntries = entries.filter { isFavoriteEntry($0) }
-        let cabinetEntries = entries.filter { entry in
-            guard !isFavoriteEntry(entry) else { return false }
-            if case .cabinet = entry.kind { return true }
-            return false
-        }
-        let otherMedicineEntries = entries.filter { entry in
-            guard !isFavoriteEntry(entry) else { return false }
-            if case .medicinePackage = entry.kind { return true }
-            return false
-        }
+        let viewState = buildShelfViewState()
         return AnyView(List {
             if appVM.suggestNearestPharmacies {
                 Section {
@@ -173,37 +154,37 @@ struct CabinetView: View {
                 .listSectionSeparator(.hidden)
             }
 
-            if !favoriteEntries.isEmpty {
+            if !viewState.favoriteEntries.isEmpty {
                 Section(header: sectionHeader("Preferiti")) {
-                    ForEach(favoriteEntries, id: \.id) { entry in
-                        shelfRow(for: entry)
+                    ForEach(viewState.favoriteEntries, id: \.id) { entry in
+                        shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
                     }
                 }
                 .listSectionSeparator(.hidden)
             }
 
-            if !cabinetEntries.isEmpty {
+            if !viewState.cabinetEntries.isEmpty {
                 Section(header: sectionHeader("Armadietti")) {
-                    ForEach(cabinetEntries, id: \.id) { entry in
-                        shelfRow(for: entry)
+                    ForEach(viewState.cabinetEntries, id: \.id) { entry in
+                        shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
                     }
                 }
                 .listSectionSeparator(.hidden)
             }
 
-            if !otherMedicineEntries.isEmpty {
-                let showOtherMedicinesHeader = !(favoriteEntries.isEmpty && cabinetEntries.isEmpty)
+            if !viewState.otherMedicineEntries.isEmpty {
+                let showOtherMedicinesHeader = !(viewState.favoriteEntries.isEmpty && viewState.cabinetEntries.isEmpty)
                 if showOtherMedicinesHeader {
                     Section(header: sectionHeader("Altri medicinali")) {
-                        ForEach(otherMedicineEntries, id: \.id) { entry in
-                            shelfRow(for: entry)
+                        ForEach(viewState.otherMedicineEntries, id: \.id) { entry in
+                            shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
                         }
                     }
                     .listSectionSeparator(.hidden)
                 } else {
                     Section {
-                        ForEach(otherMedicineEntries, id: \.id) { entry in
-                            shelfRow(for: entry)
+                        ForEach(viewState.otherMedicineEntries, id: \.id) { entry in
+                            shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
                         }
                     }
                     .listSectionSeparator(.hidden)
@@ -212,11 +193,43 @@ struct CabinetView: View {
         })
     }
 
+    private func buildShelfViewState() -> ShelfViewState {
+        let shelfState = viewModel.shelfViewState(
+            entries: Array(medicinePackages),
+            logs: Array(logs),
+            option: options.first,
+            cabinets: Array(cabinets)
+        )
+        let favoriteEntries = shelfState.entries.filter { isFavoriteEntry($0) }
+        let cabinetEntries = shelfState.entries.filter { entry in
+            guard !isFavoriteEntry(entry) else { return false }
+            if case .cabinet = entry.kind { return true }
+            return false
+        }
+        let otherMedicineEntries = shelfState.entries.filter { entry in
+            guard !isFavoriteEntry(entry) else { return false }
+            if case .medicinePackage = entry.kind { return true }
+            return false
+        }
+        return ShelfViewState(
+            favoriteEntries: favoriteEntries,
+            cabinetEntries: cabinetEntries,
+            otherMedicineEntries: otherMedicineEntries,
+            orderedEntriesByCabinetID: shelfState.orderedEntriesByCabinetID
+        )
+    }
+
     @ViewBuilder
-    private func shelfRow(for entry: CabinetViewModel.ShelfEntry) -> some View {
+    private func shelfRow(
+        for entry: CabinetViewModel.ShelfEntry,
+        orderedEntriesByCabinetID: [NSManagedObjectID: [MedicinePackage]]
+    ) -> some View {
         switch entry.kind {
         case .cabinet(let cabinet):
-            cabinetRow(for: cabinet)
+            cabinetRow(
+                for: cabinet,
+                entries: orderedEntriesByCabinetID[cabinet.objectID] ?? []
+            )
         case .medicinePackage(let entry):
             row(for: entry)
         }
@@ -339,14 +352,7 @@ struct CabinetView: View {
         .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
     }
 
-    private func cabinetRow(for cabinet: Cabinet) -> some View {
-        let entries = viewModel.sortedEntries(
-            in: cabinet,
-            entries: Array(medicinePackages),
-            logs: Array(logs),
-            option: options.first
-        )
-
+    private func cabinetRow(for cabinet: Cabinet, entries: [MedicinePackage]) -> some View {
         let isFavoriteCabinet = favoritesStore.isFavorite(cabinet)
         return Button {
             activeCabinetID = cabinet.objectID

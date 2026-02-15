@@ -17,18 +17,10 @@ import Vision
 struct ContentView: View {
     // MARK: – Dependencies
     @Environment(\.managedObjectContext) private var moc
-    @EnvironmentObject private var appVM: AppViewModel
     @EnvironmentObject private var appRouter: AppRouter
     @State private var isNewMedicinePresented = false
     @State private var isGlobalCodiceFiscalePresented = false
     @State private var globalCodiceFiscaleEntries: [PrescriptionCFEntry] = []
-
-    // Init fake data once
-    init() {
-        // Medicines are now entered manually by users; no JSON preload
-        DataManager.shared.initializePharmaciesDataIfNeeded()
-        DataManager.shared.initializeOptionsIfEmpty()
-    }
 
     // MARK: – UI
     var body: some View {
@@ -47,7 +39,16 @@ struct ContentView: View {
                     }
                 }
 
-                // TAB 2 – Medicine
+                // TAB 2 – Statistiche
+                Tab("Statistiche", systemImage: "chart.bar.xaxis", value: AppTabRoute.statistiche) {
+                    NavigationStack {
+                        Text("Statistiche")
+                            .navigationTitle("Statistiche")
+                            .navigationBarTitleDisplayMode(.large)
+                    }
+                }
+
+                // TAB 3 – Medicine
                 Tab("Medicine", systemImage: "pills", value: AppTabRoute.medicine) {
                     NavigationStack {
                         CabinetView()
@@ -55,12 +56,13 @@ struct ContentView: View {
                             .navigationBarTitleDisplayMode(.large)
                     }
                 }
-            }
-            .sheet(isPresented: Binding(
-                get: { appVM.isProfilePresented },
-                set: { appVM.isProfilePresented = $0 }
-            )) {
-                NavigationStack { ProfileView() }
+
+                // TAB 4 – Profilo
+                Tab("Profilo", systemImage: "person.crop.circle", value: AppTabRoute.profilo) {
+                    NavigationStack {
+                        ProfileView(showsDoneButton: false)
+                    }
+                }
             }
             .fullScreenCover(isPresented: $isGlobalCodiceFiscalePresented) {
                 CodiceFiscaleFullscreenView(
@@ -96,7 +98,6 @@ struct ContentView: View {
         guard let route else { return }
         switch route {
         case .profile:
-            appVM.isProfilePresented = true
             appRouter.markRouteHandled(route)
         case .codiceFiscaleFullscreen:
             globalCodiceFiscaleEntries = PrescriptionCodiceFiscaleResolver().entriesForRxAndLowStock(in: moc)
@@ -117,10 +118,10 @@ struct ContentView: View {
 
 // Placeholder ricerca catalogo se non è presente un componente dedicato.
 struct CatalogSearchScreen: View {
-    @EnvironmentObject private var appVM: AppViewModel
+    @Environment(\.dismiss) private var dismiss
     var onSelect: (CatalogSelection) -> Void
     @State private var searchText: String = ""
-    @FocusState private var isSearching: Bool
+    @State private var shouldAutoFocusSearch = false
     @State private var catalog: [CatalogSelection] = []
     @State private var isLoading = false
     @State private var isScanPresented = false
@@ -151,62 +152,53 @@ struct CatalogSearchScreen: View {
         List {
             if isLoading {
                 Section {
-                    HStack(spacing: 10) {
-                        ProgressView()
-                        Text("Caricamento catalogo…")
-                            .foregroundStyle(.secondary)
-                    }
+                    loadingContent
                 }
+            } else if trimmedSearchText.isEmpty {
+                Section {
+                    introContent
+                }
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .listRowBackground(Color.clear)
             } else if filteredResults.isEmpty {
-                // Non mostrare farmaci se la ricerca è vuota
+                Section {
+                    emptyResultsContent
+                }
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .listRowBackground(Color.clear)
             } else {
-                Section(header: Text("Risultati")) {
+                Section(header: Text("Risultati \(filteredResults.count)")) {
                     ForEach(filteredResults, id: \.id) { item in
                         Button {
                             onSelect(item)
                         } label: {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(camelCase(item.name))
-                                    .font(.headline)
-                                Text(naturalPackageLabel(for: item))
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                if !item.principle.isEmpty {
-                                    Text(item.principle)
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            catalogRow(item)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
         }
-        .listStyle(.plain)
+        .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color.white)
+        .background(Color(.systemGroupedBackground))
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Cerca il farmaco")
-        .navigationTitle("Cerca")
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+        .navigationTitle("Cerca farmaco")
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Button {
-                        appVM.isProfilePresented = true
-                    } label: {
-                    Image(systemName: "person.crop.circle")
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Chiudi") {
+                    dismiss()
                 }
-                .accessibilityLabel("Profilo")
             }
         }
-        .onAppear { isSearching = true }
-        .focused($isSearching)
+        .onAppear { shouldAutoFocusSearch = true }
         .task { loadCatalogIfNeeded() }
         .background(
-            SearchBarAccessoryInstaller(
-                systemImage: "vial.viewfinder",
-                accessibilityLabel: "Scansiona confezione",
-                onTap: { startScan() }
-            )
+            SearchFieldAutoFocusInstaller(shouldFocus: shouldAutoFocusSearch) {
+                shouldAutoFocusSearch = false
+            }
         )
         .fullScreenCover(isPresented: $isScanPresented) {
             ImagePicker(sourceType: .camera) { image in
@@ -231,8 +223,103 @@ struct CatalogSearchScreen: View {
         }
     }
 
+    private var trimmedSearchText: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var loadingContent: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Caricamento catalogo")
+                    .font(.subheadline.weight(.semibold))
+                Text("Preparazione elenco farmaci...")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 6)
+    }
+
+    private var introContent: some View {
+        Button {
+            startScan()
+        } label: {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: "vial.viewfinder")
+                    .font(.system(size: 48, weight: .bold))
+                    .foregroundStyle(.tint)
+                    .frame(width: 52, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Scannerizza la scatola del farmaco")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text("Tocca qui per usare lo scanner e riconoscere automaticamente il farmaco.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Scannerizza la scatola del farmaco")
+    }
+
+    private var emptyResultsContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Nessun risultato", systemImage: "magnifyingglass")
+                .font(.headline)
+            Text("Nessuna corrispondenza per \"\(trimmedSearchText)\".")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Text("Prova con meno parole o usa lo scanner.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func catalogRow(_ item: CatalogSelection) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(camelCase(item.name))
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                Text(item.requiresPrescription ? "Ricetta" : "Libera")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(item.requiresPrescription ? Color.orange.opacity(0.18) : Color.green.opacity(0.18))
+                    )
+                    .foregroundStyle(item.requiresPrescription ? .orange : .green)
+            }
+            Text(naturalPackageLabel(for: item))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            if !item.principle.isEmpty {
+                Text(item.principle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+    }
+
     private var filteredResults: [CatalogSelection] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let query = trimmedSearchText
         guard !query.isEmpty else { return [] }
         return catalog
             .filter { item in
@@ -761,13 +848,12 @@ private struct ImagePicker: UIViewControllerRepresentable {
     }
 }
 
-private struct SearchBarAccessoryInstaller: UIViewControllerRepresentable {
-    let systemImage: String
-    let accessibilityLabel: String
-    let onTap: () -> Void
+private struct SearchFieldAutoFocusInstaller: UIViewControllerRepresentable {
+    let shouldFocus: Bool
+    let onDidFocus: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onTap: onTap)
+        Coordinator(onDidFocus: onDidFocus)
     }
 
     func makeUIViewController(context: Context) -> UIViewController {
@@ -777,45 +863,52 @@ private struct SearchBarAccessoryInstaller: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
-        context.coordinator.onTap = onTap
-        context.coordinator.installIfNeeded(from: uiViewController, systemImage: systemImage, label: accessibilityLabel)
+        context.coordinator.onDidFocus = onDidFocus
+        guard shouldFocus else { return }
+        context.coordinator.requestFocus(from: uiViewController)
     }
 
     final class Coordinator {
-        var onTap: () -> Void
-        private weak var installedField: UISearchTextField?
-        private weak var installedButton: UIButton?
+        var onDidFocus: () -> Void
+        private var isAttempting = false
 
-        init(onTap: @escaping () -> Void) {
-            self.onTap = onTap
+        init(onDidFocus: @escaping () -> Void) {
+            self.onDidFocus = onDidFocus
         }
 
-        func installIfNeeded(from viewController: UIViewController, systemImage: String, label: String) {
-            DispatchQueue.main.async {
-                guard let searchController = viewController.findSearchController() else { return }
-                let textField = searchController.searchBar.searchTextField
-                if self.installedField === textField, let button = self.installedButton {
-                    button.setImage(UIImage(systemName: systemImage), for: .normal)
-                    button.accessibilityLabel = label
-                    return
+        func requestFocus(from viewController: UIViewController) {
+            guard !isAttempting else { return }
+            isAttempting = true
+            attemptFocus(from: viewController, attemptsRemaining: 12)
+        }
+
+        private func attemptFocus(from viewController: UIViewController, attemptsRemaining: Int) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                guard let searchController = viewController.findSearchController() else {
+                    return self.retryIfNeeded(from: viewController, attemptsRemaining: attemptsRemaining - 1)
                 }
 
-                let button = UIButton(type: .system)
-                button.setImage(UIImage(systemName: systemImage), for: .normal)
-                button.tintColor = .label
-                button.accessibilityLabel = label
-                button.contentEdgeInsets = UIEdgeInsets(top: 0, left: 6, bottom: 0, right: 6)
-                button.addAction(UIAction { [weak self] _ in
-                    self?.onTap()
-                }, for: .touchUpInside)
+                searchController.isActive = true
+                let textField = searchController.searchBar.searchTextField
+                if !textField.isFirstResponder {
+                    textField.becomeFirstResponder()
+                }
 
-                textField.rightView = button
-                textField.rightViewMode = .always
-                textField.clearButtonMode = .whileEditing
-
-                self.installedField = textField
-                self.installedButton = button
+                if textField.isFirstResponder {
+                    self.isAttempting = false
+                    self.onDidFocus()
+                } else {
+                    self.retryIfNeeded(from: viewController, attemptsRemaining: attemptsRemaining - 1)
+                }
             }
+        }
+
+        private func retryIfNeeded(from viewController: UIViewController, attemptsRemaining: Int) {
+            guard attemptsRemaining > 0 else {
+                isAttempting = false
+                return
+            }
+            attemptFocus(from: viewController, attemptsRemaining: attemptsRemaining)
         }
     }
 }
@@ -830,7 +923,8 @@ private extension UIViewController {
             current = controller.parent
         }
 
-        if let nav = navigationController, let searchController = nav.topViewController?.navigationItem.searchController {
+        if let nav = navigationController,
+           let searchController = nav.topViewController?.navigationItem.searchController {
             return searchController
         }
 

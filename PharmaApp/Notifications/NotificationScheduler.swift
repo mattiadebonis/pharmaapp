@@ -1,6 +1,7 @@
 import Foundation
 import CoreData
 import UserNotifications
+import os.signpost
 
 enum NotificationInterruptionPriority: Equatable {
     case active
@@ -18,12 +19,12 @@ struct NotificationScheduleRequestDescriptor: Equatable {
     let interruptionLevel: NotificationInterruptionPriority
 }
 
-@MainActor
 final class NotificationScheduler {
     private let center: NotificationCenterClient
     private let context: NSManagedObjectContext
     private let config: NotificationScheduleConfiguration
     private let planner: NotificationPlanner
+    private let perfLog = OSLog(subsystem: "PharmaApp", category: "Performance")
     private var isScheduling = false
     private var needsReschedule = false
 
@@ -71,6 +72,10 @@ final class NotificationScheduler {
             needsReschedule = true
             return
         }
+        let signpostID = OSSignpostID(log: perfLog)
+        os_signpost(.begin, log: perfLog, name: "NotificationPlan", signpostID: signpostID)
+        defer { os_signpost(.end, log: perfLog, name: "NotificationPlan", signpostID: signpostID) }
+
         isScheduling = true
         defer {
             isScheduling = false
@@ -86,8 +91,7 @@ final class NotificationScheduler {
         guard authorized else { return }
 
         let now = Date()
-        let preferences = TherapyNotificationPreferences(option: Option.current(in: context))
-        let plan = planner.plan(now: now)
+        let (plan, preferences) = makePlanAndPreferences(now: now)
         let therapyItems = Array(plan.therapy.prefix(config.maxTherapyNotifications))
         let stockItems = Array(plan.stock.prefix(config.maxStockNotifications))
 
@@ -107,6 +111,14 @@ final class NotificationScheduler {
             preferences: preferences,
             now: now
         )
+    }
+
+    private func makePlanAndPreferences(now: Date) -> (NotificationPlan, TherapyNotificationPreferences) {
+        context.performAndWait {
+            let preferences = TherapyNotificationPreferences(option: Option.current(in: context))
+            let plan = planner.plan(now: now)
+            return (plan, preferences)
+        }
     }
 
     nonisolated static func buildRequestDescriptors(

@@ -128,8 +128,10 @@ public struct TodayStateBuilder {
 
     public static func completionKey(for item: TodayTodoItem) -> String {
         switch item.category {
-        case .therapy, .purchase, .prescription:
+        case .therapy, .prescription:
             return stableCompletionKey(from: item.id)
+        case .purchase:
+            return item.id
         case .monitoring, .missedDose:
             return item.id
         default:
@@ -455,6 +457,17 @@ public struct TodayStateBuilder {
             }
             return dict
         }()
+        var purchaseBuckets: [String: [MedicineSnapshot]] = {
+            var dict: [String: [MedicineSnapshot]] = [:]
+            for med in medicines {
+                let key = normalizedName(med.name)
+                dict[key, default: []].append(med)
+            }
+            for key in dict.keys {
+                dict[key]?.sort { $0.externalKey < $1.externalKey }
+            }
+            return dict
+        }()
 
         for highlight in context.therapyHighlights {
             guard let parsed = parseHighlight(highlight) else { continue }
@@ -473,7 +486,15 @@ public struct TodayStateBuilder {
 
         for highlight in context.purchaseHighlights {
             guard let parsed = parsePurchaseHighlight(highlight) else { continue }
-            let med = medIndex[parsed.name.lowercased()]
+            let medKey = normalizedName(parsed.name)
+            let med: MedicineSnapshot? = {
+                guard var bucket = purchaseBuckets[medKey], !bucket.isEmpty else {
+                    return medIndex[parsed.name.lowercased()]
+                }
+                let first = bucket.removeFirst()
+                purchaseBuckets[medKey] = bucket
+                return first
+            }()
             let medId = med?.id
             let salt = med?.latestLogSalt ?? ""
             let detailWithUrgency = detailForAction(
@@ -481,9 +502,10 @@ public struct TodayStateBuilder {
                 medicine: med,
                 urgentIds: urgentIds
             )
+            let sourceKey = medId?.rawValue.uuidString ?? parsed.name.lowercased()
             items.append(
                 TodayTodoItem(
-                    id: "purchase|\(parsed.name.lowercased())|\(parsed.status.rawValue)|\(salt)",
+                    id: "purchase|\(sourceKey)|\(parsed.status.rawValue)|\(salt)",
                     title: parsed.name,
                     detail: detailWithUrgency,
                     category: .purchase,
@@ -1001,10 +1023,7 @@ public struct TodayStateBuilder {
 
         if existingItems.contains(where: { item in
             guard item.category == .purchase else { return false }
-            if item.medicineId == medicine.id { return true }
-            let itemTitle = normalizedName(item.title)
-            let medTitle = normalizedName(medicine.name)
-            return itemTitle == medTitle
+            return item.medicineId == medicine.id
         }) {
             return false
         }
@@ -1678,7 +1697,7 @@ public struct TodayStateBuilder {
 extension MedicineSnapshot {
     var latestLogSalt: String {
         guard let lastDate = logs.map(\.timestamp).max() else { return "0" }
-        return String(Int(lastDate.timeIntervalSince1970))
+        return String(Int(lastDate.timeIntervalSince1970 * 1000))
     }
 
     func stockThreshold(option: OptionSnapshot?) -> Int {

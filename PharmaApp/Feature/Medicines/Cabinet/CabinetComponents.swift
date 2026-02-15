@@ -31,14 +31,15 @@ struct MedicineSwipeRow: View {
         .onTapGesture { onTap() }
         .onLongPressGesture { onLongPress() }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if let move = onMove {
-                Button {
-                    move()
-                } label: {
-                    swipeLabel("Sposta", systemImage: "tray.and.arrow.up.fill")
-                }
-                .tint(.indigo)
-            }
+            // Temporaneamente nascosto: spostamento farmaco in armadietto.
+            // if let move = onMove {
+            //     Button {
+            //         move()
+            //     } label: {
+            //         swipeLabel("Sposta", systemImage: "tray.and.arrow.up.fill")
+            //     }
+            //     .tint(.indigo)
+            // }
 
             Button {
                 onMarkTaken()

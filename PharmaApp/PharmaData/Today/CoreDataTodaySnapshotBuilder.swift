@@ -33,12 +33,17 @@ struct CoreDataTodaySnapshotBuilder {
     }
 
     func makeMedicineSnapshots(medicines: [Medicine], logs: [Log]) -> [MedicineSnapshot] {
-        medicines.map { medicine in
+        let logsByMedicine: [NSManagedObjectID: [Log]] = {
+            guard !logs.isEmpty else { return [:] }
+            return Dictionary(grouping: logs, by: { $0.medicine.objectID })
+        }()
+
+        return medicines.map { medicine in
             let logsForMedicine: [Log] = {
-                if logs.isEmpty {
+                if logsByMedicine.isEmpty {
                     return Array(medicine.logs ?? [])
                 }
-                return logs.filter { $0.medicine.objectID == medicine.objectID }
+                return logsByMedicine[medicine.objectID] ?? []
             }()
             return makeMedicineSnapshot(medicine: medicine, logs: logsForMedicine)
         }
@@ -51,7 +56,7 @@ struct CoreDataTodaySnapshotBuilder {
         let logEntries = logs.compactMap { logEntry(from: $0) }
         let deadlineMonth = medicine.deadline_month > 0 ? Int(medicine.deadline_month) : nil
         let deadlineYear = medicine.deadline_year > 0 ? Int(medicine.deadline_year) : nil
-        let stockUnits = stockService.units(for: medicine)
+        let stockUnits = stockService.unitsReadOnly(for: medicine)
         return MedicineSnapshot(
             id: MedicineId(medicine.id),
             externalKey: medicine.objectID.uriRepresentation().absoluteString,
@@ -75,7 +80,7 @@ struct CoreDataTodaySnapshotBuilder {
         }
         let personName = (therapy.person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedName = personName.isEmpty ? nil : personName
-        let leftover = stockService.units(for: therapy.package)
+        let leftover = stockService.unitsReadOnly(for: therapy.package)
         return TherapySnapshot(
             id: TherapyId(therapy.id),
             externalKey: therapy.objectID.uriRepresentation().absoluteString,

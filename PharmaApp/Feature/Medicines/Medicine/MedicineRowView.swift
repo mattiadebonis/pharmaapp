@@ -201,7 +201,7 @@ struct MedicineRowView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 18) {
             leadingIcon
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 titleLine
                 subtitleBlock
             }
@@ -218,33 +218,77 @@ struct MedicineRowView: View {
         }
     }
     
-    private var subtitle: MedicineAggregateSubtitle {
-        let base = makeMedicineSubtitle(medicine: medicine, medicinePackage: medicinePackage, now: Date())
-        guard subtitleMode == .activeTherapies else { return base }
-        return MedicineAggregateSubtitle(line1: base.line2, line2: "", chip: base.chip)
+    private struct MedicineRowPresentationSnapshot {
+        let line1: String
+        let line2: String
+        let therapyLines: [TherapyLine]
+        let deadlineIndicator: (symbol: String, color: Color, label: String)?
+        let stockWarning: (text: String, color: Color, icon: String)?
+    }
+
+    private var presentationSnapshot: MedicineRowPresentationSnapshot {
+        let now = Date()
+        switch subtitleMode {
+        case .activeTherapies:
+            let intakeLogsToday = intakeLogsTodayRecords(on: now)
+            let payload = makeMedicineActiveTherapiesSubtitle(
+                medicine: medicine,
+                medicinePackage: medicinePackage,
+                recurrenceManager: recurrenceManager,
+                intakeLogsToday: intakeLogsToday,
+                now: now
+            )
+            return MedicineRowPresentationSnapshot(
+                line1: payload.line1,
+                line2: payload.line2,
+                therapyLines: payload.therapyLines,
+                deadlineIndicator: deadlineIndicator,
+                stockWarning: nil
+            )
+        case .nextDose:
+            let subtitle = makeMedicineSubtitle(
+                medicine: medicine,
+                medicinePackage: medicinePackage,
+                now: now
+            )
+            return MedicineRowPresentationSnapshot(
+                line1: subtitle.line1,
+                line2: subtitle.line2,
+                therapyLines: [],
+                deadlineIndicator: deadlineIndicator,
+                stockWarning: stocksWarning
+            )
+        }
+    }
+
+    private func intakeLogsTodayRecords(on now: Date) -> [Log] {
+        let calendar = Calendar.current
+        let logsToday = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
+        guard let entry = medicinePackage else { return logsToday }
+        return logsToday.filter { $0.package == entry.package }
     }
 
     private var subtitleBlock: some View {
-        let value = subtitle
+        let snapshot = presentationSnapshot
         return VStack(alignment: .leading, spacing: subtitleBlockSpacing) {
-            if !value.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(value.line1)
-                    .font(condensedSubtitleFont)
+            if !snapshot.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(snapshot.line1)
+                    .font(subtitleFont)
                     .foregroundColor(subtitleColor)
                     .lineLimit(1)
                     .multilineTextAlignment(.leading)
                     .truncationMode(.tail)
             }
             if subtitleMode == .activeTherapies {
-                therapyLinesView(activeTherapyLines)
+                therapyLinesView(snapshot.therapyLines)
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    line2View(for: value.line2)
+                    line2View(for: snapshot.line2)
                 }
             }
-            if let indicator = deadlineIndicator {
+            if let indicator = snapshot.deadlineIndicator {
                 Text(indicator.label)
-                    .font(condensedSubtitleFont)
+                    .font(subtitleFont)
                     .foregroundColor(indicator.color)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -255,7 +299,7 @@ struct MedicineRowView: View {
     @ViewBuilder
     private func line2View(for line: String) -> some View {
         Text(line)
-            .font(condensedSubtitleFont)
+            .font(subtitleFont)
             .foregroundColor(subtitleColor)
             .lineLimit(subtitleMode == .activeTherapies ? nil : 1)
             .multilineTextAlignment(.leading)
@@ -266,35 +310,15 @@ struct MedicineRowView: View {
         Color.primary.opacity(0.45)
     }
 
-    private var condensedSubtitleFont: Font {
-        Font.custom("SFProDisplay-CondensedLight", size: 15)
-    }
-
-    private var therapySummaryBuilder: TherapySummaryBuilder {
-        TherapySummaryBuilder(recurrenceManager: recurrenceManager)
-    }
-
-    private var activeTherapyLines: [TherapyLine] {
-        guard !therapies.isEmpty else { return [] }
-        let now = Date()
-        let builder = therapySummaryBuilder
-        let active = therapies.compactMap { therapy -> (Therapy, Date)? in
-            guard let next = nextUpcomingDoseDate(for: therapy, now: now) else { return nil }
-            return (therapy, next)
-        }
-        if !active.isEmpty {
-            let sorted = active.sorted { $0.1 < $1.1 }
-            return sorted.map { builder.line(for: $0.0, now: now) }
-        }
-        let fallback = therapies.sorted { ($0.start_date ?? .distantPast) < ($1.start_date ?? .distantPast) }
-        return fallback.map { builder.line(for: $0, now: now) }
+    private var subtitleFont: Font {
+        .system(size: 15, weight: .regular)
     }
 
     @ViewBuilder
     private func therapyLinesView(_ lines: [TherapyLine]) -> some View {
         if lines.isEmpty {
             Text("Nessuna terapia attiva")
-                .font(condensedSubtitleFont)
+                .font(subtitleFont)
                 .foregroundColor(subtitleColor)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -302,10 +326,11 @@ struct MedicineRowView: View {
             VStack(alignment: .leading, spacing: subtitleBlockSpacing) {
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                     therapyLineText(line)
-                        .font(condensedSubtitleFont)
+                        .font(subtitleFont)
                         .foregroundColor(subtitleColor)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                        .lineLimit(nil)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -323,7 +348,7 @@ struct MedicineRowView: View {
     }
 
     private var subtitleBlockSpacing: CGFloat {
-        subtitleMode == .activeTherapies ? 6 : 3
+        subtitleMode == .activeTherapies ? 3 : 1
     }
 
     private var deadlineIndicator: (symbol: String, color: Color, label: String)? {
@@ -344,12 +369,12 @@ struct MedicineRowView: View {
         let dosage = primaryPackageDosage
         return HStack(alignment: .bottom, spacing: 4) {
             Text(name)
-                .font(.system(size: 16, weight: .regular))
+                .font(.system(size: 15, weight: .regular))
                 .foregroundColor(.primary)
                 .lineLimit(2)
             if let dosage {
                 Text(" \(dosage)")
-                    .font(.system(size: 16, weight: .regular))
+                    .font(.system(size: 15, weight: .regular))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
@@ -378,7 +403,7 @@ struct MedicineRowView: View {
     }
 
     private var leadingIconColor: Color {
-        .accentColor
+        Color(.systemGray4)
     }
 
     private var leadingIcon: some View {

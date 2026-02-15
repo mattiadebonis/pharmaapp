@@ -27,6 +27,7 @@ final class RefillLiveActivityClient: RefillLiveActivityClientProtocol {
     func currentActivityIDs() -> [String] {
         #if canImport(ActivityKit)
         if #available(iOS 16.1, *) {
+            guard ActivityAuthorizationInfo().areActivitiesEnabled else { return [] }
             return Activity<RefillActivityAttributes>.activities.map { $0.id }
         }
         #endif
@@ -39,6 +40,12 @@ final class RefillLiveActivityClient: RefillLiveActivityClientProtocol {
         staleDate: Date?
     ) async throws -> String {
         #if canImport(ActivityKit)
+        if #available(iOS 16.1, *) {
+            guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+                throw NSError(domain: "RefillLiveActivityClient", code: 2)
+            }
+        }
+
         if #available(iOS 16.2, *) {
             let activity = try Activity<RefillActivityAttributes>.request(
                 attributes: attributes,
@@ -66,6 +73,7 @@ final class RefillLiveActivityClient: RefillLiveActivityClientProtocol {
     ) async {
         #if canImport(ActivityKit)
         guard #available(iOS 16.1, *) else { return }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         guard let activity = Activity<RefillActivityAttributes>.activities.first(where: { $0.id == activityID }) else {
             return
         }
@@ -80,6 +88,7 @@ final class RefillLiveActivityClient: RefillLiveActivityClientProtocol {
     func end(activityID: String, dismissalPolicy: RefillActivityDismissalPolicy) async {
         #if canImport(ActivityKit)
         guard #available(iOS 16.1, *) else { return }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         guard let activity = Activity<RefillActivityAttributes>.activities.first(where: { $0.id == activityID }) else {
             return
         }

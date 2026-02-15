@@ -30,7 +30,9 @@ final class CriticalDoseLiveActivityClient: CriticalDoseLiveActivityClientProtoc
     func currentActivityIDs() -> [String] {
         #if canImport(ActivityKit)
         if #available(iOS 16.1, *) {
-            return Activity<CriticalDoseLiveActivityAttributes>.activities.map { $0.id }
+            guard ActivityAuthorizationInfo().areActivitiesEnabled else { return [] }
+            return
+            Activity<CriticalDoseLiveActivityAttributes>.activities.map { $0.id }
         }
         #endif
         return []
@@ -42,6 +44,12 @@ final class CriticalDoseLiveActivityClient: CriticalDoseLiveActivityClientProtoc
         staleDate: Date?
     ) async throws -> String {
         #if canImport(ActivityKit)
+        if #available(iOS 16.1, *) {
+            guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+                throw NSError(domain: "CriticalDoseLiveActivityClient", code: 2)
+            }
+        }
+
         if #available(iOS 16.2, *) {
             let activity = try Activity<CriticalDoseLiveActivityAttributes>.request(
                 attributes: attributes,
@@ -71,6 +79,7 @@ final class CriticalDoseLiveActivityClient: CriticalDoseLiveActivityClientProtoc
     ) async {
         #if canImport(ActivityKit)
         guard #available(iOS 16.1, *) else { return }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         guard let activity = Activity<CriticalDoseLiveActivityAttributes>.activities.first(where: { $0.id == activityID }) else {
             return
         }
@@ -89,6 +98,7 @@ final class CriticalDoseLiveActivityClient: CriticalDoseLiveActivityClientProtoc
     ) async {
         #if canImport(ActivityKit)
         guard #available(iOS 16.1, *) else { return }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         guard let activity = Activity<CriticalDoseLiveActivityAttributes>.activities.first(where: { $0.id == activityID }) else {
             return
         }

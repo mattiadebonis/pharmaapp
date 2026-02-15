@@ -1,5 +1,11 @@
 import Foundation
 import CoreData
+import os.signpost
+
+enum RefillSummaryStrategy {
+    case lightweightTodos
+    case fullTodayState
+}
 
 struct RefillPurchaseSummary: Equatable {
     let allNames: [String]
@@ -26,6 +32,7 @@ struct RefillPurchaseSummary: Equatable {
 final class RefillPurchaseSummaryProvider {
     private let context: NSManagedObjectContext
     private let stateProvider: CoreDataTodayStateProvider
+    private let perfLog = OSLog(subsystem: "PharmaApp", category: "Performance")
 
     init(
         context: NSManagedObjectContext,
@@ -35,7 +42,33 @@ final class RefillPurchaseSummaryProvider {
         self.stateProvider = stateProvider ?? CoreDataTodayStateProvider(context: context)
     }
 
-    func summary(maxVisible: Int = 3) -> RefillPurchaseSummary {
+    func summary(
+        maxVisible: Int = 3,
+        strategy: RefillSummaryStrategy = .lightweightTodos
+    ) -> RefillPurchaseSummary {
+        let signpostID = OSSignpostID(log: perfLog)
+        os_signpost(.begin, log: perfLog, name: "RefillSummary", signpostID: signpostID)
+        defer { os_signpost(.end, log: perfLog, name: "RefillSummary", signpostID: signpostID) }
+
+        switch strategy {
+        case .lightweightTodos:
+            return lightweightSummary(maxVisible: maxVisible)
+        case .fullTodayState:
+            return fullStateSummary(maxVisible: maxVisible)
+        }
+    }
+
+    private func lightweightSummary(maxVisible: Int) -> RefillPurchaseSummary {
+        let request: NSFetchRequest<Todo> = Todo.fetchRequest()
+        request.predicate = NSPredicate(format: "category == %@", TodayTodoCategory.purchase.rawValue)
+        request.sortDescriptors = [NSSortDescriptor(key: "updated_at", ascending: false)]
+        request.fetchLimit = max(60, maxVisible * 8)
+        let titles = ((try? context.fetch(request)) ?? []).map(\.title)
+        let deduped = Self.deduplicatedTitles(titles)
+        return RefillPurchaseSummary(allNames: deduped, maxVisible: max(1, maxVisible))
+    }
+
+    private func fullStateSummary(maxVisible: Int) -> RefillPurchaseSummary {
         let request = Medicine.extractMedicines()
         let medicines = (try? context.fetch(request)) ?? []
 
