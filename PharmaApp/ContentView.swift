@@ -33,18 +33,16 @@ struct ContentView: View {
                     }
                 } label: {
                     Label {
-                        Text("Oggi")
+                        Text("Prossime")
                     } icon: {
                         TodayCalendarIcon(day: todayDayNumber)
                     }
                 }
 
                 // TAB 2 – Statistiche
-                Tab("Statistiche", systemImage: "chart.bar.xaxis", value: AppTabRoute.statistiche) {
+                Tab("Statistiche", systemImage: "chart.bar", value: AppTabRoute.statistiche) {
                     NavigationStack {
-                        Text("Statistiche")
-                            .navigationTitle("Statistiche")
-                            .navigationBarTitleDisplayMode(.large)
+                        AdherenceDashboardView()
                     }
                 }
 

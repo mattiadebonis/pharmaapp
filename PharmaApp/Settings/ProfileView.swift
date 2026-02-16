@@ -8,6 +8,7 @@
 import SwiftUI
 import CoreData
 import MapKit
+import CoreImage
 
 struct ProfileView: View {
     @Environment(\.managedObjectContext) private var managedObjectContext
@@ -18,73 +19,42 @@ struct ProfileView: View {
     @FetchRequest(fetchRequest: Doctor.extractDoctors()) private var doctors: FetchedResults<Doctor>
     @FetchRequest(fetchRequest: Person.extractPersons()) private var persons: FetchedResults<Person>
 
+    @State private var selectedDoctor: Doctor?
+    @State private var isDoctorDetailPresented = false
+    @State private var selectedPerson: Person?
+    @State private var isPersonDetailPresented = false
+
     var body: some View {
         Form {
+            // MARK: Persone
             Section(header: HStack {
-                Text("Gestione Dottori")
-                Spacer()
-                NavigationLink(destination: AddDoctorView()) {
-                    Image(systemName: "plus")
-                }
-            }) {
-                ForEach(doctors) { doctor in
-                    NavigationLink {
-                        DoctorDetailView(doctor: doctor)
-                    } label: {
-                        VStack(alignment: .leading) {
-                            Text(doctor.nome ?? "")
-                                .font(.headline)
-                            if let mail = doctor.mail {
-                                Text("Email: \(mail)")
-                            }
-                            if let telefono = doctor.telefono {
-                                Text("Telefono: \(telefono)")
-                            }
-                        }
-                    }
-                }
-            }
-
-            Section("Farmacie") {
-                ProfilePharmacyCard()
-                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-                    .listRowBackground(Color.clear)
-            }
-
-            Section(header: HStack {
-                Text("Gestione Persone")
+                Label("Persone", systemImage: "person.2.fill")
                 Spacer()
                 NavigationLink(destination: AddPersonView()) {
                     Image(systemName: "plus")
                 }
             }) {
                 ForEach(persons) { person in
-                    NavigationLink {
-                        PersonDetailView(person: person)
+                    Button {
+                        selectedPerson = person
+                        isPersonDetailPresented = true
                     } label: {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(personDisplayName(for: person))
                                 .font(.headline)
+                                .foregroundStyle(.primary)
+                            if let cf = person.codice_fiscale, !cf.isEmpty {
+                                CodiceFiscaleBarcodeView(codiceFiscale: cf)
+                            }
                             if person.is_account {
-                                HStack(spacing: 6) {
-                                    Text("Account")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    if auth.user != nil {
-                                        Text("Esci")
-                                            .font(.caption2)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 3)
-                                            .background(
-                                                Capsule(style: .continuous)
-                                                    .fill(Color.red.opacity(0.12))
-                                            )
-                                            .foregroundStyle(.red)
-                                    }
-                                }
+                                Text("Account")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .buttonStyle(.plain)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         if person.is_account, auth.user != nil {
                             Button(role: .destructive) {
@@ -99,6 +69,68 @@ struct ProfileView: View {
                     }
                 }
             }
+
+            // MARK: Farmacie
+            Section(header: Label("Farmacie", systemImage: "cross.fill")) {
+                ProfilePharmacyCard()
+                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                    .listRowBackground(Color.clear)
+            }
+
+            // MARK: Dottori
+            Section(header: HStack {
+                Label("Dottori", systemImage: "stethoscope")
+                Spacer()
+                NavigationLink(destination: AddDoctorView()) {
+                    Image(systemName: "plus")
+                }
+            }) {
+                ForEach(doctors) { doctor in
+                    VStack(alignment: .leading, spacing: 10) {
+                        // Nome + orario — tappable per navigare al dettaglio
+                        Button {
+                            selectedDoctor = doctor
+                            isDoctorDetailPresented = true
+                        } label: {
+                            HStack(alignment: .top) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Dottore \(doctor.nome ?? "")")
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                    if let status = doctorStatusText(for: doctor) {
+                                        Text(status)
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        // Pulsanti contatto
+                        if hasDoctorContacts(doctor) {
+                            HStack(spacing: 8) {
+                                if let mail = doctor.mail, !mail.isEmpty {
+                                    doctorContactButton(
+                                        icon: "envelope.fill",
+                                        label: "Email",
+                                        color: .blue
+                                    ) { openEmail(mail) }
+                                }
+                                if let phone = doctor.telefono, !phone.isEmpty {
+                                    doctorContactButton(
+                                        icon: "phone.fill",
+                                        label: "Chiama",
+                                        color: .green
+                                    ) { callPhone(phone) }
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
         }
         .navigationTitle("Profilo")
         .navigationBarTitleDisplayMode(.inline)
@@ -111,6 +143,16 @@ struct ProfileView: View {
                 }
             }
         }
+        .navigationDestination(isPresented: $isDoctorDetailPresented) {
+            if let doctor = selectedDoctor {
+                DoctorDetailView(doctor: doctor)
+            }
+        }
+        .navigationDestination(isPresented: $isPersonDetailPresented) {
+            if let person = selectedPerson {
+                PersonDetailView(person: person)
+            }
+        }
         .onAppear {
             AccountPersonService.shared.ensureAccountPerson(in: managedObjectContext)
             AccountPersonService.shared.syncAccountDisplayName(from: auth.user, in: managedObjectContext)
@@ -118,6 +160,126 @@ struct ProfileView: View {
         .onChange(of: auth.user) { user in
             AccountPersonService.shared.syncAccountDisplayName(from: user, in: managedObjectContext)
         }
+    }
+
+    // MARK: – Doctor helpers
+
+    private func hasDoctorContacts(_ doctor: Doctor) -> Bool {
+        let mail = doctor.mail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let phone = doctor.telefono?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !mail.isEmpty || !phone.isEmpty
+    }
+
+    private func doctorContactButton(
+        icon: String,
+        label: String,
+        color: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(label, systemImage: icon)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Capsule(style: .continuous).fill(color.opacity(0.12)))
+                .foregroundStyle(color)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func openEmail(_ address: String) {
+        if let url = URL(string: "mailto:\(address)") {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    private func callPhone(_ number: String) {
+        let cleaned = number.filter { $0.isNumber || $0 == "+" }
+        if let url = URL(string: "tel:\(cleaned)") {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    // MARK: – Doctor schedule helpers
+
+    private func doctorStatusText(for doctor: Doctor) -> String? {
+        let schedule = doctor.scheduleDTO
+        let now = Date()
+        let calendar = Calendar.current
+        let weekdayOrder: [DoctorScheduleDTO.DaySchedule.Weekday] = [
+            .sunday, .monday, .tuesday, .wednesday, .thursday, .friday, .saturday
+        ]
+        let calWeekday = calendar.component(.weekday, from: now)
+        let todayEnum = weekdayOrder[calWeekday - 1]
+        guard let todaySchedule = schedule.days.first(where: { $0.day == todayEnum }) else {
+            return nil
+        }
+        let hour = calendar.component(.hour, from: now)
+        let minute = calendar.component(.minute, from: now)
+        let nowMinutes = hour * 60 + minute
+
+        func parseMinutes(_ s: String) -> Int? {
+            let parts = s.split(separator: ":").compactMap { Int($0) }
+            guard parts.count == 2 else { return nil }
+            return parts[0] * 60 + parts[1]
+        }
+        func fmt(_ minutes: Int) -> String {
+            String(format: "%02d:%02d", minutes / 60, minutes % 60)
+        }
+
+        switch todaySchedule.mode {
+        case .closed:
+            return doctorNextOpeningText(schedule: schedule, after: todayEnum, weekdayOrder: weekdayOrder)
+        case .continuous:
+            guard let start = parseMinutes(todaySchedule.primary.start),
+                  let end = parseMinutes(todaySchedule.primary.end) else { return nil }
+            if nowMinutes >= start && nowMinutes < end {
+                return "Aperto fino alle \(fmt(end))"
+            } else if nowMinutes < start {
+                return "Apre alle \(fmt(start))"
+            } else {
+                return doctorNextOpeningText(schedule: schedule, after: todayEnum, weekdayOrder: weekdayOrder)
+            }
+        case .split:
+            guard let s1 = parseMinutes(todaySchedule.primary.start),
+                  let e1 = parseMinutes(todaySchedule.primary.end),
+                  let s2 = parseMinutes(todaySchedule.secondary.start),
+                  let e2 = parseMinutes(todaySchedule.secondary.end) else { return nil }
+            if nowMinutes >= s1 && nowMinutes < e1 {
+                return "Aperto fino alle \(fmt(e1))"
+            } else if nowMinutes >= s2 && nowMinutes < e2 {
+                return "Aperto fino alle \(fmt(e2))"
+            } else if nowMinutes < s1 {
+                return "Apre alle \(fmt(s1))"
+            } else if nowMinutes < s2 {
+                return "Apre alle \(fmt(s2))"
+            } else {
+                return doctorNextOpeningText(schedule: schedule, after: todayEnum, weekdayOrder: weekdayOrder)
+            }
+        }
+    }
+
+    private func doctorNextOpeningText(
+        schedule: DoctorScheduleDTO,
+        after day: DoctorScheduleDTO.DaySchedule.Weekday,
+        weekdayOrder: [DoctorScheduleDTO.DaySchedule.Weekday]
+    ) -> String {
+        guard let currentIdx = weekdayOrder.firstIndex(of: day) else { return "Chiuso" }
+        for offset in 1...7 {
+            let nextIdx = (currentIdx + offset) % 7
+            let nextDay = weekdayOrder[nextIdx]
+            guard let nextSchedule = schedule.days.first(where: { $0.day == nextDay }),
+                  nextSchedule.mode != .closed else { continue }
+            let openTime: String
+            switch nextSchedule.mode {
+            case .continuous: openTime = nextSchedule.primary.start
+            case .split:      openTime = nextSchedule.primary.start
+            case .closed:     continue
+            }
+            if offset == 1 { return "Chiuso · domani alle \(openTime)" }
+            return "Chiuso · \(nextSchedule.day.displayName) alle \(openTime)"
+        }
+        return "Chiuso"
     }
 
     private func personDisplayName(for person: Person) -> String {
@@ -128,11 +290,10 @@ struct ProfileView: View {
     }
 }
 
+// MARK: – Pharmacy Card
+
 private struct ProfilePharmacyCard: View {
-    @Environment(\.managedObjectContext) private var viewContext
     @StateObject private var locationVM = LocationSearchViewModel()
-    @State private var showCodiceFiscaleFullScreen = false
-    @State private var codiceFiscaleEntries: [PrescriptionCFEntry] = []
 
     private let cardCornerRadius: CGFloat = 16
     private let pharmacyAccentColor = Color(red: 0.20, green: 0.62, blue: 0.36)
@@ -141,7 +302,7 @@ private struct ProfilePharmacyCard: View {
         case walking
         case driving
 
-        var title: String {
+        var accessibilityLabel: String {
             switch self {
             case .walking: return "A piedi"
             case .driving: return "In auto"
@@ -170,29 +331,13 @@ private struct ProfilePharmacyCard: View {
             HStack(spacing: 8) {
                 routeButton(for: .walking)
                 routeButton(for: .driving)
-                codiceFiscaleButton
-            }
-            HStack(spacing: 8) {
-                actionButton(
-                    title: "Apri in Mappe",
-                    systemImage: "map.fill",
-                    enabled: canOpenMaps
-                ) {
-                    openDirections(.driving)
-                }
-                actionButton(
-                    title: "Chiama",
-                    systemImage: "phone.fill",
-                    enabled: canCall
-                ) {
-                    locationVM.callPharmacy()
-                }
+                callRouteButton()
             }
         }
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
-                .fill(Color.primary.opacity(0.04))
+                .fill(Color(.systemBackground))
         )
         .overlay(
             RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
@@ -200,13 +345,6 @@ private struct ProfilePharmacyCard: View {
         )
         .onAppear {
             locationVM.ensureStarted()
-        }
-        .fullScreenCover(isPresented: $showCodiceFiscaleFullScreen) {
-            CodiceFiscaleFullscreenView(
-                entries: codiceFiscaleEntries
-            ) {
-                showCodiceFiscaleFullScreen = false
-            }
         }
     }
 
@@ -292,9 +430,6 @@ private struct ProfilePharmacyCard: View {
                 Image(systemName: mode.systemImage)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.white)
-                Text(mode.title)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white)
                 Text(routeMinutesText(for: mode))
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.9))
@@ -309,23 +444,18 @@ private struct ProfilePharmacyCard: View {
         .buttonStyle(.plain)
         .disabled(!canOpenMaps)
         .opacity(canOpenMaps ? 1 : 0.55)
+        .accessibilityLabel(mode.accessibilityLabel)
     }
 
-    private var codiceFiscaleButton: some View {
+    private func callRouteButton() -> some View {
         Button {
-            codiceFiscaleEntries = PrescriptionCodiceFiscaleResolver().entriesForRxAndLowStock(in: viewContext)
-            showCodiceFiscaleFullScreen = true
+            locationVM.callPharmacy()
         } label: {
             VStack(spacing: 4) {
-                Image(systemName: "creditcard")
+                Image(systemName: "phone.fill")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.white)
-                Text("Codice fiscale")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Text("Tessera")
+                Text("Chiama")
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.9))
             }
@@ -333,27 +463,13 @@ private struct ProfilePharmacyCard: View {
             .padding(.vertical, 8)
             .background(
                 Capsule(style: .continuous)
-                    .fill(Color.blue)
+                    .fill(Color.green)
             )
         }
         .buttonStyle(.plain)
-    }
-
-    private func actionButton(
-        title: String,
-        systemImage: String,
-        enabled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.subheadline.weight(.semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-        }
-        .buttonStyle(.bordered)
-        .tint(.blue)
-        .disabled(!enabled)
+        .disabled(!canCall)
+        .opacity(canCall ? 1 : 0.55)
+        .accessibilityLabel("Chiama farmacia")
     }
 
     private var canOpenMaps: Bool {
@@ -399,7 +515,7 @@ private struct ProfilePharmacyCard: View {
     }
 
     private func routeMinutesText(for mode: PharmacyRouteMode) -> String {
-        guard let minutes = routeMinutes(for: mode) else { return "Apri" }
+        guard let minutes = routeMinutes(for: mode) else { return "–" }
         return "\(minutes) min"
     }
 
@@ -448,6 +564,46 @@ private struct ProfilePharmacyCard: View {
         let item = MKMapItem(placemark: placemark)
         item.name = pin.title
         return item
+    }
+}
+
+// MARK: – Barcode view
+
+private struct CodiceFiscaleBarcodeView: View {
+    let codiceFiscale: String
+    @State private var barcodeImage: UIImage?
+
+    var body: some View {
+        Group {
+            if let image = barcodeImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .interpolation(.none)
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .accessibilityLabel("Barcode codice fiscale \(codiceFiscale)")
+            } else {
+                Color.clear.frame(height: 36)
+            }
+        }
+        .task(id: codiceFiscale) {
+            guard barcodeImage == nil else { return }
+            barcodeImage = await Task.detached(priority: .userInitiated) {
+                generateBarcode(from: codiceFiscale)
+            }.value
+        }
+    }
+
+    private func generateBarcode(from string: String) -> UIImage? {
+        guard let data = string.data(using: .ascii),
+              let filter = CIFilter(name: "CICode128BarcodeGenerator") else { return nil }
+        filter.setValue(data, forKey: "inputMessage")
+        filter.setValue(7.0, forKey: "inputQuietSpace")
+        guard let output = filter.outputImage else { return nil }
+        let scaled = output.transformed(by: CGAffineTransform(scaleX: 3, y: 3))
+        let context = CIContext()
+        guard let cgImage = context.createCGImage(scaled, from: scaled.extent) else { return nil }
+        return UIImage(cgImage: cgImage)
     }
 }
 

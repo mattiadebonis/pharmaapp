@@ -2,6 +2,7 @@ import Foundation
 
 enum AppTabRoute: String, Hashable, Codable {
     case oggi
+    case prossime
     case statistiche
     case medicine
     case profilo

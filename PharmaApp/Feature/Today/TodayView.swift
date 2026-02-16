@@ -61,6 +61,7 @@ struct TodayView: View {
     @State private var lastRefreshStateExecutionAt: Date = .distantPast
     @State private var isTherapySectionExpanded = true
     @State private var isPurchaseSectionExpanded = true
+    @State private var isTodayPurchaseSectionExpanded = true
 
     @ScaledMetric(relativeTo: .body) private var timingColumnWidth: CGFloat = 112
     private let pharmacyCardCornerRadius: CGFloat = 16
@@ -145,41 +146,80 @@ struct TodayView: View {
         let baseOtherItems = state.otherItems
         let therapyItems = visibleItems(mergedItems(base: baseTherapyItems, section: .therapy))
         let purchaseItems = visibleItems(mergedItems(base: basePurchaseItems, section: .purchase))
+        let depletedPurchaseItems = purchaseItems.filter { item in
+            guard let med = medicine(for: item) else { return false }
+            return (autonomyDays(for: med) ?? 0) <= 0
+        }
+        let upcomingPurchaseItems = purchaseItems.filter { item in
+            guard let med = medicine(for: item) else { return true }
+            return (autonomyDays(for: med) ?? 0) > 0
+        }
         let otherItems = visibleItems(mergedItems(base: baseOtherItems, section: .other))
         let hasVisibleItems = !(therapyItems.isEmpty && purchaseItems.isEmpty && otherItems.isEmpty)
+        let hasOggiSection = !therapyItems.isEmpty || !depletedPurchaseItems.isEmpty
         let contentList = List {
-            if !therapyItems.isEmpty {
-                Section {
-                    if isTherapySectionExpanded {
-                        ForEach(Array(therapyItems.enumerated()), id: \.element.id) { entry in
-                            let item = entry.element
-                            let isLast = entry.offset == therapyItems.count - 1
-                            todoListRow(
-                                for: item,
-                                isCompleted: isTodoSemanticallyCompleted(item),
-                                isLast: isLast
-                            )
+            if hasOggiSection {
+                if !therapyItems.isEmpty {
+                    Section {
+                        if isTherapySectionExpanded {
+                            ForEach(Array(therapyItems.enumerated()), id: \.element.id) { entry in
+                                let item = entry.element
+                                let isLast = entry.offset == therapyItems.count - 1
+                                todoListRow(
+                                    for: item,
+                                    isCompleted: isTodoSemanticallyCompleted(item),
+                                    isLast: isLast
+                                )
+                            }
+                        }
+                    } header: {
+                        sectionHeader(
+                            title: "Oggi",
+                            subtitle: "Da assumere",
+                            count: therapyItems.count,
+                            isExpanded: isTherapySectionExpanded,
+                            topPadding: 18
+                        ) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isTherapySectionExpanded.toggle()
+                            }
                         }
                     }
-                } header: {
-                    sectionHeader(
-                        title: "Da assumere",
-                        count: therapyItems.count,
-                        isExpanded: isTherapySectionExpanded,
-                        topPadding: 18
-                    ) {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isTherapySectionExpanded.toggle()
+                }
+                if !depletedPurchaseItems.isEmpty {
+                    Section {
+                        if isTodayPurchaseSectionExpanded {
+                            ForEach(Array(depletedPurchaseItems.enumerated()), id: \.element.id) { entry in
+                                let item = entry.element
+                                let isLast = entry.offset == depletedPurchaseItems.count - 1
+                                todoListRow(
+                                    for: item,
+                                    isCompleted: isTodoSemanticallyCompleted(item),
+                                    isLast: isLast
+                                )
+                            }
+                        }
+                    } header: {
+                        sectionHeader(
+                            title: therapyItems.isEmpty ? "Oggi" : nil,
+                            subtitle: "Da comprare",
+                            count: depletedPurchaseItems.count,
+                            isExpanded: isTodayPurchaseSectionExpanded,
+                            topPadding: therapyItems.isEmpty ? 18 : 8
+                        ) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isTodayPurchaseSectionExpanded.toggle()
+                            }
                         }
                     }
                 }
             }
-            if !purchaseItems.isEmpty {
+            if !upcomingPurchaseItems.isEmpty {
                 Section {
                     if isPurchaseSectionExpanded {
-                        ForEach(Array(purchaseItems.enumerated()), id: \.element.id) { entry in
+                        ForEach(Array(upcomingPurchaseItems.enumerated()), id: \.element.id) { entry in
                             let item = entry.element
-                            let isLast = entry.offset == purchaseItems.count - 1
+                            let isLast = entry.offset == upcomingPurchaseItems.count - 1
                             todoListRow(
                                 for: item,
                                 isCompleted: isTodoSemanticallyCompleted(item),
@@ -189,10 +229,11 @@ struct TodayView: View {
                     }
                 } header: {
                     sectionHeader(
-                        title: "Da comprare",
-                        count: purchaseItems.count,
+                        title: "In arrivo",
+                        subtitle: "Da comprare",
+                        count: upcomingPurchaseItems.count,
                         isExpanded: isPurchaseSectionExpanded,
-                        topPadding: 30
+                        topPadding: 8
                     ) {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             isPurchaseSectionExpanded.toggle()
@@ -379,7 +420,7 @@ struct TodayView: View {
                 .accessibilityLabel("Opzioni")
             }
         }
-        .navigationTitle("Oggi")
+        .navigationTitle("Prossime")
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
             locationVM.ensureStarted()
@@ -1041,21 +1082,42 @@ struct TodayView: View {
 
     @ViewBuilder
     private func sectionHeader(
-        title: String,
+        title: String? = nil,
+        subtitle: String? = nil,
         count: Int,
         isExpanded: Bool,
         topPadding: CGFloat,
         bottomPadding: CGFloat = 6,
+        showDivider: Bool = false,
         onTap: @escaping () -> Void
     ) -> some View {
         Button(action: onTap) {
             HStack(spacing: 6) {
-                Text(title)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(todaySectionHeaderColor)
-                Text("\(count)")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(todaySecondaryTextColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    if let title {
+                        Text(title)
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(.primary)
+                    }
+                    if let subtitle {
+                        HStack(spacing: 6) {
+                            Text(subtitle)
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(todaySectionHeaderColor)
+                            Text("\(count)")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(todaySecondaryTextColor)
+                        }
+                        .padding(.top, title != nil ? 10 : 0)
+                        Divider()
+                            .padding(.top, 4)
+                    }
+                }
+                if subtitle == nil {
+                    Text("\(count)")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(todaySecondaryTextColor)
+                }
                 Spacer()
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
@@ -1148,6 +1210,7 @@ struct TodayView: View {
                             onToggle: { if canToggle { toggleCompletion(for: item) } },
                             subtitleFont: usesCondensedSubtitleStyle ? condensedSubtitleFont : nil,
                             subtitleColor: usesCondensedSubtitleStyle ? condensedSubtitleColor : nil,
+                            subtitleAlignsWithTitle: item.category == .therapy,
                             auxiliaryFont: usesCondensedSubtitleStyle ? condensedSubtitleFont : nil,
                             auxiliaryColor: usesCondensedSubtitleStyle ? condensedSubtitleColor : nil
                         )
@@ -1201,7 +1264,7 @@ struct TodayView: View {
 
     private func mainLineText(for item: TodayTodoItem) -> String {
         if item.category == .therapy, let medicine = medicine(for: item) {
-            return therapyTitleText(for: item, medicine: medicine)
+            return formattedMedicineName(medicine.nome)
         }
         if let medicine = medicine(for: item) {
             return medicineTitleWithDosage(for: medicine)
@@ -1251,8 +1314,8 @@ struct TodayView: View {
     }
 
     private func subtitleLine(for item: TodayTodoItem) -> String? {
-        if item.category == .therapy {
-            return nil
+        if item.category == .therapy, let medicine = medicine(for: item) {
+            return therapySubtitleText(for: item, medicine: medicine)
         }
         if item.category == .monitoring {
             return item.detail
@@ -1261,6 +1324,41 @@ struct TodayView: View {
             return item.detail
         }
         return nil
+    }
+
+    private func therapySubtitleText(for item: TodayTodoItem, medicine: Medicine) -> String? {
+        var parts: [String] = []
+
+        if let dosageLabel = medicineDosageLabel(for: medicine) {
+            parts.append(dosageLabel)
+        }
+
+        let contexts = therapyContexts(for: item, medicine: medicine)
+        if !contexts.isEmpty {
+            let unit = doseUnit(for: contexts[0].therapy)
+            let amounts = contexts.compactMap { context -> Double? in
+                if let amount = context.amount { return amount }
+                return context.therapy.commonDoseAmount
+            }
+            let totalAmount = amounts.reduce(0, +)
+            if totalAmount > 0 {
+                let doseText = doseDisplayText(amount: totalAmount, unit: unit)
+                parts.append(doseText)
+            } else if !amounts.isEmpty {
+                parts.append("dosi variabili")
+            }
+
+            let rawNames = contexts
+                .compactMap { personDisplayName(for: $0.therapy.person) }
+                .filter { !$0.isEmpty }
+            var seen: Set<String> = []
+            let personNames = rawNames.filter { seen.insert($0).inserted }
+            if !personNames.isEmpty {
+                parts.append("per \(joinedList(personNames))")
+            }
+        }
+
+        return parts.isEmpty ? nil : parts.joined(separator: "\n")
     }
 
     private func therapyRouteSubtitle(for medicine: Medicine?) -> String? {
@@ -1671,7 +1769,8 @@ struct TodayView: View {
 
     @ViewBuilder
     private func blockedTherapyCard(for item: TodayTodoItem, info: BlockedTherapyInfo, leadingTime: String?, isLast: Bool, hideToggle: Bool) -> some View {
-        let medName = therapyTitleText(for: item, medicine: info.medicine)
+        let medName = formattedMedicineName(info.medicine.nome)
+        let medSubtitle = therapySubtitleText(for: item, medicine: info.medicine)
         let canToggle = canToggleTodo(for: item)
         let stockWarning = info.isOutOfStock && info.isDepleted
         todoCard(
@@ -1680,7 +1779,7 @@ struct TodayView: View {
                 status: stockWarning ? "Da rifornire" : nil,
                 statusIconName: stockWarning ? "exclamationmark.triangle" : nil,
                 statusColor: .orange,
-                subtitle: nil,
+                subtitle: medSubtitle,
                 subtitleColor: .secondary,
                 subtitleAsBadge: false,
                 iconName: "pills",
@@ -2860,7 +2959,7 @@ struct TodayView: View {
         switch label {
         case .time(let date):
             let timeText = TodayFormatters.time.string(from: date)
-            return timeText
+            return "alle \(timeText)"
         case .category:
             return nil
         }
@@ -2874,9 +2973,9 @@ struct TodayView: View {
 
     private func purchaseAutonomyLabel(for days: Int) -> String {
         if days == 1 {
-            return "Entro 1 giorno"
+            return "entro 1 giorno"
         }
-        return "Entro \(days) giorni"
+        return "entro \(days) giorni"
     }
 
     private func prescriptionDoctorName(for medicine: Medicine) -> String {

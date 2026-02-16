@@ -86,8 +86,7 @@ struct TodayTodoRowView: View {
                             .monospacedDigit()
                             .multilineTextAlignment(.leading)
                             .lineLimit(1)
-                            .truncationMode(.tail)
-                            .minimumScaleFactor(0.85)
+                            .minimumScaleFactor(0.80)
                             .frame(width: timingColumnWidth, alignment: .leading)
                             .layoutPriority(2)
                     }
