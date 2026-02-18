@@ -3,6 +3,7 @@ import CoreData
 
 struct MedicineWizardView: View {
     enum Step: Int, CaseIterable {
+        case review
         case recurrenceDuration
         case schedule
         case person
@@ -10,6 +11,7 @@ struct MedicineWizardView: View {
 
         var label: String {
             switch self {
+            case .review: return "Farmaco"
             case .recurrenceDuration: return "Ripetizione e durata"
             case .schedule: return "Orari"
             case .person: return "Persona"
@@ -77,7 +79,7 @@ struct MedicineWizardView: View {
     private let prefill: CatalogSelection?
     private let onFinish: (() -> Void)?
     @State private var didApplyPrefill = false
-    @State private var step: Step = .recurrenceDuration
+    @State private var step: Step = .review
     @State private var selectedItem: CatalogItem?
     @State private var selectedPackage: CatalogPackage?
     @State private var therapyDraft = TherapyDraft()
@@ -167,6 +169,8 @@ struct MedicineWizardView: View {
             missingSelectionView
         } else {
             switch step {
+            case .review:
+                reviewStep
             case .recurrenceDuration:
                 recurrenceDurationStep
             case .schedule:
@@ -185,6 +189,67 @@ struct MedicineWizardView: View {
 
     private func defaultDetent(for step: Step) -> PresentationDetent {
         .medium
+    }
+
+    private var reviewStep: some View {
+        Form {
+            if let item = selectedItem {
+                Section(header: Text("Farmaco riconosciuto")) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(camelCase(item.name))
+                            .font(.title3.weight(.semibold))
+                        if !item.principle.isEmpty {
+                            Text(item.principle)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                if let pkg = selectedPackage {
+                    Section(header: Text("Confezione")) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            if pkg.units > 0 {
+                                Label("\(pkg.units) unità", systemImage: "pills")
+                                    .font(.subheadline)
+                            }
+                            if pkg.dosageValue > 0 {
+                                let unit = pkg.dosageUnit.trimmingCharacters(in: .whitespacesAndNewlines)
+                                Label(unit.isEmpty ? "\(pkg.dosageValue)" : "\(pkg.dosageValue) \(unit)", systemImage: "scalemass")
+                                    .font(.subheadline)
+                            }
+                            if !pkg.volume.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Label(pkg.volume, systemImage: "drop")
+                                    .font(.subheadline)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+
+                    Section {
+                        HStack {
+                            Text("Ricetta")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(pkg.requiresPrescription ? "Richiesta" : "Non richiesta")
+                                .foregroundStyle(pkg.requiresPrescription ? .orange : .green)
+                                .font(.subheadline.weight(.medium))
+                        }
+                    }
+                }
+            }
+
+            Section {
+                Button {
+                    step = .recurrenceDuration
+                } label: {
+                    Label("Prosegui alla terapia", systemImage: "arrow.right.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(CapsuleActionButtonStyle(fill: .blue, textColor: .white))
+            }
+        }
     }
 
     private var recurrenceDurationStep: some View {
@@ -454,8 +519,10 @@ struct MedicineWizardView: View {
 
     private func goBack() {
         switch step {
-        case .recurrenceDuration:
+        case .review:
             dismiss()
+        case .recurrenceDuration:
+            step = .review
         case .schedule:
             step = .recurrenceDuration
         case .person:
@@ -907,7 +974,7 @@ struct MedicineWizardView: View {
         selectedItem = item
         selectedPackage = pkg
         stockUnits = max(1, pkg.units)
-        step = .recurrenceDuration
+        step = .review
         didApplyPrefill = true
     }
 

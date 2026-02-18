@@ -6,6 +6,7 @@ enum AppTabRoute: String, Hashable, Codable {
     case statistiche
     case medicine
     case profilo
+    case search
 }
 
 enum AppRoute: String, Codable, Equatable {

@@ -9,7 +9,6 @@ import SwiftUI
 import CoreData
 import MapKit
 import CoreImage
-
 struct ProfileView: View {
     @Environment(\.managedObjectContext) private var managedObjectContext
     @Environment(\.dismiss) private var dismiss
@@ -23,53 +22,10 @@ struct ProfileView: View {
     @State private var isDoctorDetailPresented = false
     @State private var selectedPerson: Person?
     @State private var isPersonDetailPresented = false
+    @State private var fullscreenBarcodeCodiceFiscale: String?
 
     var body: some View {
         Form {
-            // MARK: Persone
-            Section(header: HStack {
-                Label("Persone", systemImage: "person.2.fill")
-                Spacer()
-                NavigationLink(destination: AddPersonView()) {
-                    Image(systemName: "plus")
-                }
-            }) {
-                ForEach(persons) { person in
-                    Button {
-                        selectedPerson = person
-                        isPersonDetailPresented = true
-                    } label: {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(personDisplayName(for: person))
-                                .font(.headline)
-                                .foregroundStyle(.primary)
-                            if let cf = person.codice_fiscale, !cf.isEmpty {
-                                CodiceFiscaleBarcodeView(codiceFiscale: cf)
-                            }
-                            if person.is_account {
-                                Text("Account")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .buttonStyle(.plain)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        if person.is_account, auth.user != nil {
-                            Button(role: .destructive) {
-                                auth.signOut()
-                                if showsDoneButton {
-                                    dismiss()
-                                }
-                            } label: {
-                                Text("Esci")
-                            }
-                        }
-                    }
-                }
-            }
-
             // MARK: Farmacie
             Section(header: Label("Farmacie", systemImage: "cross.fill")) {
                 ProfilePharmacyCard()
@@ -87,14 +43,13 @@ struct ProfileView: View {
             }) {
                 ForEach(doctors) { doctor in
                     VStack(alignment: .leading, spacing: 10) {
-                        // Nome + orario — tappable per navigare al dettaglio
                         Button {
                             selectedDoctor = doctor
                             isDoctorDetailPresented = true
                         } label: {
                             HStack(alignment: .top) {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("Dottore \(doctor.nome ?? "")")
+                                    Text(doctor.nome ?? "")
                                         .font(.headline)
                                         .foregroundStyle(.primary)
                                     if let status = doctorStatusText(for: doctor) {
@@ -108,7 +63,6 @@ struct ProfileView: View {
                         }
                         .buttonStyle(.plain)
 
-                        // Pulsanti contatto
                         if hasDoctorContacts(doctor) {
                             HStack(spacing: 8) {
                                 if let mail = doctor.mail, !mail.isEmpty {
@@ -131,6 +85,59 @@ struct ProfileView: View {
                     .padding(.vertical, 4)
                 }
             }
+
+            // MARK: Persone
+            Section(header: HStack {
+                Label("Persone", systemImage: "person.2.fill")
+                Spacer()
+                NavigationLink(destination: AddPersonView()) {
+                    Image(systemName: "plus")
+                }
+            }) {
+                ForEach(persons) { person in
+                    HStack(spacing: 0) {
+                        Button {
+                            selectedPerson = person
+                            isPersonDetailPresented = true
+                        } label: {
+                            Text(personDisplayName(for: person))
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                        }
+                        .buttonStyle(.plain)
+
+                        Spacer()
+
+                        if let cf = person.codice_fiscale, !cf.isEmpty {
+                            Button {
+                                fullscreenBarcodeCodiceFiscale = cf
+                            } label: {
+                                VStack(spacing: 2) {
+                                    Image(systemName: "creditcard.fill")
+                                        .font(.system(size: 22))
+                                        .foregroundStyle(.blue)
+                                    Text("Tessera sanitaria")
+                                        .font(.system(size: 8, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if person.is_account, auth.user != nil {
+                            Button(role: .destructive) {
+                                auth.signOut()
+                                if showsDoneButton {
+                                    dismiss()
+                                }
+                            } label: {
+                                Text("Esci")
+                            }
+                        }
+                    }
+                }
+            }
         }
         .navigationTitle("Profilo")
         .navigationBarTitleDisplayMode(.inline)
@@ -151,6 +158,16 @@ struct ProfileView: View {
         .navigationDestination(isPresented: $isPersonDetailPresented) {
             if let person = selectedPerson {
                 PersonDetailView(person: person)
+            }
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { fullscreenBarcodeCodiceFiscale != nil },
+            set: { if !$0 { fullscreenBarcodeCodiceFiscale = nil } }
+        )) {
+            if let cf = fullscreenBarcodeCodiceFiscale {
+                FullscreenBarcodeView(codiceFiscale: cf) {
+                    fullscreenBarcodeCodiceFiscale = nil
+                }
             }
         }
         .onAppear {
@@ -564,6 +581,66 @@ private struct ProfilePharmacyCard: View {
         let item = MKMapItem(placemark: placemark)
         item.name = pin.title
         return item
+    }
+}
+
+// MARK: – Fullscreen Barcode
+
+private struct FullscreenBarcodeView: View {
+    let codiceFiscale: String
+    let onClose: () -> Void
+    @State private var barcodeImage: UIImage?
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.white.ignoresSafeArea()
+
+            VStack(spacing: 24) {
+                Spacer()
+
+                if let image = barcodeImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .interpolation(.none)
+                        .scaledToFit()
+                        .padding(.horizontal, 24)
+                } else {
+                    ProgressView()
+                }
+
+                Text(codiceFiscale)
+                    .font(.system(size: 18, weight: .semibold, design: .monospaced))
+                    .foregroundColor(.black)
+
+                Spacer()
+            }
+
+            Button {
+                onClose()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(.gray)
+            }
+            .padding(16)
+        }
+        .task {
+            barcodeImage = await Task.detached(priority: .userInitiated) {
+                generateBarcode(from: codiceFiscale)
+            }.value
+        }
+    }
+
+    private func generateBarcode(from string: String) -> UIImage? {
+        guard let data = string.data(using: .ascii),
+              let filter = CIFilter(name: "CICode128BarcodeGenerator") else { return nil }
+        filter.setValue(data, forKey: "inputMessage")
+        filter.setValue(7.0, forKey: "inputQuietSpace")
+        guard let output = filter.outputImage else { return nil }
+        let scaled = output.transformed(by: CGAffineTransform(scaleX: 4, y: 4))
+        let context = CIContext()
+        guard let cgImage = context.createCGImage(scaled, from: scaled.extent) else { return nil }
+        return UIImage(cgImage: cgImage)
     }
 }
 

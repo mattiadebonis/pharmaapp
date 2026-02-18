@@ -40,7 +40,7 @@ struct ContentView: View {
                 }
 
                 // TAB 2 – Statistiche
-                Tab("Statistiche", systemImage: "chart.bar", value: AppTabRoute.statistiche) {
+                Tab("Statistiche", systemImage: "chart.line.text.clipboard", value: AppTabRoute.statistiche) {
                     NavigationStack {
                         AdherenceDashboardView()
                     }

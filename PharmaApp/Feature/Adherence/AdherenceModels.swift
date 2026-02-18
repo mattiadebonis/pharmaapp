@@ -66,23 +66,54 @@ enum AdherenceBucketUnit {
     case month
 }
 
-struct AdherencePoint: Identifiable {
-    let date: Date
-    let value: Double
+struct WeekdayAdherence: Identifiable {
+    let label: String
+    let percentage: Double
+    var id: String { label }
+}
 
+struct TimeSlotPunctuality: Identifiable {
+    let label: String
+    let percentage: Double
+    var id: String { label }
+}
+
+struct StockSummary {
+    let totalCount: Int
+    let okCount: Int
+    let notOkCount: Int
+    let minNotOkDays: Int  // days remaining for the worst not-ok medicine (0 = esaurite)
+
+    var okPercentage: Double {
+        guard totalCount > 0 else { return 0 }
+        return Double(okCount) / Double(totalCount)
+    }
+
+    static let empty = StockSummary(totalCount: 0, okCount: 0, notOkCount: 0, minNotOkDays: 0)
+}
+
+struct DayAdherence: Identifiable {
+    let date: Date
+    let taken: Int
+    let planned: Int
+    var percentage: Double { planned > 0 ? min(1, Double(taken) / Double(planned)) : -1 }
     var id: Date { date }
 }
 
-struct TherapySummary: Identifiable {
-    let id: UUID
+struct MedicineCoverage: Identifiable {
     let name: String
-    let statusLabel: String
-    let taken: Int
-    let planned: Int
-    let adherenceSeries: [Double]
-    let hasMeasurements: Bool
-    let parameterSeries: [Double]?
-    let isSelfReported: Bool
+    let days: Int
+    let threshold: Int
+    var id: String { name }
+    var isOk: Bool { days >= threshold }
+}
+
+struct TherapyTimeStat: Identifiable {
+    let medicineName: String
+    let avgHour: Int
+    let avgMinute: Int
+    let stdDevMinutes: Int
+    var id: String { medicineName }
 }
 
 struct ReportRow {
