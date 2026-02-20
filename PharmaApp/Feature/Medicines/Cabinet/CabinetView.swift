@@ -11,7 +11,6 @@ struct CabinetView: View {
     }
 
     @EnvironmentObject private var appVM: AppViewModel
-    @EnvironmentObject private var appRouter: AppRouter
     @EnvironmentObject private var favoritesStore: FavoritesStore
     @Environment(\.managedObjectContext) private var managedObjectContext
     @StateObject private var viewModel = CabinetViewModel()
@@ -30,6 +29,7 @@ struct CabinetView: View {
     @State private var isNewCabinetPresented = false
     @State private var newCabinetName = ""
     @State private var isSearchPresented = false
+    @State private var isProfilePresented = false
     @State private var catalogSelection: CatalogSelection?
     @State private var pendingCatalogSelection: CatalogSelection?
     @State private var selectedEntry: MedicinePackage?
@@ -45,12 +45,12 @@ struct CabinetView: View {
 
     private var cabinetListWithNavigation: some View {
         cabinetListWithNewCabinetSheet
-            .navigationTitle("Armadio dei farmaci")
+            .navigationTitle("Armadietto")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        appRouter.selectedTab = .profilo
+                        isProfilePresented = true
                     } label: {
                         Image(systemName: "person")
                     }
@@ -87,6 +87,11 @@ struct CabinetView: View {
                         pendingCatalogSelection = selection
                         isSearchPresented = false
                     }
+                }
+            }
+            .sheet(isPresented: $isProfilePresented) {
+                NavigationStack {
+                    ProfileView()
                 }
             }
             .sheet(item: $catalogSelection) { selection in
@@ -137,7 +142,6 @@ struct CabinetView: View {
             .listRowSpacing(18)
             .listStyle(.plain)
             .padding(.top, 16)
-            .padding(.leading, 5)
             .scrollContentBackground(.hidden)
             .scrollIndicators(.hidden)
     }
@@ -148,7 +152,7 @@ struct CabinetView: View {
             if appVM.suggestNearestPharmacies {
                 Section {
                     smartBannerCard
-                        .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 16, trailing: 0))
+                        .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 16, trailing: 20))
                         .listRowBackground(Color.clear)
                 }
                 .listSectionSeparator(.hidden)
@@ -253,7 +257,7 @@ struct CabinetView: View {
         }
         .padding(.top, 12)
         .padding(.bottom, 6)
-        .padding(.leading, 4)
+        .padding(.horizontal, 24)
     }
 
     private func swipeLabel(_ text: String, systemImage: String) -> some View {
@@ -349,7 +353,7 @@ struct CabinetView: View {
         )
         .accessibilityIdentifier("MedicineRow_\(entry.objectID)")
         .listRowSeparator(.hidden, edges: .all)
-        .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 1, leading: 24, bottom: 1, trailing: 24))
     }
 
     private func cabinetRow(for cabinet: Cabinet, entries: [MedicinePackage]) -> some View {
@@ -388,7 +392,7 @@ struct CabinetView: View {
         }
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden, edges: .all)
-        .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 1, leading: 24, bottom: 1, trailing: 24))
     }
 
     private func operationToken(for action: OperationAction, entry: MedicinePackage) -> (id: UUID, key: OperationKey) {

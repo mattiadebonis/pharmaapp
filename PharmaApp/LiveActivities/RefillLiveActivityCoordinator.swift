@@ -26,6 +26,7 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
     private let purchaseSummaryProvider: RefillPurchaseSummaryProvider
     private let geofenceManager: RefillGeofenceManaging
     private let hoursResolver: RefillPharmacyHoursResolving
+    private let doctorHoursResolver: RefillDoctorHoursResolving
     private let stateStore: RefillActivityStateStoring
     private let client: RefillLiveActivityClientProtocol
     private let clock: Clock
@@ -45,6 +46,7 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         purchaseSummaryProvider: RefillPurchaseSummaryProvider? = nil,
         geofenceManager: RefillGeofenceManaging? = nil,
         hoursResolver: RefillPharmacyHoursResolving = RefillPharmacyHoursResolver(),
+        doctorHoursResolver: RefillDoctorHoursResolving? = nil,
         stateStore: RefillActivityStateStoring = UserDefaultsRefillActivityStateStore(),
         client: RefillLiveActivityClientProtocol = RefillLiveActivityClient(),
         clock: Clock = SystemClock(),
@@ -55,6 +57,7 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         self.purchaseSummaryProvider = purchaseSummaryProvider ?? RefillPurchaseSummaryProvider(context: context)
         self.geofenceManager = geofenceManager ?? RefillGeofenceManager(hoursResolver: hoursResolver, clock: clock)
         self.hoursResolver = hoursResolver
+        self.doctorHoursResolver = doctorHoursResolver ?? RefillDoctorHoursResolver(context: context)
         self.stateStore = stateStore
         self.client = client
         self.clock = clock
@@ -66,6 +69,17 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
             guard let self else { return }
             Task { @MainActor in
                 await self.handleCandidateEntered(candidate)
+            }
+        }
+
+        self.geofenceManager.onCandidatesUpdated = { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                self.scheduleDebouncedRefresh(
+                    reason: "pharmacy-candidates-updated",
+                    now: nil,
+                    delayNanoseconds: self.policy == .foregroundInteractive ? 1_000_000_000 : 300_000_000
+                )
             }
         }
     }
@@ -163,22 +177,16 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
             return
         }
 
-        guard let activityId = stateStore.activeActivityId(),
-              let pharmacyId = stateStore.activePharmacyId(),
-              let candidate = geofenceManager.candidate(for: pharmacyId) else {
-            scheduleTimeoutIfNeeded()
+        let activePharmacyId = stateStore.activePharmacyId()
+        let candidate = resolvedCandidate(activePharmacyId: activePharmacyId)
+        guard let candidate else {
+            if stateStore.activeActivityId() != nil {
+                scheduleTimeoutIfNeeded()
+            }
             return
         }
 
-        let openInfo = hoursResolver.openInfo(forPharmacyName: candidate.name, now: now)
-        guard openInfo.isOpen else {
-            await endActiveActivity(reason: "pharmacy-closed")
-            return
-        }
-
-        let state = makeContentState(candidate: candidate, summary: summary, now: now)
-        await client.update(activityID: activityId, contentState: state, staleDate: now.addingTimeInterval(timeoutInterval))
-        scheduleTimeoutIfNeeded()
+        await presentOrUpdateActivity(candidate: candidate, summary: summary, now: now)
     }
 
     func dismissCurrentActivity(reason: String) async {
@@ -210,7 +218,7 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
 
     private func isRelevantManagedObject(_ object: NSManagedObject) -> Bool {
         switch object {
-        case is Therapy, is Dose, is Stock, is Log, is Medicine, is MedicinePackage, is Package, is Option, is Todo:
+        case is Therapy, is Dose, is Stock, is Log, is Medicine, is MedicinePackage, is Package, is Option, is Todo, is Doctor:
             return true
         default:
             return false
@@ -229,27 +237,27 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
             await endActiveActivity(reason: "entered-no-purchases")
             return
         }
+        await presentOrUpdateActivity(candidate: candidate, summary: summary, now: now)
+    }
 
-        let openInfo = hoursResolver.openInfo(forPharmacyName: candidate.name, now: now)
-        guard openInfo.isOpen else { return }
-
+    private func presentOrUpdateActivity(
+        candidate: RefillPharmacyCandidate,
+        summary: RefillPurchaseSummary,
+        now: Date
+    ) async {
         let activeActivityId = stateStore.activeActivityId()
         let activePharmacyId = stateStore.activePharmacyId()
 
-        if activeActivityId != nil, activePharmacyId == candidate.id {
+        if let activeActivityId, activePharmacyId == candidate.id {
             let state = makeContentState(candidate: candidate, summary: summary, now: now)
-            if let activeActivityId {
-                await client.update(
-                    activityID: activeActivityId,
-                    contentState: state,
-                    staleDate: now.addingTimeInterval(timeoutInterval)
-                )
-                scheduleTimeoutIfNeeded()
-            }
+            await client.update(
+                activityID: activeActivityId,
+                contentState: state,
+                staleDate: now.addingTimeInterval(timeoutInterval)
+            )
+            scheduleTimeoutIfNeeded()
             return
         }
-
-        guard stateStore.canShow(for: candidate.id, now: now) else { return }
 
         if activeActivityId != nil {
             await endActiveActivity(reason: "switch-pharmacy")
@@ -274,6 +282,14 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         } catch {
             // Ignore transient ActivityKit failures; we'll retry on next enter/refresh.
         }
+    }
+
+    private func resolvedCandidate(activePharmacyId: String?) -> RefillPharmacyCandidate? {
+        if let activePharmacyId,
+           let activeCandidate = geofenceManager.candidate(for: activePharmacyId) {
+            return activeCandidate
+        }
+        return geofenceManager.nearestCandidate()
     }
 
     private func requestRefresh(reason: String, now: Date?) {
@@ -315,16 +331,31 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         summary: RefillPurchaseSummary,
         now: Date
     ) -> RefillActivityAttributes.ContentState {
-        RefillActivityAttributes.ContentState(
-            primaryText: "Farmacia aperta qui vicino",
+        let doctorInfo = doctorHoursResolver.preferredDoctorOpenInfo(now: now)
+        return RefillActivityAttributes.ContentState(
+            primaryText: "Scorte sotto soglia",
+            pharmacyName: candidate.name,
             etaMinutes: candidate.etaMinutes,
             distanceMeters: candidate.distanceMeters,
-            closingTimeText: candidate.closingTimeText,
+            pharmacyHoursText: resolvedPharmacyHoursText(for: candidate, now: now),
             purchaseNames: summary.visibleNames,
             remainingPurchaseCount: summary.remainingCount,
+            doctorName: doctorInfo.name,
+            doctorHoursText: doctorInfo.hoursText,
             lastUpdatedAt: now,
             showHealthCardAction: true
         )
+    }
+
+    private func resolvedPharmacyHoursText(for candidate: RefillPharmacyCandidate, now: Date) -> String {
+        let openInfo = hoursResolver.openInfo(forPharmacyName: candidate.name, now: now)
+        if let openText = openInfo.closingTimeText, openInfo.isOpen {
+            return openText
+        }
+        if let slotText = openInfo.slotText?.trimmingCharacters(in: .whitespacesAndNewlines), !slotText.isEmpty {
+            return "oggi \(slotText)"
+        }
+        return candidate.pharmacyHoursText
     }
 
     private func endActiveActivity(reason: String) async {

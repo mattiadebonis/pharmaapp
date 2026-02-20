@@ -65,23 +65,29 @@ struct ClinicalContextBuilder {
             guard let therapy = therapiesByID[event.therapyId] else { continue }
             guard let rules = ClinicalRules.decode(from: therapy.clinicalRules) else { continue }
             guard let monitoring = rules.monitoring, !monitoring.isEmpty else { continue }
-            guard event.date >= now else { continue }
 
-            for action in monitoring where action.requiredBeforeDose {
-                let leadMinutes = action.leadMinutes ?? 30
-                let leadSeconds = Double(leadMinutes) * 60
-                let triggerDate = event.date.addingTimeInterval(-leadSeconds)
+            for action in monitoring where action.schedule == nil {
+                let relation = action.resolvedDoseRelation
+                let offsetMinutes = action.resolvedOffsetMinutes
+                let offsetSeconds = Double(offsetMinutes) * 60
+                let triggerDate: Date = {
+                    switch relation {
+                    case .beforeDose:
+                        return event.date.addingTimeInterval(-offsetSeconds)
+                    case .afterDose:
+                        return event.date.addingTimeInterval(offsetSeconds)
+                    }
+                }()
                 if triggerDate < startOfToday { continue }
                 if triggerDate > endOfToday { continue }
+                guard triggerDate >= now else { continue }
 
-                let leadText = leadMinutes > 0 ? " (\(leadMinutes) min prima)" : ""
-                let detail = "Prima della dose\(leadText)"
-                let id = "monitoring|dose|\(action.kind.rawValue)|\(event.therapyId.uriRepresentation().absoluteString)|\(Int(event.date.timeIntervalSince1970))"
+                let id = "monitoring|dose|\(action.kind.rawValue)|\(relation.rawValue)|\(event.therapyId.uriRepresentation().absoluteString)|\(Int(event.date.timeIntervalSince1970))|\(Int(triggerDate.timeIntervalSince1970))"
                 todos.append(
                     TodayTodoItem(
                         id: id,
                         title: therapy.medicine.nome,
-                        detail: detail,
+                        detail: nil,
                         category: .monitoring,
                         medicineId: MedicineId(therapy.medicine.id)
                     )
@@ -99,14 +105,12 @@ struct ClinicalContextBuilder {
                 let scheduleEvents = scheduleOccurrences(schedule: schedule, from: startOfToday, to: endOfToday)
                 for scheduleDate in scheduleEvents {
                     guard scheduleDate >= now else { continue }
-                    let timeText = timeFormatter.string(from: scheduleDate)
-                    let detail = "\(timeText)"
                     let id = "monitoring|schedule|\(action.kind.rawValue)|\(therapy.objectID.uriRepresentation().absoluteString)|\(Int(scheduleDate.timeIntervalSince1970))"
                     todos.append(
                         TodayTodoItem(
                             id: id,
                             title: therapy.medicine.nome,
-                            detail: detail,
+                            detail: nil,
                             category: .monitoring,
                             medicineId: MedicineId(therapy.medicine.id)
                         )
@@ -115,7 +119,20 @@ struct ClinicalContextBuilder {
             }
         }
 
-        return todos.sorted { $0.detail ?? "" < $1.detail ?? "" }
+        return todos.sorted { lhs, rhs in
+            let lhsTime = monitoringTimestamp(from: lhs.id) ?? .distantFuture
+            let rhsTime = monitoringTimestamp(from: rhs.id) ?? .distantFuture
+            if lhsTime != rhsTime {
+                return lhsTime < rhsTime
+            }
+            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+        }
+    }
+
+    private func monitoringTimestamp(from id: String) -> Date? {
+        let parts = id.split(separator: "|")
+        guard let raw = parts.last, let seconds = TimeInterval(raw) else { return nil }
+        return Date(timeIntervalSince1970: seconds)
     }
 
     private func buildMissedDoseTodos(

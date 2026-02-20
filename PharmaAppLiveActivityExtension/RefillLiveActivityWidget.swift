@@ -8,12 +8,16 @@ struct RefillLiveActivityWidget: Widget {
                 Text(context.state.primaryText)
                     .font(.headline)
 
+                Text(context.state.pharmacyName)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+
                 HStack(spacing: 8) {
                     Text("\(context.state.etaMinutes) min")
                         .font(.subheadline.weight(.semibold))
                     Text("·")
                         .foregroundStyle(.secondary)
-                    Text(context.state.closingTimeText)
+                    Text(context.state.pharmacyHoursText)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -21,6 +25,11 @@ struct RefillLiveActivityWidget: Widget {
 
                 Text(purchaseSummaryText(for: context.state))
                     .font(.subheadline)
+                    .lineLimit(2)
+
+                Text("Medico \(context.state.doctorName): \(context.state.doctorHoursText)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
 
                 if context.state.showHealthCardAction {
@@ -58,7 +67,7 @@ struct RefillLiveActivityWidget: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Text("Rifornimenti")
+                    Text("Scorte")
                         .font(.headline)
                 }
 
@@ -68,10 +77,19 @@ struct RefillLiveActivityWidget: Widget {
                 }
 
                 DynamicIslandExpandedRegion(.center) {
-                    Text(context.state.closingTimeText)
-                        .lineLimit(1)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(context.state.pharmacyName)
+                            .lineLimit(1)
+                            .font(.footnote.weight(.semibold))
+                        Text(context.state.pharmacyHoursText)
+                            .lineLimit(1)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Text("\(context.state.doctorName): \(context.state.doctorHoursText)")
+                            .lineLimit(1)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 DynamicIslandExpandedRegion(.bottom) {
@@ -111,9 +129,9 @@ struct RefillLiveActivityWidget: Widget {
     private func purchaseSummaryText(for state: RefillActivityAttributes.ContentState) -> String {
         let head = state.purchaseNames.joined(separator: ", ")
         if state.remainingPurchaseCount > 0 {
-            return "Da comprare: \(head) +\(state.remainingPurchaseCount)"
+            return "Sotto soglia: \(head) +\(state.remainingPurchaseCount)"
         }
-        return "Da comprare: \(head)"
+        return "Sotto soglia: \(head)"
     }
 
     private func shortPurchaseSummaryText(for state: RefillActivityAttributes.ContentState) -> String {

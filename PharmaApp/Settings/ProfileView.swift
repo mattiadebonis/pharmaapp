@@ -23,16 +23,11 @@ struct ProfileView: View {
     @State private var selectedPerson: Person?
     @State private var isPersonDetailPresented = false
     @State private var fullscreenBarcodeCodiceFiscale: String?
+    @State private var personPendingDeletion: Person?
+    @State private var personDeleteErrorMessage: String?
 
     var body: some View {
         Form {
-            // MARK: Farmacie
-            Section(header: Label("Farmacie", systemImage: "cross.fill")) {
-                ProfilePharmacyCard()
-                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-                    .listRowBackground(Color.clear)
-            }
-
             // MARK: Dottori
             Section(header: HStack {
                 Label("Dottori", systemImage: "stethoscope")
@@ -86,6 +81,19 @@ struct ProfileView: View {
                 }
             }
 
+            Section(header: Label("Impostazioni", systemImage: "gearshape")) {
+                NavigationLink {
+                    PrescriptionMessageTemplateSettingsView()
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Messaggio richiesta ricetta")
+                        Text("Personalizza il testo con i placeholder {medico} e {medicinali}.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             // MARK: Persone
             Section(header: HStack {
                 Label("Persone", systemImage: "person.2.fill")
@@ -125,6 +133,14 @@ struct ProfileView: View {
                         }
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if !person.is_account {
+                            Button(role: .destructive) {
+                                personPendingDeletion = person
+                            } label: {
+                                Text("Elimina")
+                            }
+                        }
+
                         if person.is_account, auth.user != nil {
                             Button(role: .destructive) {
                                 auth.signOut()
@@ -176,6 +192,41 @@ struct ProfileView: View {
         }
         .onChange(of: auth.user) { user in
             AccountPersonService.shared.syncAccountDisplayName(from: user, in: managedObjectContext)
+        }
+        .alert(
+            "Eliminare questa persona?",
+            isPresented: Binding(
+                get: { personPendingDeletion != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        personPendingDeletion = nil
+                    }
+                }
+            )
+        ) {
+            Button("Elimina", role: .destructive) {
+                if let person = personPendingDeletion {
+                    deletePerson(person)
+                }
+                personPendingDeletion = nil
+            }
+            Button("Annulla", role: .cancel) {
+                personPendingDeletion = nil
+            }
+        } message: {
+            Text("Le terapie associate verranno assegnate all'account.")
+        }
+        .alert("Errore", isPresented: Binding(
+            get: { personDeleteErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    personDeleteErrorMessage = nil
+                }
+            }
+        )) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(personDeleteErrorMessage ?? "Errore sconosciuto.")
         }
     }
 
@@ -305,6 +356,21 @@ struct ProfileView: View {
         let full = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
         return full.isEmpty ? "Persona" : full
     }
+
+    private func deletePerson(_ person: Person) {
+        let context = person.managedObjectContext ?? managedObjectContext
+        do {
+            try PersonDeletionService.shared.delete(person, in: context)
+            if selectedPerson?.objectID == person.objectID {
+                selectedPerson = nil
+                isPersonDetailPresented = false
+            }
+        } catch {
+            context.rollback()
+            personDeleteErrorMessage = error.localizedDescription
+            print("Errore nell'eliminazione della persona: \(error.localizedDescription)")
+        }
+    }
 }
 
 // MARK: – Pharmacy Card
@@ -342,9 +408,9 @@ private struct ProfilePharmacyCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             pharmacyHeader
-            pharmacyMapPreview()
+            pharmacyInfoRows
             HStack(spacing: 8) {
                 routeButton(for: .walking)
                 routeButton(for: .driving)
@@ -367,16 +433,11 @@ private struct ProfilePharmacyCard: View {
 
     private var pharmacyHeader: some View {
         HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(locationVM.pinItem?.title ?? "Farmacia più vicina")
                     .font(.headline)
                     .lineLimit(2)
-                if let line = pharmacyDetailsLine {
-                    Text(line)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                } else {
+                if locationVM.pinItem == nil {
                     Text("Attiva la posizione per vedere distanza, orari e contatti.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -398,69 +459,66 @@ private struct ProfilePharmacyCard: View {
         }
     }
 
-    @ViewBuilder
-    private func pharmacyMapPreview() -> some View {
-        if let region = locationVM.region {
-            ZStack {
-                Map(coordinateRegion: Binding(
-                    get: { locationVM.region ?? region },
-                    set: { locationVM.region = $0 }
-                ))
-                .allowsHitTesting(false)
-                if locationVM.pinItem != nil {
-                    Image(systemName: "mappin.circle.fill")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(.red)
-                        .shadow(color: Color.black.opacity(0.15), radius: 2, x: 0, y: 1)
-                }
-            }
-            .frame(height: 150)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+    private var pharmacyInfoRows: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            pharmacyInfoRow(
+                icon: "location",
+                title: "Distanza",
+                value: pharmacyDistanceText() ?? "non disponibile"
             )
-        } else {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.secondary.opacity(0.12))
-                VStack(spacing: 6) {
-                    Image(systemName: "map")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                    Text("Ricerca in corso della farmacia più vicina")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.horizontal, 16)
-            }
-            .frame(height: 150)
+            pharmacyInfoRow(
+                icon: "clock",
+                title: "Orari oggi",
+                value: todayOpeningSummary
+            )
         }
+    }
+
+    private func pharmacyInfoRow(icon: String, title: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 14)
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.secondary.opacity(0.08))
+        )
     }
 
     private func routeButton(for mode: PharmacyRouteMode) -> some View {
         Button {
             openDirections(mode)
         } label: {
-            VStack(spacing: 4) {
-                Image(systemName: mode.systemImage)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
+            VStack(spacing: 3) {
+                Label(mode.accessibilityLabel, systemImage: mode.systemImage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
                 Text(routeMinutesText(for: mode))
                     .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
-            .background(
+            .overlay(
                 Capsule(style: .continuous)
-                    .fill(Color.blue)
+                    .stroke(Color.primary.opacity(0.18), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
         .disabled(!canOpenMaps)
-        .opacity(canOpenMaps ? 1 : 0.55)
+        .opacity(canOpenMaps ? 1 : 0.45)
         .accessibilityLabel(mode.accessibilityLabel)
     }
 
@@ -468,24 +526,24 @@ private struct ProfilePharmacyCard: View {
         Button {
             locationVM.callPharmacy()
         } label: {
-            VStack(spacing: 4) {
-                Image(systemName: "phone.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                Text("Chiama")
+            VStack(spacing: 3) {
+                Label("Chiama", systemImage: "phone.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text("Farmacia")
                     .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
-            .background(
+            .overlay(
                 Capsule(style: .continuous)
-                    .fill(Color.green)
+                    .stroke(Color.primary.opacity(0.18), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
         .disabled(!canCall)
-        .opacity(canCall ? 1 : 0.55)
+        .opacity(canCall ? 1 : 0.45)
         .accessibilityLabel("Chiama farmacia")
     }
 
@@ -498,16 +556,12 @@ private struct ProfilePharmacyCard: View {
         return phone?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
-    private var pharmacyDetailsLine: String? {
-        var parts: [String] = []
-        if let distance = pharmacyDistanceText() {
-            parts.append("Distanza \(distance)")
+    private var todayOpeningSummary: String {
+        guard let slot = locationVM.todayOpeningText?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !slot.isEmpty else {
+            return "non disponibili"
         }
-        if let slot = locationVM.todayOpeningText?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !slot.isEmpty {
-            parts.append("Orari oggi \(slot)")
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        return slot
     }
 
     private var pharmacyStatusText: String? {

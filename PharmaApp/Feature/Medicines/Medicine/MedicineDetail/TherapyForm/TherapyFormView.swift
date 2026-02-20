@@ -124,7 +124,8 @@ struct TherapyFormView: View {
 
     @State private var monitoringEnabled: Bool = false
     @State private var monitoringKind: MonitoringKind = .bloodPressure
-    @State private var monitoringLeadMinutes: Int = 30
+    @State private var monitoringDoseRelation: MonitoringDoseRelation = .beforeDose
+    @State private var monitoringOffsetMinutes: Int = 30
     @State private var missedDosePreset: MissedDosePreset = .none
     private let showClinicalRuleControls = false
 
@@ -269,9 +270,11 @@ struct TherapyFormView: View {
             }
             .listRowBackground(Color(.systemGroupedBackground))
 
+            // Temporaneamente nascosto: accesso impostazioni monitoraggi nel Therapy Form.
+            // monitoringOverviewSection
+
             if showClinicalRuleControls {
                 taperSection
-                monitoringOverviewSection
                 missedDoseSection
             }
 
@@ -370,6 +373,8 @@ struct TherapyFormView: View {
                 }
             }
         }
+        // Temporaneamente nascosto: sheet impostazioni monitoraggi nel Therapy Form.
+        /*
         .sheet(isPresented: $isShowingMonitoringSheet) {
             NavigationStack {
                 Form {
@@ -384,6 +389,7 @@ struct TherapyFormView: View {
                 }
             }
         }
+        */
         .sheet(isPresented: $showTaperEditor) {
             NavigationStack {
                 TaperStepEditorView(steps: $taperSteps)
@@ -441,7 +447,8 @@ struct TherapyFormView: View {
 
     private var monitoringDetailsText: String {
         guard monitoringEnabled else { return "Nessun monitoraggio richiesto." }
-        return "\(monitoringKind.label) • \(monitoringLeadMinutes) min prima"
+        let relationText = monitoringDoseRelation == .beforeDose ? "prima" : "dopo"
+        return "\(monitoringKind.label) • \(monitoringOffsetMinutes) min \(relationText)"
     }
 
     @ViewBuilder
@@ -577,14 +584,14 @@ struct TherapyFormView: View {
     private var monitoringOverviewSection: some View {
         Section(
             header: Text("Monitoraggi"),
-            footer: Text("Se attivi, crea un promemoria prima di ogni dose.")
+            footer: Text("Se attivi, crea un promemoria prima o dopo ogni dose.")
         ) {
             Button {
                 isShowingMonitoringSheet = true
             } label: {
                 clinicalRuleRow(
                     title: "Monitoraggi",
-                    subtitle: "Controlli prima della dose (es. pressione, glicemia).",
+                    subtitle: "Controlli dose-correlati (es. pressione, glicemia).",
                     status: monitoringStatusText,
                     statusColor: monitoringEnabled ? .blue : .secondary,
                     details: monitoringDetailsText
@@ -655,24 +662,37 @@ struct TherapyFormView: View {
     private var monitoringSection: some View {
         Section(
             header: Text("Monitoraggi"),
-            footer: Text("Se attivi, crea un promemoria prima di ogni dose.")
+            footer: Text("Configura un monitoraggio prima o dopo la dose, con offset libero in minuti.")
         ) {
-            Toggle("Richiedi un monitoraggio prima della dose", isOn: $monitoringEnabled)
+            Toggle("Richiedi un monitoraggio legato alla dose", isOn: $monitoringEnabled)
             if monitoringEnabled {
                 Picker("Cosa controllare", selection: $monitoringKind) {
                     ForEach(MonitoringKind.allCases, id: \.self) { kind in
                         Text(kind.label).tag(kind)
                     }
                 }
-                Picker("Quanto prima", selection: $monitoringLeadMinutes) {
-                    Text("15 min").tag(15)
-                    Text("30 min").tag(30)
-                    Text("60 min").tag(60)
+
+                Picker("Quando", selection: $monitoringDoseRelation) {
+                    ForEach(MonitoringDoseRelation.allCases, id: \.self) { relation in
+                        Text(relation.label).tag(relation)
+                    }
                 }
-                .pickerStyle(.segmented)
-                Text("Promemoria: \(monitoringLeadMinutes) min prima della dose.")
+
+                TextField("Minuti", value: $monitoringOffsetMinutes, format: .number)
+                    .keyboardType(.numberPad)
+
+                Text(
+                    monitoringDoseRelation == .beforeDose
+                    ? "Promemoria: \(monitoringOffsetMinutes) min prima della dose."
+                    : "Promemoria: \(monitoringOffsetMinutes) min dopo la dose."
+                )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            }
+        }
+        .onChange(of: monitoringOffsetMinutes) { newValue in
+            if newValue < 0 {
+                monitoringOffsetMinutes = 0
             }
         }
         .listRowBackground(Color(.systemGroupedBackground))
@@ -997,14 +1017,16 @@ struct TherapyFormView: View {
         }()
 
         var monitoringActions = (editingTherapy?.clinicalRulesValue?.monitoring ?? [])
-        monitoringActions.removeAll(where: { $0.requiredBeforeDose })
+        monitoringActions.removeAll(where: { $0.schedule == nil })
         if monitoringEnabled {
             monitoringActions.append(
                 MonitoringAction(
                     kind: monitoringKind,
-                    requiredBeforeDose: true,
+                    doseRelation: monitoringDoseRelation,
+                    offsetMinutes: monitoringOffsetMinutes,
+                    requiredBeforeDose: monitoringDoseRelation == .beforeDose,
                     schedule: nil,
-                    leadMinutes: monitoringLeadMinutes
+                    leadMinutes: monitoringOffsetMinutes
                 )
             )
         }
@@ -1053,10 +1075,11 @@ struct TherapyFormView: View {
         spacingSubstances = Set(spacing.map { $0.substance })
         spacingHours = spacing.first?.hours ?? spacingHours
 
-        if let action = rules.monitoring?.first(where: { $0.requiredBeforeDose }) {
+        if let action = rules.monitoring?.first(where: { $0.schedule == nil }) {
             monitoringEnabled = true
             monitoringKind = action.kind
-            monitoringLeadMinutes = action.leadMinutes ?? monitoringLeadMinutes
+            monitoringDoseRelation = action.resolvedDoseRelation
+            monitoringOffsetMinutes = action.resolvedOffsetMinutes
         } else {
             monitoringEnabled = false
         }
@@ -1074,7 +1097,8 @@ struct TherapyFormView: View {
         spacingHours = 2
         monitoringEnabled = false
         monitoringKind = .bloodPressure
-        monitoringLeadMinutes = 30
+        monitoringDoseRelation = .beforeDose
+        monitoringOffsetMinutes = 30
         missedDosePreset = .none
     }
 }

@@ -681,16 +681,12 @@ struct MedicineDetailView: View {
     }
     
     private func emailBody(for meds: [Medicine]) -> String {
-        let list = meds.map { "- \($0.nome)" }.joined(separator: "\n")
-        return """
-        Gentile \(doctorDisplayName),
-
-        avrei bisogno della ricetta per:
-        \(list)
-
-        Potresti inviarla appena possibile? Grazie!
-
-        """
+        let medicineNames = meds.map(\.nome)
+        return PrescriptionMessageTemplateRenderer.render(
+            template: currentOption?.prescription_message_template,
+            doctorName: doctorDisplayName,
+            medicineNames: medicineNames
+        )
     }
     
     private func sendEmailBody(for meds: [Medicine]) {

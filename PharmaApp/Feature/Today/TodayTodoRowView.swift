@@ -3,7 +3,6 @@ import SwiftUI
 /// Riga generica per i todo di "Oggi" (versione senza sotto-task).
 struct TodayTodoRowView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @ScaledMetric(relativeTo: .body) private var timingColumnWidth: CGFloat = 100
 
     let iconName: String
     let actionText: String?
@@ -21,6 +20,7 @@ struct TodayTodoRowView: View {
     let showToggle: Bool
     let hideToggle: Bool
     let trailingBadge: (String, Color)?
+    let trailingBadgeAction: (() -> Void)?
     let onToggle: () -> Void
     let subtitleFont: Font?
     let subtitleColor: Color?
@@ -44,6 +44,7 @@ struct TodayTodoRowView: View {
         showToggle: Bool = true,
         hideToggle: Bool = false,
         trailingBadge: (String, Color)? = nil,
+        trailingBadgeAction: (() -> Void)? = nil,
         onToggle: @escaping () -> Void,
         subtitleFont: Font? = nil,
         subtitleColor: Color? = nil,
@@ -67,6 +68,7 @@ struct TodayTodoRowView: View {
         self.showToggle = showToggle
         self.hideToggle = hideToggle
         self.trailingBadge = trailingBadge
+        self.trailingBadgeAction = trailingBadgeAction
         self.onToggle = onToggle
         self.subtitleFont = subtitleFont
         self.subtitleColor = subtitleColor
@@ -76,32 +78,36 @@ struct TodayTodoRowView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 6) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    if let leadingTime, !leadingTime.isEmpty {
-                        Text(leadingTime)
-                            .font(.system(size: 16, weight: .regular))
-                            .foregroundStyle(secondaryTextColor)
-                            .monospacedDigit()
-                            .multilineTextAlignment(.leading)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.80)
-                            .frame(width: timingColumnWidth, alignment: .leading)
-                            .layoutPriority(2)
+        HStack(alignment: .top, spacing: 16) {
+            if !hideToggle {
+                Button(action: onToggle) {
+                    let size: CGFloat = 18
+                    ZStack {
+                        Circle()
+                            .stroke(checkboxBorderColor, lineWidth: 1.2)
+                            .background(
+                                Circle()
+                                    .fill(isToggleOn ? checkboxFillColor.opacity(0.24) : .clear)
+                            )
+                        if isToggleOn {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(checkboxCheckmarkColor)
+                        }
                     }
+                    .frame(width: size, height: size)
+                    .contentShape(Circle())
+                    .accessibilityLabel(Text(iconName))
+                }
+                .buttonStyle(.plain)
+                .disabled(!showToggle)
+                .padding(.top, 1)
+            }
 
-                    if let actionText, !actionText.isEmpty {
-                        Text(actionText)
-                            .font(.system(size: 16, weight: .regular))
-                            .foregroundStyle(labelColor)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                            .layoutPriority(2)
-                    }
-
-                    Text(title)
-                        .font(.system(size: 16, weight: .regular))
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(primaryLineTitle)
+                        .font(.system(size: 17, weight: .regular))
                         .foregroundStyle(titleColor)
                         .multilineTextAlignment(.leading)
                         .lineLimit(2)
@@ -116,72 +122,68 @@ struct TodayTodoRowView: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    if let badge = trailingBadge {
-                        badgeView(text: badge.0, color: badge.1)
+                if let leadingTime, !leadingTime.isEmpty {
+                    Text(formatTimingLine(leadingTime))
+                        .font(.system(size: 15, weight: .regular))
+                        .foregroundStyle(secondaryTextColor)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                }
+
+                if let actionText, !actionText.isEmpty {
+                    Text(actionText)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(labelColor)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+                }
+
+                if let subtitleLine {
+                    subtitleLine
+                        .font(subtitleFont ?? .system(size: 15))
+                        .foregroundStyle(subtitleColor ?? secondaryTextColor)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(3)
+                        .truncationMode(.tail)
+                } else if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(subtitleFont ?? .system(size: 15))
+                        .foregroundStyle(subtitleColor ?? secondaryTextColor)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(3)
+                        .truncationMode(.tail)
+                }
+
+                if let auxiliaryLine {
+                    let baseLine = auxiliaryLine
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(3)
+                        .truncationMode(.tail)
+                    if auxiliaryUsesDefaultStyle {
+                        baseLine
+                            .font(auxiliaryFont ?? .system(size: 15))
+                            .foregroundStyle(auxiliaryColor ?? secondaryTextColor)
+                    } else {
+                        baseLine
                     }
-                    if let subtitleLine {
-                        subtitleLine
-                            .font(subtitleFont ?? .system(size: 15))
-                            .foregroundStyle(subtitleColor ?? secondaryTextColor)
-                            .multilineTextAlignment(.leading)
-                            .lineLimit(3)
-                            .truncationMode(.tail)
-                            .padding(.leading, subtitleLeadingInset)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    } else if let subtitle, !subtitle.isEmpty {
-                        Text(subtitle)
-                            .font(subtitleFont ?? .system(size: 15))
-                            .foregroundStyle(subtitleColor ?? secondaryTextColor)
-                            .multilineTextAlignment(.leading)
-                            .lineLimit(3)
-                            .truncationMode(.tail)
-                            .padding(.leading, subtitleLeadingInset)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    if let auxiliaryLine {
-                        let baseLine = auxiliaryLine
-                            .multilineTextAlignment(.leading)
-                            .lineLimit(3)
-                            .truncationMode(.tail)
-                            .padding(.leading, subtitleLeadingInset)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        if auxiliaryUsesDefaultStyle {
-                            baseLine
-                                .font(auxiliaryFont ?? .system(size: 15))
-                                .foregroundStyle(auxiliaryColor ?? secondaryTextColor)
-                        } else {
-                            baseLine
+                }
+
+                if let badge = trailingBadge {
+                    if let trailingBadgeAction {
+                        Button(action: trailingBadgeAction) {
+                            badgeView(text: badge.0, color: badge.1)
                         }
+                        .buttonStyle(.plain)
+                    } else {
+                        badgeView(text: badge.0, color: badge.1)
                     }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .onTapGesture { if showToggle && !hideToggle { onToggle() } }
-
-            if !hideToggle {
-                Button(action: onToggle) {
-                    let size: CGFloat = 18
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(checkboxBorderColor, lineWidth: 1.5)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(isToggleOn ? checkboxFillColor : .clear)
-                            )
-                        if isToggleOn {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(checkboxCheckmarkColor)
-                        }
-                    }
-                        .frame(width: size, height: size)
-                        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        .accessibilityLabel(Text(iconName))
-                }
-                .buttonStyle(.plain)
-                .disabled(!showToggle)
+            .onTapGesture {
+                guard trailingBadgeAction == nil else { return }
+                if showToggle && !hideToggle { onToggle() }
             }
         }
     }
@@ -224,15 +226,35 @@ struct TodayTodoRowView: View {
 
     private func badgeView(text: String, color: Color) -> some View {
         Text(text)
-            .font(.system(size: 14, weight: .regular))
+            .font(.system(size: 12, weight: .medium))
             .foregroundStyle(color)
             .fixedSize(horizontal: true, vertical: true)
-            .padding(.horizontal, 2)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(color.opacity(colorScheme == .dark ? 0.25 : 0.14))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(color.opacity(colorScheme == .dark ? 0.55 : 0.35), lineWidth: 0.8)
+            )
     }
 
-    private var subtitleLeadingInset: CGFloat {
-        guard subtitleAlignsWithTitle else { return 0 }
-        guard let leadingTime, !leadingTime.isEmpty else { return 0 }
-        return timingColumnWidth + 8
+    private var primaryLineTitle: String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+        guard let actionText else { return "" }
+        return actionText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func formatTimingLine(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("alle ") else { return trimmed }
+        let time = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
+        if time.isEmpty { return trimmed }
+        return time
     }
 }

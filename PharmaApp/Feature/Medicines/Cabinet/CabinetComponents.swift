@@ -118,7 +118,7 @@ struct MedicineSwipeRow: View {
     }
 }
 
-/// Sheet semplificato per spostare un medicinale in un armadietto o nell'armadio dei farmaci.
+/// Sheet semplificato per spostare un medicinale in un armadietto o nel contenitore principale.
 struct MoveToCabinetSheet: View {
     let entry: MedicinePackage
     let cabinets: [Cabinet]
@@ -136,7 +136,7 @@ struct MoveToCabinetSheet: View {
                     } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Armadio dei farmaci")
+                                Text("Armadietto")
                                 Text("Nessun armadietto")
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)

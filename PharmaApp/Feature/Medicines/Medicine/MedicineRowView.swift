@@ -199,8 +199,7 @@ struct MedicineRowView: View {
     // MARK: - Body
     
     var body: some View {
-        HStack(alignment: .top, spacing: 18) {
-            leadingIcon
+        HStack(alignment: .top, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
                 titleLine
                 subtitleBlock
@@ -369,12 +368,12 @@ struct MedicineRowView: View {
         let dosage = primaryPackageDosage
         return HStack(alignment: .bottom, spacing: 4) {
             Text(name)
-                .font(.system(size: 15, weight: .regular))
+                .font(.system(size: 16, weight: .bold))
                 .foregroundColor(.primary)
                 .lineLimit(2)
             if let dosage {
                 Text(" \(dosage)")
-                    .font(.system(size: 15, weight: .regular))
+                    .font(.system(size: 16, weight: .regular))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
@@ -398,21 +397,6 @@ struct MedicineRowView: View {
         return packageDosageLabel(pkg)
     }
 
-    private var leadingIconName: String {
-        "pill"
-    }
-
-    private var leadingIconColor: Color {
-        Color(.systemGray4)
-    }
-
-    private var leadingIcon: some View {
-        Image(systemName: leadingIconName)
-            .font(.system(size: 17, weight: .regular))
-            .foregroundColor(leadingIconColor)
-            .frame(width: 22, height: 22, alignment: .center)
-    }
-    
     private func packageQuantityLabel(_ pkg: Package) -> String? {
         let typeRaw = pkg.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
         if pkg.numero > 0 {

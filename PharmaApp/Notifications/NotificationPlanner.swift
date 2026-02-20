@@ -11,6 +11,7 @@ struct NotificationScheduleConfiguration {
     var stockAlertCooldownHours: Int = 24
     var stockForecastHorizonDays: Int = 90
     var therapyGraceWindowSeconds: Int = 90
+    var therapyIntakeLogToleranceSeconds: Int = 60 * 60
 }
 
 enum NotificationPlanOrigin: String {
@@ -127,23 +128,29 @@ struct NotificationPlanner {
     }
 
     func planTherapyNotifications(therapies: [Therapy], now: Date) -> [NotificationPlanItem] {
-        guard !therapies.isEmpty else { return [] }
+        let activeTherapies = therapies.filter(isTherapyEligibleForNotification)
+        guard !activeTherapies.isEmpty else { return [] }
         guard let endDate = calendar.date(byAdding: .day, value: config.therapyHorizonDays, to: now) else {
             return []
         }
 
         let generator = DoseEventGenerator(context: context, calendar: calendar)
-        let events = generator.generateEvents(therapies: therapies, from: now, to: endDate)
+        let events = generator.generateEvents(therapies: activeTherapies, from: now, to: endDate)
         guard !events.isEmpty else { return [] }
 
-        let therapyLookup = Dictionary(therapies.map { ($0.objectID, $0) }, uniquingKeysWith: { first, _ in first })
+        let therapyLookup = Dictionary(activeTherapies.map { ($0.objectID, $0) }, uniquingKeysWith: { first, _ in first })
         var items: [NotificationPlanItem] = []
 
         let graceWindow = Double(config.therapyGraceWindowSeconds)
+        let intakeTolerance = Double(config.therapyIntakeLogToleranceSeconds)
         for event in events {
             let delta = event.date.timeIntervalSince(now)
             if delta < 0, abs(delta) > graceWindow { continue }
             guard let therapy = therapyLookup[event.therapyId] else { continue }
+            guard !hasMatchingIntakeLog(for: event.date, therapy: therapy, tolerance: intakeTolerance) else {
+                continue
+            }
+
             let medicine = therapy.medicine
             let title = "È ora della terapia"
             let personLabel = personLabel(for: therapy)
@@ -277,11 +284,7 @@ struct NotificationPlanner {
         let request: NSFetchRequest<Therapy> = Therapy.fetchRequest() as! NSFetchRequest<Therapy>
         do {
             let therapies = try context.fetch(request)
-            return therapies.filter { therapy in
-                guard let rrule = therapy.rrule, !rrule.isEmpty else { return false }
-                guard let doses = therapy.doses, !doses.isEmpty else { return false }
-                return true
-            }
+            return therapies.filter(isTherapyEligibleForNotification)
         } catch {
             return []
         }
@@ -301,6 +304,39 @@ struct NotificationPlanner {
         let surname = therapy.person.cognome?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let combined = "\(name) \(surname)".trimmingCharacters(in: .whitespacesAndNewlines)
         return combined
+    }
+
+    private func isTherapyEligibleForNotification(_ therapy: Therapy) -> Bool {
+        guard !therapy.isDeleted else { return false }
+        guard !therapy.medicine.isDeleted else { return false }
+        guard let rrule = therapy.rrule, !rrule.isEmpty else { return false }
+        guard let doses = therapy.doses, !doses.isEmpty else { return false }
+        return true
+    }
+
+    private func hasMatchingIntakeLog(for eventDate: Date, therapy: Therapy, tolerance: TimeInterval) -> Bool {
+        let intakeLogs = therapy.medicine.effectiveIntakeLogs(calendar: calendar)
+        guard !intakeLogs.isEmpty else { return false }
+
+        for log in intakeLogs {
+            if let logTherapy = log.therapy {
+                if logTherapy.objectID != therapy.objectID { continue }
+            } else {
+                let activeTherapyCount = (therapy.medicine.therapies ?? []).filter { !$0.isDeleted }.count
+                if activeTherapyCount == 1 {
+                    // In caso di una sola terapia, accettiamo anche log non assegnati.
+                } else if log.package != therapy.package {
+                    continue
+                }
+            }
+
+            let delta = abs(log.timestamp.timeIntervalSince(eventDate))
+            if delta <= tolerance {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func shouldNotifyNow(level: StockAlertLevel, medicineId: UUID, now: Date) -> Bool {

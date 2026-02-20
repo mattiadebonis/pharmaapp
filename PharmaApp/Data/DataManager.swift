@@ -274,12 +274,16 @@ class DataManager {
         do {
             let options = try context.fetch(fetchRequest)
             if options.isEmpty {
-                let newOption = Option(context: context)
+                guard let optionEntity = NSEntityDescription.entity(forEntityName: "Option", in: context) else {
+                    fatalError("Entity Option non trovata nel modello Core Data.")
+                }
+                let newOption = Option(entity: optionEntity, insertInto: context)
                 newOption.id = UUID()
                 newOption.manual_intake_registration = false
                 newOption.day_threeshold_stocks_alarm = 7
                 newOption.therapy_notification_level = TherapyNotificationPreferences.defaultLevel.rawValue
                 newOption.therapy_snooze_minutes = Int32(TherapyNotificationPreferences.defaultSnoozeMinutes)
+                newOption.prescription_message_template = PrescriptionMessageTemplateRenderer.defaultTemplate
             }else if options.count > 0 {
                 if let option = options.first {
                     if !option.manual_intake_registration {
@@ -299,6 +303,12 @@ class DataManager {
                     )
                     if Int(option.therapy_snooze_minutes) != normalizedSnooze {
                         option.therapy_snooze_minutes = Int32(normalizedSnooze)
+                    }
+                    let normalizedTemplate = PrescriptionMessageTemplateRenderer.resolvedTemplate(
+                        customTemplate: option.prescription_message_template
+                    )
+                    if option.prescription_message_template != normalizedTemplate {
+                        option.prescription_message_template = normalizedTemplate
                     }
                 }
             }

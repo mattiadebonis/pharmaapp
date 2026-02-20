@@ -3,6 +3,8 @@ import CoreData
 
 struct UpcomingView: View {
     @Environment(\.colorScheme) private var colorScheme
+    private let sectionContentInset: CGFloat = 30
+    private let sectionHeaderInset: CGFloat = 18
 
     @FetchRequest(
         sortDescriptors: [
@@ -32,11 +34,13 @@ struct UpcomingView: View {
                             onToggle: {}
                         )
                         .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 0, leading: sectionContentInset, bottom: 0, trailing: sectionContentInset))
                         .listRowSeparator(.visible)
                         .listRowSeparatorTint(Color.primary.opacity(0.12))
                     }
                 } header: {
                     sectionHeader(for: group)
+                        .padding(.horizontal, sectionHeaderInset)
                 }
             }
         }

@@ -66,6 +66,24 @@ enum AdherenceBucketUnit {
     case month
 }
 
+enum StatisticsRange: String, CaseIterable, Identifiable {
+    case days
+    case weeks
+    case months
+    case all
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .days: return "Giorni"
+        case .weeks: return "Settimane"
+        case .months: return "Mesi"
+        case .all: return "Tutto"
+        }
+    }
+}
+
 struct WeekdayAdherence: Identifiable {
     let label: String
     let percentage: Double
@@ -100,6 +118,13 @@ struct DayAdherence: Identifiable {
     var id: Date { date }
 }
 
+struct OverallTrendPoint: Identifiable {
+    let date: Date
+    let adherence: Double
+    let punctuality: Double
+    var id: Date { date }
+}
+
 struct MedicineCoverage: Identifiable {
     let name: String
     let days: Int
@@ -114,6 +139,23 @@ struct TherapyTimeStat: Identifiable {
     let avgMinute: Int
     let stdDevMinutes: Int
     var id: String { medicineName }
+}
+
+struct MonitoringCorrelationPoint: Identifiable {
+    let date: Date
+    let value: Double
+    var id: Date { date }
+}
+
+struct TherapyMonitoringCorrelation {
+    let therapyTitle: String
+    let parameterTitle: String
+    let parameterUnit: String
+    let parameterPoints: [MonitoringCorrelationPoint]
+    /// Moving-average smoothed version of parameterPoints (same dates, averaged values).
+    let smoothedParameterPoints: [MonitoringCorrelationPoint]
+    let adherencePoints: [MonitoringCorrelationPoint]
+    let correlationCoefficient: Double?
 }
 
 struct ReportRow {

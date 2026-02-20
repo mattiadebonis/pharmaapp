@@ -13,33 +13,32 @@ struct AdherenceDashboardView: View {
     private var logs: FetchedResults<Log>
 
     @StateObject private var viewModel = AdherenceDashboardViewModel()
+    @State private var selectedRange: StatisticsRange = .days
 
     private enum StockLevel { case ok, low, critical, noData }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 56) {
                 header
-                widgetsRow
-
+                rangePicker
+                overallTrendSection
                 // ADERENZA
                 adherenceHeatmapSection
                 weekdayChart
                 timeSlotChart
-
-                // SCORTE
-                stockHeatmapSection
-                EarlyRefillCard(count: viewModel.earlyRefillCount, total: viewModel.earlyRefillTotal, ratio: viewModel.earlyRefillRatio)
+                therapyMonitoringCorrelationSection
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 32)
+            .padding(.horizontal, 30)
+            .padding(.top, 30)
+            .padding(.bottom, 44)
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Color.white)
         .toolbar(.hidden, for: .navigationBar)
         .onAppear(perform: reload)
         .onChange(of: therapies.count) { _ in reload() }
         .onChange(of: logs.count) { _ in reload() }
+        .onChange(of: selectedRange) { _ in reload() }
         .onReceive(NotificationCenter.default.publisher(
             for: .NSManagedObjectContextObjectsDidChange,
             object: PersistenceController.shared.container.viewContext
@@ -53,27 +52,127 @@ struct AdherenceDashboardView: View {
             Text("Statistiche")
                 .font(.system(size: 32, weight: .semibold))
                 .foregroundStyle(.primary)
-            Text("Panoramica delle tue terapie")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
         }
     }
 
-    private var widgetsRow: some View {
-        VStack(spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                GaugeCard(
-                    title: "Aderenza",
-                    value: viewModel.adherencePercentage,
-                    color: adherenceColor(viewModel.adherencePercentage)
-                )
-                GaugeCard(
-                    title: "Puntualità",
-                    value: viewModel.punctualityPercentage,
-                    color: adherenceColor(viewModel.punctualityPercentage)
-                )
+    private var rangePicker: some View {
+        Picker("Intervallo", selection: $selectedRange) {
+            ForEach(StatisticsRange.allCases) { range in
+                Text(range.title).tag(range)
             }
-            RefillReadinessCard(summary: viewModel.stockSummary)
+        }
+        .pickerStyle(.segmented)
+    }
+
+    @available(iOS 16.0, *)
+    private var overallTrendChart: some View {
+        let points = viewModel.overallTrend
+        let adherencePoints = points.filter { $0.adherence >= 0 }
+        let punctualityPoints = points.filter { $0.punctuality >= 0 }
+
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("Andamento generale")
+                .font(.subheadline.weight(.semibold))
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Aderenza generale")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Chart {
+                    ForEach(adherencePoints) { point in
+                        LineMark(
+                            x: .value("Data", point.date),
+                            y: .value("Aderenza", point.adherence)
+                        )
+                        .foregroundStyle(Color.blue)
+                        .interpolationMethod(.catmullRom)
+                    }
+                }
+                .chartYScale(domain: 0...1)
+                .chartYAxis {
+                    AxisMarks(values: [0, 0.5, 1]) { value in
+                        AxisGridLine().foregroundStyle(Color.primary.opacity(0.08))
+                        AxisValueLabel {
+                            if let v = value.as(Double.self) {
+                                Text("\(Int(v * 100))%")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic) { value in
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                if selectedRange == .days {
+                                    Text(date, format: .dateTime.weekday(.narrow))
+                                } else {
+                                    Text(date, format: .dateTime.day().month(.abbreviated))
+                                }
+                            }
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(height: 160)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Puntualita generale")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Chart {
+                    ForEach(punctualityPoints) { point in
+                        LineMark(
+                            x: .value("Data", point.date),
+                            y: .value("Puntualita", point.punctuality)
+                        )
+                        .foregroundStyle(Color.green)
+                        .interpolationMethod(.catmullRom)
+                    }
+                }
+                .chartYScale(domain: 0...1)
+                .chartYAxis {
+                    AxisMarks(values: [0, 0.5, 1]) { value in
+                        AxisGridLine().foregroundStyle(Color.primary.opacity(0.08))
+                        AxisValueLabel {
+                            if let v = value.as(Double.self) {
+                                Text("\(Int(v * 100))%")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic) { value in
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                if selectedRange == .days {
+                                    Text(date, format: .dateTime.weekday(.narrow))
+                                } else {
+                                    Text(date, format: .dateTime.day().month(.abbreviated))
+                                }
+                            }
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(height: 160)
+            }
+        }
+        .padding(.vertical, 12)
+    }
+
+    @ViewBuilder
+    private var overallTrendSection: some View {
+        if #available(iOS 16.0, *), !viewModel.overallTrend.isEmpty {
+            overallTrendChart
         }
     }
 
@@ -120,12 +219,7 @@ struct AdherenceDashboardView: View {
             }
             .frame(height: 180)
         }
-        .padding(16)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-        )
+        .padding(.vertical, 12)
     }
 
     @ViewBuilder
@@ -180,12 +274,7 @@ struct AdherenceDashboardView: View {
             }
             .frame(height: 180)
         }
-        .padding(16)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-        )
+        .padding(.vertical, 12)
     }
 
     @ViewBuilder
@@ -194,6 +283,133 @@ struct AdherenceDashboardView: View {
             if #available(iOS 16.0, *) {
                 timeSlotBarChart
             }
+        }
+    }
+
+    // MARK: - Parameter/Adherence Correlation
+
+    @ViewBuilder
+    private var therapyMonitoringCorrelationSection: some View {
+        if #available(iOS 16.0, *), let series = viewModel.therapyMonitoringCorrelation {
+            let xDomain = parameterXDomain(for: series.parameterPoints)
+            let xSpan   = xDomain.upperBound.timeIntervalSince(xDomain.lowerBound)
+            let adherenceInWindow = series.adherencePoints.filter { xDomain.contains($0.date) }
+            let adherenceSource = adherenceInWindow.isEmpty ? series.adherencePoints : adherenceInWindow
+            let yDomain = parameterDomain(for: series.parameterPoints)
+            let isSmoothed = zip(series.parameterPoints, series.smoothedParameterPoints)
+                .contains { abs($0.value - $1.value) > 0.0001 }
+            let therapyTitle = camelCaseName(series.therapyTitle)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Correlazione \(therapyTitle) · \(series.parameterTitle)")
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+
+                VStack(spacing: 0) {
+                    // ── Grafico aderenza ──────────────────────────────────────
+                    Chart {
+                        ForEach(adherenceSource) { point in
+                            LineMark(
+                                x: .value("Data", point.date),
+                                y: .value("Aderenza", point.value)
+                            )
+                            .foregroundStyle(Color.blue)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                            .interpolationMethod(.catmullRom)
+                        }
+                    }
+                    .chartXScale(domain: xDomain)
+                    .chartYScale(domain: adherenceDomain(for: adherenceSource))
+                    .chartYAxis(.hidden)
+                    .chartXAxis(.hidden)
+                    .frame(height: 90)
+
+                    // ── Grafico parametro ─────────────────────────────────────
+                    Chart {
+                        if isSmoothed {
+                            ForEach(series.parameterPoints) { point in
+                                LineMark(
+                                    x: .value("Data", point.date),
+                                    y: .value("Parametro", point.value)
+                                )
+                                .foregroundStyle(Color.green.opacity(0.25))
+                                .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                                .interpolationMethod(.linear)
+                            }
+                        }
+                        ForEach(series.smoothedParameterPoints) { point in
+                            LineMark(
+                                x: .value("Data", point.date),
+                                y: .value("Parametro", point.value)
+                            )
+                            .foregroundStyle(Color.green)
+                            .lineStyle(StrokeStyle(lineWidth: 2.5))
+                            .interpolationMethod(.catmullRom)
+                        }
+                        ForEach(series.parameterPoints) { point in
+                            PointMark(
+                                x: .value("Data", point.date),
+                                y: .value("Parametro", point.value)
+                            )
+                            .foregroundStyle(isSmoothed ? Color.green.opacity(0.45) : Color.green.opacity(0.85))
+                            .symbolSize(isSmoothed ? 14 : 22)
+                        }
+                    }
+                    .chartXScale(domain: xDomain)
+                    .chartYScale(domain: yDomain)
+                    .chartYAxis(.hidden)
+                    .chartXAxis {
+                        AxisMarks(values: .automatic) { value in
+                            AxisValueLabel {
+                                if let date = value.as(Date.self) {
+                                    if xSpan < 86400 * 2 {
+                                        Text(date, format: .dateTime.hour().minute())
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    } else {
+                                        Text(date, format: .dateTime.day().month(.abbreviated))
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .frame(height: 90)
+                }
+
+                // ── Legenda ───────────────────────────────────────────────────
+                HStack(spacing: 16) {
+                    HStack(spacing: 6) {
+                        Capsule().fill(Color.blue).frame(width: 16, height: 3)
+                        Text("Aderenza \(therapyTitle)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack(spacing: 6) {
+                        Capsule().fill(Color.green).frame(width: 16, height: 3)
+                        let paramLabel = series.parameterTitle
+                        Text(isSmoothed ? "\(paramLabel) · trend" : paramLabel)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    if isSmoothed {
+                        HStack(spacing: 6) {
+                            Capsule().fill(Color.green.opacity(0.35)).frame(width: 16, height: 2)
+                            Text("dati grezzi")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    if let r = series.correlationCoefficient {
+                        Text(String(format: "r = %.2f", r))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(correlationColor(r))
+                    }
+                }
+            }
+            .padding(.vertical, 12)
         }
     }
 
@@ -208,7 +424,7 @@ struct AdherenceDashboardView: View {
                         .font(.subheadline.weight(.semibold))
                     Spacer()
                     HStack(spacing: 3) {
-                        ForEach([Color(.systemFill), Color.red.opacity(0.5), Color.orange, Color.blue], id: \.self) { c in
+                        ForEach(adherenceHeatmapScale, id: \.self) { c in
                             RoundedRectangle(cornerRadius: 2).fill(c).frame(width: 8, height: 8)
                         }
                     }
@@ -244,25 +460,33 @@ struct AdherenceDashboardView: View {
                     }
                 }
             }
-            .padding(16)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.primary.opacity(0.06), lineWidth: 1))
+            .padding(.vertical, 12)
         }
+    }
+
+    private var adherenceHeatmapScale: [Color] {
+        [
+            Color(.systemGray5),
+            Color(red: 0.82, green: 0.94, blue: 0.82),
+            Color(red: 0.48, green: 0.78, blue: 0.48),
+            Color(red: 0.12, green: 0.54, blue: 0.22)
+        ]
     }
 
     private func heatmapColor(for day: DayAdherence) -> Color {
         let p = day.percentage
-        if p < 0 { return Color(.systemFill) }
-        if p == 0 { return Color.red.opacity(0.25) }
-        if p < 0.5 { return Color.red.opacity(0.6) }
-        if p < 0.8 { return Color.orange }
-        return Color.blue
+        if p < 0 { return adherenceHeatmapScale[0] }
+        if p < 0.5 { return adherenceHeatmapScale[1] }
+        if p < 0.8 { return adherenceHeatmapScale[2] }
+        return adherenceHeatmapScale[3]
     }
 
     private var heatmapWeeks: [[DayAdherence?]] {
         let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        guard let start = cal.date(byAdding: .day, value: -90, to: today) else { return [] }
+        guard let firstDate = viewModel.dayAdherence.first?.date,
+              let lastDate = viewModel.dayAdherence.last?.date else { return [] }
+        let start = cal.startOfDay(for: firstDate)
+        let end = cal.startOfDay(for: lastDate)
 
         var lookup: [Date: DayAdherence] = [:]
         for d in viewModel.dayAdherence {
@@ -275,11 +499,11 @@ struct AdherenceDashboardView: View {
 
         var weeks: [[DayAdherence?]] = []
         var weekStart = firstMonday
-        while weekStart <= today {
+        while weekStart <= end {
             var week: [DayAdherence?] = []
             for i in 0..<7 {
                 guard let day = cal.date(byAdding: .day, value: i, to: weekStart) else { week.append(nil); continue }
-                if day < start || day > today {
+                if day < start || day > end {
                     week.append(nil)
                 } else {
                     week.append(lookup[day] ?? DayAdherence(date: day, taken: 0, planned: 0))
@@ -290,6 +514,103 @@ struct AdherenceDashboardView: View {
             weekStart = next
         }
         return weeks
+    }
+
+    // MARK: - Routine Stability
+
+    @ViewBuilder
+    private var routineStabilitySection: some View {
+        let points = weeklyAdherencePoints
+        if points.count >= 3 {
+            if #available(iOS 16.0, *) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Stabilità della routine")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                        let trend = routineTrendLabel(points)
+                        Text(trend.label)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(trend.color)
+                    }
+                    Chart(points) { point in
+                        AreaMark(
+                            x: .value("Settimana", point.index),
+                            y: .value("Aderenza", point.adherence)
+                        )
+                        .foregroundStyle(Color.blue.opacity(0.10).gradient)
+                        .interpolationMethod(.catmullRom)
+
+                        LineMark(
+                            x: .value("Settimana", point.index),
+                            y: .value("Aderenza", point.adherence)
+                        )
+                        .foregroundStyle(Color.blue.gradient)
+                        .interpolationMethod(.catmullRom)
+
+                        PointMark(
+                            x: .value("Settimana", point.index),
+                            y: .value("Aderenza", point.adherence)
+                        )
+                        .foregroundStyle(adherenceColor(point.adherence >= 0 ? point.adherence : 0))
+                        .symbolSize(30)
+                    }
+                    .chartYScale(domain: 0...1)
+                    .chartYAxis {
+                        AxisMarks(values: [0, 0.5, 1]) { value in
+                            AxisGridLine().foregroundStyle(Color.primary.opacity(0.08))
+                            AxisValueLabel {
+                                if let v = value.as(Double.self) {
+                                    Text("\(Int(v * 100))%").font(.caption2).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    .chartXAxis {
+                        AxisMarks { value in
+                            AxisValueLabel {
+                                if let i = value.as(Int.self), i < points.count {
+                                    Text(points[i].label).font(.caption2).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    .frame(height: 140)
+                }
+                .padding(.vertical, 12)
+            }
+        }
+    }
+
+    private var weeklyAdherencePoints: [WeekPoint] {
+        let cal = Calendar.current
+        var weekly: [String: (taken: Int, planned: Int, date: Date)] = [:]
+        for d in viewModel.dayAdherence {
+            let comps = cal.dateComponents([.weekOfYear, .yearForWeekOfYear], from: d.date)
+            let key = "\(comps.yearForWeekOfYear ?? 0)-\(String(format: "%02d", comps.weekOfYear ?? 0))"
+            var prev = weekly[key] ?? (taken: 0, planned: 0, date: d.date)
+            prev = (taken: prev.taken + d.taken, planned: prev.planned + d.planned, date: min(prev.date, d.date))
+            weekly[key] = prev
+        }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d/M"
+        return weekly.sorted { $0.key < $1.key }.suffix(12).enumerated().map { idx, pair in
+            let label = formatter.string(from: pair.value.date)
+            return WeekPoint(index: idx, label: label, taken: pair.value.taken, planned: pair.value.planned)
+        }
+    }
+
+    private func routineTrendLabel(_ points: [WeekPoint]) -> (label: String, color: Color) {
+        guard points.count >= 2 else { return ("—", .secondary) }
+        let first = points.prefix(points.count / 2).compactMap { $0.adherence >= 0 ? $0.adherence : nil }
+        let last  = points.suffix(points.count / 2).compactMap { $0.adherence >= 0 ? $0.adherence : nil }
+        guard !first.isEmpty, !last.isEmpty else { return ("Stabile", .secondary) }
+        let avgFirst = first.reduce(0, +) / Double(first.count)
+        let avgLast  = last.reduce(0, +) / Double(last.count)
+        let delta = avgLast - avgFirst
+        if delta > 0.05  { return ("↑ In miglioramento", .green) }
+        if delta < -0.05 { return ("↓ In calo", .red) }
+        return ("→ Stabile", .blue)
     }
 
     // MARK: - Stock Heatmap (proiezione)
@@ -354,9 +675,7 @@ struct AdherenceDashboardView: View {
                     Spacer()
                 }
             }
-            .padding(16)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.primary.opacity(0.06), lineWidth: 1))
+            .padding(.vertical, 12)
         }
     }
 
@@ -429,8 +748,138 @@ struct AdherenceDashboardView: View {
         return .red
     }
 
+    /// Y-domain for the adherence chart.
+    /// Uses a dynamic range with a minimum visible span of 40 pp so the line
+    /// never looks completely flat when adherence is consistently high.
+    @available(iOS 16.0, *)
+    private func adherenceDomain(for points: [MonitoringCorrelationPoint]) -> ClosedRange<Double> {
+        let values = points.map(\.value)
+        guard let minV = values.min(), let maxV = values.max() else { return 0...1 }
+        let span = maxV - minV
+        let minSpan = 0.40  // always show at least 40 percentage points
+        if span < minSpan {
+            let center = (minV + maxV) / 2.0
+            let lo = max(0.0, center - minSpan / 2.0)
+            let hi = min(1.0, lo + minSpan)
+            return lo...hi
+        }
+        let pad = span * 0.15
+        return max(0.0, minV - pad)...min(1.0, maxV + pad)
+    }
+
+    /// Y-domain for the parameter chart.
+    /// Uses the 5th–95th percentile to resist outliers, then enforces a
+    /// minimum visible span of 15% of the median so tiny real-world
+    /// variations (e.g. 3 mmHg) don't appear as dramatic vertical spikes.
+    @available(iOS 16.0, *)
+    private func parameterDomain(for points: [MonitoringCorrelationPoint]) -> ClosedRange<Double> {
+        let sorted = points.map(\.value).sorted()
+        guard !sorted.isEmpty else { return 0...1 }
+        let loIdx = max(0, Int(Double(sorted.count) * 0.05))
+        let hiIdx = min(sorted.count - 1, Int(Double(sorted.count) * 0.95))
+        var lo = sorted[loIdx]
+        var hi = sorted[hiIdx]
+        // Minimum clinically meaningful span: 15% of the median value (at least 1 unit)
+        let median = sorted[sorted.count / 2]
+        let minSpan = max(1.0, abs(median) * 0.15)
+        if hi - lo < minSpan {
+            let center = (lo + hi) / 2.0
+            lo = center - minSpan / 2.0
+            hi = center + minSpan / 2.0
+        }
+        let pad = (hi - lo) * 0.20
+        return (lo - pad)...(hi + pad)
+    }
+
+    @available(iOS 16.0, *)
+    private func parameterXDomain(for points: [MonitoringCorrelationPoint]) -> ClosedRange<Date> {
+        let sortedDates = points.map(\.date).sorted()
+        guard let first = sortedDates.first, let last = sortedDates.last else {
+            let now = Date()
+            return now...now
+        }
+        if first == last {
+            // Single point: show a ±1-hour window so it renders as a dot, not a spike.
+            return first.addingTimeInterval(-3600)...last.addingTimeInterval(3600)
+        }
+        // Pure proportional padding – no artificial day-minimum.
+        // The domain therefore mirrors the actual data window, whether
+        // it spans a few hours or several months.
+        let span = last.timeIntervalSince(first)
+        let padding = span * 0.10
+        return first.addingTimeInterval(-padding)...last.addingTimeInterval(padding)
+    }
+
+    private func formatParameterValue(_ value: Double) -> String {
+        value.truncatingRemainder(dividingBy: 1) == 0
+            ? "\(Int(value))"
+            : String(format: "%.1f", value)
+    }
+
+    private func correlationColor(_ value: Double) -> Color {
+        if value >= 0.45 { return .green }
+        if value <= -0.45 { return .red }
+        return .secondary
+    }
+
+    private func camelCaseName(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return value }
+        return trimmed.lowercased().localizedCapitalized
+    }
+
+    private func earlyRefillColor(_ value: Double) -> Color {
+        if value >= 0.8 { return .green }
+        if value >= 0.5 { return .orange }
+        return .red
+    }
+
     private func reload() {
-        viewModel.reload(therapies: Array(therapies), logs: Array(logs))
+        viewModel.reload(therapies: Array(therapies), logs: Array(logs), range: selectedRange)
+    }
+
+    private func summaryRingKPI(title: String, value: Double, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ZStack {
+                Circle()
+                    .stroke(color.opacity(0.15), lineWidth: 8)
+                Circle()
+                    .trim(from: 0, to: CGFloat(min(max(value, 0), 1)))
+                    .stroke(color, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Text("\(Int(value * 100))%")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.primary)
+            }
+            .frame(width: 58, height: 58)
+
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func summaryKPI(title: String, value: String, detail: String?, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Text(value)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            if let detail {
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -440,6 +889,7 @@ struct GaugeCard: View {
     let title: String
     let value: Double
     let color: Color
+    private let gaugeHeight: CGFloat = 74
 
     private var displayText: String {
         "\(Int(value * 100))%"
@@ -447,11 +897,14 @@ struct GaugeCard: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            if #available(iOS 17.0, *) {
-                sectorGauge
-            } else {
-                ringGauge
+            Group {
+                if #available(iOS 17.0, *) {
+                    sectorGauge
+                } else {
+                    ringGauge
+                }
             }
+            .frame(height: gaugeHeight)
 
             Text(title)
                 .font(.caption.weight(.semibold))
@@ -514,6 +967,55 @@ struct GaugeCard: View {
         }
         .aspectRatio(1, contentMode: .fit)
         .padding(.horizontal, 10)
+    }
+}
+
+struct CabinetStockOkCard: View {
+    let summary: StockSummary
+
+    private var color: Color {
+        if summary.totalCount == 0 { return .secondary }
+        if summary.okPercentage >= 0.8 { return .green }
+        if summary.okPercentage >= 0.5 { return .orange }
+        return .red
+    }
+
+    private var percentageText: String {
+        guard summary.totalCount > 0 else { return "—" }
+        return "\(Int(summary.okPercentage * 100))%"
+    }
+
+    private var detailText: String {
+        guard summary.totalCount > 0 else { return "Nessun farmaco monitorato" }
+        return "\(summary.okCount)/\(summary.totalCount) in armadietto"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Farmaci con scorte ok")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            Text(percentageText)
+                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            Text(detailText)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 12)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+        )
     }
 }
 
@@ -692,37 +1194,26 @@ struct RefillReadinessCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .stroke(color.opacity(0.15), lineWidth: 10)
-                Circle()
-                    .trim(from: 0, to: CGFloat(min(percentage, 1.0)))
-                    .stroke(color, style: StrokeStyle(lineWidth: 10, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                Text(summary.totalCount > 0 ? "\(Int(percentage * 100))%" : "—")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(summary.totalCount > 0 ? color : .secondary)
-            }
-            .frame(width: 64, height: 64)
+        HStack(spacing: 14) {
+            Image(systemName: "shield")
+                .font(.system(size: 38, weight: .semibold))
+                .foregroundStyle(summary.totalCount > 0 ? color : .secondary)
+                .frame(width: 44)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Refill readiness")
+                Text("Terapie protette dalle scorte")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Label(
+
+                Text(
                     summary.totalCount > 0
-                        ? "\(summary.okCount)/\(summary.totalCount) terapie protette"
-                        : "Nessuna terapia monitorata",
-                    systemImage: "shield.fill"
+                        ? "\(summary.okCount)/\(summary.totalCount) \(summary.totalCount == 1 ? "terapia con scorte sufficienti" : "terapie con scorte sufficienti")"
+                        : "Nessuna terapia monitorata"
                 )
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(summary.totalCount > 0 ? color : .secondary)
                 .lineLimit(2)
-                .minimumScaleFactor(0.85)
-                Text("Scorte sopra la soglia di sicurezza")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .minimumScaleFactor(0.75)
             }
 
             Spacer()
@@ -784,13 +1275,7 @@ struct EarlyRefillCard: View {
 
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-        )
+        .padding(.vertical, 12)
     }
 }
 

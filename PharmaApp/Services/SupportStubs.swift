@@ -10,6 +10,7 @@ struct PrescriptionRequestConfirmationSheet: View {
     let messageBody: String
     let onDidSend: () -> Void
     @Environment(\.openURL) private var openURL
+    @Environment(\.dismiss) private var dismiss
     @State private var showMailFallbackAlert = false
 
     var body: some View {
@@ -23,7 +24,7 @@ struct PrescriptionRequestConfirmationSheet: View {
                 Button {
                     sendWhatsApp()
                 } label: {
-                    Label("WhatsApp", systemImage: "message.fill")
+                    Label("WhatsApp + segna richiesta", systemImage: "message.fill")
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(doctor.phoneInternational == nil)
@@ -31,7 +32,7 @@ struct PrescriptionRequestConfirmationSheet: View {
                 Button {
                     sendMail()
                 } label: {
-                    Label("Mail", systemImage: "envelope.fill")
+                    Label("Email + segna richiesta", systemImage: "envelope.fill")
                 }
                 .buttonStyle(.bordered)
                 .disabled(doctor.email == nil)
@@ -53,6 +54,7 @@ struct PrescriptionRequestConfirmationSheet: View {
         guard doctor.phoneInternational != nil else { return }
         communicationService.sendWhatsApp(to: doctor, text: messageBody)
         onDidSend()
+        dismiss()
     }
 
     private func sendMail() {
@@ -67,6 +69,7 @@ struct PrescriptionRequestConfirmationSheet: View {
             }
         )
         onDidSend()
+        dismiss()
     }
 }
 

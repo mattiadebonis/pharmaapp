@@ -59,6 +59,20 @@
         <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package" inverseName="logs" inverseEntity="Package"/>
         <relationship name="therapy" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Therapy" inverseName="logs" inverseEntity="Therapy"/>
     </entity>
+    <entity name="MonitoringMeasurement" representedClassName=".MonitoringMeasurement" syncable="YES">
+        <attribute name="created_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="dose_relation" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="kind" optional="YES" attributeType="String"/>
+        <attribute name="measured_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="scheduled_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="todo_source_id" optional="YES" attributeType="String"/>
+        <attribute name="unit" optional="YES" attributeType="String"/>
+        <attribute name="value_primary" optional="YES" attributeType="Double" usesScalarValueType="NO"/>
+        <attribute name="value_secondary" optional="YES" attributeType="Double" usesScalarValueType="NO"/>
+        <relationship name="medicine" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="monitoringMeasurements" inverseEntity="Medicine"/>
+        <relationship name="therapy" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Therapy" inverseName="monitoringMeasurements" inverseEntity="Therapy"/>
+    </entity>
     <entity name="MedicineComment" representedClassName=".MedicineComment" syncable="YES">
         <attribute name="actor_device_id" optional="YES" attributeType="String"/>
         <attribute name="actor_user_id" optional="YES" attributeType="String"/>
@@ -148,6 +162,7 @@
         <relationship name="comments" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="MedicineComment" inverseName="medicine" inverseEntity="MedicineComment"/>
         <relationship name="doseEvents" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="DoseEvent" inverseName="medicine" inverseEntity="DoseEvent"/>
         <relationship name="logs" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Log" inverseName="medicine" inverseEntity="Log"/>
+        <relationship name="monitoringMeasurements" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="MonitoringMeasurement" inverseName="medicine" inverseEntity="MonitoringMeasurement"/>
         <relationship name="todos" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Todo" inverseName="medicine" inverseEntity="Todo"/>
         <relationship name="packages" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Package" inverseName="medicine" inverseEntity="Package"/>
         <relationship name="stocks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Stock" inverseName="medicine" inverseEntity="Stock"/>
@@ -191,6 +206,7 @@
         <attribute name="day_threeshold_stocks_alarm" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="manual_intake_registration" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="prescription_message_template" optional="YES" attributeType="String"/>
         <attribute name="therapy_notification_level" optional="YES" attributeType="String" defaultValueString="normal"/>
         <attribute name="therapy_snooze_minutes" optional="YES" attributeType="Integer 32" defaultValueString="10" usesScalarValueType="YES"/>
     </entity>
@@ -276,6 +292,7 @@
         <relationship name="doses" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Dose" inverseName="therapy" inverseEntity="Dose"/>
         <relationship name="doseEvents" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="DoseEvent" inverseName="therapy" inverseEntity="DoseEvent"/>
         <relationship name="logs" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Log" inverseName="therapy" inverseEntity="Log"/>
+        <relationship name="monitoringMeasurements" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="MonitoringMeasurement" inverseName="therapy" inverseEntity="MonitoringMeasurement"/>
         <relationship name="medicine" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="therapies" inverseEntity="Medicine"/>
         <relationship name="medicinePackage" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="MedicinePackage" inverseName="therapies" inverseEntity="MedicinePackage"/>
         <relationship name="package" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Package" inverseName="therapies" inverseEntity="Package"/>

@@ -91,6 +91,57 @@ final class TodayTodoEngineTests: XCTestCase {
         XCTAssertEqual(sortValue, 8 * 60 + 45)
     }
 
+    func testTimeSortValueForDoseMonitoringUsesTriggerTimestampFromNewIDFormat() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 2,
+            day: 18,
+            hour: 7,
+            minute: 0
+        ).date!
+        let doseDate = DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 2,
+            day: 18,
+            hour: 10,
+            minute: 0
+        ).date!
+        let triggerDate = DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 2,
+            day: 18,
+            hour: 9,
+            minute: 30
+        ).date!
+
+        let item = TodayTodoItem(
+            id: "monitoring|dose|bloodPressure|beforeDose|therapy-key|\(Int(doseDate.timeIntervalSince1970))|\(Int(triggerDate.timeIntervalSince1970))",
+            title: "Pressione",
+            detail: nil,
+            category: .monitoring,
+            medicineId: nil
+        )
+
+        let sortValue = TodayTodoEngine.timeSortValue(
+            for: item,
+            medicines: [],
+            option: nil,
+            recurrenceManager: RecurrenceManager(context: nil),
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(sortValue, 9 * 60 + 30)
+    }
+
     func testTodayEngineUnlocksBuyWhenPrescriptionReceived() throws {
         let container = try TestCoreDataFactory.makeContainer()
         let context = container.viewContext
@@ -239,7 +290,6 @@ final class TodayTodoEngineTests: XCTestCase {
 
         let therapy = try TestCoreDataFactory.makeTherapy(context: context, medicine: medicine)
         therapy.rrule = "FREQ=DAILY"
-        therapy.start_date = Calendar.current.date(byAdding: .day, value: -1, to: Date())
         therapy.package = package
         therapy.person = person
 
@@ -254,6 +304,7 @@ final class TodayTodoEngineTests: XCTestCase {
             hour: 19,
             minute: 0
         ).date!
+        therapy.start_date = calendar.date(byAdding: .day, value: -1, to: now)
 
         let morningDose = Dose(entity: doseEntity, insertInto: context)
         morningDose.id = UUID()
@@ -326,7 +377,6 @@ final class TodayTodoEngineTests: XCTestCase {
 
         let therapy = try TestCoreDataFactory.makeTherapy(context: context, medicine: medicine)
         therapy.rrule = "FREQ=DAILY"
-        therapy.start_date = Calendar.current.date(byAdding: .day, value: -1, to: Date())
         therapy.package = package
         therapy.person = person
 
@@ -341,6 +391,7 @@ final class TodayTodoEngineTests: XCTestCase {
             hour: 22,
             minute: 0
         ).date!
+        therapy.start_date = calendar.date(byAdding: .day, value: -1, to: now)
 
         let morningDose = Dose(entity: doseEntity, insertInto: context)
         morningDose.id = UUID()
@@ -420,7 +471,6 @@ final class TodayTodoEngineTests: XCTestCase {
 
         let therapy = try TestCoreDataFactory.makeTherapy(context: context, medicine: medicine)
         therapy.rrule = "FREQ=DAILY"
-        therapy.start_date = Calendar.current.date(byAdding: .day, value: -1, to: Date())
         therapy.package = package
         therapy.person = person
 
@@ -435,6 +485,7 @@ final class TodayTodoEngineTests: XCTestCase {
             hour: 10,
             minute: 0
         ).date!
+        therapy.start_date = calendar.date(byAdding: .day, value: -1, to: now)
 
         let dose = Dose(entity: doseEntity, insertInto: context)
         dose.id = UUID()

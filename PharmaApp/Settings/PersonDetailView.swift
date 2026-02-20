@@ -17,6 +17,7 @@ struct PersonDetailView: View {
     @State private var codiceFiscale: String
     @State private var isScannerPresented = false
     @State private var errorMessage: String?
+    @State private var showDeleteConfirmation = false
 
     init(person: Person) {
         self.person = person
@@ -62,6 +63,20 @@ struct PersonDetailView: View {
                     }
                 }
             }
+
+            if !person.is_account {
+                Section {
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Text("Elimina persona")
+                            Spacer()
+                        }
+                    }
+                }
+            }
         }
         .navigationTitle("Dettaglio Persona")
         .toolbar {
@@ -79,6 +94,14 @@ struct PersonDetailView: View {
             } else {
                 Text("Scanner non disponibile.")
             }
+        }
+        .alert("Eliminare questa persona?", isPresented: $showDeleteConfirmation) {
+            Button("Elimina", role: .destructive) {
+                deletePerson()
+            }
+            Button("Annulla", role: .cancel) { }
+        } message: {
+            Text("Le terapie associate verranno assegnate all'account.")
         }
     }
 
@@ -101,10 +124,27 @@ struct PersonDetailView: View {
         person.cognome = nil
         person.codice_fiscale = normalizedCF.isEmpty ? nil : normalizedCF
 
+        let context = person.managedObjectContext ?? managedObjectContext
         do {
-            try managedObjectContext.save()
+            if context.hasChanges {
+                try context.save()
+            }
         } catch {
+            context.rollback()
+            errorMessage = error.localizedDescription
             print("Errore nel salvataggio della persona: \(error.localizedDescription)")
+        }
+    }
+
+    private func deletePerson() {
+        let context = person.managedObjectContext ?? managedObjectContext
+        do {
+            try PersonDeletionService.shared.delete(person, in: context)
+            dismiss()
+        } catch {
+            context.rollback()
+            errorMessage = error.localizedDescription
+            print("Errore nell'eliminazione della persona: \(error.localizedDescription)")
         }
     }
 

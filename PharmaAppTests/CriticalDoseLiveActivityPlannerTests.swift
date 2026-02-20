@@ -45,7 +45,7 @@ struct CriticalDoseLiveActivityPlannerTests {
         _ = try makeTherapy(
             context: context,
             medicineName: "CardioB",
-            doseAt: makeDate(2026, 2, 11, 10, 20)
+            doseAt: makeDate(2026, 2, 11, 10, 9)
         )
         _ = try makeTherapy(
             context: context,
@@ -65,7 +65,7 @@ struct CriticalDoseLiveActivityPlannerTests {
     @Test func plannerTieBreaksByMedicineNameOnSameTime() throws {
         let context = try makeContext()
         let now = makeDate(2026, 2, 11, 10, 0)
-        let sameTime = makeDate(2026, 2, 11, 10, 15)
+        let sameTime = makeDate(2026, 2, 11, 10, 10)
 
         _ = try makeTherapy(context: context, medicineName: "Zeta", doseAt: sameTime)
         _ = try makeTherapy(context: context, medicineName: "Alfa", doseAt: sameTime)
@@ -78,7 +78,7 @@ struct CriticalDoseLiveActivityPlannerTests {
 
     @Test func plannerSkipsSnoozedPrimaryAndSelectsNext() throws {
         let context = try makeContext()
-        let now = makeDate(2026, 2, 11, 10, 0)
+        let now = makeDate(2026, 2, 11, 10, 10)
 
         let first = try makeTherapy(
             context: context,
@@ -103,7 +103,7 @@ struct CriticalDoseLiveActivityPlannerTests {
 
     @Test func plannerSkipsAlreadyTakenDoseAndSelectsNext() throws {
         let context = try makeContext()
-        let now = makeDate(2026, 2, 11, 10, 0)
+        let now = makeDate(2026, 2, 11, 10, 10)
 
         let first = try makeTherapy(
             context: context,
@@ -126,6 +126,23 @@ struct CriticalDoseLiveActivityPlannerTests {
         let plan = planner.makePlan(now: now)
 
         #expect(plan.aggregate?.primary.medicineName == "Seconda")
+    }
+
+    @Test func plannerShowsDoseOnlyWithinTenMinutesLeadTime() throws {
+        let context = try makeContext()
+        let now = makeDate(2026, 2, 11, 10, 0)
+
+        _ = try makeTherapy(
+            context: context,
+            medicineName: "CardioA",
+            doseAt: makeDate(2026, 2, 11, 10, 11)
+        )
+
+        let planner = CriticalDoseLiveActivityPlanner(context: context)
+        let plan = planner.makePlan(now: now)
+
+        #expect(plan.aggregate == nil)
+        #expect(plan.nextRefreshAt == makeDate(2026, 2, 11, 10, 1))
     }
 
     private func makeContext() throws -> NSManagedObjectContext {

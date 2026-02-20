@@ -61,7 +61,8 @@ struct MedicineWizardView: View {
 
         var monitoringEnabled: Bool = false
         var monitoringKind: MonitoringKind = .bloodPressure
-        var monitoringLeadMinutes: Int = 30
+        var monitoringDoseRelation: MonitoringDoseRelation = .beforeDose
+        var monitoringOffsetMinutes: Int = 30
 
         var missedDosePreset: MissedDosePreset = .none
         var selectedPerson: Person?
@@ -91,6 +92,15 @@ struct MedicineWizardView: View {
     @State private var deadlineMonthInput: String = ""
     @State private var deadlineYearInput: String = ""
     @State private var showTaperEditor = false
+
+    // Temporaneamente nasconde il tab "Scorte/Statistiche" dal Wizard.
+    private var visibleSteps: [Step] {
+        Step.allCases.filter { $0 != .stock }
+    }
+
+    private var currentVisibleStepIndex: Int {
+        visibleSteps.firstIndex(of: step) ?? max(0, visibleSteps.count - 1)
+    }
 
     private var stockService: MedicineStockService {
         MedicineStockService(context: context)
@@ -135,7 +145,7 @@ struct MedicineWizardView: View {
         VStack(alignment: .leading, spacing: 10) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(Step.allCases, id: \.self) { item in
+                    ForEach(visibleSteps, id: \.self) { item in
                         Button {
                             step = item
                         } label: {
@@ -153,8 +163,8 @@ struct MedicineWizardView: View {
                 }
             }
             ProgressView(
-                value: Double(step.rawValue + 1),
-                total: Double(Step.allCases.count)
+                value: Double(currentVisibleStepIndex + 1),
+                total: Double(visibleSteps.count)
             )
             .tint(.accentColor)
         }
@@ -346,28 +356,46 @@ struct MedicineWizardView: View {
                 }
             }
 
+            // Temporaneamente nascosto: impostazioni monitoraggi nel Wizard.
+            /*
             Section(
                 header: Text("Monitoraggi"),
-                footer: Text("Se attivi, crea un promemoria prima di ogni dose.")
+                footer: Text("Se attivi, crea un promemoria prima o dopo ogni dose.")
             ) {
-                Toggle("Richiedi un monitoraggio prima della dose", isOn: $therapyDraft.monitoringEnabled)
+                Toggle("Richiedi un monitoraggio legato alla dose", isOn: $therapyDraft.monitoringEnabled)
                 if therapyDraft.monitoringEnabled {
                     Picker("Cosa controllare", selection: $therapyDraft.monitoringKind) {
                         ForEach(MonitoringKind.allCases, id: \.self) { kind in
                             Text(kind.label).tag(kind)
                         }
                     }
-                    Picker("Quanto prima", selection: $therapyDraft.monitoringLeadMinutes) {
-                        Text("15 min").tag(15)
-                        Text("30 min").tag(30)
-                        Text("60 min").tag(60)
+
+                    Picker("Quando", selection: $therapyDraft.monitoringDoseRelation) {
+                        ForEach(MonitoringDoseRelation.allCases, id: \.self) { relation in
+                            Text(relation.label).tag(relation)
+                        }
                     }
-                    .pickerStyle(.segmented)
-                    Text("Promemoria: \(therapyDraft.monitoringLeadMinutes) min prima della dose.")
+
+                    TextField(
+                        "Minuti",
+                        value: Binding(
+                            get: { therapyDraft.monitoringOffsetMinutes },
+                            set: { therapyDraft.monitoringOffsetMinutes = max(0, $0) }
+                        ),
+                        format: .number
+                    )
+                    .keyboardType(.numberPad)
+
+                    Text(
+                        therapyDraft.monitoringDoseRelation == .beforeDose
+                        ? "Promemoria: \(therapyDraft.monitoringOffsetMinutes) min prima della dose."
+                        : "Promemoria: \(therapyDraft.monitoringOffsetMinutes) min dopo la dose."
+                    )
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
+            */
 
             Section {
                 Button {
@@ -426,12 +454,12 @@ struct MedicineWizardView: View {
 
             Section {
                 Button {
-                    step = .stock
+                    finishWizard()
                 } label: {
-                    Label("Prosegui alle scorte", systemImage: "arrow.right.circle.fill")
+                    Label("Fine", systemImage: "checkmark.circle.fill")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(CapsuleActionButtonStyle(fill: .blue, textColor: .white))
+                .buttonStyle(CapsuleActionButtonStyle(fill: .green, textColor: .white))
             }
         }
     }
@@ -801,9 +829,11 @@ struct MedicineWizardView: View {
             ? [
                 MonitoringAction(
                     kind: therapyDraft.monitoringKind,
-                    requiredBeforeDose: true,
+                    doseRelation: therapyDraft.monitoringDoseRelation,
+                    offsetMinutes: therapyDraft.monitoringOffsetMinutes,
+                    requiredBeforeDose: therapyDraft.monitoringDoseRelation == .beforeDose,
                     schedule: nil,
-                    leadMinutes: therapyDraft.monitoringLeadMinutes
+                    leadMinutes: therapyDraft.monitoringOffsetMinutes
                 )
             ]
             : nil
@@ -904,8 +934,10 @@ struct MedicineWizardView: View {
         applyDeadlineInputs(to: medicine)
         saveTherapyDraft(medicine: medicine, package: package, medicinePackage: entry)
 
+        // Con tab scorte nascosto usiamo un fallback sensato (unita confezione) se non impostato.
+        let resolvedStockUnits = stockUnits > 0 ? stockUnits : max(1, pkg.units)
         stockService.addPurchase(medicine: medicine, package: package)
-        stockService.setStockUnits(medicine: medicine, package: package, targetUnits: stockUnits)
+        stockService.setStockUnits(medicine: medicine, package: package, targetUnits: resolvedStockUnits)
 
         onFinish?()
         dismiss()

@@ -6,7 +6,7 @@ struct CriticalDoseLiveActivityConfig: Equatable {
     let snoozeMinutes: Int
 
     static let `default` = CriticalDoseLiveActivityConfig(
-        leadTimeMinutes: 60,
+        leadTimeMinutes: 10,
         overdueToleranceMinutes: 30,
         snoozeMinutes: 10
     )

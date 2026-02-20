@@ -33,7 +33,7 @@ final class AppRouter: ObservableObject {
         case .today, .todayPurchaseList, .pharmacy, .codiceFiscaleFullscreen:
             selectedTab = .oggi
         case .profile:
-            selectedTab = .profilo
+            selectedTab = .search
         }
     }
 }

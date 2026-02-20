@@ -9,7 +9,7 @@ struct RefillPharmacyCandidate: Equatable {
     let longitude: Double
     let distanceMeters: Double
     let etaMinutes: Int
-    let closingTimeText: String
+    let pharmacyHoursText: String
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -19,9 +19,11 @@ struct RefillPharmacyCandidate: Equatable {
 @MainActor
 protocol RefillGeofenceManaging: AnyObject {
     var onCandidateEntered: ((RefillPharmacyCandidate) -> Void)? { get set }
+    var onCandidatesUpdated: (() -> Void)? { get set }
     func start()
     func refreshMonitoring(hasPendingPurchases: Bool)
     func candidate(for pharmacyId: String) -> RefillPharmacyCandidate?
+    func nearestCandidate() -> RefillPharmacyCandidate?
 }
 
 protocol RefillPharmacySearching {
@@ -57,6 +59,7 @@ final class RefillGeofenceManager: NSObject, @preconcurrency CLLocationManagerDe
     static let maxMonitoredRegions = 12
 
     var onCandidateEntered: ((RefillPharmacyCandidate) -> Void)?
+    var onCandidatesUpdated: (() -> Void)?
 
     private let locationManager: CLLocationManager
     private let searchProvider: RefillPharmacySearching
@@ -102,6 +105,10 @@ final class RefillGeofenceManager: NSObject, @preconcurrency CLLocationManagerDe
 
     func candidate(for pharmacyId: String) -> RefillPharmacyCandidate? {
         monitoredById[pharmacyId]
+    }
+
+    func nearestCandidate() -> RefillPharmacyCandidate? {
+        monitoredById.values.sorted(by: { $0.distanceMeters < $1.distanceMeters }).first
     }
 
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
@@ -156,7 +163,14 @@ final class RefillGeofenceManager: NSObject, @preconcurrency CLLocationManagerDe
             guard selected.count < Self.maxMonitoredRegions else { break }
             guard let name = item.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { continue }
             let openInfo = hoursResolver.openInfo(forPharmacyName: name, now: now)
-            guard openInfo.isOpen, let closingTimeText = openInfo.closingTimeText else { continue }
+            let pharmacyHoursText: String
+            if let openText = openInfo.closingTimeText, openInfo.isOpen {
+                pharmacyHoursText = openText
+            } else if let slotText = openInfo.slotText?.trimmingCharacters(in: .whitespacesAndNewlines), !slotText.isEmpty {
+                pharmacyHoursText = "oggi \(slotText)"
+            } else {
+                pharmacyHoursText = "orari non disponibili"
+            }
 
             let coordinate = item.placemark.coordinate
             let id = Self.makeStablePharmacyId(name: name, latitude: coordinate.latitude, longitude: coordinate.longitude)
@@ -170,12 +184,13 @@ final class RefillGeofenceManager: NSObject, @preconcurrency CLLocationManagerDe
                     longitude: coordinate.longitude,
                     distanceMeters: distance,
                     etaMinutes: eta,
-                    closingTimeText: closingTimeText
+                    pharmacyHoursText: pharmacyHoursText
                 )
             )
         }
 
         applyMonitoredCandidates(selected)
+        onCandidatesUpdated?()
     }
 
     private func applyMonitoredCandidates(_ candidates: [RefillPharmacyCandidate]) {

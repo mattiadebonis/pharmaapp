@@ -7,6 +7,7 @@ enum TestCoreDataFactory {
         "Medicine",
         "Package",
         "Log",
+        "MonitoringMeasurement",
         "Stock",
         "Therapy",
         "Dose",

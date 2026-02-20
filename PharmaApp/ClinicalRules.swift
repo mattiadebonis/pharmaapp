@@ -81,22 +81,59 @@ public struct InteractionRules: Codable, Equatable {
     }
 }
 
+public enum MonitoringDoseRelation: String, Codable, CaseIterable {
+    case beforeDose
+    case afterDose
+
+    public var label: String {
+        switch self {
+        case .beforeDose:
+            return "Prima della dose"
+        case .afterDose:
+            return "Dopo la dose"
+        }
+    }
+}
+
 public struct MonitoringAction: Codable, Equatable {
     public var kind: MonitoringKind
+    public var doseRelation: MonitoringDoseRelation?
+    public var offsetMinutes: Int?
     public var requiredBeforeDose: Bool
     public var schedule: MonitoringSchedule?
     public var leadMinutes: Int?
 
     public init(
         kind: MonitoringKind,
+        doseRelation: MonitoringDoseRelation? = nil,
+        offsetMinutes: Int? = nil,
         requiredBeforeDose: Bool,
         schedule: MonitoringSchedule? = nil,
         leadMinutes: Int? = nil
     ) {
         self.kind = kind
+        self.doseRelation = doseRelation
+        self.offsetMinutes = offsetMinutes
         self.requiredBeforeDose = requiredBeforeDose
         self.schedule = schedule
         self.leadMinutes = leadMinutes
+    }
+
+    public var resolvedDoseRelation: MonitoringDoseRelation {
+        if let doseRelation {
+            return doseRelation
+        }
+        return requiredBeforeDose ? .beforeDose : .afterDose
+    }
+
+    public var resolvedOffsetMinutes: Int {
+        if let offsetMinutes {
+            return max(0, offsetMinutes)
+        }
+        if let leadMinutes {
+            return max(0, leadMinutes)
+        }
+        return 30
     }
 }
 
@@ -234,11 +271,15 @@ public enum SpacingSubstance: String, Codable, CaseIterable {
 public enum MonitoringKind: String, Codable, CaseIterable {
     case bloodPressure
     case bloodGlucose
+    case temperature
+    case heartRate
 
     public var label: String {
         switch self {
         case .bloodPressure: return "Pressione"
         case .bloodGlucose: return "Glicemia"
+        case .temperature: return "Temperatura"
+        case .heartRate: return "Frequenza cardiaca"
         }
     }
 }

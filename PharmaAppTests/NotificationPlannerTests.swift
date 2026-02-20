@@ -55,6 +55,106 @@ struct NotificationPlannerTests {
         #expect(items.allSatisfy { $0.kind == .therapy })
     }
 
+    @Test func therapyNotificationIsSkippedWhenDoseAlreadyLogged() throws {
+        let context = makeContext()
+        let now = makeDate(2026, 1, 26, 7, 0)
+        let (medicine, package) = makeMedicine(context: context, name: "Aspirina")
+        let person = makePerson(context: context, name: "Luca", surname: "Rossi")
+        let therapy = makeTherapy(
+            context: context,
+            medicine: medicine,
+            package: package,
+            person: person,
+            start: makeDate(2026, 1, 26, 0, 0),
+            rrule: "RRULE:FREQ=DAILY",
+            doseTimes: [
+                makeDate(2026, 1, 26, 8, 0),
+                makeDate(2026, 1, 26, 20, 0)
+            ]
+        )
+        makeIntakeLog(
+            context: context,
+            medicine: medicine,
+            package: package,
+            therapy: therapy,
+            timestamp: makeDate(2026, 1, 26, 8, 5)
+        )
+
+        let planner = NotificationPlanner(
+            context: context,
+            calendar: calendar,
+            config: NotificationScheduleConfiguration(
+                therapyHorizonDays: 1,
+                therapyIntakeLogToleranceSeconds: 60 * 60
+            ),
+            stockAlertStore: InMemoryStockAlertStore()
+        )
+
+        let items = planner.planTherapyNotifications(therapies: [therapy], now: now)
+        #expect(items.count == 1)
+        #expect(items[0].date == makeDate(2026, 1, 26, 20, 0))
+    }
+
+    @Test func unassignedIntakeLogSkipsNotificationWhenSingleTherapy() throws {
+        let context = makeContext()
+        let now = makeDate(2026, 1, 26, 7, 0)
+        let (medicine, package) = makeMedicine(context: context, name: "Aspirina")
+        let person = makePerson(context: context, name: "Luca", surname: "Rossi")
+        let therapy = makeTherapy(
+            context: context,
+            medicine: medicine,
+            package: package,
+            person: person,
+            start: makeDate(2026, 1, 26, 0, 0),
+            rrule: "RRULE:FREQ=DAILY",
+            doseTimes: [makeDate(2026, 1, 26, 8, 0)]
+        )
+        makeIntakeLog(
+            context: context,
+            medicine: medicine,
+            package: package,
+            therapy: nil,
+            timestamp: makeDate(2026, 1, 26, 8, 10)
+        )
+
+        let planner = NotificationPlanner(
+            context: context,
+            calendar: calendar,
+            config: NotificationScheduleConfiguration(therapyHorizonDays: 1),
+            stockAlertStore: InMemoryStockAlertStore()
+        )
+
+        let items = planner.planTherapyNotifications(therapies: [therapy], now: now)
+        #expect(items.isEmpty)
+    }
+
+    @Test func deletedTherapyDoesNotScheduleNotifications() throws {
+        let context = makeContext()
+        let now = makeDate(2026, 1, 26, 7, 0)
+        let (medicine, package) = makeMedicine(context: context, name: "Aspirina")
+        let person = makePerson(context: context, name: "Luca", surname: "Rossi")
+        let therapy = makeTherapy(
+            context: context,
+            medicine: medicine,
+            package: package,
+            person: person,
+            start: makeDate(2026, 1, 26, 0, 0),
+            rrule: "RRULE:FREQ=DAILY",
+            doseTimes: [makeDate(2026, 1, 26, 8, 0)]
+        )
+        context.delete(therapy)
+
+        let planner = NotificationPlanner(
+            context: context,
+            calendar: calendar,
+            config: NotificationScheduleConfiguration(therapyHorizonDays: 1),
+            stockAlertStore: InMemoryStockAlertStore()
+        )
+
+        let items = planner.planTherapyNotifications(therapies: [therapy], now: now)
+        #expect(items.isEmpty)
+    }
+
     @Test func stockForecastSchedulesLowAndOut() throws {
         let context = makeContext()
         let now = makeDate(2026, 1, 26, 8, 0)
@@ -187,6 +287,26 @@ struct NotificationPlannerTests {
         therapy.doses = doseSet
         medicine.addToTherapies(therapy)
         return therapy
+    }
+
+    private func makeIntakeLog(
+        context: NSManagedObjectContext,
+        medicine: Medicine,
+        package: Package,
+        therapy: Therapy?,
+        timestamp: Date
+    ) {
+        guard let logEntity = NSEntityDescription.entity(forEntityName: "Log", in: context) else {
+            fatalError("Missing Log entity in Core Data model.")
+        }
+        let log = Log(entity: logEntity, insertInto: context)
+        log.id = UUID()
+        log.type = "intake"
+        log.timestamp = timestamp
+        log.medicine = medicine
+        log.package = package
+        log.therapy = therapy
+        medicine.addToLogs(log)
     }
 
     private func makeDate(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int) -> Date {

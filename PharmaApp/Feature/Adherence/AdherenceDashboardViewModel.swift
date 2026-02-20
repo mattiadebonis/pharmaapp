@@ -14,11 +14,14 @@ final class AdherenceDashboardViewModel: ObservableObject {
     @Published private(set) var weekdayAdherence: [WeekdayAdherence] = []
     @Published private(set) var timeSlotPunctuality: [TimeSlotPunctuality] = []
     @Published private(set) var dayAdherence: [DayAdherence] = []
+    @Published private(set) var overallTrend: [OverallTrendPoint] = []
     @Published private(set) var medicineCoverages: [MedicineCoverage] = []
     @Published private(set) var therapyTimeStats: [TherapyTimeStat] = []
     @Published private(set) var earlyRefillCount: Int = 0
     @Published private(set) var earlyRefillTotal: Int = 0
     @Published private(set) var earlyRefillRatio: Double = 0
+    @Published private(set) var calmDaysStreak: Int = 0
+    @Published private(set) var therapyMonitoringCorrelation: TherapyMonitoringCorrelation?
 
     private let calendar: Calendar
     private let recurrenceManager: RecurrenceManager
@@ -35,7 +38,7 @@ final class AdherenceDashboardViewModel: ObservableObject {
         self.doseEventGenerator = DoseEventGenerator(context: context, calendar: calendar)
     }
 
-    func reload(therapies: [Therapy], logs: [Log]) {
+    func reload(therapies: [Therapy], logs: [Log], range: StatisticsRange) {
         let endDay = calendar.startOfDay(for: Date())
         let earliestTherapyDate = therapies.compactMap { $0.start_date }.min()
         let earliestLogDate = logs.filter { $0.type == "intake" }.map { $0.timestamp }.min()
@@ -51,6 +54,7 @@ final class AdherenceDashboardViewModel: ObservableObject {
             weekdayAdherence = []
             timeSlotPunctuality = []
             dayAdherence = []
+            overallTrend = []
             therapyTimeStats = []
             let coverage = computeStockCoverage()
             stockCoverageDays = coverage.days
@@ -62,23 +66,34 @@ final class AdherenceDashboardViewModel: ObservableObject {
             earlyRefillCount = earlyRefill.early
             earlyRefillTotal = earlyRefill.total
             earlyRefillRatio = earlyRefill.total > 0 ? Double(earlyRefill.early) / Double(earlyRefill.total) : 0
+            calmDaysStreak = 0
+            therapyMonitoringCorrelation = nil
             return
         }
 
-        // Adherence
-        let result = computeAdherence(therapies: therapies, logs: logs, startDay: startDay, endDay: endDay)
-        generalTaken = result.taken
-        generalPlanned = result.planned
-        adherencePercentage = result.planned > 0 ? min(1, Double(result.taken) / Double(result.planned)) : 0
-        weekdayAdherence = result.weekday
-        dayAdherence = result.dayByDay
+        let full = computeAdherence(therapies: therapies, logs: logs, startDay: startDay, endDay: endDay)
+        generalTaken = full.taken
+        generalPlanned = full.planned
+
+        let rangeStartDay = filteredStartDay(for: range, earliestStartDay: startDay, endDay: endDay)
+        let filtered = computeAdherence(therapies: therapies, logs: logs, startDay: rangeStartDay, endDay: endDay)
+        adherencePercentage = filtered.planned > 0 ? min(1, Double(filtered.taken) / Double(filtered.planned)) : 0
+        weekdayAdherence = filtered.weekday
+        dayAdherence = filtered.dayByDay
 
         // Punctuality
-        let effectiveLogs = buildEffectiveIntakeLogs(from: logs, startDay: startDay, endDay: endDay)
-        punctualityPercentage = computePunctuality(therapies: therapies, intakeLogs: effectiveLogs, startDay: startDay, endDay: endDay)
+        let effectiveLogs = buildEffectiveIntakeLogs(from: logs, startDay: rangeStartDay, endDay: endDay)
+        overallTrend = computeOverallTrend(
+            therapies: therapies,
+            dayAdherence: dayAdherence,
+            intakeLogs: effectiveLogs,
+            startDay: rangeStartDay,
+            endDay: endDay
+        )
+        punctualityPercentage = computePunctuality(therapies: therapies, intakeLogs: effectiveLogs, startDay: rangeStartDay, endDay: endDay)
 
         // Punctuality by time slot
-        timeSlotPunctuality = computePunctualityByTimeSlot(therapies: therapies, intakeLogs: effectiveLogs, startDay: startDay, endDay: endDay)
+        timeSlotPunctuality = computePunctualityByTimeSlot(therapies: therapies, intakeLogs: effectiveLogs, startDay: rangeStartDay, endDay: endDay)
 
         // Therapy time stats
         therapyTimeStats = computeTherapyTimeStats(effectiveLogs: effectiveLogs, therapies: therapies)
@@ -96,6 +111,18 @@ final class AdherenceDashboardViewModel: ObservableObject {
         earlyRefillCount = earlyRefill.early
         earlyRefillTotal = earlyRefill.total
         earlyRefillRatio = earlyRefill.total > 0 ? Double(earlyRefill.early) / Double(earlyRefill.total) : 0
+
+        // Calm days streak (consecutive days from today):
+        // - no stockouts (all monitored medicines have days > 0)
+        // - perfect daily adherence (or no planned doses on that day)
+        calmDaysStreak = computeCalmDaysStreak(dayAdherence: dayAdherence, coverages: medicineCoverages)
+
+        // Correlation between monitored parameter and therapy adherence
+        therapyMonitoringCorrelation = computeTherapyMonitoringCorrelation(
+            therapies: therapies,
+            startDay: rangeStartDay,
+            endDay: endDay
+        )
     }
 
     // MARK: - Adherence
@@ -214,6 +241,96 @@ final class AdherenceDashboardViewModel: ObservableObject {
         }
 
         return matchedCount > 0 ? Double(onTimeCount) / Double(matchedCount) : 0
+    }
+
+    private func computeOverallTrend(
+        therapies: [Therapy],
+        dayAdherence: [DayAdherence],
+        intakeLogs: [Log],
+        startDay: Date,
+        endDay: Date
+    ) -> [OverallTrendPoint] {
+        let punctualityByDay = computeDailyPunctualityByDay(
+            therapies: therapies,
+            intakeLogs: intakeLogs,
+            startDay: startDay,
+            endDay: endDay
+        )
+        let adherenceByDay = Dictionary(
+            uniqueKeysWithValues: dayAdherence.map { (calendar.startOfDay(for: $0.date), $0.percentage) }
+        )
+
+        return makeDays(from: startDay, to: endDay).map { day in
+            OverallTrendPoint(
+                date: day,
+                adherence: adherenceByDay[day] ?? -1,
+                punctuality: punctualityByDay[day] ?? -1
+            )
+        }
+    }
+
+    private func computeDailyPunctualityByDay(
+        therapies: [Therapy],
+        intakeLogs: [Log],
+        startDay: Date,
+        endDay: Date
+    ) -> [Date: Double] {
+        guard !intakeLogs.isEmpty else { return [:] }
+        guard let rangeEnd = calendar.date(byAdding: .day, value: 1, to: endDay) else { return [:] }
+        let events = doseEventGenerator.generateEvents(therapies: therapies, from: startDay, to: rangeEnd)
+        guard !events.isEmpty else { return [:] }
+
+        struct DayMedicineKey: Hashable {
+            let day: Date
+            let medicineId: NSManagedObjectID
+        }
+
+        var eventsByKey: [DayMedicineKey: [DoseEvent]] = [:]
+        for event in events {
+            let day = calendar.startOfDay(for: event.date)
+            let key = DayMedicineKey(day: day, medicineId: event.medicineId)
+            eventsByKey[key, default: []].append(event)
+        }
+
+        var usedIndices: [DayMedicineKey: Set<Int>] = [:]
+        var matchedByDay: [Date: Int] = [:]
+        var onTimeByDay: [Date: Int] = [:]
+        let tolerance: TimeInterval = 30 * 60
+
+        for log in intakeLogs {
+            let day = calendar.startOfDay(for: log.timestamp)
+            let key = DayMedicineKey(day: day, medicineId: log.medicine.objectID)
+            guard let candidates = eventsByKey[key], !candidates.isEmpty else { continue }
+
+            var used = usedIndices[key] ?? []
+            var bestIndex: Int?
+            var bestDelta: TimeInterval = .greatestFiniteMagnitude
+
+            for (i, event) in candidates.enumerated() {
+                if used.contains(i) { continue }
+                let delta = abs(log.timestamp.timeIntervalSince(event.date))
+                if delta < bestDelta {
+                    bestDelta = delta
+                    bestIndex = i
+                }
+            }
+
+            guard let idx = bestIndex else { continue }
+            used.insert(idx)
+            usedIndices[key] = used
+            matchedByDay[day, default: 0] += 1
+            if bestDelta <= tolerance {
+                onTimeByDay[day, default: 0] += 1
+            }
+        }
+
+        var result: [Date: Double] = [:]
+        for (day, matched) in matchedByDay {
+            guard matched > 0 else { continue }
+            let onTime = onTimeByDay[day, default: 0]
+            result[day] = Double(onTime) / Double(matched)
+        }
+        return result
     }
 
     private func computePunctualityByTimeSlot(therapies: [Therapy], intakeLogs: [Log], startDay: Date, endDay: Date) -> [TimeSlotPunctuality] {
@@ -428,6 +545,263 @@ final class AdherenceDashboardViewModel: ObservableObject {
             if days > threshold { earlyCount += 1 }
         }
         return (earlyCount, totalCount)
+    }
+
+    private func computeCalmDaysStreak(dayAdherence: [DayAdherence], coverages: [MedicineCoverage]) -> Int {
+        let hasNoStockOut = !coverages.isEmpty && coverages.allSatisfy { $0.days > 0 }
+        guard hasNoStockOut else { return 0 }
+
+        var streak = 0
+        for day in dayAdherence.reversed() {
+            let isPerfectAdherence = day.planned == 0 || day.percentage >= 1
+            guard isPerfectAdherence else { break }
+            streak += 1
+        }
+        return streak
+    }
+
+    private func filteredStartDay(for range: StatisticsRange, earliestStartDay: Date, endDay: Date) -> Date {
+        let candidate: Date
+        switch range {
+        case .days:
+            candidate = calendar.date(byAdding: .day, value: -6, to: endDay) ?? endDay
+        case .weeks:
+            candidate = calendar.date(byAdding: .day, value: -29, to: endDay) ?? endDay
+        case .months:
+            let comps = calendar.dateComponents([.year], from: endDay)
+            candidate = calendar.date(from: DateComponents(year: comps.year, month: 1, day: 1)) ?? endDay
+        case .all:
+            candidate = earliestStartDay
+        }
+        return max(earliestStartDay, calendar.startOfDay(for: candidate))
+    }
+
+    private func computeTherapyMonitoringCorrelation(
+        therapies: [Therapy],
+        startDay: Date,
+        endDay: Date
+    ) -> TherapyMonitoringCorrelation? {
+        let monitoredTherapyIDs = Set(therapies.compactMap { therapy -> NSManagedObjectID? in
+            guard let monitoring = therapy.clinicalRulesValue?.monitoring else { return nil }
+            return monitoring.isEmpty ? nil : therapy.objectID
+        })
+
+        let rangeStart = startDay
+        guard let rangeEndExclusive = calendar.date(byAdding: .day, value: 1, to: endDay) else { return nil }
+
+        let request: NSFetchRequest<MonitoringMeasurement> = MonitoringMeasurement.fetchRequest()
+        request.sortDescriptors = [NSSortDescriptor(key: "measured_at", ascending: true)]
+        request.predicate = NSPredicate(
+            format: "measured_at >= %@ AND measured_at < %@",
+            rangeStart as NSDate,
+            rangeEndExclusive as NSDate
+        )
+
+        guard let fetched = try? context.fetch(request), !fetched.isEmpty else { return nil }
+
+        struct MeasurementWithTherapy {
+            let measurement: MonitoringMeasurement
+            let therapy: Therapy
+        }
+
+        let cleaned: [MeasurementWithTherapy] = fetched.compactMap { measurement in
+            guard let value = measurement.primaryValue, value.isFinite, !value.isNaN else { return nil }
+            if let linkedTherapy = measurement.therapy {
+                return MeasurementWithTherapy(measurement: measurement, therapy: linkedTherapy)
+            }
+
+            guard let medicineId = measurement.medicine?.objectID else { return nil }
+            let candidates = therapies.filter { $0.medicine.objectID == medicineId }
+            guard !candidates.isEmpty else { return nil }
+
+            if let monitored = candidates.first(where: { monitoredTherapyIDs.contains($0.objectID) }) {
+                return MeasurementWithTherapy(measurement: measurement, therapy: monitored)
+            }
+            if candidates.count == 1, let only = candidates.first {
+                return MeasurementWithTherapy(measurement: measurement, therapy: only)
+            }
+            let latest = candidates.max { ($0.start_date ?? .distantPast) < ($1.start_date ?? .distantPast) }
+            guard let fallback = latest else { return nil }
+            return MeasurementWithTherapy(measurement: measurement, therapy: fallback)
+        }
+        guard !cleaned.isEmpty else { return nil }
+
+        // Prefer therapies explicitly configured with monitoring rules, fallback to any linked measurements.
+        let preferred = cleaned.filter {
+            monitoredTherapyIDs.contains($0.therapy.objectID)
+        }
+        let filtered = preferred.isEmpty ? cleaned : preferred
+
+        let byTherapy = Dictionary(grouping: filtered) { $0.therapy.objectID }
+        guard let selectedID = byTherapy.max(by: { $0.value.count < $1.value.count })?.key,
+              let selectedEntries = byTherapy[selectedID] else { return nil }
+        let therapyMeasurements = selectedEntries.map(\.measurement)
+        guard let selectedTherapy = therapies.first(where: { $0.objectID == selectedID }) ?? selectedEntries.first?.therapy else {
+            return nil
+        }
+
+        let dominantKindRaw = Dictionary(grouping: therapyMeasurements, by: { $0.kind })
+            .max(by: { $0.value.count < $1.value.count })?.key
+        let kindMeasurements = therapyMeasurements.filter {
+            guard let value = $0.primaryValue else { return false }
+            if value.isNaN || !value.isFinite { return false }
+            return dominantKindRaw == nil || $0.kind == dominantKindRaw
+        }
+        guard !kindMeasurements.isEmpty else { return nil }
+
+        let kind = dominantKindRaw.flatMap { MonitoringKind(rawValue: $0) }
+
+        // Keep original measurement timestamps (no daily aggregation) so intra-day variations are visible.
+        let parameterPoints = kindMeasurements.compactMap { measurement -> MonitoringCorrelationPoint? in
+            guard let primary = measurement.primaryValue, primary.isFinite, !primary.isNaN else { return nil }
+
+            // For blood pressure, use the average of systolic/diastolic when both are present.
+            // This avoids a flat line when only one component changes.
+            let effectiveValue: Double
+            if kind == .bloodPressure,
+               let secondary = measurement.secondaryValue,
+               secondary.isFinite,
+               !secondary.isNaN {
+                effectiveValue = (primary + secondary) / 2.0
+            } else {
+                effectiveValue = primary
+            }
+
+            return MonitoringCorrelationPoint(date: measurement.measured_at, value: effectiveValue)
+        }
+        .sorted { $0.date < $1.date }
+        guard let firstParameterDate = parameterPoints.first?.date, !parameterPoints.isEmpty else { return nil }
+
+        var therapiesByMedicineId: [UUID: [Therapy]] = [:]
+        var medicinesById: [UUID: Medicine] = [:]
+        for therapy in therapies {
+            medicinesById[therapy.medicine.id] = therapy.medicine
+            therapiesByMedicineId[therapy.medicine.id, default: []].append(therapy)
+        }
+
+        let adherenceStart = max(rangeStart, calendar.startOfDay(for: firstParameterDate))
+        let logsByMedicineDay = buildLogsIndex(
+            medicinesById: medicinesById,
+            startDay: adherenceStart,
+            endDay: endDay
+        )
+
+        let therapyAdherenceByDay = Dictionary(uniqueKeysWithValues: makeDays(from: adherenceStart, to: endDay).compactMap { day -> (Date, Double)? in
+            let planned = plannedCount(for: selectedTherapy, on: day)
+            guard planned > 0 else { return nil }
+            let taken = takenCount(
+                for: selectedTherapy,
+                on: day,
+                therapiesByMedicineId: therapiesByMedicineId,
+                logsByMedicineDay: logsByMedicineDay
+            )
+            let percentage = min(1, Double(taken) / Double(planned))
+            return (day, percentage)
+        })
+
+        let globalByDay = Dictionary(uniqueKeysWithValues: dayAdherence.compactMap { d -> (Date, Double)? in
+            guard d.percentage >= 0 else { return nil }
+            let day = calendar.startOfDay(for: d.date)
+            return (day, d.percentage)
+        })
+
+        let adherencePoints = parameterPoints.compactMap { point -> MonitoringCorrelationPoint? in
+            let day = calendar.startOfDay(for: point.date)
+            let value = therapyAdherenceByDay[day] ?? globalByDay[day]
+            guard let value else { return nil }
+            return MonitoringCorrelationPoint(date: point.date, value: value)
+        }
+        guard !adherencePoints.isEmpty else { return nil }
+
+        let kindLabel = kind?.label ?? "Parametro"
+        let unit = kindMeasurements.reversed().compactMap { $0.unit?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first(where: { !$0.isEmpty }) ?? defaultUnit(for: kind)
+
+        let correlation = pearsonCorrelation(
+            parameterPoints: parameterPoints,
+            adherencePoints: adherencePoints
+        )
+
+        let smoothed = smoothPoints(parameterPoints)
+
+        return TherapyMonitoringCorrelation(
+            therapyTitle: selectedTherapy.medicine.nome,
+            parameterTitle: kindLabel,
+            parameterUnit: unit,
+            parameterPoints: parameterPoints,
+            smoothedParameterPoints: smoothed,
+            adherencePoints: adherencePoints,
+            correlationCoefficient: correlation
+        )
+    }
+
+    private func defaultUnit(for kind: MonitoringKind?) -> String {
+        switch kind {
+        case .bloodPressure:
+            return "mmHg"
+        case .bloodGlucose:
+            return "mg/dL"
+        case .temperature:
+            return "°C"
+        case .heartRate:
+            return "bpm"
+        case nil:
+            return ""
+        }
+    }
+
+    // MARK: - Smoothing & Robust Domain
+
+    /// Applies a symmetric moving average with an adaptive half-window.
+    /// Window grows with data density so sparse series stay unmodified while
+    /// noisy dense series show a clearly readable trend line.
+    private func smoothPoints(_ points: [MonitoringCorrelationPoint]) -> [MonitoringCorrelationPoint] {
+        let n = points.count
+        let halfWindow: Int
+        switch n {
+        case ..<5:  return points          // too few points – no smoothing
+        case ..<10: halfWindow = 1          // window of 3
+        case ..<20: halfWindow = 2          // window of 5
+        default:    halfWindow = 3          // window of 7
+        }
+        return points.enumerated().map { i, point in
+            let lo = max(0, i - halfWindow)
+            let hi = min(n - 1, i + halfWindow)
+            let window = points[lo...hi]
+            let avg = window.map(\.value).reduce(0.0, +) / Double(window.count)
+            return MonitoringCorrelationPoint(date: point.date, value: avg)
+        }
+    }
+
+    private func pearsonCorrelation(
+        parameterPoints: [MonitoringCorrelationPoint],
+        adherencePoints: [MonitoringCorrelationPoint]
+    ) -> Double? {
+        let adherenceByDay = Dictionary(uniqueKeysWithValues: adherencePoints.map { ($0.date, $0.value) })
+        let pairs = parameterPoints.compactMap { point -> (Double, Double)? in
+            guard let adherence = adherenceByDay[point.date] else { return nil }
+            return (adherence, point.value)
+        }
+        guard pairs.count >= 3 else { return nil }
+
+        let xs = pairs.map { $0.0 }
+        let ys = pairs.map { $0.1 }
+        let meanX = xs.reduce(0, +) / Double(xs.count)
+        let meanY = ys.reduce(0, +) / Double(ys.count)
+
+        var num = 0.0
+        var denX = 0.0
+        var denY = 0.0
+        for i in 0..<pairs.count {
+            let dx = xs[i] - meanX
+            let dy = ys[i] - meanY
+            num += dx * dy
+            denX += dx * dx
+            denY += dy * dy
+        }
+        let den = sqrt(denX * denY)
+        guard den > 0 else { return nil }
+        return num / den
     }
 
     // MARK: - Helpers

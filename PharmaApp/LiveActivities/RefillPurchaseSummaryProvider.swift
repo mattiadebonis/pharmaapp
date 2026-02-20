@@ -31,15 +31,12 @@ struct RefillPurchaseSummary: Equatable {
 @MainActor
 final class RefillPurchaseSummaryProvider {
     private let context: NSManagedObjectContext
-    private let stateProvider: CoreDataTodayStateProvider
     private let perfLog = OSLog(subsystem: "PharmaApp", category: "Performance")
 
     init(
-        context: NSManagedObjectContext,
-        stateProvider: CoreDataTodayStateProvider? = nil
+        context: NSManagedObjectContext
     ) {
         self.context = context
-        self.stateProvider = stateProvider ?? CoreDataTodayStateProvider(context: context)
     }
 
     func summary(
@@ -52,40 +49,22 @@ final class RefillPurchaseSummaryProvider {
 
         switch strategy {
         case .lightweightTodos:
-            return lightweightSummary(maxVisible: maxVisible)
+            return underThresholdSummary(maxVisible: maxVisible)
         case .fullTodayState:
-            return fullStateSummary(maxVisible: maxVisible)
+            return underThresholdSummary(maxVisible: maxVisible)
         }
     }
 
-    private func lightweightSummary(maxVisible: Int) -> RefillPurchaseSummary {
-        let request: NSFetchRequest<Todo> = Todo.fetchRequest()
-        request.predicate = NSPredicate(format: "category == %@", TodayTodoCategory.purchase.rawValue)
-        request.sortDescriptors = [NSSortDescriptor(key: "updated_at", ascending: false)]
-        request.fetchLimit = max(60, maxVisible * 8)
-        let titles = ((try? context.fetch(request)) ?? []).map(\.title)
-        let deduped = Self.deduplicatedTitles(titles)
-        return RefillPurchaseSummary(allNames: deduped, maxVisible: max(1, maxVisible))
-    }
-
-    private func fullStateSummary(maxVisible: Int) -> RefillPurchaseSummary {
+    private func underThresholdSummary(maxVisible: Int) -> RefillPurchaseSummary {
         let request = Medicine.extractMedicines()
         let medicines = (try? context.fetch(request)) ?? []
-
-        let state = stateProvider.buildState(
-            medicines: medicines,
-            logs: fetchLogs(),
-            todos: fetchTodos(),
-            option: Option.current(in: context),
-            completedTodoIDs: []
+        let option = Option.current(in: context)
+        let sections = computeSections(for: medicines, logs: [], option: option)
+        let names = sections.purchase.map { $0.nome.trimmingCharacters(in: .whitespacesAndNewlines) }
+        return RefillPurchaseSummary(
+            allNames: Self.deduplicatedTitles(names),
+            maxVisible: max(1, maxVisible)
         )
-
-        let purchaseTitles = state.computedTodos
-            .filter { $0.category == .purchase }
-            .map { $0.title }
-
-        let deduped = Self.deduplicatedTitles(purchaseTitles)
-        return RefillPurchaseSummary(allNames: deduped, maxVisible: max(1, maxVisible))
     }
 
     static func deduplicatedTitles(_ titles: [String]) -> [String] {
@@ -101,15 +80,5 @@ final class RefillPurchaseSummaryProvider {
         }
 
         return ordered
-    }
-
-    private func fetchLogs() -> [Log] {
-        let request = Log.extractLogs()
-        return (try? context.fetch(request)) ?? []
-    }
-
-    private func fetchTodos() -> [Todo] {
-        let request: NSFetchRequest<Todo> = Todo.fetchRequest()
-        return (try? context.fetch(request)) ?? []
     }
 }

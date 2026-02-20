@@ -26,39 +26,29 @@ struct ContentView: View {
     var body: some View {
         if #available(iOS 18.0, *) {
             TabView(selection: $appRouter.selectedTab) {
-                // TAB 1 – Insights
                 Tab(value: AppTabRoute.oggi) {
                     NavigationStack {
                         TodayView()
                     }
                 } label: {
                     Label {
-                        Text("Prossime")
+                        Text("Oggi")
                     } icon: {
-                        TodayCalendarIcon(day: todayDayNumber)
+                        TodayCalendarIcon(day: Calendar.current.component(.day, from: Date()))
                     }
                 }
 
-                // TAB 2 – Statistiche
-                Tab("Statistiche", systemImage: "chart.line.text.clipboard", value: AppTabRoute.statistiche) {
-                    NavigationStack {
-                        AdherenceDashboardView()
-                    }
-                }
-
-                // TAB 3 – Medicine
-                Tab("Medicine", systemImage: "pills", value: AppTabRoute.medicine) {
+                Tab("Armadietto", systemImage: "pills", value: AppTabRoute.medicine) {
                     NavigationStack {
                         CabinetView()
-                            .navigationTitle("Armadio dei farmaci")
+                            .navigationTitle("Armadietto")
                             .navigationBarTitleDisplayMode(.large)
                     }
                 }
 
-                // TAB 4 – Profilo
-                Tab("Profilo", systemImage: "person.crop.circle", value: AppTabRoute.profilo) {
+                Tab("Cerca", systemImage: "magnifyingglass", value: AppTabRoute.search, role: .search) {
                     NavigationStack {
-                        ProfileView(showsDoneButton: false)
+                        GlobalSearchView()
                     }
                 }
             }
@@ -79,17 +69,6 @@ struct ContentView: View {
         } else {
             // Fallback on earlier versions
         }
-    }
-
-    private var todayCalendarSymbolName: String {
-        if #available(iOS 17.0, *) {
-            return "calendar.day.timeline.left"
-        }
-        return "calendar"
-    }
-
-    private var todayDayNumber: Int {
-        Calendar.current.component(.day, from: Date())
     }
 
     private func handleGlobalRoute(_ route: AppRoute?) {

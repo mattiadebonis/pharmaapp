@@ -224,7 +224,7 @@ private struct MoveCabinetSelectionSheet: View {
                             dismiss()
                         } label: {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Armadio dei farmaci")
+                                Text("Armadietto")
                                 Text("Nessun armadietto")
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
