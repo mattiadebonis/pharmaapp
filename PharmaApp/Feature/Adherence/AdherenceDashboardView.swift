@@ -16,16 +16,6 @@ struct AdherenceDashboardView: View {
 
     private enum StockLevel { case ok, low, critical, noData }
 
-    // Shared per la heatmap grid
-    private struct WeekPoint: Identifiable {
-        let index: Int
-        let label: String
-        let taken: Int
-        let planned: Int
-        var adherence: Double { planned > 0 ? min(1, Double(taken) / Double(planned)) : -1 }
-        var id: Int { index }
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -34,7 +24,6 @@ struct AdherenceDashboardView: View {
 
                 // ADERENZA
                 adherenceHeatmapSection
-                routineStabilitySection
                 weekdayChart
                 timeSlotChart
 
@@ -219,10 +208,9 @@ struct AdherenceDashboardView: View {
                         .font(.subheadline.weight(.semibold))
                     Spacer()
                     HStack(spacing: 3) {
-                        ForEach([Color(.systemFill), Color.red.opacity(0.5), Color.orange, Color.green], id: \.self) { c in
+                        ForEach([Color(.systemFill), Color.red.opacity(0.5), Color.orange, Color.blue], id: \.self) { c in
                             RoundedRectangle(cornerRadius: 2).fill(c).frame(width: 8, height: 8)
                         }
-                        Text("100%").font(.system(size: 8)).foregroundStyle(.secondary)
                     }
                 }
 
@@ -268,7 +256,7 @@ struct AdherenceDashboardView: View {
         if p == 0 { return Color.red.opacity(0.25) }
         if p < 0.5 { return Color.red.opacity(0.6) }
         if p < 0.8 { return Color.orange }
-        return Color.green
+        return Color.blue
     }
 
     private var heatmapWeeks: [[DayAdherence?]] {
@@ -302,105 +290,6 @@ struct AdherenceDashboardView: View {
             weekStart = next
         }
         return weeks
-    }
-
-    // MARK: - Routine Stability
-
-    @ViewBuilder
-    private var routineStabilitySection: some View {
-        let points = weeklyAdherencePoints
-        if points.count >= 3 {
-            if #available(iOS 16.0, *) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("Stabilità della routine")
-                            .font(.subheadline.weight(.semibold))
-                        Spacer()
-                        let trend = routineTrendLabel(points)
-                        Text(trend.label)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(trend.color)
-                    }
-                    Chart(points) { point in
-                        AreaMark(
-                            x: .value("Settimana", point.index),
-                            y: .value("Aderenza", point.adherence)
-                        )
-                        .foregroundStyle(Color.blue.opacity(0.10).gradient)
-                        .interpolationMethod(.catmullRom)
-
-                        LineMark(
-                            x: .value("Settimana", point.index),
-                            y: .value("Aderenza", point.adherence)
-                        )
-                        .foregroundStyle(Color.blue.gradient)
-                        .interpolationMethod(.catmullRom)
-
-                        PointMark(
-                            x: .value("Settimana", point.index),
-                            y: .value("Aderenza", point.adherence)
-                        )
-                        .foregroundStyle(adherenceColor(point.adherence >= 0 ? point.adherence : 0))
-                        .symbolSize(30)
-                    }
-                    .chartYScale(domain: 0...1)
-                    .chartYAxis {
-                        AxisMarks(values: [0, 0.5, 1]) { value in
-                            AxisGridLine().foregroundStyle(Color.primary.opacity(0.08))
-                            AxisValueLabel {
-                                if let v = value.as(Double.self) {
-                                    Text("\(Int(v * 100))%").font(.caption2).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-                    .chartXAxis {
-                        AxisMarks { value in
-                            AxisValueLabel {
-                                if let i = value.as(Int.self), i < points.count {
-                                    Text(points[i].label).font(.caption2).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-                    .frame(height: 140)
-                }
-                .padding(16)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.primary.opacity(0.06), lineWidth: 1))
-            }
-        }
-    }
-
-    private var weeklyAdherencePoints: [WeekPoint] {
-        let cal = Calendar.current
-        var weekly: [String: (taken: Int, planned: Int, date: Date)] = [:]
-        for d in viewModel.dayAdherence {
-            let comps = cal.dateComponents([.weekOfYear, .yearForWeekOfYear], from: d.date)
-            let key = "\(comps.yearForWeekOfYear ?? 0)-\(String(format: "%02d", comps.weekOfYear ?? 0))"
-            var prev = weekly[key] ?? (taken: 0, planned: 0, date: d.date)
-            prev = (taken: prev.taken + d.taken, planned: prev.planned + d.planned, date: min(prev.date, d.date))
-            weekly[key] = prev
-        }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d/M"
-        return weekly.sorted { $0.key < $1.key }.suffix(12).enumerated().map { idx, pair in
-            let label = formatter.string(from: pair.value.date)
-            return WeekPoint(index: idx, label: label, taken: pair.value.taken, planned: pair.value.planned)
-        }
-    }
-
-    private func routineTrendLabel(_ points: [WeekPoint]) -> (label: String, color: Color) {
-        guard points.count >= 2 else { return ("—", .secondary) }
-        let first = points.prefix(points.count / 2).compactMap { $0.adherence >= 0 ? $0.adherence : nil }
-        let last  = points.suffix(points.count / 2).compactMap { $0.adherence >= 0 ? $0.adherence : nil }
-        guard !first.isEmpty, !last.isEmpty else { return ("Stabile", .secondary) }
-        let avgFirst = first.reduce(0, +) / Double(first.count)
-        let avgLast  = last.reduce(0, +) / Double(last.count)
-        let delta = avgLast - avgFirst
-        if delta > 0.05  { return ("↑ In miglioramento", .green) }
-        if delta < -0.05 { return ("↓ In calo", .red) }
-        return ("→ Stabile", .blue)
     }
 
     // MARK: - Stock Heatmap (proiezione)
