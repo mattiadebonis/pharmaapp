@@ -28,6 +28,13 @@ struct ProfileView: View {
 
     var body: some View {
         Form {
+            // MARK: Farmacie
+            Section(header: Label("Farmacie", systemImage: "cross.case.fill")) {
+                ProfilePharmacyCard()
+                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                    .listRowBackground(Color.clear)
+            }
+
             // MARK: Dottori
             Section(header: HStack {
                 Label("Dottori", systemImage: "stethoscope")
@@ -78,19 +85,6 @@ struct ProfileView: View {
                         }
                     }
                     .padding(.vertical, 4)
-                }
-            }
-
-            Section(header: Label("Impostazioni", systemImage: "gearshape")) {
-                NavigationLink {
-                    PrescriptionMessageTemplateSettingsView()
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Messaggio richiesta ricetta")
-                        Text("Personalizza il testo con i placeholder {medico} e {medicinali}.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
                 }
             }
 
@@ -152,6 +146,17 @@ struct ProfileView: View {
                             }
                         }
                     }
+                }
+            }
+
+            // MARK: Settaggi terapia
+            TherapySettingsSectionsView()
+
+            Section(header: Label("Messaggio ricetta", systemImage: "text.bubble")) {
+                NavigationLink {
+                    PrescriptionMessageTemplateSettingsView()
+                } label: {
+                    Text("Template messaggio con placeholder {medico} e {medicinali}")
                 }
             }
         }
@@ -410,7 +415,7 @@ private struct ProfilePharmacyCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             pharmacyHeader
-            pharmacyInfoRows
+            pharmacyMapPreview()
             HStack(spacing: 8) {
                 routeButton(for: .walking)
                 routeButton(for: .driving)
@@ -442,6 +447,11 @@ private struct ProfilePharmacyCard: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
+                } else {
+                    Text("Distanza \(pharmacyDistanceText() ?? "non disponibile")")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
             Spacer(minLength: 8)
@@ -459,61 +469,69 @@ private struct ProfilePharmacyCard: View {
         }
     }
 
-    private var pharmacyInfoRows: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            pharmacyInfoRow(
-                icon: "location",
-                title: "Distanza",
-                value: pharmacyDistanceText() ?? "non disponibile"
-            )
-            pharmacyInfoRow(
-                icon: "clock",
-                title: "Orari oggi",
-                value: todayOpeningSummary
-            )
-        }
-    }
+    @ViewBuilder
+    private func pharmacyMapPreview() -> some View {
+        if let region = locationVM.region {
+            ZStack {
+                Map(coordinateRegion: Binding(
+                    get: { locationVM.region ?? region },
+                    set: { locationVM.region = $0 }
+                ))
+                .allowsHitTesting(false)
 
-    private func pharmacyInfoRow(icon: String, title: String, value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: icon)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 14)
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-            Spacer(minLength: 0)
+                if locationVM.pinItem != nil {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.red)
+                        .shadow(color: Color.black.opacity(0.15), radius: 2, x: 0, y: 1)
+                }
+            }
+            .frame(height: 140)
+            .clipShape(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                openDirections(.driving)
+            }
+        } else {
+            ZStack {
+                RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+                    .fill(Color.secondary.opacity(0.08))
+                VStack(spacing: 6) {
+                    Image(systemName: "map")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundColor(.secondary)
+                    Text("Attiva la posizione per vedere la mappa")
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                }
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 12)
+            }
+            .frame(height: 140)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.secondary.opacity(0.08))
-        )
     }
 
     private func routeButton(for mode: PharmacyRouteMode) -> some View {
         Button {
             openDirections(mode)
         } label: {
-            VStack(spacing: 3) {
-                Label(mode.accessibilityLabel, systemImage: mode.systemImage)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
+            VStack(spacing: 4) {
+                Image(systemName: mode.systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
                 Text(routeMinutesText(for: mode))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .overlay(
+            .padding(.vertical, 9)
+            .background(
                 Capsule(style: .continuous)
-                    .stroke(Color.primary.opacity(0.18), lineWidth: 1)
+                    .fill(Color.blue)
             )
         }
         .buttonStyle(.plain)
@@ -526,20 +544,16 @@ private struct ProfilePharmacyCard: View {
         Button {
             locationVM.callPharmacy()
         } label: {
-            VStack(spacing: 3) {
-                Label("Chiama", systemImage: "phone.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text("Farmacia")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+            Image(systemName: "phone.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 17)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.green)
+                )
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(Color.primary.opacity(0.18), lineWidth: 1)
-            )
         }
         .buttonStyle(.plain)
         .disabled(!canCall)
@@ -554,14 +568,6 @@ private struct ProfilePharmacyCard: View {
     private var canCall: Bool {
         let phone = locationVM.pinItem?.phone ?? locationVM.pinItem?.mapItem?.phoneNumber
         return phone?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-    }
-
-    private var todayOpeningSummary: String {
-        guard let slot = locationVM.todayOpeningText?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !slot.isEmpty else {
-            return "non disponibili"
-        }
-        return slot
     }
 
     private var pharmacyStatusText: String? {

@@ -273,7 +273,7 @@ struct MedicineRowView: View {
             if !snapshot.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(snapshot.line1)
                     .font(subtitleFont)
-                    .foregroundColor(subtitleColor)
+                    .foregroundColor(line1Color)
                     .lineLimit(1)
                     .multilineTextAlignment(.leading)
                     .truncationMode(.tail)
@@ -299,7 +299,7 @@ struct MedicineRowView: View {
     private func line2View(for line: String) -> some View {
         Text(line)
             .font(subtitleFont)
-            .foregroundColor(subtitleColor)
+            .foregroundColor(line2Color)
             .lineLimit(subtitleMode == .activeTherapies ? nil : 1)
             .multilineTextAlignment(.leading)
             .truncationMode(.tail)
@@ -326,13 +326,48 @@ struct MedicineRowView: View {
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                     therapyLineText(line)
                         .font(subtitleFont)
-                        .foregroundColor(subtitleColor)
+                        .foregroundColor(therapyLineColor)
                         .lineLimit(nil)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
+    }
+
+    private var isAutonomyBelowThreshold: Bool {
+        if !therapies.isEmpty {
+            guard let days = autonomyDays else { return false }
+            return days < coverageThreshold
+        }
+        guard let units = remainingUnits else { return false }
+        return units < coverageThreshold
+    }
+
+    private var hasSkippedDose: Bool {
+        earliestOverdueDoseTime != nil
+    }
+
+    private var line1Color: Color {
+        switch subtitleMode {
+        case .activeTherapies:
+            return isAutonomyBelowThreshold ? .red : subtitleColor
+        case .nextDose:
+            return hasSkippedDose ? .red : subtitleColor
+        }
+    }
+
+    private var line2Color: Color {
+        switch subtitleMode {
+        case .activeTherapies:
+            return subtitleColor
+        case .nextDose:
+            return isAutonomyBelowThreshold ? .red : subtitleColor
+        }
+    }
+
+    private var therapyLineColor: Color {
+        hasSkippedDose ? .red : subtitleColor
     }
 
     private func therapyLineText(_ line: TherapyLine) -> Text {

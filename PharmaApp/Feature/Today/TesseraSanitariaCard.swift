@@ -27,7 +27,7 @@ struct TesseraSanitariaCard<FullScreenContent: View>: View {
                     .font(.system(.caption, design: .monospaced))
                     .foregroundColor(.secondary)
             } else {
-                Text("Aggiungi la tessera sanitaria dalle Opzioni.")
+                Text("Aggiungi la tessera sanitaria dal Profilo.")
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
             }

@@ -34,6 +34,7 @@ struct GlobalSearchView: View {
     @State private var isCatalogSearchPresented = false
     @State private var pendingCatalogSelection: CatalogSelection?
     @State private var catalogSelection: CatalogSelection?
+    @State private var catalogMedicines: [CatalogSelection] = []
 
     @AppStorage("search.recent.items") private var recentItemsRaw: String = ""
 
@@ -307,6 +308,52 @@ struct GlobalSearchView: View {
         }
     }
 
+    private var filteredCatalogMedicines: [CatalogSelection] {
+        guard !trimmedQuery.isEmpty else { return [] }
+        guard selectedScope == .all || selectedScope == .medicines else { return [] }
+
+        let normalizedQuery = normalizeCatalogText(trimmedQuery)
+        guard !normalizedQuery.isEmpty else { return [] }
+
+        let sortedMatches = catalogMedicines
+            .filter { item in
+                let name = normalizeCatalogText(item.name)
+                let principle = normalizeCatalogText(item.principle)
+                let packageLabel = normalizeCatalogText(item.packageLabel)
+                return name.contains(normalizedQuery)
+                    || principle.contains(normalizedQuery)
+                    || packageLabel.contains(normalizedQuery)
+            }
+            .sorted { lhs, rhs in
+                if lhs.name == rhs.name {
+                    return lhs.packageLabel.localizedCaseInsensitiveCompare(rhs.packageLabel) == .orderedAscending
+                }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+
+        var seenKeys: Set<String> = []
+        var results: [CatalogSelection] = []
+
+        for item in sortedMatches {
+            let key = catalogIdentityKey(name: item.name, principle: item.principle)
+            let normalizedName = normalizeCatalogText(item.name)
+
+            if medicinesInCabinetIdentityKeys.contains(key) || medicinesInCabinetNames.contains(normalizedName) {
+                continue
+            }
+
+            if seenKeys.insert(key).inserted {
+                results.append(item)
+            }
+
+            if results.count >= 40 {
+                break
+            }
+        }
+
+        return results
+    }
+
     private var filteredTherapies: [Therapy] {
         guard !trimmedQuery.isEmpty else { return [] }
         guard selectedScope == .all || selectedScope == .therapies else { return [] }
@@ -348,7 +395,35 @@ struct GlobalSearchView: View {
     }
 
     private var hasSearchResults: Bool {
-        !filteredMedicines.isEmpty || !filteredTherapies.isEmpty || !filteredDoctors.isEmpty || !filteredPersons.isEmpty
+        !filteredMedicines.isEmpty
+            || !filteredCatalogMedicines.isEmpty
+            || !filteredTherapies.isEmpty
+            || !filteredDoctors.isEmpty
+            || !filteredPersons.isEmpty
+    }
+
+    private var medicinesInCabinetIdentityKeys: Set<String> {
+        Set(
+            medicines
+                .filter { medicine in
+                    medicine.in_cabinet || (medicine.medicinePackages?.isEmpty == false)
+                }
+                .map { medicine in
+                    catalogIdentityKey(name: medicine.nome, principle: medicine.principio_attivo)
+                }
+        )
+    }
+
+    private var medicinesInCabinetNames: Set<String> {
+        Set(
+            medicines
+                .filter { medicine in
+                    medicine.in_cabinet || (medicine.medicinePackages?.isEmpty == false)
+                }
+                .map { medicine in
+                    normalizeCatalogText(medicine.nome)
+                }
+        )
     }
 
     private var pharmacyPrimaryLine: String {
@@ -455,6 +530,7 @@ struct GlobalSearchView: View {
         }
         .onAppear {
             locationVM.ensureStarted()
+            loadCatalogMedicinesIfNeeded()
         }
         .onChange(of: query) { value in
             if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -711,6 +787,21 @@ struct GlobalSearchView: View {
                 }
             }
 
+            if !filteredCatalogMedicines.isEmpty {
+                Section {
+                    ForEach(filteredCatalogMedicines) { selection in
+                        Button {
+                            openCatalogMedicine(selection)
+                        } label: {
+                            catalogMedicineRow(selection)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    sectionHeader("Aggiungi dall'elenco farmaci")
+                }
+            }
+
             if !filteredTherapies.isEmpty {
                 Section {
                     ForEach(filteredTherapies, id: \.objectID) { therapy in
@@ -916,6 +1007,37 @@ struct GlobalSearchView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func catalogMedicineRow(_ item: CatalogSelection) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(item.name)
+                    .font(.system(size: 18, weight: .regular))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                Text("Aggiungi")
+                    .font(.system(size: 12, weight: .semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.accentColor.opacity(0.18))
+                    )
+                    .foregroundStyle(Color.accentColor)
+            }
+
+            if !item.principle.isEmpty {
+                Text(item.principle)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func therapyRow(_ therapy: Therapy) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(therapy.medicine.nome)
@@ -1053,6 +1175,10 @@ struct GlobalSearchView: View {
             title: medicine.nome,
             subtitle: medicine.principio_attivo.isEmpty ? nil : medicine.principio_attivo
         )
+    }
+
+    private func openCatalogMedicine(_ selection: CatalogSelection) {
+        catalogSelection = selection
     }
 
     private func openTherapy(_ therapy: Therapy) {
@@ -1320,6 +1446,242 @@ struct GlobalSearchView: View {
             return package
         }
         return medicine.packages.first
+    }
+
+    private func loadCatalogMedicinesIfNeeded() {
+        guard catalogMedicines.isEmpty else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let loaded = loadCatalogMedicines()
+            DispatchQueue.main.async {
+                catalogMedicines = loaded
+            }
+        }
+    }
+
+    private func loadCatalogMedicines() -> [CatalogSelection] {
+        let bundle = Bundle.main
+        let data: Data? = {
+            if let fullURL = bundle.url(forResource: "medicinali", withExtension: "json"),
+               let fullData = try? Data(contentsOf: fullURL) {
+                return fullData
+            }
+            if let fallbackURL = bundle.url(forResource: "medicinale_example", withExtension: "json"),
+               let fallbackData = try? Data(contentsOf: fallbackURL) {
+                return fallbackData
+            }
+            return nil
+        }()
+
+        guard let data,
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let entries = catalogEntries(from: object) else {
+            return []
+        }
+
+        var results: [CatalogSelection] = []
+        results.reserveCapacity(800)
+
+        for entry in entries {
+            let medicineInfo = entry["medicinale"] as? [String: Any]
+            let info = entry["informazioni"] as? [String: Any]
+            let principles = entry["principi"] as? [String: Any]
+
+            let rawName = (medicineInfo?["denominazioneMedicinale"] as? String)
+                ?? (entry["denominazioneMedicinale"] as? String)
+                ?? (entry["titolo"] as? String)
+                ?? catalogStringArray(from: entry["principiAttiviIt"]).first
+                ?? catalogStringArray(from: principles?["principiAttiviIt"]).first
+                ?? ""
+            let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+
+            let principleValues = deduplicatedCatalogValues(
+                catalogStringArray(from: entry["principiAttiviIt"])
+                + catalogStringArray(from: principles?["principiAttiviIt"])
+            )
+            let principle = principleValues.isEmpty ? name : principleValues.joined(separator: ", ")
+
+            let packages = entry["confezioni"] as? [[String: Any]] ?? []
+            guard !packages.isEmpty else { continue }
+
+            let dosageSource = (info?["descrizioneFormaDosaggio"] as? String)
+                ?? (entry["descrizioneFormaDosaggio"] as? String)
+            let dosage = parseCatalogDosage(from: dosageSource)
+
+            for package in packages {
+                let rawPackageLabel = (package["denominazionePackage"] as? String) ?? "Confezione"
+                let packageLabel = rawPackageLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+                let packageId = (package["idPackage"] as? String)
+                    ?? (entry["id"] as? String)
+                    ?? UUID().uuidString
+
+                let selection = CatalogSelection(
+                    id: packageId,
+                    name: name,
+                    principle: principle,
+                    requiresPrescription: catalogRequiresPrescription(package),
+                    packageLabel: packageLabel.isEmpty ? "Confezione" : packageLabel,
+                    units: max(1, extractCatalogUnitCount(from: packageLabel)),
+                    tipologia: packageLabel.isEmpty ? "Confezione" : packageLabel,
+                    valore: dosage.value,
+                    unita: dosage.unit,
+                    volume: extractCatalogVolume(from: packageLabel)
+                )
+                results.append(selection)
+            }
+        }
+
+        return results.sorted { lhs, rhs in
+            if lhs.name == rhs.name {
+                return lhs.packageLabel.localizedCaseInsensitiveCompare(rhs.packageLabel) == .orderedAscending
+            }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+    }
+
+    private func catalogEntries(from object: Any) -> [[String: Any]]? {
+        if let array = object as? [[String: Any]] {
+            return array
+        }
+        if let dictionary = object as? [String: Any] {
+            return [dictionary]
+        }
+        return nil
+    }
+
+    private func catalogStringArray(from value: Any?) -> [String] {
+        guard let value else { return [] }
+        if let array = value as? [String] {
+            return array
+        }
+        if let string = value as? String {
+            return [string]
+        }
+        if let anyArray = value as? [Any] {
+            return anyArray.compactMap { $0 as? String }
+        }
+        return []
+    }
+
+    private func deduplicatedCatalogValues(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for value in values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = normalizeCatalogText(trimmed)
+            if seen.insert(key).inserted {
+                result.append(trimmed)
+            }
+        }
+        return result
+    }
+
+    private func catalogRequiresPrescription(_ package: [String: Any]) -> Bool {
+        if catalogBoolValue(package["flagPrescrizione"] ?? package["prescrizione"]) {
+            return true
+        }
+        if let classe = (package["classeFornitura"] as? String)?.uppercased(),
+           ["RR", "RRL", "OSP"].contains(classe) {
+            return true
+        }
+        let descriptions = catalogStringArray(from: package["descrizioneRf"])
+        if descriptions.contains(where: catalogRequiresPrescriptionDescription) {
+            return true
+        }
+        return false
+    }
+
+    private func catalogRequiresPrescriptionDescription(_ description: String) -> Bool {
+        let normalized = description
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalized.contains("non soggetto")
+            || normalized.contains("senza ricetta")
+            || normalized.contains("senza prescrizione")
+            || normalized.contains("non richiede") {
+            return false
+        }
+        return normalized.contains("prescrizione") || normalized.contains("ricetta")
+    }
+
+    private func catalogBoolValue(_ value: Any?) -> Bool {
+        guard let value, !(value is NSNull) else { return false }
+        if let bool = value as? Bool { return bool }
+        if let int = value as? Int { return int != 0 }
+        if let int = value as? Int32 { return int != 0 }
+        if let number = value as? NSNumber { return number.intValue != 0 }
+        if let string = value as? String {
+            let normalized = string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return ["1", "true", "yes", "si", "y", "t"].contains(normalized)
+        }
+        return false
+    }
+
+    private func parseCatalogDosage(from description: String?) -> (value: Int32, unit: String) {
+        guard let text = description else { return (0, "") }
+        let tokens = text.split(separator: " ")
+        var value: Int32 = 0
+        var unit = ""
+
+        for (index, token) in tokens.enumerated() {
+            let digitString = token.filter(\.isNumber)
+            guard !digitString.isEmpty, let parsed = Int32(digitString) else { continue }
+            value = parsed
+            if index + 1 < tokens.count {
+                let possibleUnit = tokens[index + 1]
+                if possibleUnit.rangeOfCharacter(from: .letters) != nil || possibleUnit.contains("/") {
+                    unit = String(possibleUnit)
+                }
+            }
+            break
+        }
+
+        return (value, unit)
+    }
+
+    private func extractCatalogUnitCount(from text: String) -> Int {
+        guard let regex = try? NSRegularExpression(pattern: "\\d+") else { return 0 }
+        let matches = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+        guard let last = matches.last,
+              let range = Range(last.range, in: text),
+              let value = Int(text[range]) else {
+            return 0
+        }
+        return value
+    }
+
+    private func extractCatalogVolume(from text: String) -> String {
+        let uppercase = text.uppercased()
+        guard let regex = try? NSRegularExpression(pattern: "\\d+\\s*(ML|L)") else { return "" }
+        let range = NSRange(location: 0, length: (uppercase as NSString).length)
+        guard let match = regex.firstMatch(in: uppercase, range: range),
+              let matchRange = Range(match.range, in: uppercase) else {
+            return ""
+        }
+        return uppercase[matchRange].lowercased()
+    }
+
+    private func normalizeCatalogText(_ text: String) -> String {
+        let folded = text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        let cleaned = folded.replacingOccurrences(
+            of: "[^A-Za-z0-9]",
+            with: " ",
+            options: .regularExpression
+        )
+        return cleaned
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+
+    private func catalogIdentityKey(name: String, principle: String) -> String {
+        let normalizedName = normalizeCatalogText(name)
+        let normalizedPrinciple = normalizeCatalogText(principle)
+        if normalizedPrinciple.isEmpty {
+            return normalizedName
+        }
+        return "\(normalizedName)|\(normalizedPrinciple)"
     }
 
     private func addRecent(kind: RecentKind, objectID: NSManagedObjectID?, title: String, subtitle: String?) {

@@ -27,7 +27,7 @@ final class AppRouterRouteStoreTests: XCTestCase {
 
         router.consumePendingRouteIfAny()
 
-        XCTAssertEqual(router.selectedTab, .oggi)
+        XCTAssertEqual(router.selectedTab, .medicine)
         XCTAssertEqual(router.pendingRoute, .todayPurchaseList)
 
         router.markRouteHandled(.todayPurchaseList)
@@ -42,7 +42,7 @@ final class AppRouterRouteStoreTests: XCTestCase {
         router.open(.profile)
 
         XCTAssertEqual(fakeStore.savedRoute, .profile)
-        XCTAssertEqual(router.selectedTab, .oggi)
+        XCTAssertEqual(router.selectedTab, .profilo)
         XCTAssertEqual(router.pendingRoute, .profile)
     }
 }

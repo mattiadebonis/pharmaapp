@@ -18,56 +18,84 @@ struct ContentView: View {
     // MARK: – Dependencies
     @Environment(\.managedObjectContext) private var moc
     @EnvironmentObject private var appRouter: AppRouter
-    @State private var isNewMedicinePresented = false
     @State private var isGlobalCodiceFiscalePresented = false
     @State private var globalCodiceFiscaleEntries: [PrescriptionCFEntry] = []
 
     // MARK: – UI
     var body: some View {
-        if #available(iOS 18.0, *) {
-            TabView(selection: $appRouter.selectedTab) {
-                Tab(value: AppTabRoute.oggi) {
-                    NavigationStack {
-                        TodayView()
+        Group {
+            if #available(iOS 18.0, *) {
+                TabView(selection: $appRouter.selectedTab) {
+                    Tab("Armadietto", systemImage: "pills", value: AppTabRoute.medicine) {
+                        NavigationStack {
+                            CabinetView()
+                        }
                     }
-                } label: {
-                    Label {
-                        Text("Oggi")
-                    } icon: {
-                        TodayCalendarIcon(day: Calendar.current.component(.day, from: Date()))
+                    Tab("Profilo", systemImage: "person.crop.circle", value: AppTabRoute.profilo) {
+                        NavigationStack {
+                            ProfileView(showsDoneButton: false)
+                                .navigationTitle("Profilo")
+                                .navigationBarTitleDisplayMode(.inline)
+                        }
+                    }
+                    Tab(
+                        "Cerca",
+                        systemImage: "magnifyingglass",
+                        value: AppTabRoute.search,
+                        role: .search
+                    ) {
+                        NavigationStack {
+                            GlobalSearchView()
+                                .navigationTitle("Cerca")
+                                .navigationBarTitleDisplayMode(.inline)
+                        }
                     }
                 }
-
-                Tab("Armadietto", systemImage: "pills", value: AppTabRoute.medicine) {
+            } else {
+                TabView(selection: $appRouter.selectedTab) {
                     NavigationStack {
                         CabinetView()
-                            .navigationTitle("Armadietto")
-                            .navigationBarTitleDisplayMode(.large)
                     }
-                }
+                    .tabItem {
+                        Label("Armadietto", systemImage: "pills")
+                    }
+                    .tag(AppTabRoute.medicine)
 
-                Tab("Cerca", systemImage: "magnifyingglass", value: AppTabRoute.search, role: .search) {
+                    NavigationStack {
+                        ProfileView(showsDoneButton: false)
+                            .navigationTitle("Profilo")
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
+                    .tabItem {
+                        Label("Profilo", systemImage: "person.crop.circle")
+                    }
+                    .tag(AppTabRoute.profilo)
+
                     NavigationStack {
                         GlobalSearchView()
+                            .navigationTitle("Cerca")
+                            .navigationBarTitleDisplayMode(.inline)
                     }
+                    .tabItem {
+                        Label("Cerca", systemImage: "magnifyingglass")
+                    }
+                    .tag(AppTabRoute.search)
                 }
             }
-            .fullScreenCover(isPresented: $isGlobalCodiceFiscalePresented) {
-                CodiceFiscaleFullscreenView(
-                    entries: globalCodiceFiscaleEntries
-                ) {
-                    isGlobalCodiceFiscalePresented = false
-                }
+        }
+        .fullScreenCover(isPresented: $isGlobalCodiceFiscalePresented) {
+            CodiceFiscaleFullscreenView(
+                entries: globalCodiceFiscaleEntries
+            ) {
+                isGlobalCodiceFiscalePresented = false
             }
-            .onAppear {
-                appRouter.consumePendingRouteIfAny()
-                handleGlobalRoute(appRouter.pendingRoute)
-            }
-            .onChange(of: appRouter.pendingRoute) { route in
-                handleGlobalRoute(route)
-            }
-        } else {
-            // Fallback on earlier versions
+        }
+        .onAppear {
+            appRouter.consumePendingRouteIfAny()
+            handleGlobalRoute(appRouter.pendingRoute)
+        }
+        .onChange(of: appRouter.pendingRoute) { route in
+            handleGlobalRoute(route)
         }
     }
 
@@ -81,7 +109,7 @@ struct ContentView: View {
             isGlobalCodiceFiscalePresented = true
             appRouter.markRouteHandled(route)
         case .today, .todayPurchaseList, .pharmacy:
-            break
+            appRouter.markRouteHandled(route)
         }
     }
 }

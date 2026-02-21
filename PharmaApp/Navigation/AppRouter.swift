@@ -2,7 +2,7 @@ import Foundation
 
 @MainActor
 final class AppRouter: ObservableObject {
-    @Published var selectedTab: AppTabRoute = .oggi
+    @Published var selectedTab: AppTabRoute = .medicine
     @Published var pendingRoute: AppRoute?
 
     private let routeStore: PendingAppRouteStoring
@@ -31,9 +31,9 @@ final class AppRouter: ObservableObject {
     private func apply(_ route: AppRoute) {
         switch route {
         case .today, .todayPurchaseList, .pharmacy, .codiceFiscaleFullscreen:
-            selectedTab = .oggi
+            selectedTab = .medicine
         case .profile:
-            selectedTab = .search
+            selectedTab = .profilo
         }
     }
 }

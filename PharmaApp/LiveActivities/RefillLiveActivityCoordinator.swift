@@ -30,12 +30,10 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
     private let stateStore: RefillActivityStateStoring
     private let client: RefillLiveActivityClientProtocol
     private let clock: Clock
-    private let timeoutInterval: TimeInterval
     private let policy: PerformancePolicy
 
     private var didStart = false
     private var observers: [NSObjectProtocol] = []
-    private var timeoutTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
     private var debouncedRefreshTask: Task<Void, Never>?
     private var queuedRefreshReason: String?
@@ -50,7 +48,6 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         stateStore: RefillActivityStateStoring = UserDefaultsRefillActivityStateStore(),
         client: RefillLiveActivityClientProtocol = RefillLiveActivityClient(),
         clock: Clock = SystemClock(),
-        timeoutInterval: TimeInterval = 90 * 60,
         policy: PerformancePolicy = .foregroundInteractive
     ) {
         self.context = context
@@ -61,7 +58,6 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         self.stateStore = stateStore
         self.client = client
         self.clock = clock
-        self.timeoutInterval = timeoutInterval
         self.policy = policy
         super.init()
 
@@ -172,21 +168,13 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
             return
         }
 
-        if let startedAt = stateStore.activeStartedAt(), now.timeIntervalSince(startedAt) >= timeoutInterval {
-            await endActiveActivity(reason: "timeout")
-            return
-        }
-
         let activePharmacyId = stateStore.activePharmacyId()
         let candidate = resolvedCandidate(activePharmacyId: activePharmacyId)
-        guard let candidate else {
-            if stateStore.activeActivityId() != nil {
-                scheduleTimeoutIfNeeded()
-            }
-            return
+        if let candidate {
+            await presentOrUpdateActivity(candidate: candidate, summary: summary, now: now)
+        } else {
+            await presentOrUpdateActivityWithoutPharmacy(summary: summary, now: now)
         }
-
-        await presentOrUpdateActivity(candidate: candidate, summary: summary, now: now)
     }
 
     func dismissCurrentActivity(reason: String) async {
@@ -240,6 +228,59 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         await presentOrUpdateActivity(candidate: candidate, summary: summary, now: now)
     }
 
+    private static let noPharmacyId = "no-pharmacy"
+
+    private func presentOrUpdateActivityWithoutPharmacy(
+        summary: RefillPurchaseSummary,
+        now: Date
+    ) async {
+        let noPharmacyId = Self.noPharmacyId
+        let activeActivityId = stateStore.activeActivityId()
+        let activePharmacyId = stateStore.activePharmacyId()
+
+        if let activeActivityId, activePharmacyId == noPharmacyId {
+            if client.currentActivityIDs().contains(activeActivityId) {
+                // Update the existing no-pharmacy activity.
+                let state = makeContentState(candidate: nil, summary: summary, now: now)
+                await client.update(
+                    activityID: activeActivityId,
+                    contentState: state,
+                    staleDate: nil
+                )
+                return
+            }
+            // Activity was ended externally (e.g. user dismissed from lock screen); clear and recreate.
+            stateStore.clearActive()
+        } else if let activeActivityId {
+            if client.currentActivityIDs().contains(activeActivityId) {
+                // A pharmacy activity is already running (pharmacy temporarily out of geofence range).
+                // Keep it alive rather than replacing it with a no-pharmacy activity.
+                return
+            }
+            // Stale entry for an activity that no longer exists; clean up and fall through to create.
+            stateStore.clearActive()
+        }
+
+        let attributes = RefillActivityAttributes(
+            pharmacyId: noPharmacyId,
+            pharmacyName: "",
+            latitude: 0,
+            longitude: 0
+        )
+        let state = makeContentState(candidate: nil, summary: summary, now: now)
+
+        do {
+            let id = try await client.request(
+                attributes: attributes,
+                contentState: state,
+                staleDate: nil
+            )
+            stateStore.markShown(for: noPharmacyId, activityId: id, startedAt: now, now: now)
+        } catch {
+            // Ignore transient ActivityKit failures; we'll retry on next refresh.
+        }
+    }
+
     private func presentOrUpdateActivity(
         candidate: RefillPharmacyCandidate,
         summary: RefillPurchaseSummary,
@@ -253,9 +294,8 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
             await client.update(
                 activityID: activeActivityId,
                 contentState: state,
-                staleDate: now.addingTimeInterval(timeoutInterval)
+                staleDate: nil
             )
-            scheduleTimeoutIfNeeded()
             return
         }
 
@@ -275,10 +315,9 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
             let id = try await client.request(
                 attributes: attributes,
                 contentState: state,
-                staleDate: now.addingTimeInterval(timeoutInterval)
+                staleDate: nil
             )
             stateStore.markShown(for: candidate.id, activityId: id, startedAt: now, now: now)
-            scheduleTimeoutIfNeeded()
         } catch {
             // Ignore transient ActivityKit failures; we'll retry on next enter/refresh.
         }
@@ -327,17 +366,20 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
     }
 
     private func makeContentState(
-        candidate: RefillPharmacyCandidate,
+        candidate: RefillPharmacyCandidate?,
         summary: RefillPurchaseSummary,
         now: Date
     ) -> RefillActivityAttributes.ContentState {
         let doctorInfo = doctorHoursResolver.preferredDoctorOpenInfo(now: now)
+        let pharmacyName = candidate?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let resolvedPharmacyName = pharmacyName.isEmpty ? "Farmacia più vicina" : pharmacyName
+
         return RefillActivityAttributes.ContentState(
             primaryText: "Scorte sotto soglia",
-            pharmacyName: candidate.name,
-            etaMinutes: candidate.etaMinutes,
-            distanceMeters: candidate.distanceMeters,
-            pharmacyHoursText: resolvedPharmacyHoursText(for: candidate, now: now),
+            pharmacyName: resolvedPharmacyName,
+            etaMinutes: candidate?.etaMinutes ?? 0,
+            distanceMeters: candidate?.distanceMeters ?? 0,
+            pharmacyHoursText: candidate.map { resolvedPharmacyHoursText(for: $0, now: now) } ?? "orari non disponibili",
             purchaseNames: summary.visibleNames,
             remainingPurchaseCount: summary.remainingCount,
             doctorName: doctorInfo.name,
@@ -360,8 +402,6 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
 
     private func endActiveActivity(reason: String) async {
         let _ = reason
-        timeoutTask?.cancel()
-        timeoutTask = nil
 
         if let activityId = stateStore.activeActivityId() {
             await client.end(activityID: activityId, dismissalPolicy: .immediate)
@@ -371,28 +411,6 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
             }
         }
         stateStore.clearActive()
-    }
-
-    private func scheduleTimeoutIfNeeded() {
-        timeoutTask?.cancel()
-        guard let startedAt = stateStore.activeStartedAt() else { return }
-
-        let fireDate = startedAt.addingTimeInterval(timeoutInterval)
-        let now = clock.now()
-        let delay = fireDate.timeIntervalSince(now)
-
-        if delay <= 0 {
-            timeoutTask = Task { @MainActor [weak self] in
-                await self?.dismissCurrentActivity(reason: "timeout-immediate")
-            }
-            return
-        }
-
-        timeoutTask = Task { @MainActor [weak self] in
-            let nanoseconds = UInt64(delay * 1_000_000_000)
-            try? await Task.sleep(nanoseconds: nanoseconds)
-            await self?.dismissCurrentActivity(reason: "timeout")
-        }
     }
 
     private var liveActivitiesEnabled: Bool {
@@ -406,7 +424,6 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
 
     deinit {
         observers.forEach { NotificationCenter.default.removeObserver($0) }
-        timeoutTask?.cancel()
         refreshTask?.cancel()
         debouncedRefreshTask?.cancel()
     }

@@ -56,7 +56,7 @@ struct TodayView: View {
     @State private var intakeGuardrailPrompt: IntakeGuardrailPrompt?
     @State private var showCodiceFiscaleFullScreen = false
     @State private var codiceFiscaleEntries: [PrescriptionCFEntry] = []
-    @State private var isOptionsPresented = false
+    @State private var isProfilePresented = false
     @State private var refreshStateWorkItem: DispatchWorkItem?
     @State private var lastRefreshStateExecutionAt: Date = .distantPast
     @State private var isTherapySectionExpanded = true
@@ -355,19 +355,19 @@ struct TodayView: View {
                 }
             }
         }
-        .sheet(isPresented: $isOptionsPresented) {
+        .sheet(isPresented: $isProfilePresented) {
             NavigationStack {
-                OptionsView()
+                ProfileView()
             }
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    isOptionsPresented = true
+                    isProfilePresented = true
                 } label: {
                     Image(systemName: "ellipsis")
                 }
-                .accessibilityLabel("Opzioni")
+                .accessibilityLabel("Profilo")
             }
         }
         .navigationTitle("Oggi")
@@ -564,11 +564,11 @@ struct TodayView: View {
 
             HStack(spacing: 8) {
                 controlIndicatorCard(
-                    title: "Aderenza settimanale",
+                    title: "Aderenza",
                     value: adherence.map { "\($0)%" } ?? "—",
                     tint: adherenceColor(for: adherence),
-                    valueColor: adherence == 100 ? .green : .primary,
-                    valueFont: adherence == 100 ? .system(size: 20, weight: .bold) : .system(size: 16, weight: .semibold),
+                    valueColor: .primary,
+                    valueFont: .system(size: 16, weight: .semibold),
                     titleLineLimit: 2
                 )
                 controlIndicatorCard(
@@ -3469,7 +3469,7 @@ struct TodayView: View {
             || messageComposeData != nil
             || intakeGuardrailPrompt != nil
             || showCodiceFiscaleFullScreen
-            || isOptionsPresented
+            || isProfilePresented
     }
 
     private func handleContextObjectsDidChange(_ notification: Notification) {
