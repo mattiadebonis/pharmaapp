@@ -28,7 +28,6 @@ struct MedicineDetailView: View {
     
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
     @FetchRequest private var therapies: FetchedResults<Therapy>
-    @FetchRequest private var comments: FetchedResults<MedicineComment>
     @FetchRequest private var intakeLogs: FetchedResults<Log>
     @FetchRequest(fetchRequest: Doctor.extractDoctors()) private var doctors: FetchedResults<Doctor>
     @FetchRequest(fetchRequest: Medicine.extractMedicines()) private var allMedicines: FetchedResults<Medicine>
@@ -36,7 +35,6 @@ struct MedicineDetailView: View {
     private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
     @State private var showEmailSheet = false
     @State private var showLogsSheet = false
-    @State private var showCommentsSheet = false
     @State private var showThresholdAlert = false
     @State private var thresholdInput: String = ""
 
@@ -71,11 +69,6 @@ struct MedicineDetailView: View {
             sortDescriptors: [NSSortDescriptor(keyPath: \Therapy.start_date, ascending: true)],
             predicate: predicate
         )
-        _comments = FetchRequest(
-            entity: MedicineComment.entity(),
-            sortDescriptors: [NSSortDescriptor(key: "created_at", ascending: true)],
-            predicate: NSPredicate(format: "medicine == %@", medicine)
-        )
         _intakeLogs = FetchRequest(fetchRequest: Log.extractIntakeLogsFiltered(medicine: medicine))
     }
     
@@ -84,7 +77,6 @@ struct MedicineDetailView: View {
             Form {
                 stockManagementSection
                 therapiesInlineSection
-                commentsPreviewSection
             }
             .scrollContentBackground(.hidden)
             .background(Color(.systemGroupedBackground))
@@ -195,19 +187,6 @@ struct MedicineDetailView: View {
                         }
                 }
             }
-        }
-        .sheet(isPresented: $showCommentsSheet) {
-            NavigationStack {
-                MedicineCommentsModalView(medicine: medicine)
-                    .navigationTitle("Commenti")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button("Chiudi") { showCommentsSheet = false }
-                        }
-                    }
-            }
-            .presentationDetents([.medium, .large])
         }
         .sheet(item: $therapySheet) { state in
             TherapyFormView(
@@ -660,12 +639,6 @@ struct MedicineDetailView: View {
     }
     
     private func deleteMedicine() {
-        do {
-            try MedicineCommentService(context: context).deleteAllComments(for: medicine)
-        } catch {
-            print("Errore eliminazione commenti medicina: \(error.localizedDescription)")
-        }
-
         // Core Data has required relationships (e.g., Log.medicine, Therapy.medicine, Package.medicine),
         // so we must delete dependents first to avoid validation errors.
         let relatedLogs = (medicine.logs as? Set<Log>) ?? []
@@ -864,14 +837,6 @@ extension MedicineDetailView {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(CapsuleActionButtonStyle(fill: .blue, textColor: .white))
-
-            Button {
-                showCommentsSheet = true
-            } label: {
-                Label("Commenta", systemImage: "text.bubble")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(CapsuleActionButtonStyle(fill: .blue, textColor: .white))
         }
         .frame(maxWidth: .infinity)
     }
@@ -924,74 +889,6 @@ extension MedicineDetailView {
         }
         .textCase(nil)
     }
-
-    private var commentsPreviewSection: some View {
-        Section {
-            Button {
-                showCommentsSheet = true
-            } label: {
-                VStack(alignment: .leading, spacing: 6) {
-                    if let latestComment {
-                        if let text = latestComment.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
-                            Text(text)
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                        } else {
-                            Text("Commento senza testo")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        if let created = latestComment.created_at {
-                            Text(Self.commentPreviewDateFormatter.string(from: created))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        Text("Nessun commento")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-        } header: {
-            HStack(spacing: 8) {
-                Text("Commenti")
-                    .font(.body.weight(.semibold))
-                Spacer()
-                Text(documentsCountLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .textCase(nil)
-    }
-
-    private var latestComment: MedicineComment? {
-        comments.last
-    }
-
-    private var documentsCount: Int {
-        comments.reduce(0) { partialResult, comment in
-            partialResult + (comment.attachments?.count ?? 0)
-        }
-    }
-
-    private var documentsCountLabel: String {
-        documentsCount == 1 ? "1 documento" : "\(documentsCount) documenti"
-    }
-
-    private static let commentPreviewDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "it_IT")
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
-        return formatter
-    }()
 
     private func syncDeadlineInputs() {
         if let info = medicine.deadlineMonthYear {

@@ -65,8 +65,6 @@ public class Medicine: NSManagedObject, Identifiable {
     @NSManaged public var packages: Set<Package>
     @NSManaged public var stocks: Set<Stock>?
     @NSManaged public var logs: Set<Log>?
-    @NSManaged public var comments: Set<MedicineComment>?
-    @NSManaged public var todos: Set<Todo>?
     @NSManaged public var doseEvents: Set<DoseEventRecord>?
     @NSManaged public var cabinet: Cabinet?
     @NSManaged public var medicinePackages: Set<MedicinePackage>?
@@ -80,14 +78,6 @@ public class Medicine: NSManagedObject, Identifiable {
         self.mutableSetValue(forKey: "logs").add(log)
     }
 
-    func addToComments(_ comment: MedicineComment) {
-        self.mutableSetValue(forKey: "comments").add(comment)
-    }
-
-    func addToTodos(_ todo: Todo) {
-        self.mutableSetValue(forKey: "todos").add(todo)
-    }
-    
     func addToPackages(_ package: Package) {
         self.mutableSetValue(forKey: "packages").add(package)
     }

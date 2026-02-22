@@ -206,7 +206,7 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
 
     private func isRelevantManagedObject(_ object: NSManagedObject) -> Bool {
         switch object {
-        case is Therapy, is Dose, is Stock, is Log, is Medicine, is MedicinePackage, is Package, is Option, is Todo, is Doctor:
+        case is Therapy, is Dose, is Stock, is Log, is Medicine, is MedicinePackage, is Package, is Option, is Doctor:
             return true
         default:
             return false

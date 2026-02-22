@@ -40,7 +40,6 @@ class TodayViewModel: ObservableObject {
     func refreshState(
         medicines: [Medicine],
         logs: [Log],
-        todos: [Todo],
         option: Option?,
         completedTodoIDs: Set<String>
     ) {
@@ -49,7 +48,6 @@ class TodayViewModel: ObservableObject {
         let cutoff = Calendar.current.date(byAdding: .day, value: -refreshLogLookbackDays, to: Date()) ?? .distantPast
         let medicineIDs = medicines.map(\.objectID)
         let recentLogIDs = logs.filter { $0.timestamp >= cutoff }.map(\.objectID)
-        let todoIDs = todos.map(\.objectID)
         let optionID = option?.objectID
         let completedIDs = completedTodoIDs
 
@@ -63,7 +61,6 @@ class TodayViewModel: ObservableObject {
             guard let newState = await Self.buildStateInBackground(
                 medicineIDs: medicineIDs,
                 logIDs: recentLogIDs,
-                todoIDs: todoIDs,
                 optionID: optionID,
                 completedTodoIDs: completedIDs
             ) else { return }
@@ -140,94 +137,6 @@ class TodayViewModel: ObservableObject {
         TodayStateBuilder.completionKey(for: item)
     }
 
-    @MainActor
-    func syncTodos(
-        from items: [TodayTodoItem],
-        medicines: [Medicine],
-        option: Option?,
-        timeLabels: [String: TodayTimeLabel]
-    ) {
-        let context = viewContext
-        let now = Date()
-        let request: NSFetchRequest<Todo> = Todo.fetchRequest()
-        let existing: [Todo]
-        do {
-            existing = try context.fetch(request)
-        } catch {
-            print("⚠️ syncTodos: fetch failed \(error)")
-            return
-        }
-
-        var bySourceID: [String: Todo] = [:]
-        for todo in existing {
-            bySourceID[todo.source_id] = todo
-        }
-
-        var seen: Set<String> = []
-        for item in items {
-            let sourceID = item.id
-            seen.insert(sourceID)
-            let todo = bySourceID[sourceID] ?? Todo(context: context)
-            let isNew = bySourceID[sourceID] == nil
-            if isNew {
-                todo.id = UUID()
-                todo.created_at = now
-            }
-
-            var didChange = isNew
-
-            if todo.source_id != sourceID {
-                todo.source_id = sourceID
-                didChange = true
-            }
-            if todo.title != item.title {
-                todo.title = item.title
-                didChange = true
-            }
-            if todo.detail != item.detail {
-                todo.detail = item.detail
-                didChange = true
-            }
-            if todo.category != item.category.rawValue {
-                todo.category = item.category.rawValue
-                didChange = true
-            }
-
-            let resolvedDueAt = resolvedDueDate(
-                for: item,
-                medicines: medicines,
-                option: option,
-                timeLabels: timeLabels,
-                now: now
-            )
-            if todo.due_at != resolvedDueAt {
-                todo.due_at = resolvedDueAt
-                didChange = true
-            }
-
-            let resolvedMedicine = medicine(for: item, medicines: medicines)
-            if todo.medicine?.objectID != resolvedMedicine?.objectID {
-                todo.medicine = resolvedMedicine
-                didChange = true
-            }
-
-            if didChange {
-                todo.updated_at = now
-            }
-        }
-
-        for todo in existing where !seen.contains(todo.source_id) {
-            context.delete(todo)
-        }
-
-        guard context.hasChanges else { return }
-        do {
-            try context.save()
-        } catch {
-            print("⚠️ syncTodos: save failed \(error)")
-        }
-    }
-
     struct TodayIntakeInfo: Equatable {
         let date: Date
         let personName: String?
@@ -275,31 +184,6 @@ class TodayViewModel: ObservableObject {
         return nil
     }
 
-    private func resolvedDueDate(
-        for item: TodayTodoItem,
-        medicines: [Medicine],
-        option: Option?,
-        timeLabels: [String: TodayTimeLabel],
-        now: Date
-    ) -> Date? {
-        if let label = timeLabels[item.id] {
-            switch label {
-            case .time(let date):
-                return date
-            case .category:
-                if !item.id.hasPrefix("purchase|deadline|") && item.category != .deadline {
-                    return nil
-                }
-            }
-        }
-        return todayStateProvider.todoTimeDate(
-            for: item,
-            medicines: medicines,
-            option: option,
-            now: now
-        )
-    }
-
     func operationKey(action: OperationAction, medicine: Medicine, source: OperationSource) -> OperationKey {
         let packageId = resolvePackage(for: medicine, therapy: nil)?.id
         return OperationKey.medicineAction(
@@ -313,7 +197,6 @@ class TodayViewModel: ObservableObject {
     private static func buildStateInBackground(
         medicineIDs: [NSManagedObjectID],
         logIDs: [NSManagedObjectID],
-        todoIDs: [NSManagedObjectID],
         optionID: NSManagedObjectID?,
         completedTodoIDs: Set<String>
     ) async -> TodayState? {
@@ -328,9 +211,6 @@ class TodayViewModel: ObservableObject {
                 let logs = logIDs.compactMap { id in
                     try? context.existingObject(with: id) as? Log
                 }
-                let todos = todoIDs.compactMap { id in
-                    try? context.existingObject(with: id) as? Todo
-                }
                 let option = optionID.flatMap { id in
                     try? context.existingObject(with: id) as? Option
                 }
@@ -339,7 +219,6 @@ class TodayViewModel: ObservableObject {
                 let state = provider.buildState(
                     medicines: medicines,
                     logs: logs,
-                    todos: todos,
                     option: option,
                     completedTodoIDs: completedTodoIDs
                 )

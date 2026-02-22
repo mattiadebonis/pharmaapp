@@ -12,7 +12,6 @@ enum TestCoreDataFactory {
         "Therapy",
         "Dose",
         "Person",
-        "Todo",
         "Option"
     ]
 

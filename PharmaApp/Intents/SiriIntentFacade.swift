@@ -117,7 +117,6 @@ final class SiriIntentFacade {
             let state = provider.buildState(
                 medicines: medicines,
                 logs: fetchLogs(),
-                todos: fetchTodos(),
                 option: option,
                 completedTodoIDs: []
             )
@@ -199,7 +198,6 @@ final class SiriIntentFacade {
             let state = provider.buildState(
                 medicines: medicines,
                 logs: fetchLogs(),
-                todos: fetchTodos(),
                 option: fetchCurrentOption(),
                 completedTodoIDs: []
             )
@@ -273,11 +271,6 @@ final class SiriIntentFacade {
 
     private func fetchLogs() -> [Log] {
         let request = Log.extractLogs()
-        return (try? context.fetch(request)) ?? []
-    }
-
-    private func fetchTodos() -> [Todo] {
-        let request = Todo.extractTodos()
         return (try? context.fetch(request)) ?? []
     }
 

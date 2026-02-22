@@ -13,18 +13,16 @@ struct CoreDataTodaySnapshotBuilder {
     func makeInput(
         medicines: [Medicine],
         logs: [Log],
-        todos: [Todo],
         option: Option?,
         completedTodoIDs: Set<String>,
         now: Date,
         calendar: Calendar = .current
     ) -> TodayStateInput {
         let medicineSnapshots = makeMedicineSnapshots(medicines: medicines, logs: logs)
-        let todoSnapshots = makeTodoSnapshots(todos: todos)
         let optionSnapshot = makeOptionSnapshot(option: option)
         return TodayStateInput(
             medicines: medicineSnapshots,
-            todos: todoSnapshots,
+            todos: [],
             option: optionSnapshot,
             completedTodoIDs: completedTodoIDs,
             now: now,
@@ -95,18 +93,6 @@ struct CoreDataTodaySnapshotBuilder {
             clinicalRules: therapy.clinicalRulesValue,
             personName: resolvedName
         )
-    }
-
-    func makeTodoSnapshots(todos: [Todo]) -> [TodoSnapshot] {
-        todos.map { todo in
-            TodoSnapshot(
-                sourceId: todo.source_id,
-                title: todo.title,
-                detail: todo.detail,
-                category: todo.category,
-                medicineId: todo.medicine.map { MedicineId($0.id) }
-            )
-        }
     }
 
     func makeOptionSnapshot(option: Option?) -> OptionSnapshot? {

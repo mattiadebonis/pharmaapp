@@ -20,9 +20,6 @@ struct TodayView: View {
     private var logs: FetchedResults<Log>
     @FetchRequest(fetchRequest: Doctor.extractDoctors())
     private var doctors: FetchedResults<Doctor>
-    @FetchRequest(fetchRequest: Todo.extractTodos())
-    private var storedTodos: FetchedResults<Todo>
-
     @StateObject private var viewModel = TodayViewModel()
     @StateObject private var locationVM = LocationSearchViewModel()
     private let therapyRecurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
@@ -235,15 +232,6 @@ struct TodayView: View {
             }
         }
         .scrollIndicators(.hidden)
-        .task(id: "\(state.syncToken)|\(isPresentingModal)") {
-            guard !isPresentingModal else { return }
-            viewModel.syncTodos(
-                from: state.computedTodos,
-                medicines: Array(medicines),
-                option: options.first,
-                timeLabels: state.timeLabels
-            )
-        }
         .sheet(item: $prescriptionToConfirm) { medicine in
             let doctor = prescriptionDoctorContact(for: medicine)
             let formattedName = formattedMedicineName(medicine.nome)
@@ -3452,7 +3440,6 @@ struct TodayView: View {
         viewModel.refreshState(
             medicines: Array(medicines),
             logs: Array(logs),
-            todos: Array(storedTodos),
             option: options.first,
             completedTodoIDs: completedTodoIDs
         )
@@ -3492,7 +3479,6 @@ struct TodayView: View {
             if objects.contains(where: { object in
                 object is Medicine
                     || object is Log
-                    || object is Todo
                     || object is Option
                     || object is Stock
             }) {

@@ -1,5 +1,4 @@
 import SwiftUI
-import CoreData
 
 extension TodayTodoCategory {
     var label: String {
@@ -42,15 +41,3 @@ extension TodayTodoCategory {
     }
 }
 
-extension TodayTodoItem {
-    init?(todo: Todo) {
-        guard let category = TodayTodoCategory(rawValue: todo.category) else { return nil }
-        self.init(
-            id: todo.source_id,
-            title: todo.title,
-            detail: todo.detail,
-            category: category,
-            medicineId: todo.medicine.map { MedicineId($0.id) }
-        )
-    }
-}

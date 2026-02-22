@@ -19,7 +19,6 @@ struct CoreDataTodayStateProvider {
     func buildState(
         medicines: [Medicine],
         logs: [Log],
-        todos: [Todo],
         option: Option?,
         completedTodoIDs: Set<String>
     ) -> TodayState {
@@ -27,7 +26,6 @@ struct CoreDataTodayStateProvider {
         let input = snapshotBuilder.makeInput(
             medicines: medicines,
             logs: logs,
-            todos: todos,
             option: option,
             completedTodoIDs: completedTodoIDs,
             now: now,

@@ -73,40 +73,6 @@
         <relationship name="medicine" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="monitoringMeasurements" inverseEntity="Medicine"/>
         <relationship name="therapy" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Therapy" inverseName="monitoringMeasurements" inverseEntity="Therapy"/>
     </entity>
-    <entity name="MedicineComment" representedClassName=".MedicineComment" syncable="YES">
-        <attribute name="actor_device_id" optional="YES" attributeType="String"/>
-        <attribute name="actor_user_id" optional="YES" attributeType="String"/>
-        <attribute name="created_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
-        <attribute name="operation_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
-        <attribute name="source" optional="YES" attributeType="String"/>
-        <attribute name="text" optional="YES" attributeType="String"/>
-        <attribute name="updated_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <relationship name="attachments" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="MedicineCommentAttachment" inverseName="comment" inverseEntity="MedicineCommentAttachment"/>
-        <relationship name="medicine" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="comments" inverseEntity="Medicine"/>
-    </entity>
-    <entity name="MedicineCommentAttachment" representedClassName=".MedicineCommentAttachment" syncable="YES">
-        <attribute name="byte_size" optional="YES" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="created_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="filename" optional="YES" attributeType="String"/>
-        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
-        <attribute name="kind" optional="YES" attributeType="String"/>
-        <attribute name="mime_type" optional="YES" attributeType="String"/>
-        <attribute name="relative_path" optional="YES" attributeType="String"/>
-        <attribute name="uti" optional="YES" attributeType="String"/>
-        <relationship name="comment" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="MedicineComment" inverseName="attachments" inverseEntity="MedicineComment"/>
-    </entity>
-    <entity name="Todo" representedClassName=".Todo" syncable="YES">
-        <attribute name="category" optional="YES" attributeType="String"/>
-        <attribute name="created_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="detail" optional="YES" attributeType="String"/>
-        <attribute name="due_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
-        <attribute name="source_id" optional="YES" attributeType="String"/>
-        <attribute name="title" optional="YES" attributeType="String"/>
-        <attribute name="updated_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <relationship name="medicine" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Medicine" inverseName="todos" inverseEntity="Medicine"/>
-    </entity>
 		    <entity name="Medicine" representedClassName=".Medicine" syncable="YES">
 		        <attribute name="source_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
 		        <attribute name="visibility" optional="YES" attributeType="String" defaultValueString="local"/>
@@ -159,11 +125,9 @@
         <attribute name="commercio" optional="YES" attributeType="String"/>
         <attribute name="stato_amministrativo" optional="YES" attributeType="String"/>
         <relationship name="cabinet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Cabinet" inverseName="medicines" inverseEntity="Cabinet"/>
-        <relationship name="comments" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="MedicineComment" inverseName="medicine" inverseEntity="MedicineComment"/>
         <relationship name="doseEvents" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="DoseEvent" inverseName="medicine" inverseEntity="DoseEvent"/>
         <relationship name="logs" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Log" inverseName="medicine" inverseEntity="Log"/>
         <relationship name="monitoringMeasurements" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="MonitoringMeasurement" inverseName="medicine" inverseEntity="MonitoringMeasurement"/>
-        <relationship name="todos" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Todo" inverseName="medicine" inverseEntity="Todo"/>
         <relationship name="packages" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Package" inverseName="medicine" inverseEntity="Package"/>
         <relationship name="stocks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Stock" inverseName="medicine" inverseEntity="Stock"/>
         <relationship name="prescribingDoctor" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Doctor" inverseName="medicines" inverseEntity="Doctor"/>
