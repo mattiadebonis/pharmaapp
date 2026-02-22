@@ -26,7 +26,7 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
     private let purchaseSummaryProvider: RefillPurchaseSummaryProvider
     private let geofenceManager: RefillGeofenceManaging
     private let hoursResolver: RefillPharmacyHoursResolving
-    private let doctorHoursResolver: RefillDoctorHoursResolving
+    private let prescriptionCFResolver: PrescriptionCodiceFiscaleResolver
     private let stateStore: RefillActivityStateStoring
     private let client: RefillLiveActivityClientProtocol
     private let clock: Clock
@@ -44,7 +44,7 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         purchaseSummaryProvider: RefillPurchaseSummaryProvider? = nil,
         geofenceManager: RefillGeofenceManaging? = nil,
         hoursResolver: RefillPharmacyHoursResolving = RefillPharmacyHoursResolver(),
-        doctorHoursResolver: RefillDoctorHoursResolving? = nil,
+        prescriptionCFResolver: PrescriptionCodiceFiscaleResolver? = nil,
         stateStore: RefillActivityStateStoring = UserDefaultsRefillActivityStateStore(),
         client: RefillLiveActivityClientProtocol = RefillLiveActivityClient(),
         clock: Clock = SystemClock(),
@@ -54,7 +54,7 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         self.purchaseSummaryProvider = purchaseSummaryProvider ?? RefillPurchaseSummaryProvider(context: context)
         self.geofenceManager = geofenceManager ?? RefillGeofenceManager(hoursResolver: hoursResolver, clock: clock)
         self.hoursResolver = hoursResolver
-        self.doctorHoursResolver = doctorHoursResolver ?? RefillDoctorHoursResolver(context: context)
+        self.prescriptionCFResolver = prescriptionCFResolver ?? PrescriptionCodiceFiscaleResolver()
         self.stateStore = stateStore
         self.client = client
         self.clock = clock
@@ -370,27 +370,38 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         summary: RefillPurchaseSummary,
         now: Date
     ) -> RefillActivityAttributes.ContentState {
-        let doctorInfo = doctorHoursResolver.preferredDoctorOpenInfo(now: now)
         let pharmacyName = candidate?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let resolvedPharmacyName = pharmacyName.isEmpty ? "Farmacia più vicina" : pharmacyName
+
+        let cfEntries = prescriptionCFResolver.entriesForRxAndLowStock(in: context).map {
+            RefillActivityAttributes.CFDisplayEntry(
+                personName: $0.personDisplayName,
+                codiceFiscale: $0.codiceFiscale
+            )
+        }
+
+        let distance = candidate?.distanceMeters ?? 0
+        let isWalking = distance < 2000
+        let openInfo = candidate.map { hoursResolver.openInfo(forPharmacyName: $0.name, now: now) }
+        let isPharmacyOpen = openInfo?.isOpen ?? false
 
         return RefillActivityAttributes.ContentState(
             primaryText: "Scorte sotto soglia",
             pharmacyName: resolvedPharmacyName,
             etaMinutes: candidate?.etaMinutes ?? 0,
-            distanceMeters: candidate?.distanceMeters ?? 0,
-            pharmacyHoursText: candidate.map { resolvedPharmacyHoursText(for: $0, now: now) } ?? "orari non disponibili",
-            purchaseNames: summary.visibleNames,
-            remainingPurchaseCount: summary.remainingCount,
-            doctorName: doctorInfo.name,
-            doctorHoursText: doctorInfo.hoursText,
-            lastUpdatedAt: now,
-            showHealthCardAction: true
+            distanceMeters: distance,
+            pharmacyHoursText: openInfo.map { resolvedPharmacyHoursText(openInfo: $0, candidate: candidate!, now: now) } ?? "orari non disponibili",
+            purchaseNames: summary.allNames,
+            purchaseItems: summary.allItems,
+            isWalking: isWalking,
+            isPharmacyOpen: isPharmacyOpen,
+            codiceFiscaleEntries: cfEntries,
+            lastUpdatedAt: now
         )
     }
 
-    private func resolvedPharmacyHoursText(for candidate: RefillPharmacyCandidate, now: Date) -> String {
-        let openInfo = hoursResolver.openInfo(forPharmacyName: candidate.name, now: now)
+    private func resolvedPharmacyHoursText(openInfo: RefillPharmacyOpenInfo, candidate: RefillPharmacyCandidate, now: Date) -> String {
+        let _ = now
         if let openText = openInfo.closingTimeText, openInfo.isOpen {
             return openText
         }

@@ -5,12 +5,10 @@ struct TherapySettingsSectionsView: View {
     @Environment(\.managedObjectContext) private var managedObjectContext
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
 
-    @State private var thresholdInput: String = ""
-
     var body: some View {
         if let option = options.first {
             Section(
-                header: Text("Soglia scorte e assunzione"),
+                header: Text("Assunzione"),
                 footer: Text("Queste impostazioni valgono per tutte le medicine.")
             ) {
                 let manualBinding = Binding<Bool>(
@@ -31,33 +29,6 @@ struct TherapySettingsSectionsView: View {
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Avvisami quando restano")
-                    HStack(spacing: 8) {
-                        TextField("Giorni", text: Binding(
-                            get: { thresholdInput },
-                            set: { newValue in
-                                let sanitized = sanitizeThresholdInput(newValue)
-                                if sanitized != thresholdInput {
-                                    thresholdInput = sanitized
-                                }
-                                persistThresholdInput(sanitized, option: option)
-                            }
-                        ))
-                        .keyboardType(.numberPad)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 80)
-                        Text("giorni")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .onAppear {
-                    if thresholdInput.isEmpty {
-                        let value = Int(option.day_threeshold_stocks_alarm)
-                        thresholdInput = String(value > 0 ? value : 7)
                     }
                 }
             }
@@ -123,23 +94,6 @@ struct TherapySettingsSectionsView: View {
             try managedObjectContext.save()
         } catch {
             print("Errore nel salvataggio: \(error.localizedDescription)")
-        }
-    }
-
-    private func sanitizeThresholdInput(_ value: String) -> String {
-        let digits = value.filter { $0.isNumber }
-        return String(digits.prefix(2))
-    }
-
-    private func persistThresholdInput(_ value: String, option: Option) {
-        guard let parsed = Int(value) else { return }
-        let clamped = min(max(1, parsed), 60)
-        if Int(option.day_threeshold_stocks_alarm) != clamped {
-            option.day_threeshold_stocks_alarm = Int32(clamped)
-            saveContext()
-        }
-        if value != String(clamped) {
-            thresholdInput = String(clamped)
         }
     }
 

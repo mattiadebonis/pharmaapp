@@ -52,7 +52,12 @@ struct LiveActivityMarkTakenIntent: AppIntent {
         )
 
         let success = await Self.actionPerformer.markTaken(contentState: content)
-        _ = await Self.liveActivityRefresher.refresh(reason: "intent-assunto", now: nil)
+
+        if success {
+            await Self.liveActivityRefresher.showConfirmationThenRefresh(medicineName: medicineName)
+        } else {
+            _ = await Self.liveActivityRefresher.refresh(reason: "intent-assunto", now: nil)
+        }
 
         let dialog = success
             ? "Perfetto, segnato come assunto."

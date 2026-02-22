@@ -1,123 +1,190 @@
 import WidgetKit
 import SwiftUI
+import AppIntents
 
 struct CriticalDoseLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: CriticalDoseLiveActivityAttributes.self) { context in
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Image(systemName: "pills.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(context.attributes.title)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(countdownText(for: context.state.primaryScheduledAt))
-                        .font(.title3.weight(.bold))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                    Text("entro le \(Self.hourFormatter.string(from: context.state.primaryScheduledAt))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(context.state.primaryMedicineName)
-                        .font(.headline.weight(.bold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                    Text(doseLine(for: context.state))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.9)
-                }
-
-                if #available(iOSApplicationExtension 17.0, *) {
-                    HStack(spacing: 8) {
-                        actionLink(
-                            title: "Assunto",
-                            destination: actionURL(for: context.state, action: .markTaken),
-                            prominent: true,
-                            compact: false
-                        )
-                        actionLink(
-                            title: "Ricordamelo dopo",
-                            destination: actionURL(for: context.state, action: .remindLater),
-                            prominent: false,
-                            compact: false
-                        )
-                    }
-                }
-            }
-            .padding(10)
-            .activityBackgroundTint(Color(.systemBackground))
-            .activitySystemActionForegroundColor(.accentColor)
-        } dynamicIsland: { context in
-            DynamicIsland {
-                DynamicIslandExpandedRegion(.leading) {
-                    HStack(spacing: 4) {
+            if let confirmedName = context.state.confirmedTakenName {
+                // ── Confirmation state ──
+                confirmationBanner(medicineName: confirmedName)
+                    .padding(10)
+                    .activityBackgroundTint(Color(.systemBackground))
+                    .activitySystemActionForegroundColor(.accentColor)
+            } else {
+                // ── Normal state ──
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
                         Image(systemName: "pills.fill")
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
-                        Text("È quasi ora")
-                            .font(.subheadline.weight(.semibold))
+                        Text(context.attributes.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
                     }
-                }
-                DynamicIslandExpandedRegion(.trailing) {
-                    Text(countdownText(for: context.state.primaryScheduledAt))
-                        .font(.headline.weight(.bold))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                }
-                DynamicIslandExpandedRegion(.center) {
+
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(countdownText(for: context.state.primaryScheduledAt))
+                            .font(.title3.weight(.bold))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                        Text("entro le \(Self.hourFormatter.string(from: context.state.primaryScheduledAt))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
                     VStack(alignment: .leading, spacing: 2) {
                         Text(context.state.primaryMedicineName)
-                            .font(.subheadline.weight(.bold))
+                            .font(.headline.weight(.bold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.85)
                         Text(doseLine(for: context.state))
-                            .font(.caption.weight(.semibold))
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.9)
                     }
-                }
-                DynamicIslandExpandedRegion(.bottom) {
+
                     if #available(iOSApplicationExtension 17.0, *) {
                         HStack(spacing: 8) {
-                            actionLink(
+                            intentButton(
                                 title: "Assunto",
-                                destination: actionURL(for: context.state, action: .markTaken),
+                                intent: markTakenIntent(for: context.state),
                                 prominent: true,
-                                compact: true
+                                compact: false
                             )
-                            actionLink(
+                            intentButton(
                                 title: "Ricordamelo dopo",
-                                destination: actionURL(for: context.state, action: .remindLater),
+                                intent: remindLaterIntent(for: context.state),
                                 prominent: false,
-                                compact: true
+                                compact: false
                             )
                         }
                     }
                 }
+                .padding(10)
+                .activityBackgroundTint(Color(.systemBackground))
+                .activitySystemActionForegroundColor(.accentColor)
+            }
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) {
+                    if context.state.confirmedTakenName != nil {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text("Fatto")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                    } else {
+                        HStack(spacing: 4) {
+                            Image(systemName: "pills.fill")
+                                .foregroundStyle(.secondary)
+                            Text("È quasi ora")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                    }
+                }
+                DynamicIslandExpandedRegion(.trailing) {
+                    if context.state.confirmedTakenName == nil {
+                        Text(countdownText(for: context.state.primaryScheduledAt))
+                            .font(.headline.weight(.bold))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                    }
+                }
+                DynamicIslandExpandedRegion(.center) {
+                    if let confirmedName = context.state.confirmedTakenName {
+                        Text("\(confirmedName) segnato come assunto")
+                            .font(.subheadline.weight(.bold))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
+                    } else {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(context.state.primaryMedicineName)
+                                .font(.subheadline.weight(.bold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.85)
+                            Text(doseLine(for: context.state))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.9)
+                        }
+                    }
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    if context.state.confirmedTakenName == nil {
+                        if #available(iOSApplicationExtension 17.0, *) {
+                            HStack(spacing: 8) {
+                                intentButton(
+                                    title: "Assunto",
+                                    intent: markTakenIntent(for: context.state),
+                                    prominent: true,
+                                    compact: true
+                                )
+                                intentButton(
+                                    title: "Ricordamelo dopo",
+                                    intent: remindLaterIntent(for: context.state),
+                                    prominent: false,
+                                    compact: true
+                                )
+                            }
+                        }
+                    }
+                }
             } compactLeading: {
-                Image(systemName: "pills")
+                if context.state.confirmedTakenName != nil {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                } else {
+                    Image(systemName: "pills")
+                }
             } compactTrailing: {
-                Text(context.state.primaryScheduledAt, style: .timer)
-                    .monospacedDigit()
-                    .frame(minWidth: 36)
+                if context.state.confirmedTakenName != nil {
+                    Text("Assunto")
+                        .font(.caption2.weight(.semibold))
+                } else {
+                    Text(context.state.primaryScheduledAt, style: .timer)
+                        .monospacedDigit()
+                        .frame(minWidth: 36)
+                }
             } minimal: {
-                Image(systemName: "pills")
+                if context.state.confirmedTakenName != nil {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                } else {
+                    Image(systemName: "pills")
+                }
             }
             .widgetURL(URL(string: "pharmaapp://today"))
             .keylineTint(.accentColor)
         }
     }
+
+    // MARK: - Confirmation Banner
+
+    @ViewBuilder
+    private func confirmationBanner(medicineName: String) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.largeTitle)
+                .foregroundStyle(.green)
+            Text("\(medicineName) assunto")
+                .font(.headline.weight(.bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+            Text("Registrato correttamente")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+    }
+
+    // MARK: - Helpers
 
     private func countdownText(for date: Date) -> String {
         let minutes = max(0, Int(ceil(date.timeIntervalSinceNow / 60)))
@@ -139,14 +206,17 @@ struct CriticalDoseLiveActivityWidget: Widget {
         return value
     }
 
+    // MARK: - Intent Buttons
+
+    @available(iOSApplicationExtension 17.0, *)
     @ViewBuilder
-    private func actionLink(
+    private func intentButton(
         title: String,
-        destination: URL,
+        intent: some AppIntent,
         prominent: Bool,
         compact: Bool
     ) -> some View {
-        Link(destination: destination) {
+        Button(intent: intent) {
             Text(title)
                 .font((compact ? Font.footnote : Font.callout).weight(.semibold))
                 .lineLimit(1)
@@ -161,14 +231,27 @@ struct CriticalDoseLiveActivityWidget: Widget {
             RoundedRectangle(cornerRadius: compact ? 10 : 11, style: .continuous)
                 .fill(prominent ? Color.accentColor : Color(.secondarySystemBackground))
         )
+        .buttonStyle(.plain)
     }
 
-    private func actionURL(
-        for state: CriticalDoseLiveActivityAttributes.ContentState,
-        action: LiveActivityActionURLBuilder.Action
-    ) -> URL {
-        LiveActivityActionURLBuilder.makeURL(
-            action: action,
+    // MARK: - Intent Factories
+
+    private func markTakenIntent(
+        for state: CriticalDoseLiveActivityAttributes.ContentState
+    ) -> LiveActivityMarkTakenIntent {
+        LiveActivityMarkTakenIntent(
+            therapyId: state.primaryTherapyId,
+            medicineId: state.primaryMedicineId,
+            medicineName: state.primaryMedicineName,
+            doseText: state.primaryDoseText,
+            scheduledAt: state.primaryScheduledAt
+        )
+    }
+
+    private func remindLaterIntent(
+        for state: CriticalDoseLiveActivityAttributes.ContentState
+    ) -> LiveActivityRemindLaterIntent {
+        LiveActivityRemindLaterIntent(
             therapyId: state.primaryTherapyId,
             medicineId: state.primaryMedicineId,
             medicineName: state.primaryMedicineName,

@@ -21,10 +21,17 @@ private final class IntentActionPerformerFake: CriticalDoseActionPerforming {
 @MainActor
 private final class IntentRefresherFake: CriticalDoseLiveActivityRefreshing {
     var refreshCalls = 0
+    var confirmationCalls = 0
+    var lastConfirmedName: String?
 
     func refresh(reason: String, now: Date?) async -> Date? {
         refreshCalls += 1
         return nil
+    }
+
+    func showConfirmationThenRefresh(medicineName: String) async {
+        confirmationCalls += 1
+        lastConfirmedName = medicineName
     }
 }
 
@@ -54,7 +61,8 @@ struct LiveActivityIntentTests {
         _ = try await intent.perform()
 
         #expect(performer.markTakenCalls == 1)
-        #expect(refresher.refreshCalls == 1)
+        #expect(refresher.confirmationCalls == 1)
+        #expect(refresher.lastConfirmedName == "Othargan 5")
     }
 
     @Test func remindLaterIntentCallsActionAndRefresh() async throws {

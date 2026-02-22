@@ -37,6 +37,8 @@ struct MedicineDetailView: View {
     @State private var showEmailSheet = false
     @State private var showLogsSheet = false
     @State private var showCommentsSheet = false
+    @State private var showThresholdAlert = false
+    @State private var thresholdInput: String = ""
 
     
     private let stockDateFormatter: DateFormatter = {
@@ -107,10 +109,12 @@ struct MedicineDetailView: View {
                             Label("Visualizza log", systemImage: "clock.arrow.circlepath")
                         }
                         Button {
-                            deletePackage()
+                            let current = medicine.custom_stock_threshold
+                            thresholdInput = current > 0 ? String(current) : "7"
+                            showThresholdAlert = true
                         } label: {
-                            Label("Rimuovi confezione", systemImage: "minus.circle")
-                                .foregroundStyle(.orange)
+                            let days = medicine.custom_stock_threshold > 0 ? Int(medicine.custom_stock_threshold) : 7
+                            Label("Soglia scorte (\(days) gg)", systemImage: "exclamationmark.triangle")
                         }
                         Button(role: .destructive) {
                             deleteMedicine()
@@ -214,6 +218,23 @@ struct MedicineDetailView: View {
                 editingTherapy: state.therapy
             )
             .presentationDetents([.large])
+        }
+        .alert("Soglia scorte", isPresented: $showThresholdAlert) {
+            TextField("Giorni", text: $thresholdInput)
+                .keyboardType(.numberPad)
+            Button("Salva") {
+                if let parsed = Int(thresholdInput), parsed >= 1 {
+                    medicine.custom_stock_threshold = Int32(min(parsed, 60))
+                    saveContext()
+                }
+            }
+            Button("Ripristina default (7 gg)") {
+                medicine.custom_stock_threshold = 0
+                saveContext()
+            }
+            Button("Annulla", role: .cancel) { }
+        } message: {
+            Text("Inserisci il numero di giorni sotto cui ricevere l'avviso di scorte basse.")
         }
         .onChange(of: selectedDoctorID) { newValue in
             if let newValue, let doc = doctors.first(where: { $0.objectID == newValue }) {

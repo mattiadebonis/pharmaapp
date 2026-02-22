@@ -31,6 +31,7 @@ struct GlobalSearchView: View {
     @State private var selectedPerson: Person?
     @State private var isPersonDetailPresented = false
 
+    @State private var fullscreenBarcodeCodiceFiscale: String?
     @State private var isCatalogSearchPresented = false
     @State private var pendingCatalogSelection: CatalogSelection?
     @State private var catalogSelection: CatalogSelection?
@@ -426,29 +427,6 @@ struct GlobalSearchView: View {
         )
     }
 
-    private var pharmacyPrimaryLine: String {
-        if let today = locationVM.todayOpeningText?.trimmingCharacters(in: .whitespacesAndNewlines), !today.isEmpty {
-            if let active = OpeningHoursParser.activeInterval(from: today, now: Date()) {
-                return "Aperta fino alle \(OpeningHoursParser.timeString(from: active.end))"
-            }
-            if let next = OpeningHoursParser.nextInterval(from: today, after: Date()) {
-                return "Prossima apertura: oggi \(OpeningHoursParser.timeString(from: next.start))"
-            }
-            return "Orari oggi \(today)"
-        }
-        if locationVM.isLikelyOpen == true {
-            return "Aperta ora"
-        }
-        return "Orari non disponibili"
-    }
-
-    private var pharmacySecondaryLine: String {
-        if let distance = pharmacyDistanceText() {
-            return "a \(distance) · Indicazioni"
-        }
-        return "Indicazioni"
-    }
-
     private var preferredDoctor: Doctor? {
         let now = Date()
         if let open = doctors.first(where: { activeDoctorInterval(for: $0, now: now) != nil }) {
@@ -458,31 +436,6 @@ struct GlobalSearchView: View {
             return today
         }
         return doctors.first
-    }
-
-    private var doctorPrimaryLine: String {
-        guard let doctor = preferredDoctor else {
-            return "Aggiungi un dottore"
-        }
-
-        let now = Date()
-        if let active = activeDoctorInterval(for: doctor, now: now) {
-            return "Aperto fino alle \(OpeningHoursParser.timeString(from: active.end))"
-        }
-        if let today = doctorTodaySlotText(for: doctor) {
-            return "Oggi \(today)"
-        }
-        if let next = doctorNextOpeningLabel(for: doctor, now: now) {
-            return "Prossima apertura: \(next)"
-        }
-        return "Orari non disponibili"
-    }
-
-    private var doctorSecondaryLine: String {
-        if let doctor = preferredDoctor, doctorPhone(doctor) != nil {
-            return "Chiama · Regole urgenze"
-        }
-        return "Regole urgenze"
     }
 
     var body: some View {
@@ -596,6 +549,16 @@ struct GlobalSearchView: View {
             .environment(\.managedObjectContext, managedObjectContext)
             .presentationDetents([.fraction(0.5), .large])
         }
+        .fullScreenCover(isPresented: Binding(
+            get: { fullscreenBarcodeCodiceFiscale != nil },
+            set: { if !$0 { fullscreenBarcodeCodiceFiscale = nil } }
+        )) {
+            if let cf = fullscreenBarcodeCodiceFiscale {
+                FullscreenBarcodeView(codiceFiscale: cf) {
+                    fullscreenBarcodeCodiceFiscale = nil
+                }
+            }
+        }
     }
 
     private var headerSection: some View {
@@ -642,22 +605,87 @@ struct GlobalSearchView: View {
     @ViewBuilder
     private var utilitySection: some View {
         Section {
-            utilityRow(
-                title: "Farmacia",
-                primary: pharmacyPrimaryLine,
-                secondary: pharmacySecondaryLine,
-                action: openPharmacyDirections
-            )
-
-            utilityRow(
-                title: preferredDoctor.map(doctorDisplayName) ?? "Dottore",
-                primary: doctorPrimaryLine,
-                secondary: doctorSecondaryLine,
-                action: openPreferredDoctor
-            )
+            ProfilePharmacyCard()
+                .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                .listRowBackground(Color.clear)
         } header: {
-            sectionHeader("Ora utile")
+            sectionHeader("Farmacia")
         }
+
+        Section {
+            ForEach(doctors) { doctor in
+                Button {
+                    openDoctor(doctor)
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(doctorDisplayName(doctor))
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(.primary)
+                            Text(doctorPrimaryLineFor(doctor))
+                                .font(.system(size: 15, weight: .regular))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            if doctors.isEmpty {
+                emptyLine("Nessun dottore aggiunto")
+            }
+        } header: {
+            sectionHeader("Dottori")
+        }
+
+        if !personsWithCodiceFiscale.isEmpty {
+            Section {
+                ForEach(personsWithCodiceFiscale) { person in
+                    Button {
+                        fullscreenBarcodeCodiceFiscale = person.codice_fiscale
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(personDisplayName(for: person))
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(.primary)
+                            CodiceFiscaleBarcodeView(codiceFiscale: person.codice_fiscale!)
+                                .frame(height: 50)
+                            Text(person.codice_fiscale!)
+                                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } header: {
+                sectionHeader("Tessere sanitarie")
+            }
+        }
+    }
+
+    private var personsWithCodiceFiscale: [Person] {
+        persons.filter { person in
+            guard let cf = person.codice_fiscale else { return false }
+            return !cf.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    private func doctorPrimaryLineFor(_ doctor: Doctor) -> String {
+        let now = Date()
+        if let active = activeDoctorInterval(for: doctor, now: now) {
+            return "Aperto fino alle \(OpeningHoursParser.timeString(from: active.end))"
+        }
+        if let today = doctorTodaySlotText(for: doctor) {
+            return "Oggi \(today)"
+        }
+        if let next = doctorNextOpeningLabel(for: doctor, now: now) {
+            return "Prossima apertura: \(next)"
+        }
+        return "Orari non disponibili"
     }
 
     @ViewBuilder
@@ -931,25 +959,6 @@ struct GlobalSearchView: View {
             .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(.secondary)
             .textCase(nil)
-    }
-
-    private func utilityRow(title: String, primary: String, secondary: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.primary)
-                Text(primary)
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(.primary)
-                Text(secondary)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 2)
-        }
-        .buttonStyle(.plain)
     }
 
     private func watchRow(_ entry: WatchEntry) -> some View {

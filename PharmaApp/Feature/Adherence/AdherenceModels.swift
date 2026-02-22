@@ -125,6 +125,15 @@ struct OverallTrendPoint: Identifiable {
     var id: Date { date }
 }
 
+struct WeekPoint: Identifiable {
+    let index: Int
+    let label: String
+    let taken: Int
+    let planned: Int
+    var adherence: Double { planned > 0 ? min(1, Double(taken) / Double(planned)) : -1 }
+    var id: Int { index }
+}
+
 struct MedicineCoverage: Identifiable {
     let name: String
     let days: Int

@@ -323,10 +323,11 @@ extension Medicine {
         return totalScore
     }
     
-    func stockThreshold(option: Option?) -> Int {
-        let resolvedOption = option ?? Option.current(in: managedObjectContext)
-        let value = Int(resolvedOption?.day_threeshold_stocks_alarm ?? 0)
-        return value > 0 ? value : 7
+    func stockThreshold(option: Option? = nil) -> Int {
+        if custom_stock_threshold > 0 {
+            return Int(custom_stock_threshold)
+        }
+        return 7
     }
 
     enum DeadlineStatus {

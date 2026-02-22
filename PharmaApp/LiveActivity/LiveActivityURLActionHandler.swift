@@ -60,8 +60,12 @@ final class LiveActivityURLActionHandler {
         switch action {
         case .markTaken:
             guard let state = makeState(from: queryValues) else { return true }
-            _ = actionPerformer.markTaken(contentState: state)
-            _ = await liveActivityRefresher.refresh(reason: "url-\(action.rawValue)", now: nil)
+            let success = actionPerformer.markTaken(contentState: state)
+            if success {
+                await liveActivityRefresher.showConfirmationThenRefresh(medicineName: state.primaryMedicineName)
+            } else {
+                _ = await liveActivityRefresher.refresh(reason: "url-\(action.rawValue)", now: nil)
+            }
         case .remindLater:
             guard let state = makeState(from: queryValues) else { return true }
             _ = await actionPerformer.remindLater(contentState: state, now: now)

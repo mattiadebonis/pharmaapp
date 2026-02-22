@@ -9,10 +9,15 @@ enum RefillSummaryStrategy {
 
 struct RefillPurchaseSummary: Equatable {
     let allNames: [String]
+    let allItems: [RefillActivityAttributes.PurchaseItem]
     let maxVisible: Int
 
     var visibleNames: [String] {
         Array(allNames.prefix(maxVisible))
+    }
+
+    var visibleItems: [RefillActivityAttributes.PurchaseItem] {
+        Array(allItems.prefix(maxVisible))
     }
 
     var totalCount: Int {
@@ -60,9 +65,26 @@ final class RefillPurchaseSummaryProvider {
         let medicines = (try? context.fetch(request)) ?? []
         let option = Option.current(in: context)
         let sections = computeSections(for: medicines, logs: [], option: option)
-        let names = sections.purchase.map { $0.nome.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let recurrenceManager = RecurrenceManager(context: context)
+
+        var names: [String] = []
+        var items: [RefillActivityAttributes.PurchaseItem] = []
+        var seen = Set<String>()
+
+        for medicine in sections.purchase {
+            let name = medicine.nome.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+            guard seen.insert(name.lowercased()).inserted else { continue }
+
+            let days = Self.autonomyDays(for: medicine, recurrenceManager: recurrenceManager)
+            let units = Self.remainingUnits(for: medicine)
+            names.append(name)
+            items.append(RefillActivityAttributes.PurchaseItem(name: name, autonomyDays: days, remainingUnits: units))
+        }
+
         return RefillPurchaseSummary(
-            allNames: Self.deduplicatedTitles(names),
+            allNames: names,
+            allItems: items,
             maxVisible: max(1, maxVisible)
         )
     }
@@ -80,5 +102,25 @@ final class RefillPurchaseSummaryProvider {
         }
 
         return ordered
+    }
+
+    private static func remainingUnits(for medicine: Medicine) -> Int? {
+        guard let therapies = medicine.therapies, !therapies.isEmpty else {
+            return medicine.remainingUnitsWithoutTherapy()
+        }
+        let total = therapies.reduce(0) { $0 + Int($1.leftover()) }
+        return max(0, total)
+    }
+
+    private static func autonomyDays(for medicine: Medicine, recurrenceManager: RecurrenceManager) -> Int? {
+        guard let therapies = medicine.therapies, !therapies.isEmpty else { return nil }
+        var totalLeftover: Double = 0
+        var totalDaily: Double = 0
+        for therapy in therapies {
+            totalLeftover += Double(therapy.leftover())
+            totalDaily += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
+        }
+        guard totalDaily > 0 else { return nil }
+        return max(0, Int(floor(totalLeftover / totalDaily)))
     }
 }

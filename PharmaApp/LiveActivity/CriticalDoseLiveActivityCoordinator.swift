@@ -7,6 +7,7 @@ import ActivityKit
 @MainActor
 protocol CriticalDoseLiveActivityRefreshing {
     func refresh(reason: String, now: Date?) async -> Date?
+    func showConfirmationThenRefresh(medicineName: String) async
 }
 
 @MainActor
@@ -76,6 +77,32 @@ final class CriticalDoseLiveActivityCoordinator: CriticalDoseLiveActivityRefresh
         }
 
         return plan.nextRefreshAt
+    }
+
+    func showConfirmationThenRefresh(medicineName: String) async {
+        guard liveActivitiesEnabled else { return }
+
+        let activityIDs = client.currentActivityIDs()
+        guard let firstID = activityIDs.first else { return }
+
+        // Build a confirmation state reusing the current activity's data
+        let confirmationState = CriticalDoseLiveActivityAttributes.ContentState(
+            primaryTherapyId: "",
+            primaryMedicineId: "",
+            primaryMedicineName: medicineName,
+            primaryDoseText: "",
+            primaryScheduledAt: Date(),
+            additionalCount: 0,
+            subtitleDisplay: "",
+            expiryAt: Date().addingTimeInterval(10),
+            confirmedTakenName: medicineName
+        )
+
+        await client.update(activityID: firstID, contentState: confirmationState, staleDate: nil)
+
+        // Show confirmation for 3 seconds, then refresh normally
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
+        _ = await refresh(reason: "post-confirmation", now: nil)
     }
 
     private func endAllActivities() async {

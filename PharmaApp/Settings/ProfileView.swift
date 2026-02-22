@@ -28,66 +28,6 @@ struct ProfileView: View {
 
     var body: some View {
         Form {
-            // MARK: Farmacie
-            Section(header: Label("Farmacie", systemImage: "cross.case.fill")) {
-                ProfilePharmacyCard()
-                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-                    .listRowBackground(Color.clear)
-            }
-
-            // MARK: Dottori
-            Section(header: HStack {
-                Label("Dottori", systemImage: "stethoscope")
-                Spacer()
-                NavigationLink(destination: AddDoctorView()) {
-                    Image(systemName: "plus")
-                }
-            }) {
-                ForEach(doctors) { doctor in
-                    VStack(alignment: .leading, spacing: 10) {
-                        Button {
-                            selectedDoctor = doctor
-                            isDoctorDetailPresented = true
-                        } label: {
-                            HStack(alignment: .top) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(doctor.nome ?? "")
-                                        .font(.headline)
-                                        .foregroundStyle(.primary)
-                                    if let status = doctorStatusText(for: doctor) {
-                                        Text(status)
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer()
-                            }
-                        }
-                        .buttonStyle(.plain)
-
-                        if hasDoctorContacts(doctor) {
-                            HStack(spacing: 8) {
-                                if let mail = doctor.mail, !mail.isEmpty {
-                                    doctorContactButton(
-                                        icon: "envelope.fill",
-                                        label: "Email",
-                                        color: .blue
-                                    ) { openEmail(mail) }
-                                }
-                                if let phone = doctor.telefono, !phone.isEmpty {
-                                    doctorContactButton(
-                                        icon: "phone.fill",
-                                        label: "Chiama",
-                                        color: .green
-                                    ) { callPhone(phone) }
-                                }
-                            }
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-
             // MARK: Persone
             Section(header: HStack {
                 Label("Persone", systemImage: "person.2.fill")
@@ -149,9 +89,28 @@ struct ProfileView: View {
                 }
             }
 
-            // MARK: Settaggi terapia
-            TherapySettingsSectionsView()
+            // MARK: Dottori
+            Section(header: HStack {
+                Label("Dottori", systemImage: "stethoscope")
+                Spacer()
+                NavigationLink(destination: AddDoctorView()) {
+                    Image(systemName: "plus")
+                }
+            }) {
+                ForEach(doctors) { doctor in
+                    Button {
+                        selectedDoctor = doctor
+                        isDoctorDetailPresented = true
+                    } label: {
+                        Text(doctor.nome ?? "Dottore")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
 
+            // MARK: Messaggio ricetta
             Section(header: Label("Messaggio ricetta", systemImage: "text.bubble")) {
                 NavigationLink {
                     PrescriptionMessageTemplateSettingsView()
@@ -159,6 +118,9 @@ struct ProfileView: View {
                     Text("Template messaggio con placeholder {medico} e {medicinali}")
                 }
             }
+
+            // MARK: Settaggi terapia
+            TherapySettingsSectionsView()
         }
         .navigationTitle("Profilo")
         .navigationBarTitleDisplayMode(.inline)
@@ -235,126 +197,6 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: – Doctor helpers
-
-    private func hasDoctorContacts(_ doctor: Doctor) -> Bool {
-        let mail = doctor.mail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let phone = doctor.telefono?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return !mail.isEmpty || !phone.isEmpty
-    }
-
-    private func doctorContactButton(
-        icon: String,
-        label: String,
-        color: Color,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Label(label, systemImage: icon)
-                .font(.caption.weight(.semibold))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Capsule(style: .continuous).fill(color.opacity(0.12)))
-                .foregroundStyle(color)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func openEmail(_ address: String) {
-        if let url = URL(string: "mailto:\(address)") {
-            UIApplication.shared.open(url)
-        }
-    }
-
-    private func callPhone(_ number: String) {
-        let cleaned = number.filter { $0.isNumber || $0 == "+" }
-        if let url = URL(string: "tel:\(cleaned)") {
-            UIApplication.shared.open(url)
-        }
-    }
-
-    // MARK: – Doctor schedule helpers
-
-    private func doctorStatusText(for doctor: Doctor) -> String? {
-        let schedule = doctor.scheduleDTO
-        let now = Date()
-        let calendar = Calendar.current
-        let weekdayOrder: [DoctorScheduleDTO.DaySchedule.Weekday] = [
-            .sunday, .monday, .tuesday, .wednesday, .thursday, .friday, .saturday
-        ]
-        let calWeekday = calendar.component(.weekday, from: now)
-        let todayEnum = weekdayOrder[calWeekday - 1]
-        guard let todaySchedule = schedule.days.first(where: { $0.day == todayEnum }) else {
-            return nil
-        }
-        let hour = calendar.component(.hour, from: now)
-        let minute = calendar.component(.minute, from: now)
-        let nowMinutes = hour * 60 + minute
-
-        func parseMinutes(_ s: String) -> Int? {
-            let parts = s.split(separator: ":").compactMap { Int($0) }
-            guard parts.count == 2 else { return nil }
-            return parts[0] * 60 + parts[1]
-        }
-        func fmt(_ minutes: Int) -> String {
-            String(format: "%02d:%02d", minutes / 60, minutes % 60)
-        }
-
-        switch todaySchedule.mode {
-        case .closed:
-            return doctorNextOpeningText(schedule: schedule, after: todayEnum, weekdayOrder: weekdayOrder)
-        case .continuous:
-            guard let start = parseMinutes(todaySchedule.primary.start),
-                  let end = parseMinutes(todaySchedule.primary.end) else { return nil }
-            if nowMinutes >= start && nowMinutes < end {
-                return "Aperto fino alle \(fmt(end))"
-            } else if nowMinutes < start {
-                return "Apre alle \(fmt(start))"
-            } else {
-                return doctorNextOpeningText(schedule: schedule, after: todayEnum, weekdayOrder: weekdayOrder)
-            }
-        case .split:
-            guard let s1 = parseMinutes(todaySchedule.primary.start),
-                  let e1 = parseMinutes(todaySchedule.primary.end),
-                  let s2 = parseMinutes(todaySchedule.secondary.start),
-                  let e2 = parseMinutes(todaySchedule.secondary.end) else { return nil }
-            if nowMinutes >= s1 && nowMinutes < e1 {
-                return "Aperto fino alle \(fmt(e1))"
-            } else if nowMinutes >= s2 && nowMinutes < e2 {
-                return "Aperto fino alle \(fmt(e2))"
-            } else if nowMinutes < s1 {
-                return "Apre alle \(fmt(s1))"
-            } else if nowMinutes < s2 {
-                return "Apre alle \(fmt(s2))"
-            } else {
-                return doctorNextOpeningText(schedule: schedule, after: todayEnum, weekdayOrder: weekdayOrder)
-            }
-        }
-    }
-
-    private func doctorNextOpeningText(
-        schedule: DoctorScheduleDTO,
-        after day: DoctorScheduleDTO.DaySchedule.Weekday,
-        weekdayOrder: [DoctorScheduleDTO.DaySchedule.Weekday]
-    ) -> String {
-        guard let currentIdx = weekdayOrder.firstIndex(of: day) else { return "Chiuso" }
-        for offset in 1...7 {
-            let nextIdx = (currentIdx + offset) % 7
-            let nextDay = weekdayOrder[nextIdx]
-            guard let nextSchedule = schedule.days.first(where: { $0.day == nextDay }),
-                  nextSchedule.mode != .closed else { continue }
-            let openTime: String
-            switch nextSchedule.mode {
-            case .continuous: openTime = nextSchedule.primary.start
-            case .split:      openTime = nextSchedule.primary.start
-            case .closed:     continue
-            }
-            if offset == 1 { return "Chiuso · domani alle \(openTime)" }
-            return "Chiuso · \(nextSchedule.day.displayName) alle \(openTime)"
-        }
-        return "Chiuso"
-    }
-
     private func personDisplayName(for person: Person) -> String {
         let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -380,7 +222,7 @@ struct ProfileView: View {
 
 // MARK: – Pharmacy Card
 
-private struct ProfilePharmacyCard: View {
+struct ProfilePharmacyCard: View {
     @StateObject private var locationVM = LocationSearchViewModel()
 
     private let cardCornerRadius: CGFloat = 16
@@ -646,7 +488,7 @@ private struct ProfilePharmacyCard: View {
 
 // MARK: – Fullscreen Barcode
 
-private struct FullscreenBarcodeView: View {
+struct FullscreenBarcodeView: View {
     let codiceFiscale: String
     let onClose: () -> Void
     @State private var barcodeImage: UIImage?
@@ -706,7 +548,7 @@ private struct FullscreenBarcodeView: View {
 
 // MARK: – Barcode view
 
-private struct CodiceFiscaleBarcodeView: View {
+struct CodiceFiscaleBarcodeView: View {
     let codiceFiscale: String
     @State private var barcodeImage: UIImage?
 

@@ -47,26 +47,6 @@ struct CabinetView: View {
         cabinetListWithNewCabinetSheet
             .navigationTitle("Armadietto")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        isProfilePresented = true
-                    } label: {
-                        Image(systemName: "person")
-                    }
-                    .accessibilityLabel("Profilo")
-                    .foregroundStyle(.primary)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        isSearchPresented = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel("Nuovo farmaco")
-                    .foregroundStyle(.primary)
-                }
-            }
     }
 
     private var cabinetListWithNewCabinetSheet: some View {

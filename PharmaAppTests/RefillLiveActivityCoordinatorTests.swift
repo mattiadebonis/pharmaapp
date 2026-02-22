@@ -36,15 +36,6 @@ private struct RefillPharmacyHoursResolverFake: RefillPharmacyHoursResolving {
     }
 }
 
-private struct RefillDoctorHoursResolverFake: RefillDoctorHoursResolving {
-    let info: RefillDoctorOpenInfo
-
-    func preferredDoctorOpenInfo(now: Date) -> RefillDoctorOpenInfo {
-        let _ = now
-        return info
-    }
-}
-
 private final class RefillActivityStateStoreFake: RefillActivityStateStoring {
     var activeId: String?
     var pharmacyId: String?
@@ -165,9 +156,6 @@ struct RefillLiveActivityCoordinatorTests {
                     slotText: "09:00-22:00"
                 )
             ),
-            doctorHoursResolver: RefillDoctorHoursResolverFake(
-                info: RefillDoctorOpenInfo(name: "Dott. Rossi", hoursText: "oggi 10:00-13:00")
-            ),
             stateStore: stateStore,
             client: client,
             clock: FrozenClock(date: now)
@@ -182,8 +170,6 @@ struct RefillLiveActivityCoordinatorTests {
         #expect(client.lastRequestedState?.purchaseNames == ["Tachipirina"])
         #expect(client.lastRequestedState?.pharmacyName == "Farmacia Centrale")
         #expect(client.lastRequestedState?.pharmacyHoursText == "aperta fino alle 22:00")
-        #expect(client.lastRequestedState?.doctorName == "Dott. Rossi")
-        #expect(client.lastRequestedState?.doctorHoursText == "oggi 10:00-13:00")
         #expect(stateStore.activeActivityId() == "refill-1")
     }
 
@@ -222,9 +208,6 @@ struct RefillLiveActivityCoordinatorTests {
                     closingTimeText: nil,
                     slotText: nil
                 )
-            ),
-            doctorHoursResolver: RefillDoctorHoursResolverFake(
-                info: RefillDoctorOpenInfo(name: "Dott.ssa Neri", hoursText: "orari non disponibili")
             ),
             stateStore: stateStore,
             client: client,
