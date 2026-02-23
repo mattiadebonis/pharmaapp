@@ -22,15 +22,15 @@ final class AppRouterRouteStoreTests: XCTestCase {
 
     @MainActor
     func testRouterConsumePendingRouteApreTabECaricaRoute() {
-        let fakeStore = FakeRouteStore(route: .todayPurchaseList)
+        let fakeStore = FakeRouteStore(route: .pharmacy)
         let router = AppRouter(routeStore: fakeStore)
 
         router.consumePendingRouteIfAny()
 
         XCTAssertEqual(router.selectedTab, .medicine)
-        XCTAssertEqual(router.pendingRoute, .todayPurchaseList)
+        XCTAssertEqual(router.pendingRoute, .pharmacy)
 
-        router.markRouteHandled(.todayPurchaseList)
+        router.markRouteHandled(.pharmacy)
         XCTAssertNil(router.pendingRoute)
     }
 

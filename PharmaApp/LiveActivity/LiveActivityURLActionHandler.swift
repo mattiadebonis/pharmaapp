@@ -71,7 +71,7 @@ final class LiveActivityURLActionHandler {
             _ = await actionPerformer.remindLater(contentState: state, now: now)
             _ = await liveActivityRefresher.refresh(reason: "url-\(action.rawValue)", now: nil)
         case .openPurchaseList:
-            routeStore.save(route: .todayPurchaseList)
+            routeStore.save(route: .pharmacy)
         case .openHealthCard:
             routeStore.save(route: .codiceFiscaleFullscreen)
         case .dismissRefill:

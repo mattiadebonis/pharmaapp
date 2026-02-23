@@ -1,6 +1,6 @@
 import Foundation
 
-public struct TodayStateInput {
+public struct TherapyPlanInput {
     public let medicines: [MedicineSnapshot]
     public let todos: [TodoSnapshot]
     public let option: OptionSnapshot?

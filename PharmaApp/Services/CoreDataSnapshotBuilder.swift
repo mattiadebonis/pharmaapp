@@ -1,7 +1,7 @@
 import Foundation
 import CoreData
 
-struct CoreDataTodaySnapshotBuilder {
+struct CoreDataSnapshotBuilder {
     private let context: NSManagedObjectContext
     private let stockService: StockService
 
@@ -17,10 +17,10 @@ struct CoreDataTodaySnapshotBuilder {
         completedTodoIDs: Set<String>,
         now: Date,
         calendar: Calendar = .current
-    ) -> TodayStateInput {
+    ) -> TherapyPlanInput {
         let medicineSnapshots = makeMedicineSnapshots(medicines: medicines, logs: logs)
         let optionSnapshot = makeOptionSnapshot(option: option)
-        return TodayStateInput(
+        return TherapyPlanInput(
             medicines: medicineSnapshots,
             todos: [],
             option: optionSnapshot,

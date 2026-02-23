@@ -1,6 +1,6 @@
 import Foundation
 
-public struct TodayRecurrenceService {
+public struct PureRecurrenceService {
     public init() {}
 
     public func parseRecurrenceString(_ icsString: String) -> RecurrenceRule {

@@ -108,7 +108,7 @@ struct ContentView: View {
             globalCodiceFiscaleEntries = PrescriptionCodiceFiscaleResolver().entriesForRxAndLowStock(in: moc)
             isGlobalCodiceFiscalePresented = true
             appRouter.markRouteHandled(route)
-        case .today, .todayPurchaseList, .pharmacy:
+        case .pharmacy:
             appRouter.markRouteHandled(route)
         case .scan, .addMedicine:
             break // handled by GlobalSearchView

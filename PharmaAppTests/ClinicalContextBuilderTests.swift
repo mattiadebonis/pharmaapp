@@ -1,7 +1,7 @@
 import XCTest
 @testable import PharmaApp
 
-final class TodayClinicalContextBuilderTests: XCTestCase {
+final class ClinicalContextBuilderTests: XCTestCase {
     private var calendar: Calendar!
 
     override func setUp() {
@@ -19,8 +19,8 @@ final class TodayClinicalContextBuilderTests: XCTestCase {
         let therapyId = TherapyId(UUID())
         let medicine = makeMedicineSnapshot(medicineId: medicineId, therapyId: therapyId, doseDate: doseDate, relation: .beforeDose, offset: 30)
 
-        let builder = TodayClinicalContextBuilder(
-            recurrenceService: TodayRecurrenceService(),
+        let builder = ClinicalContextBuilder(
+            recurrenceService: PureRecurrenceService(),
             calendar: calendar
         )
         let context = builder.build(for: [medicine], now: now)
@@ -44,8 +44,8 @@ final class TodayClinicalContextBuilderTests: XCTestCase {
         let therapyId = TherapyId(UUID())
         let medicine = makeMedicineSnapshot(medicineId: medicineId, therapyId: therapyId, doseDate: doseDate, relation: .afterDose, offset: 45)
 
-        let builder = TodayClinicalContextBuilder(
-            recurrenceService: TodayRecurrenceService(),
+        let builder = ClinicalContextBuilder(
+            recurrenceService: PureRecurrenceService(),
             calendar: calendar
         )
         let context = builder.build(for: [medicine], now: now)

@@ -1,25 +1,25 @@
 import Foundation
 
-public struct TodayClinicalContext {
-    public let monitoring: [TodayTodoItem]
-    public let missedDoses: [TodayTodoItem]
+public struct ClinicalContext {
+    public let monitoring: [TodoItem]
+    public let missedDoses: [TodoItem]
 
-    public init(monitoring: [TodayTodoItem], missedDoses: [TodayTodoItem]) {
+    public init(monitoring: [TodoItem], missedDoses: [TodoItem]) {
         self.monitoring = monitoring
         self.missedDoses = missedDoses
     }
 
-    public var allTodos: [TodayTodoItem] {
+    public var allTodos: [TodoItem] {
         monitoring + missedDoses
     }
 }
 
-public struct TodayClinicalContextBuilder {
-    private let recurrenceService: TodayRecurrenceService
+public struct ClinicalContextBuilder {
+    private let recurrenceService: PureRecurrenceService
     private let calendar: Calendar
     private let timeFormatter: DateFormatter
 
-    public init(recurrenceService: TodayRecurrenceService = TodayRecurrenceService(), calendar: Calendar = .current) {
+    public init(recurrenceService: PureRecurrenceService = PureRecurrenceService(), calendar: Calendar = .current) {
         self.recurrenceService = recurrenceService
         self.calendar = calendar
         let formatter = DateFormatter()
@@ -29,9 +29,9 @@ public struct TodayClinicalContextBuilder {
         self.timeFormatter = formatter
     }
 
-    public func build(for medicines: [MedicineSnapshot], now: Date = Date()) -> TodayClinicalContext {
+    public func build(for medicines: [MedicineSnapshot], now: Date = Date()) -> ClinicalContext {
         let therapies = medicines.flatMap { $0.therapies }
-        let generator = TodayDoseEventGenerator(recurrenceService: recurrenceService, calendar: calendar)
+        let generator = SnapshotDoseEventGenerator(recurrenceService: recurrenceService, calendar: calendar)
         let startOfToday = calendar.startOfDay(for: now)
         let endOfToday = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: startOfToday) ?? now
         let events = generator.generateEvents(therapies: therapies, from: startOfToday, to: endOfToday)
@@ -53,18 +53,18 @@ public struct TodayClinicalContextBuilder {
             now: now
         )
 
-        return TodayClinicalContext(monitoring: monitoringTodos, missedDoses: missedDoseTodos)
+        return ClinicalContext(monitoring: monitoringTodos, missedDoses: missedDoseTodos)
     }
 
     private func buildMonitoringTodos(
-        events: [TodayDoseEvent],
+        events: [SnapshotDoseEvent],
         therapiesByID: [TherapyId: TherapySnapshot],
         medicinesByID: [MedicineId: MedicineSnapshot],
         now: Date,
         startOfToday: Date,
         endOfToday: Date
-    ) -> [TodayTodoItem] {
-        var todos: [TodayTodoItem] = []
+    ) -> [TodoItem] {
+        var todos: [TodoItem] = []
         for event in events {
             guard let therapy = therapiesByID[event.therapyId] else { continue }
             guard let rules = therapy.clinicalRules else { continue }
@@ -88,11 +88,13 @@ public struct TodayClinicalContextBuilder {
                 guard triggerDate >= now else { continue }
 
                 let id = "monitoring|dose|\(action.kind.rawValue)|\(relation.rawValue)|\(therapy.externalKey)|\(Int(event.date.timeIntervalSince1970))|\(Int(triggerDate.timeIntervalSince1970))"
+                let suffix = relation == .beforeDose ? "prima" : "dopo"
+                let detail = "\(relation.label) (\(offsetMinutes) min \(suffix))"
                 todos.append(
-                    TodayTodoItem(
+                    TodoItem(
                         id: id,
                         title: medicineName,
-                        detail: nil,
+                        detail: detail,
                         category: .monitoring,
                         medicineId: therapy.medicineId
                     )
@@ -113,7 +115,7 @@ public struct TodayClinicalContextBuilder {
                     guard scheduleDate >= now else { continue }
                     let id = "monitoring|schedule|\(action.kind.rawValue)|\(therapy.externalKey)|\(Int(scheduleDate.timeIntervalSince1970))"
                     todos.append(
-                        TodayTodoItem(
+                        TodoItem(
                             id: id,
                             title: medicineName,
                             detail: nil,
@@ -142,13 +144,13 @@ public struct TodayClinicalContextBuilder {
     }
 
     private func buildMissedDoseTodos(
-        events: [TodayDoseEvent],
+        events: [SnapshotDoseEvent],
         therapiesByID: [TherapyId: TherapySnapshot],
         medicinesByID: [MedicineId: MedicineSnapshot],
         now: Date
-    ) -> [TodayTodoItem] {
+    ) -> [TodoItem] {
         let tolerance: TimeInterval = 60 * 60
-        var todos: [TodayTodoItem] = []
+        var todos: [TodoItem] = []
 
         for event in events {
             guard event.date < now else { continue }
@@ -167,7 +169,7 @@ public struct TodayClinicalContextBuilder {
             let id = "missed|\(therapy.externalKey)|\(Int(event.date.timeIntervalSince1970))"
             let medicineName = medicinesByID[event.medicineId]?.name ?? ""
             todos.append(
-                TodayTodoItem(
+                TodoItem(
                     id: id,
                     title: medicineName,
                     detail: detail,
@@ -181,7 +183,7 @@ public struct TodayClinicalContextBuilder {
     }
 
     private func hasMatchingIntakeLog(
-        for event: TodayDoseEvent,
+        for event: SnapshotDoseEvent,
         therapy: TherapySnapshot,
         medicine: MedicineSnapshot,
         tolerance: TimeInterval
@@ -311,17 +313,17 @@ public struct TodayClinicalContextBuilder {
     }
 }
 
-private struct TodayDoseEvent {
+private struct SnapshotDoseEvent {
     let date: Date
     let therapyId: TherapyId
     let medicineId: MedicineId
 }
 
-private struct TodayDoseEventGenerator {
-    private let recurrenceService: TodayRecurrenceService
+private struct SnapshotDoseEventGenerator {
+    private let recurrenceService: PureRecurrenceService
     private let calendar: Calendar
 
-    init(recurrenceService: TodayRecurrenceService, calendar: Calendar = .current) {
+    init(recurrenceService: PureRecurrenceService, calendar: Calendar = .current) {
         self.recurrenceService = recurrenceService
         self.calendar = calendar
     }
@@ -330,13 +332,13 @@ private struct TodayDoseEventGenerator {
         therapies: [TherapySnapshot],
         from rangeStart: Date,
         to end: Date
-    ) -> [TodayDoseEvent] {
+    ) -> [SnapshotDoseEvent] {
         guard !therapies.isEmpty else { return [] }
 
         let startDay = calendar.startOfDay(for: rangeStart)
         let endDay = calendar.startOfDay(for: end)
         var day = startDay
-        var events: [TodayDoseEvent] = []
+        var events: [SnapshotDoseEvent] = []
 
         while day <= endDay {
             for therapy in therapies {
@@ -361,7 +363,7 @@ private struct TodayDoseEventGenerator {
                     guard date >= therapyStart else { continue }
                     guard date >= rangeStart && date <= end else { continue }
                     events.append(
-                        TodayDoseEvent(
+                        SnapshotDoseEvent(
                             date: date,
                             therapyId: therapy.id,
                             medicineId: therapy.medicineId

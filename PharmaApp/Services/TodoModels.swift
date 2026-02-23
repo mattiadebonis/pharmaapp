@@ -1,6 +1,6 @@
 import Foundation
 
-public enum TodayTodoCategory: String, CaseIterable, Hashable, Codable {
+public enum TodoCategory: String, CaseIterable, Hashable, Codable {
     case therapy
     case monitoring
     case missedDose
@@ -10,13 +10,13 @@ public enum TodayTodoCategory: String, CaseIterable, Hashable, Codable {
     case upcoming
     case pharmacy
 
-    public static var displayOrder: [TodayTodoCategory] {
+    public static var displayOrder: [TodoCategory] {
         [.monitoring, .therapy, .missedDose, .purchase, .deadline, .prescription, .upcoming, .pharmacy]
     }
 }
 
-public struct TodayTodoItem: Identifiable, Hashable, Codable {
-    public typealias Category = TodayTodoCategory
+public struct TodoItem: Identifiable, Hashable, Codable {
+    public typealias Category = TodoCategory
 
     public let id: String
     public let title: String
@@ -39,7 +39,7 @@ public struct TodayTodoItem: Identifiable, Hashable, Codable {
     }
 }
 
-public struct TodayMedicineStatus: Equatable, Codable {
+public struct MedicineStatusInfo: Equatable, Codable {
     public let needsPrescription: Bool
     public let isOutOfStock: Bool
     public let isDepleted: Bool
@@ -61,7 +61,7 @@ public struct TodayMedicineStatus: Equatable, Codable {
     }
 }
 
-public struct TodayBlockedTherapyStatus: Equatable, Codable {
+public struct BlockedTherapyStatus: Equatable, Codable {
     public let medicineId: MedicineId
     public let needsPrescription: Bool
     public let isOutOfStock: Bool
@@ -83,38 +83,38 @@ public struct TodayBlockedTherapyStatus: Equatable, Codable {
     }
 }
 
-public enum TodayTimeLabelKind: String, Hashable, Codable {
+public enum TimeLabelKind: String, Hashable, Codable {
     case purchase
     case deadline
 }
 
-public enum TodayTimeLabel: Hashable, Codable {
+public enum TimeLabel: Hashable, Codable {
     case time(Date)
-    case category(TodayTimeLabelKind)
+    case category(TimeLabelKind)
 }
 
-public struct TodayState: Equatable {
-    public let computedTodos: [TodayTodoItem]
-    public let pendingItems: [TodayTodoItem]
-    public let therapyItems: [TodayTodoItem]
-    public let purchaseItems: [TodayTodoItem]
-    public let otherItems: [TodayTodoItem]
+public struct TherapyPlanState: Equatable {
+    public let computedTodos: [TodoItem]
+    public let pendingItems: [TodoItem]
+    public let therapyItems: [TodoItem]
+    public let purchaseItems: [TodoItem]
+    public let otherItems: [TodoItem]
     public let showPharmacyCard: Bool
-    public let timeLabels: [String: TodayTimeLabel]
-    public let medicineStatuses: [MedicineId: TodayMedicineStatus]
-    public let blockedTherapyStatuses: [String: TodayBlockedTherapyStatus]
+    public let timeLabels: [String: TimeLabel]
+    public let medicineStatuses: [MedicineId: MedicineStatusInfo]
+    public let blockedTherapyStatuses: [String: BlockedTherapyStatus]
     public let syncToken: String
 
     public init(
-        computedTodos: [TodayTodoItem],
-        pendingItems: [TodayTodoItem],
-        therapyItems: [TodayTodoItem],
-        purchaseItems: [TodayTodoItem],
-        otherItems: [TodayTodoItem],
+        computedTodos: [TodoItem],
+        pendingItems: [TodoItem],
+        therapyItems: [TodoItem],
+        purchaseItems: [TodoItem],
+        otherItems: [TodoItem],
         showPharmacyCard: Bool,
-        timeLabels: [String: TodayTimeLabel],
-        medicineStatuses: [MedicineId: TodayMedicineStatus],
-        blockedTherapyStatuses: [String: TodayBlockedTherapyStatus],
+        timeLabels: [String: TimeLabel],
+        medicineStatuses: [MedicineId: MedicineStatusInfo],
+        blockedTherapyStatuses: [String: BlockedTherapyStatus],
         syncToken: String
     ) {
         self.computedTodos = computedTodos
@@ -129,11 +129,11 @@ public struct TodayState: Equatable {
         self.syncToken = syncToken
     }
 
-    public func timeLabel(for item: TodayTodoItem) -> TodayTimeLabel? {
+    public func timeLabel(for item: TodoItem) -> TimeLabel? {
         timeLabels[item.id]
     }
 
-    public static let empty = TodayState(
+    public static let empty = TherapyPlanState(
         computedTodos: [],
         pendingItems: [],
         therapyItems: [],

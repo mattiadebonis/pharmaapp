@@ -45,7 +45,7 @@ struct RefillIntentTests {
 
         _ = try await OpenPurchaseListIntent().perform()
 
-        #expect(fakeStore.savedRoute == .todayPurchaseList)
+        #expect(fakeStore.savedRoute == .pharmacy)
     }
 
     @Test func dismissRefillIntentCallsDismissHandler() async throws {

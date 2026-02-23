@@ -4,7 +4,7 @@ import os.signpost
 
 enum RefillSummaryStrategy {
     case lightweightTodos
-    case fullTodayState
+    case fullTherapyPlan
 }
 
 struct RefillPurchaseSummary: Equatable {
@@ -55,7 +55,7 @@ final class RefillPurchaseSummaryProvider {
         switch strategy {
         case .lightweightTodos:
             return underThresholdSummary(maxVisible: maxVisible)
-        case .fullTodayState:
+        case .fullTherapyPlan:
             return underThresholdSummary(maxVisible: maxVisible)
         }
     }

@@ -30,7 +30,7 @@ final class AppRouter: ObservableObject {
 
     private func apply(_ route: AppRoute) {
         switch route {
-        case .today, .todayPurchaseList, .pharmacy, .codiceFiscaleFullscreen:
+        case .pharmacy, .codiceFiscaleFullscreen:
             selectedTab = .medicine
         case .profile:
             selectedTab = .profilo

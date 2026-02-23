@@ -154,7 +154,7 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
 
         let summary = purchaseSummaryProvider.summary(
             maxVisible: 3,
-            strategy: policy == .foregroundInteractive ? .lightweightTodos : .fullTodayState
+            strategy: policy == .foregroundInteractive ? .lightweightTodos : .fullTherapyPlan
         )
         geofenceManager.refreshMonitoring(hasPendingPurchases: summary.hasItems)
 
@@ -219,7 +219,7 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         let now = clock.now()
         let summary = purchaseSummaryProvider.summary(
             maxVisible: 3,
-            strategy: policy == .foregroundInteractive ? .lightweightTodos : .fullTodayState
+            strategy: policy == .foregroundInteractive ? .lightweightTodos : .fullTherapyPlan
         )
         guard summary.hasItems else {
             await endActiveActivity(reason: "entered-no-purchases")

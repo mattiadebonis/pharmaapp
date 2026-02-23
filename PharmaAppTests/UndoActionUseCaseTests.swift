@@ -40,8 +40,5 @@ final class UndoActionUseCaseTests: XCTestCase {
         XCTAssertEqual(undoLogs.count, 1)
         XCTAssertEqual(undoLogs.first?.reversal_of_operation_id, operationId)
         XCTAssertEqual(medicine.effectivePrescriptionReceivedLogs().count, 0)
-
-        let recManager = RecurrenceManager(context: context)
-        XCTAssertTrue(TodayTodoEngine.needsPrescriptionBeforePurchase(medicine, option: nil, recurrenceManager: recManager))
     }
 }

@@ -111,7 +111,7 @@ final class SiriIntentFacade {
 
     func nextDoseNow(now: Date = Date()) -> SiriNextDoseNow? {
         context.performAndWait {
-            let provider = CoreDataTodayStateProvider(context: context)
+            let provider = CoreDataTherapyPlanProvider(context: context)
             let medicines = fetchMedicines()
             let option = fetchCurrentOption()
             let state = provider.buildState(
@@ -123,7 +123,7 @@ final class SiriIntentFacade {
 
             let therapyCandidates = state.computedTodos
                 .filter { $0.category == .therapy }
-                .compactMap { item -> (TodayTodoItem, Date)? in
+                .compactMap { item -> (TodoItem, Date)? in
                     guard let date = provider.todoTimeDate(for: item, medicines: medicines, option: option, now: now) else {
                         return nil
                     }
@@ -150,7 +150,7 @@ final class SiriIntentFacade {
 
     func doneTodayStatus(now: Date = Date()) -> SiriDoneTodayStatus {
         context.performAndWait {
-            let recurrenceService = TodayRecurrenceService()
+            let recurrenceService = PureRecurrenceService()
             var totalPlanned = 0
             var totalTaken = 0
             var missing: [String] = []
@@ -193,7 +193,7 @@ final class SiriIntentFacade {
 
     func purchaseSummary(maxItems: Int = 3) -> SiriPurchaseSummary {
         context.performAndWait {
-            let provider = CoreDataTodayStateProvider(context: context)
+            let provider = CoreDataTherapyPlanProvider(context: context)
             let medicines = fetchMedicines()
             let state = provider.buildState(
                 medicines: medicines,
@@ -287,7 +287,7 @@ final class SiriIntentFacade {
         return try? context.fetch(request).first
     }
 
-    private func resolveMedicine(for item: TodayTodoItem) -> Medicine? {
+    private func resolveMedicine(for item: TodoItem) -> Medicine? {
         if let medicineID = item.medicineId {
             return fetchMedicine(by: medicineID.rawValue)
         }
@@ -365,7 +365,7 @@ final class SiriIntentFacade {
         return fallback.isEmpty ? "unita" : fallback.lowercased()
     }
 
-    private func timeDate(from label: TodayTimeLabel?, fallbackDetail: String?, now: Date) -> Date? {
+    private func timeDate(from label: TimeLabel?, fallbackDetail: String?, now: Date) -> Date? {
         switch label {
         case .time(let date):
             return date

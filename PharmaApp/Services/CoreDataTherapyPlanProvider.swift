@@ -1,8 +1,8 @@
 import Foundation
 import CoreData
 
-struct CoreDataTodayStateProvider {
-    private let snapshotBuilder: CoreDataTodaySnapshotBuilder
+struct CoreDataTherapyPlanProvider {
+    private let snapshotBuilder: CoreDataSnapshotBuilder
     private let clock: Clock
     private let calendar: Calendar
 
@@ -11,7 +11,7 @@ struct CoreDataTodayStateProvider {
         clock: Clock = SystemClock(),
         calendar: Calendar = .current
     ) {
-        self.snapshotBuilder = CoreDataTodaySnapshotBuilder(context: context)
+        self.snapshotBuilder = CoreDataSnapshotBuilder(context: context)
         self.clock = clock
         self.calendar = calendar
     }
@@ -21,7 +21,7 @@ struct CoreDataTodayStateProvider {
         logs: [Log],
         option: Option?,
         completedTodoIDs: Set<String>
-    ) -> TodayState {
+    ) -> TherapyPlanState {
         let now = clock.now()
         let input = snapshotBuilder.makeInput(
             medicines: medicines,
@@ -31,11 +31,11 @@ struct CoreDataTodayStateProvider {
             now: now,
             calendar: calendar
         )
-        return TodayStateBuilder.buildState(input: input)
+        return TherapyPlanBuilder.buildState(input: input)
     }
 
     func todoTimeDate(
-        for item: TodayTodoItem,
+        for item: TodoItem,
         medicines: [Medicine],
         option: Option?,
         now: Date? = nil
@@ -43,7 +43,7 @@ struct CoreDataTodayStateProvider {
         let resolvedNow = now ?? clock.now()
         let medicineSnapshots = snapshotBuilder.makeMedicineSnapshots(medicines: medicines, logs: [])
         let optionSnapshot = snapshotBuilder.makeOptionSnapshot(option: option)
-        return TodayStateBuilder.todoTimeDate(
+        return TherapyPlanBuilder.todoTimeDate(
             for: item,
             medicines: medicineSnapshots,
             option: optionSnapshot,
@@ -58,7 +58,7 @@ struct CoreDataTodayStateProvider {
     ) -> Date? {
         let resolvedNow = now ?? clock.now()
         let snapshot = snapshotBuilder.makeMedicineSnapshot(medicine: medicine, logs: Array(medicine.logs ?? []))
-        return TodayStateBuilder.nextUpcomingDoseDate(
+        return TherapyPlanBuilder.nextUpcomingDoseDate(
             for: snapshot,
             now: resolvedNow,
             calendar: calendar
@@ -69,11 +69,11 @@ struct CoreDataTodayStateProvider {
         for medicine: Medicine,
         option: Option?,
         now: Date? = nil
-    ) -> TodayDoseInfo? {
+    ) -> DoseInfo? {
         let resolvedNow = now ?? clock.now()
         let snapshot = snapshotBuilder.makeMedicineSnapshot(medicine: medicine, logs: Array(medicine.logs ?? []))
         let optionSnapshot = snapshotBuilder.makeOptionSnapshot(option: option)
-        return TodayStateBuilder.nextDoseTodayInfo(
+        return TherapyPlanBuilder.nextDoseTodayInfo(
             for: snapshot,
             option: optionSnapshot,
             now: resolvedNow,

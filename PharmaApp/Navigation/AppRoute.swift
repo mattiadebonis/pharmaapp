@@ -7,8 +7,6 @@ enum AppTabRoute: String, Hashable, Codable {
 }
 
 enum AppRoute: String, Codable, Equatable {
-    case today
-    case todayPurchaseList
     case pharmacy
     case codiceFiscaleFullscreen
     case profile
