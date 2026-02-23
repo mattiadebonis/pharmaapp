@@ -8,6 +8,7 @@
 import SwiftUI
 import CoreData
 import MapKit
+import CoreLocation
 import CoreImage
 struct ProfileView: View {
     @Environment(\.managedObjectContext) private var managedObjectContext
@@ -18,6 +19,8 @@ struct ProfileView: View {
     @FetchRequest(fetchRequest: Doctor.extractDoctors()) private var doctors: FetchedResults<Doctor>
     @FetchRequest(fetchRequest: Person.extractPersons()) private var persons: FetchedResults<Person>
 
+    @AppStorage("preferredPharmacyName") private var preferredPharmacyName: String = ""
+
     @State private var selectedDoctor: Doctor?
     @State private var isDoctorDetailPresented = false
     @State private var selectedPerson: Person?
@@ -25,6 +28,7 @@ struct ProfileView: View {
     @State private var fullscreenBarcodeCodiceFiscale: String?
     @State private var personPendingDeletion: Person?
     @State private var personDeleteErrorMessage: String?
+    @State private var isPharmacyPickerPresented = false
 
     var body: some View {
         Form {
@@ -110,6 +114,26 @@ struct ProfileView: View {
                 }
             }
 
+            // MARK: Farmacie
+            Section(header: HStack {
+                Label("Farmacie", systemImage: "cross.fill")
+                Spacer()
+                Button {
+                    isPharmacyPickerPresented = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }) {
+                if !preferredPharmacyName.isEmpty {
+                    Text(preferredPharmacyName)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                } else {
+                    Text("Nessuna farmacia selezionata")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             // MARK: Messaggio ricetta
             Section(header: Label("Messaggio ricetta", systemImage: "text.bubble")) {
                 NavigationLink {
@@ -151,6 +175,11 @@ struct ProfileView: View {
                 FullscreenBarcodeView(codiceFiscale: cf) {
                     fullscreenBarcodeCodiceFiscale = nil
                 }
+            }
+        }
+        .sheet(isPresented: $isPharmacyPickerPresented) {
+            NavigationStack {
+                PharmacyPickerView(selectedPharmacyName: $preferredPharmacyName)
             }
         }
         .onAppear {
@@ -217,6 +246,288 @@ struct ProfileView: View {
             personDeleteErrorMessage = error.localizedDescription
             print("Errore nell'eliminazione della persona: \(error.localizedDescription)")
         }
+    }
+}
+
+// MARK: – Pharmacy Search ViewModel
+
+final class PharmacySearchViewModel: NSObject, ObservableObject, CLLocationManagerDelegate {
+    struct PharmacyResult: Identifiable {
+        let id = UUID()
+        let name: String
+        let address: String
+        let distance: CLLocationDistance?
+        let isOpen: Bool?
+        let mapItem: MKMapItem
+    }
+
+    @Published var results: [PharmacyResult] = []
+    @Published var isLoading = false
+
+    private let locationManager = CLLocationManager()
+    private var userLocation: CLLocation?
+    private var currentSearch: MKLocalSearch?
+    private var hasPerformedInitialSearch = false
+
+    override init() {
+        super.init()
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+    }
+
+    func start() {
+        guard CLLocationManager.locationServicesEnabled() else { return }
+        let status = locationManager.authorizationStatus
+        switch status {
+        case .notDetermined:
+            locationManager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            requestLocation()
+        default:
+            break
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
+            requestLocation()
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last, location.horizontalAccuracy >= 0 else { return }
+        userLocation = location
+        if !hasPerformedInitialSearch {
+            hasPerformedInitialSearch = true
+            searchPharmacies(query: nil)
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+
+    func searchPharmacies(query: String?) {
+        currentSearch?.cancel()
+
+        let trimmed = query?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let isCustomQuery = !trimmed.isEmpty
+
+        if isCustomQuery {
+            performSearch(query: trimmed, pinnedOpenItem: nil)
+        } else {
+            searchWithOpenFirst()
+        }
+    }
+
+    private func searchWithOpenFirst() {
+        isLoading = true
+
+        let openRequest = makeSearchRequest(query: "farmacia aperta ora")
+        let openSearch = MKLocalSearch(request: openRequest)
+        currentSearch = openSearch
+
+        openSearch.start { [weak self] openResponse, _ in
+            guard let self else { return }
+            let openItems = self.filterPharmacies(openResponse?.mapItems ?? [])
+            let sortedOpen = self.sortByDistance(openItems)
+            let pinnedOpen = sortedOpen.first
+
+            self.performSearch(query: "farmacia", pinnedOpenItem: pinnedOpen)
+        }
+    }
+
+    private func performSearch(query: String, pinnedOpenItem: MKMapItem?) {
+        let request = makeSearchRequest(query: query)
+
+        isLoading = true
+        let search = MKLocalSearch(request: request)
+        currentSearch = search
+
+        search.start { [weak self] response, _ in
+            guard let self else { return }
+            DispatchQueue.main.async {
+                self.isLoading = false
+                let items = self.filterPharmacies(response?.mapItems ?? [])
+                let sorted = self.sortByDistance(items)
+                self.results = self.buildResults(from: sorted, pinnedOpenItem: pinnedOpenItem)
+            }
+        }
+    }
+
+    private func makeSearchRequest(query: String) -> MKLocalSearch.Request {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        request.resultTypes = .pointOfInterest
+        request.pointOfInterestFilter = MKPointOfInterestFilter(including: [.pharmacy])
+
+        if let location = userLocation {
+            request.region = MKCoordinateRegion(
+                center: location.coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
+            )
+            if #available(iOS 18.0, *) {
+                request.regionPriority = .required
+            }
+        }
+        return request
+    }
+
+    private func requestLocation() {
+        if let cached = locationManager.location, cached.horizontalAccuracy >= 0 {
+            userLocation = cached
+            if !hasPerformedInitialSearch {
+                hasPerformedInitialSearch = true
+                searchPharmacies(query: nil)
+            }
+        }
+        locationManager.requestLocation()
+    }
+
+    private func filterPharmacies(_ items: [MKMapItem]) -> [MKMapItem] {
+        items.filter { item in
+            if let category = item.pointOfInterestCategory, category != .pharmacy { return false }
+            let name = (item.name ?? "").folding(options: .diacriticInsensitive, locale: .current).lowercased()
+            let banned = ["erboristeria", "parafarmacia", "vitamine", "vitamin"]
+            return !banned.contains(where: { name.contains($0) })
+        }
+    }
+
+    private func sortByDistance(_ items: [MKMapItem]) -> [MKMapItem] {
+        guard let location = userLocation else { return items }
+        return items.sorted { lhs, rhs in
+            let ld = lhs.placemark.location?.distance(from: location) ?? .greatestFiniteMagnitude
+            let rd = rhs.placemark.location?.distance(from: location) ?? .greatestFiniteMagnitude
+            return ld < rd
+        }
+    }
+
+    private func buildResults(from items: [MKMapItem], pinnedOpenItem: MKMapItem? = nil) -> [PharmacyResult] {
+        var finalItems = items
+
+        // Se c'e una farmacia aperta pinnata, mettila in cima e rimuovi duplicati
+        if let pinned = pinnedOpenItem {
+            finalItems.removeAll { ($0.name ?? "") == (pinned.name ?? "") }
+            finalItems.insert(pinned, at: 0)
+        }
+
+        return finalItems.map { item -> PharmacyResult in
+            let dist = userLocation.flatMap { item.placemark.location?.distance(from: $0) }
+            let address = [item.placemark.thoroughfare, item.placemark.subThoroughfare, item.placemark.locality]
+                .compactMap { $0 }
+                .joined(separator: " ")
+            let isPinned = pinnedOpenItem.map { ($0.name ?? "") == (item.name ?? "") } ?? false
+            return PharmacyResult(
+                name: item.name ?? "Farmacia",
+                address: address,
+                distance: dist,
+                isOpen: isPinned ? true : nil,
+                mapItem: item
+            )
+        }
+    }
+
+    func distanceText(for result: PharmacyResult) -> String? {
+        guard let meters = result.distance else { return nil }
+        if meters < 1000 {
+            let rounded = Int((meters / 10).rounded()) * 10
+            return "\(rounded) m"
+        }
+        let km = (meters / 1000 * 10).rounded() / 10
+        return String(format: "%.1f km", km)
+    }
+}
+
+// MARK: – Pharmacy Picker
+
+struct PharmacyPickerView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var selectedPharmacyName: String
+    @StateObject private var searchVM = PharmacySearchViewModel()
+    @State private var query = ""
+
+    var body: some View {
+        List {
+            if searchVM.isLoading && searchVM.results.isEmpty {
+                Section {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("Ricerca farmacie...")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            ForEach(searchVM.results) { result in
+                pharmacyRow(result)
+            }
+            if !searchVM.isLoading && searchVM.results.isEmpty {
+                Section {
+                    Text("Nessuna farmacia trovata")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Cerca farmacia per nome")
+        .onSubmit(of: .search) {
+            searchVM.searchPharmacies(query: query)
+        }
+        .onChange(of: query) { newValue in
+            if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                searchVM.searchPharmacies(query: nil)
+            }
+        }
+        .navigationTitle("Seleziona farmacia")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Chiudi") {
+                    dismiss()
+                }
+            }
+        }
+        .onAppear {
+            searchVM.start()
+        }
+    }
+
+    private func pharmacyRow(_ result: PharmacySearchViewModel.PharmacyResult) -> some View {
+        Button {
+            selectedPharmacyName = result.name
+            dismiss()
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(result.name)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        if result.isOpen == true {
+                            Text("Aperta")
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.green.opacity(0.18)))
+                                .foregroundStyle(.green)
+                        }
+                    }
+                    if !result.address.isEmpty {
+                        Text(result.address)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer()
+                if let dist = searchVM.distanceText(for: result) {
+                    Text(dist)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                if result.name == selectedPharmacyName {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 

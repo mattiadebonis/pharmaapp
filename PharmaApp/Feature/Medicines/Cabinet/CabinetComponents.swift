@@ -3,7 +3,7 @@ import CoreData
 
 /// Riga con swipe action per i medicinali nell'armadietto.
 struct MedicineSwipeRow: View {
-    @ObservedObject var entry: MedicinePackage
+    let entry: MedicinePackage
     var isSelected: Bool
     var isInSelectionMode: Bool
     var shouldShowPrescription: Bool

@@ -301,7 +301,7 @@ extension Medicine {
         }
         
         // Recupera o crea un RecurrenceManager
-        let recManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+        let recManager = RecurrenceManager.shared
         
         var totalScore = 0
         

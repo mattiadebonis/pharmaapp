@@ -22,15 +22,6 @@ struct TherapySummaryBuilder {
         descriptionText(for: therapy, includeTimes: true)
     }
 
-    /// "HH:mm ⟳ Descrizione terapia"
-    func summaryWithTimePrefix(for therapy: Therapy, now: Date = Date()) -> String {
-        let line = line(for: therapy, now: now)
-        if let prefix = line.prefix {
-            return "\(prefix) ⟳ \(line.description)"
-        }
-        return line.description
-    }
-
     func line(for therapy: Therapy, now: Date = Date()) -> TherapyLine {
         let description = descriptionText(for: therapy, includeTimes: false)
         let prefix = timePrefix(for: therapy, now: now)

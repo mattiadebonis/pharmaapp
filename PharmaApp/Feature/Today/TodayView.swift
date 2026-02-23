@@ -22,7 +22,7 @@ struct TodayView: View {
     private var doctors: FetchedResults<Doctor>
     @StateObject private var viewModel = TodayViewModel()
     @StateObject private var locationVM = LocationSearchViewModel()
-    private let therapyRecurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+    private let therapyRecurrenceManager = RecurrenceManager.shared
 
     @State private var selectedMedicine: Medicine?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
@@ -398,7 +398,7 @@ struct TodayView: View {
         case .pharmacy:
             openPharmacySuggestionInMaps()
             appRouter.markRouteHandled(route)
-        case .codiceFiscaleFullscreen, .profile:
+        case .codiceFiscaleFullscreen, .profile, .scan, .addMedicine:
             break
         }
     }
@@ -2842,13 +2842,6 @@ struct TodayView: View {
         openURL(url)
     }
 
-    private func normalizedSecondaryDetail(_ detail: String?) -> String? {
-        guard let detail else { return nil }
-        let trimmed = detail.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        return trimmed.replacingOccurrences(of: "\n", with: " • ")
-    }
-
     private func prescriptionRowContent(
         item: TodayTodoItem,
         titleColor: Color,
@@ -3743,28 +3736,6 @@ struct TodayView: View {
         content
     }
 
-    private var insightsPlaceholder: some View {
-        VStack {
-            Spacer(minLength: 0)
-            VStack(spacing: 14) {
-                Image(systemName: "leaf.circle.fill")
-                    .font(.system(size: 42, weight: .semibold))
-                    .foregroundColor(Color.mint.opacity(0.85))
-                VStack(spacing: 10) {
-                    Text("non è richiesta alcuna azione da parte tua")
-                        .font(.title3)
-                        .multilineTextAlignment(.center)
-                    Text("Se ci sarà qualcosa da gestire, comparirà qui con il giusto preavviso: per ora puoi rilassarti.")
-                        .font(.body)
-                        .multilineTextAlignment(.center)
-                }
-                .foregroundColor(.secondary)
-            }
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 24)
-    }
 }
 
 // MARK: - Mail composer helpers

@@ -142,8 +142,7 @@ class CabinetViewModel: ObservableObject {
         guard medicine.obbligo_ricetta else { return false }
         if medicine.hasEffectivePrescriptionReceived() { return false }
         if medicine.hasNewPrescritpionRequest() { return false }
-        let rec = RecurrenceManager(context: viewContext)
-        return needsPrescriptionBeforePurchase(medicine, recurrenceManager: rec)
+        return needsPrescriptionBeforePurchase(medicine, recurrenceManager: .shared)
     }
 
     // MARK: - Sorting

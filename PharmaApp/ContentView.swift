@@ -39,14 +39,14 @@ struct ContentView: View {
                         }
                     }
                     Tab(
-                        "Cerca",
-                        systemImage: "magnifyingglass",
+                        "Aggiungi",
+                        systemImage: "plus",
                         value: AppTabRoute.search,
                         role: .search
                     ) {
                         NavigationStack {
                             GlobalSearchView()
-                                .navigationTitle("Cerca")
+                                .navigationTitle("Aggiungi")
                                 .navigationBarTitleDisplayMode(.inline)
                         }
                     }
@@ -73,11 +73,11 @@ struct ContentView: View {
 
                     NavigationStack {
                         GlobalSearchView()
-                            .navigationTitle("Cerca")
+                            .navigationTitle("Aggiungi")
                             .navigationBarTitleDisplayMode(.inline)
                     }
                     .tabItem {
-                        Label("Cerca", systemImage: "magnifyingglass")
+                        Label("Aggiungi", systemImage: "plus")
                     }
                     .tag(AppTabRoute.search)
                 }
@@ -110,6 +110,8 @@ struct ContentView: View {
             appRouter.markRouteHandled(route)
         case .today, .todayPurchaseList, .pharmacy:
             appRouter.markRouteHandled(route)
+        case .scan, .addMedicine:
+            break // handled by GlobalSearchView
         }
     }
 }

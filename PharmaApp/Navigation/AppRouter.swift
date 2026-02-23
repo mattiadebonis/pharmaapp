@@ -34,6 +34,8 @@ final class AppRouter: ObservableObject {
             selectedTab = .medicine
         case .profile:
             selectedTab = .profilo
+        case .scan, .addMedicine:
+            selectedTab = .search
         }
     }
 }

@@ -8,7 +8,7 @@ enum MedicineSubtitleMode {
 
 struct MedicineRowView: View {
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
-    private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+    private let recurrenceManager = RecurrenceManager.shared
     
     // MARK: - Costanti
     // MARK: - Input

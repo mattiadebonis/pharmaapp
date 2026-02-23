@@ -18,7 +18,7 @@ private struct EntryMetrics {
 }
 
 func computeSections(for medicines: [Medicine], logs: [Log], option: Option?) -> (purchase: [Medicine], oggi: [Medicine], ok: [Medicine]) {
-    let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+    let rec = RecurrenceManager.shared
     let now = Date()
     let cal = Calendar.current
     let fallbackContext = medicines.first?.managedObjectContext ?? PersistenceController.shared.container.viewContext
@@ -200,7 +200,7 @@ func computeSections(for medicines: [Medicine], logs: [Log], option: Option?) ->
 }
 
 func computeSections(for entries: [MedicinePackage], logs: [Log], option: Option?) -> (purchase: [MedicinePackage], oggi: [MedicinePackage], ok: [MedicinePackage]) {
-    let rec = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+    let rec = RecurrenceManager.shared
     let now = Date()
     let cal = Calendar.current
     let stockService = StockService(context: PersistenceController.shared.container.viewContext)

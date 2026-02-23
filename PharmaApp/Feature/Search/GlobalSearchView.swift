@@ -6,6 +6,7 @@ import UIKit
 struct GlobalSearchView: View {
     @Environment(\.managedObjectContext) private var managedObjectContext
     @Environment(\.openURL) private var openURL
+    @EnvironmentObject private var appRouter: AppRouter
 
     @FetchRequest(fetchRequest: Medicine.extractMedicines())
     private var medicines: FetchedResults<Medicine>
@@ -134,7 +135,7 @@ struct GlobalSearchView: View {
     }
 
     private var recurrenceManager: RecurrenceManager {
-        RecurrenceManager(context: managedObjectContext)
+        .shared
     }
 
     private var option: Option? {
@@ -398,9 +399,6 @@ struct GlobalSearchView: View {
     private var hasSearchResults: Bool {
         !filteredMedicines.isEmpty
             || !filteredCatalogMedicines.isEmpty
-            || !filteredTherapies.isEmpty
-            || !filteredDoctors.isEmpty
-            || !filteredPersons.isEmpty
     }
 
     private var medicinesInCabinetIdentityKeys: Set<String> {
@@ -443,13 +441,12 @@ struct GlobalSearchView: View {
             if !trimmedQuery.isEmpty {
                 searchResultsSections
             } else {
-                utilitySection
                 recentSection
             }
         }
         .listStyle(.plain)
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Cerca un farmaco o una terapia...")
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Inserisci un farmaco")
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .onSubmit(of: .search) {
@@ -461,29 +458,22 @@ struct GlobalSearchView: View {
                 isCatalogSearchPresented = true
             }
         )
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    ForEach(SearchScope.allCases) { scope in
-                        Button {
-                            selectedScope = scope
-                        } label: {
-                            if selectedScope == scope {
-                                Label(scope.menuLabel, systemImage: "checkmark")
-                            } else {
-                                Text(scope.menuLabel)
-                            }
-                        }
-                    }
-                } label: {
-                    Image(systemName: selectedScope == .all ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
-                        .font(.system(size: 18, weight: .regular))
-                }
+        .onAppear {
+            loadCatalogMedicinesIfNeeded()
+            if appRouter.pendingRoute == .scan {
+                appRouter.markRouteHandled(.scan)
+                isCatalogSearchPresented = true
+            } else if appRouter.pendingRoute == .addMedicine {
+                appRouter.markRouteHandled(.addMedicine)
             }
         }
-        .onAppear {
-            locationVM.ensureStarted()
-            loadCatalogMedicinesIfNeeded()
+        .onChange(of: appRouter.pendingRoute) { route in
+            if route == .scan {
+                appRouter.markRouteHandled(.scan)
+                isCatalogSearchPresented = true
+            } else if route == .addMedicine {
+                appRouter.markRouteHandled(.addMedicine)
+            }
         }
         .onChange(of: query) { value in
             if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -830,44 +820,6 @@ struct GlobalSearchView: View {
                 }
             }
 
-            if !filteredTherapies.isEmpty {
-                Section {
-                    ForEach(filteredTherapies, id: \.objectID) { therapy in
-                        Button {
-                            openTherapy(therapy)
-                        } label: {
-                            therapyRow(therapy)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                } header: {
-                    sectionHeader("Terapie")
-                }
-            }
-
-            if !filteredDoctors.isEmpty || !filteredPersons.isEmpty {
-                Section {
-                    ForEach(filteredDoctors, id: \.objectID) { doctor in
-                        Button {
-                            openDoctor(doctor)
-                        } label: {
-                            doctorRow(doctor)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    ForEach(filteredPersons, id: \.objectID) { person in
-                        Button {
-                            openPerson(person)
-                        } label: {
-                            personRow(person)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                } header: {
-                    sectionHeader("Contatti")
-                }
-            }
         } else {
             Section {
                 emptyLine("Nessun risultato per \"\(trimmedQuery)\"")

@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreData
+import WidgetKit
 
 /// Vista dedicata al tab "Armadietto" (ex ramo medicines di FeedView)
 struct CabinetView: View {
@@ -14,12 +15,13 @@ struct CabinetView: View {
     @EnvironmentObject private var favoritesStore: FavoritesStore
     @Environment(\.managedObjectContext) private var managedObjectContext
     @StateObject private var viewModel = CabinetViewModel()
+    @StateObject private var locationVM = LocationSearchViewModel()
 
     @FetchRequest(fetchRequest: MedicinePackage.extractEntries())
     private var medicinePackages: FetchedResults<MedicinePackage>
     @FetchRequest(fetchRequest: Option.extractOptions())
     private var options: FetchedResults<Option>
-    @FetchRequest(fetchRequest: Log.extractLogs())
+    @FetchRequest(fetchRequest: Log.extractRecentLogs(days: 7))
     private var logs: FetchedResults<Log>
     @FetchRequest(fetchRequest: Cabinet.extractCabinets())
     private var cabinets: FetchedResults<Cabinet>
@@ -34,6 +36,8 @@ struct CabinetView: View {
     @State private var pendingCatalogSelection: CatalogSelection?
     @State private var selectedEntry: MedicinePackage?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
+    @State private var cachedSummaryLines: [String] = ["Tutto sotto controllo"]
+    @State private var syncWorkItem: DispatchWorkItem?
 
     var body: some View {
         cabinetRootView
@@ -47,6 +51,33 @@ struct CabinetView: View {
         cabinetListWithNewCabinetSheet
             .navigationTitle("Armadietto")
             .navigationBarTitleDisplayMode(.large)
+            .onAppear {
+                locationVM.ensureStarted()
+                recomputeSummaryLines()
+                syncSummaryToWidgetDebounced()
+            }
+            .onChange(of: medicinePackages.count) { _ in
+                recomputeSummaryLines()
+                syncSummaryToWidgetDebounced()
+            }
+            .onChange(of: logs.count) { _ in
+                recomputeSummaryLines()
+                syncSummaryToWidgetDebounced()
+            }
+    }
+
+    private func recomputeSummaryLines() {
+        cachedSummaryLines = computeSummaryLines()
+    }
+
+    private func syncSummaryToWidgetDebounced() {
+        syncWorkItem?.cancel()
+        let workItem = DispatchWorkItem {
+            CabinetSummarySharedStore.write(cachedSummaryLines)
+            WidgetCenter.shared.reloadTimelines(ofKind: "CabinetSummaryWidget")
+        }
+        syncWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
     }
 
     private var cabinetListWithNewCabinetSheet: some View {
@@ -121,14 +152,110 @@ struct CabinetView: View {
             .listSectionSpacingIfAvailable(4)
             .listRowSpacing(18)
             .listStyle(.plain)
-            .padding(.top, 16)
+            .padding(.top, 18)
             .scrollContentBackground(.hidden)
             .scrollIndicators(.hidden)
+    }
+
+    private func camelCaseName(_ text: String) -> String {
+        text.lowercased().split(separator: " ").map { part in
+            guard let first = part.first else { return "" }
+            return String(first).uppercased() + part.dropFirst()
+        }.joined(separator: " ")
+    }
+
+    private func computeSummaryLines() -> [String] {
+        let medicines = uniqueMedicines
+        guard let option = options.first else {
+            return ["Tutto sotto controllo"]
+        }
+        let recurrence = RecurrenceManager.shared
+
+        let lowStock = medicines.filter { $0.isInEsaurimento(option: option, recurrenceManager: recurrence) }
+
+        let now = Date()
+        let calendar = Calendar.current
+        let startOfToday = calendar.startOfDay(for: now)
+        let justBeforeToday = startOfToday.addingTimeInterval(-1)
+        let missedDoses = medicines.filter { medicine in
+            guard let firstDoseToday = medicine.nextIntakeDate(from: justBeforeToday, recurrenceManager: recurrence) else { return false }
+            return calendar.isDateInToday(firstDoseToday)
+                && firstDoseToday < now
+                && !medicine.hasIntakeLoggedToday(calendar: calendar)
+        }
+
+        let stockOk = lowStock.isEmpty
+        let therapyOk = missedDoses.isEmpty
+
+        if stockOk && therapyOk {
+            return ["Tutto sotto controllo"]
+        }
+
+        var lines: [String] = []
+
+        if stockOk {
+            lines.append("Scorte a posto")
+        } else {
+            let names = lowStock.prefix(3).map { camelCaseName($0.nome) }
+            let label = names.joined(separator: ", ")
+            if lowStock.count > 3 {
+                lines.append("\(label) e altri \(lowStock.count - 3) in esaurimento")
+            } else {
+                lines.append("\(label) in esaurimento")
+            }
+            if let pharmacyName = locationVM.pinItem?.title {
+                var pharmacyLine = pharmacyName
+                if let open = locationVM.isLikelyOpen {
+                    pharmacyLine += open ? " · aperta" : " · chiusa"
+                }
+                if let distance = locationVM.distanceString {
+                    pharmacyLine += " · \(distance)"
+                }
+                lines.append(pharmacyLine)
+            }
+        }
+
+        if therapyOk {
+            lines.append("Terapie in regola")
+        } else {
+            let names = missedDoses.prefix(3).map { camelCaseName($0.nome) }
+            let label = names.joined(separator: ", ")
+            if missedDoses.count > 3 {
+                lines.append("\(label) e altri \(missedDoses.count - 3) da assumere")
+            } else {
+                lines.append("\(label) da assumere")
+            }
+        }
+
+        return lines
+    }
+
+    private var uniqueMedicines: [Medicine] {
+        var seen = Set<NSManagedObjectID>()
+        return medicinePackages.compactMap { entry -> Medicine? in
+            let id = entry.medicine.objectID
+            guard seen.insert(id).inserted else { return nil }
+            return entry.medicine
+        }
     }
 
     private var cabinetListView: AnyView {
         let viewState = buildShelfViewState()
         return AnyView(List {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(cachedSummaryLines, id: \.self) { line in
+                        Text(line)
+                            .font(.system(size: 16, weight: .regular))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 24, trailing: 20))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+            .listSectionSeparator(.hidden)
+
             if appVM.suggestNearestPharmacies {
                 Section {
                     smartBannerCard
@@ -184,16 +311,17 @@ struct CabinetView: View {
             option: options.first,
             cabinets: Array(cabinets)
         )
-        let favoriteEntries = shelfState.entries.filter { isFavoriteEntry($0) }
-        let cabinetEntries = shelfState.entries.filter { entry in
-            guard !isFavoriteEntry(entry) else { return false }
-            if case .cabinet = entry.kind { return true }
-            return false
-        }
-        let otherMedicineEntries = shelfState.entries.filter { entry in
-            guard !isFavoriteEntry(entry) else { return false }
-            if case .medicinePackage = entry.kind { return true }
-            return false
+        var favoriteEntries: [CabinetViewModel.ShelfEntry] = []
+        var cabinetEntries: [CabinetViewModel.ShelfEntry] = []
+        var otherMedicineEntries: [CabinetViewModel.ShelfEntry] = []
+        for entry in shelfState.entries {
+            if isFavoriteEntry(entry) {
+                favoriteEntries.append(entry)
+            } else if case .cabinet = entry.kind {
+                cabinetEntries.append(entry)
+            } else if case .medicinePackage = entry.kind {
+                otherMedicineEntries.append(entry)
+            }
         }
         return ShelfViewState(
             favoriteEntries: favoriteEntries,

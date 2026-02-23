@@ -247,45 +247,6 @@ private func scheduledTimesToday(
     }
 }
 
-private func dosesTodayCount(for therapies: Set<Therapy>, now: Date, recurrenceManager: RecurrenceManager) -> Int {
-    guard !therapies.isEmpty else { return 0 }
-    let calendar = Calendar.current
-    let today = calendar.startOfDay(for: now)
-    var total = 0
-    for therapy in therapies {
-        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-        let start = therapy.start_date ?? today
-        let perDay = max(1, therapy.doses?.count ?? 0)
-        let allowed = recurrenceManager.allowedEvents(
-            on: today,
-            rule: rule,
-            startDate: start,
-            dosesPerDay: perDay,
-            calendar: calendar
-        )
-        total += allowed
-    }
-    return total
-}
-
-private func nextDoseTime(for therapies: Set<Therapy>, now: Date, recurrenceManager: RecurrenceManager) -> Date? {
-    guard !therapies.isEmpty else { return nil }
-    let calendar = Calendar.current
-    let today = calendar.startOfDay(for: now)
-    let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
-
-    let todayTimes = scheduledTimes(for: therapies, on: today, now: now, recurrenceManager: recurrenceManager)
-        .filter { $0 > now }
-        .sorted()
-    if let nextToday = todayTimes.first {
-        return nextToday
-    }
-
-    let tomorrowTimes = scheduledTimes(for: therapies, on: tomorrow, now: now, recurrenceManager: recurrenceManager)
-        .sorted()
-    return tomorrowTimes.first
-}
-
 private func scheduledTimes(for therapies: Set<Therapy>, on day: Date, now: Date, recurrenceManager: RecurrenceManager) -> [Date] {
     var times: [Date] = []
     for therapy in therapies {
@@ -311,13 +272,6 @@ private func scheduledTimes(for therapies: Set<Therapy>, on day: Date, now: Date
         }
     }
     return times
-}
-
-private func frequencyLabel(for therapies: Set<Therapy>, recurrenceManager: RecurrenceManager) -> String? {
-    guard let therapy = therapies.first else { return nil }
-    let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-    let description = recurrenceManager.describeRecurrence(rule: rule).trimmingCharacters(in: .whitespacesAndNewlines)
-    return description.isEmpty ? nil : description
 }
 
 private func stockDays(for medicine: Medicine, therapies: Set<Therapy>, recurrenceManager: RecurrenceManager) -> Int? {
@@ -354,21 +308,6 @@ private func stockDays(for entry: MedicinePackage, therapies: Set<Therapy>, recu
     return max(0, days)
 }
 
-private func occurs(on day: Date, therapy: Therapy, recurrenceManager: RecurrenceManager) -> Bool {
-    let calendar = Calendar.current
-    let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-    let start = therapy.start_date ?? day
-    let perDay = max(1, therapy.doses?.count ?? 0)
-    let allowed = recurrenceManager.allowedEvents(
-        on: day,
-        rule: rule,
-        startDate: start,
-        dosesPerDay: perDay,
-        calendar: calendar
-    )
-    return allowed > 0
-}
-
 private func combine(day: Date, withTime time: Date) -> Date? {
     let calendar = Calendar.current
     let dayComponents = calendar.dateComponents([.year, .month, .day], from: day)
@@ -400,27 +339,3 @@ private func nextTherapyOccurrence(for therapy: Therapy, now: Date, recurrenceMa
     )
 }
 
-private func dayLabel(for date: Date) -> String {
-    let label = weekdayFormatter.string(from: date).trimmingCharacters(in: .whitespacesAndNewlines)
-    return label.isEmpty ? shortDateFormatter.string(from: date) : label
-}
-
-private let timeFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "HH:mm"
-    return formatter
-}()
-
-private let weekdayFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: "it_IT")
-    formatter.dateFormat = "EEE"
-    return formatter
-}()
-
-private let shortDateFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: "it_IT")
-    formatter.dateFormat = "dd/MM"
-    return formatter
-}()

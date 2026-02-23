@@ -99,6 +99,18 @@ struct PharmaAppApp: App {
                 .environmentObject(favoritesStore)
                 .onOpenURL { url in
                     Task { @MainActor in
+                        if url.scheme == "pharmaapp" {
+                            switch url.host {
+                            case "scan":
+                                appRouter.open(.scan)
+                                return
+                            case "add":
+                                appRouter.open(.addMedicine)
+                                return
+                            default:
+                                break
+                            }
+                        }
                         let handledLiveActivityAction = await LiveActivityURLActionHandler.shared.handle(url: url)
                         if handledLiveActivityAction {
                             appRouter.consumePendingRouteIfAny()

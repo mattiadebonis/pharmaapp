@@ -1,5 +1,4 @@
 import SwiftUI
-import MapKit
 import UIKit
 
 // Placeholder per la conferma richiesta ricetta.
@@ -102,19 +101,3 @@ struct PrescriptionEmailSheet: View {
     }
 }
 
-// Contesto usato per generare insight e todo.
-struct AIInsightsContext {
-    let purchaseHighlights: [String]
-    let therapyHighlights: [String]
-    let upcomingHighlights: [String]
-    let prescriptionHighlights: [String]
-    let pharmacySuggestion: String?
-
-    var hasSignals: Bool {
-        !purchaseHighlights.isEmpty ||
-        !therapyHighlights.isEmpty ||
-        !upcomingHighlights.isEmpty ||
-        !prescriptionHighlights.isEmpty ||
-        pharmacySuggestion != nil
-    }
-}

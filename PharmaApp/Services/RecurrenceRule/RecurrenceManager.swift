@@ -10,6 +10,8 @@ import CoreData
 
 struct RecurrenceManager {
 
+    static let shared = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+
     let context: NSManagedObjectContext?
     private static let recurrenceCacheQueue = DispatchQueue(label: "RecurrenceManager.parse.cache.queue", attributes: .concurrent)
     private static var recurrenceCache: [String: RecurrenceRule] = [:]

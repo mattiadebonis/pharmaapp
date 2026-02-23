@@ -32,7 +32,7 @@ struct MedicineDetailView: View {
     @FetchRequest(fetchRequest: Doctor.extractDoctors()) private var doctors: FetchedResults<Doctor>
     @FetchRequest(fetchRequest: Medicine.extractMedicines()) private var allMedicines: FetchedResults<Medicine>
     
-    private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+    private let recurrenceManager = RecurrenceManager.shared
     @State private var showEmailSheet = false
     @State private var showLogsSheet = false
     @State private var showThresholdAlert = false

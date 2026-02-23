@@ -10,7 +10,7 @@ import CoreData
 
 class MedicineRowViewModel: ObservableObject {
     let managedObjectContext: NSManagedObjectContext
-    private let recurrenceManager = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
+    private let recurrenceManager = RecurrenceManager.shared
     private let operationIdProvider: OperationIdProviding
 
     init(

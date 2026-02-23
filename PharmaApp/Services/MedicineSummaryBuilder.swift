@@ -11,6 +11,7 @@ struct MedicineSummaryBuilder {
         self.calendar = calendar
         self.recurrenceManager = RecurrenceManager(context: context)
     }
+    
 
     func build(
         for medicine: Medicine,
@@ -195,27 +196,9 @@ private func formatCount(_ count: Int, singular: String, plural: String) -> Stri
     count == 1 ? "1 \(singular)" : "\(count) \(plural)"
 }
 
-private func dayLabel(for date: Date) -> String {
-    let label = weekdayFormatter.string(from: date).trimmingCharacters(in: .whitespacesAndNewlines)
-    return label.isEmpty ? shortDateFormatter.string(from: date) : label
-}
-
 private let timeFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "HH:mm"
     return formatter
 }()
 
-private let weekdayFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: "it_IT")
-    formatter.dateFormat = "EEE"
-    return formatter
-}()
-
-private let shortDateFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: "it_IT")
-    formatter.dateFormat = "dd/MM"
-    return formatter
-}()
