@@ -108,6 +108,19 @@ struct MedicineDetailView: View {
                             let days = medicine.custom_stock_threshold > 0 ? Int(medicine.custom_stock_threshold) : 7
                             Label("Soglia scorte (\(days) gg)", systemImage: "exclamationmark.triangle")
                         }
+                        Button {
+                            medicine.manual_intake_registration.toggle()
+                            saveContext()
+                        } label: {
+                            Label(
+                                medicine.manual_intake_registration
+                                    ? "Conferma assunzione: attiva"
+                                    : "Conferma assunzione: disattivata",
+                                systemImage: medicine.manual_intake_registration
+                                    ? "checkmark.circle"
+                                    : "checkmark.circle.badge.xmark"
+                            )
+                        }
                         Button(role: .destructive) {
                             deleteMedicine()
                         } label: {

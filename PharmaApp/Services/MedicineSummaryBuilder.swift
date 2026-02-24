@@ -72,7 +72,13 @@ struct MedicineSummaryBuilder {
                 line2 = "Autonomia zero giorni"
             } else {
                 let daysText = formatCount(stockDays, singular: "giorno", plural: "giorni")
-                line2 = "Autonomia \(daysText)"
+                let totalLeftover = Int(therapies.reduce(0.0) { $0 + Double($1.leftover()) })
+                if totalLeftover > 0 {
+                    let unitLabel = remainingUnitLabel(for: medicine, therapies: therapies, count: totalLeftover)
+                    line2 = "Autonomia \(daysText) · \(totalLeftover) \(unitLabel)"
+                } else {
+                    line2 = "Autonomia \(daysText)"
+                }
             }
         } else if therapies.isEmpty, let remainingUnits = stockUnitsFallback ?? medicine.remainingUnitsWithoutTherapy() {
             let clamped = max(0, remainingUnits)
@@ -194,6 +200,23 @@ private func stockDays(for medicine: Medicine, therapies: Set<Therapy>, recurren
 
 private func formatCount(_ count: Int, singular: String, plural: String) -> String {
     count == 1 ? "1 \(singular)" : "\(count) \(plural)"
+}
+
+private func remainingUnitLabel(for medicine: Medicine, therapies: Set<Therapy>, count: Int) -> String {
+    let packages = therapies.compactMap { $0.package }
+    let tipologia = (packages.first?.tipologia ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    let unitTokens: [(singular: String, plural: String)] = [
+        ("compressa", "compresse"), ("capsula", "capsule"), ("fiala", "fiale"),
+        ("bustina", "bustine"), ("siringa", "siringhe"), ("cerotto", "cerotti"),
+        ("goccia", "gocce"), ("flacone", "flaconi"), ("ampolla", "ampolle")
+    ]
+    let lower = tipologia.lowercased()
+    for pair in unitTokens {
+        if lower.contains(pair.singular) || lower.contains(pair.plural) {
+            return count == 1 ? pair.singular : pair.plural
+        }
+    }
+    return "unità"
 }
 
 private let timeFormatter: DateFormatter = {

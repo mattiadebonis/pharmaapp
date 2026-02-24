@@ -130,7 +130,7 @@ struct TherapyFormView: View {
     private let showClinicalRuleControls = false
 
     private var manualIntakeEnabled: Bool {
-        options.first?.manual_intake_registration ?? false
+        medicine.manual_intake_registration
     }
     
     // Sezione Orari: con pulsante + per aggiungere e - per rimuovere

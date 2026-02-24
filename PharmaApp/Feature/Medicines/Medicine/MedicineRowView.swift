@@ -292,6 +292,15 @@ struct MedicineRowView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
+            if !medicine.manual_intake_registration {
+                HStack(spacing: 4) {
+                    Image(systemName: "bolt.fill")
+                    Text("Assunzione automatica")
+                }
+                .font(subtitleFont)
+                .foregroundColor(.orange)
+                .lineLimit(1)
+            }
         }
     }
 

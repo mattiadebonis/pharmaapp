@@ -8,32 +8,6 @@ struct TherapySettingsSectionsView: View {
     var body: some View {
         if let option = options.first {
             Section(
-                header: Text("Assunzione"),
-                footer: Text("Queste impostazioni valgono per tutte le medicine.")
-            ) {
-                let manualBinding = Binding<Bool>(
-                    get: { option.manual_intake_registration },
-                    set: { newValue in
-                        option.manual_intake_registration = newValue
-                        applyManualIntakeSetting(newValue)
-                        saveContext()
-                    }
-                )
-                Toggle(isOn: manualBinding) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "repeat")
-                            .foregroundStyle(.secondary)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Chiedi conferma assunzione")
-                            Text("Quando ricevi il promemoria, conferma manualmente l'assunzione.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-
-            Section(
                 header: Text("Notifiche terapia"),
                 footer: Text("In modalità Tipo sveglia puoi interrompere o rimandare dal lock screen.")
             ) {
@@ -97,18 +71,4 @@ struct TherapySettingsSectionsView: View {
         }
     }
 
-    private func applyManualIntakeSetting(_ enabled: Bool) {
-        let medicineRequest: NSFetchRequest<Medicine> = Medicine.fetchRequest() as! NSFetchRequest<Medicine>
-        let therapyRequest: NSFetchRequest<Therapy> = Therapy.fetchRequest() as! NSFetchRequest<Therapy>
-        if let medicines = try? managedObjectContext.fetch(medicineRequest) {
-            for medicine in medicines {
-                medicine.manual_intake_registration = enabled
-            }
-        }
-        if let therapies = try? managedObjectContext.fetch(therapyRequest) {
-            for therapy in therapies {
-                therapy.manual_intake_registration = enabled
-            }
-        }
-    }
 }

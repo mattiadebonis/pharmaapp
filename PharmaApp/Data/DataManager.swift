@@ -322,6 +322,23 @@ class DataManager {
         }
     }
 
+    private let manualIntakeMigrationKey = "pharmaapp.migration.manualIntakeDefaultTrue.v1"
+
+    func migrateManualIntakeDefaultIfNeeded(userDefaults: UserDefaults = .standard) {
+        guard !userDefaults.bool(forKey: manualIntakeMigrationKey) else { return }
+        let request: NSFetchRequest<Medicine> = Medicine.fetchRequest() as! NSFetchRequest<Medicine>
+        request.predicate = NSPredicate(format: "manual_intake_registration == NO")
+        if let medicines = try? context.fetch(request) {
+            for medicine in medicines {
+                medicine.manual_intake_registration = true
+            }
+        }
+        if context.hasChanges {
+            try? context.save()
+        }
+        userDefaults.set(true, forKey: manualIntakeMigrationKey)
+    }
+
     private func requiresPrescription(from packages: [[String: Any]]) -> Bool {
         for package in packages {
             if boolValue(packagePrescriptionValue(in: package)) {

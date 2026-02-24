@@ -64,6 +64,10 @@ struct CabinetView: View {
                 recomputeSummaryLines()
                 syncSummaryToWidgetDebounced()
             }
+            .onChange(of: locationVM.pinItem?.title) { _ in
+                recomputeSummaryLines()
+                syncSummaryToWidgetDebounced()
+            }
     }
 
     private func recomputeSummaryLines() {
@@ -246,7 +250,7 @@ struct CabinetView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(cachedSummaryLines, id: \.self) { line in
                         Text(line)
-                            .font(.system(size: 16, weight: .regular))
+                            .font(.title3.weight(.regular))
                             .foregroundStyle(.secondary)
                     }
                 }

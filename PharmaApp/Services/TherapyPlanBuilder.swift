@@ -1278,10 +1278,8 @@ public struct TherapyPlanBuilder {
         option: OptionSnapshot?,
         therapies: [TherapySnapshot]?
     ) -> Bool {
-        if let option { return option.manualIntakeRegistration }
-        if medicine.manualIntakeRegistration { return true }
-        let list = therapies ?? medicine.therapies
-        return list.contains(where: { $0.manualIntakeRegistration })
+        // Default: sempre conferma (true). Si disattiva per singolo farmaco.
+        return medicine.manualIntakeRegistration
     }
 
     private static func scheduledTimesToday(
