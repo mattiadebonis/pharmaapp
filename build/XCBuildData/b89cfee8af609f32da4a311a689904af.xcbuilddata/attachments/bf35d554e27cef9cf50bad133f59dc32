@@ -1,0 +1,139 @@
+{
+  "" : {
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/PharmaAppLiveActivityExtension-primary.dia",
+    "emit-module-dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/PharmaAppLiveActivityExtension-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/PharmaAppLiveActivityExtension-primary-emit-module.dia",
+    "pch" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/PharmaAppLiveActivityExtension-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/PharmaAppLiveActivityExtension-primary.swiftdeps"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaAppLiveActivityExtension/AddMedicineWidget.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/AddMedicineWidget.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/AddMedicineWidget.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/AddMedicineWidget.dia",
+    "index-unit-output-path" : "/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/AddMedicineWidget.o",
+    "llvm-bc" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/AddMedicineWidget.bc",
+    "object" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/AddMedicineWidget.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/AddMedicineWidget.swiftdeps",
+    "swiftmodule" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/AddMedicineWidget~partial.swiftmodule"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaAppLiveActivityExtension/CabinetSummaryWidget.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CabinetSummaryWidget.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CabinetSummaryWidget.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CabinetSummaryWidget.dia",
+    "index-unit-output-path" : "/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CabinetSummaryWidget.o",
+    "llvm-bc" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CabinetSummaryWidget.bc",
+    "object" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CabinetSummaryWidget.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CabinetSummaryWidget.swiftdeps",
+    "swiftmodule" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CabinetSummaryWidget~partial.swiftmodule"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaAppLiveActivityExtension/CriticalDoseLiveActivityAttributes.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityAttributes.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityAttributes.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityAttributes.dia",
+    "index-unit-output-path" : "/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityAttributes.o",
+    "llvm-bc" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityAttributes.bc",
+    "object" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityAttributes.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityAttributes.swiftdeps",
+    "swiftmodule" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityAttributes~partial.swiftmodule"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaAppLiveActivityExtension/CriticalDoseLiveActivityWidget.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityWidget.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityWidget.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityWidget.dia",
+    "index-unit-output-path" : "/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityWidget.o",
+    "llvm-bc" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityWidget.bc",
+    "object" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityWidget.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityWidget.swiftdeps",
+    "swiftmodule" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/CriticalDoseLiveActivityWidget~partial.swiftmodule"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaAppLiveActivityExtension/LiveActivityActionURLBuilder.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityActionURLBuilder.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityActionURLBuilder.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityActionURLBuilder.dia",
+    "index-unit-output-path" : "/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityActionURLBuilder.o",
+    "llvm-bc" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityActionURLBuilder.bc",
+    "object" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityActionURLBuilder.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityActionURLBuilder.swiftdeps",
+    "swiftmodule" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityActionURLBuilder~partial.swiftmodule"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaAppLiveActivityExtension/LiveActivityMarkTakenIntent.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityMarkTakenIntent.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityMarkTakenIntent.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityMarkTakenIntent.dia",
+    "index-unit-output-path" : "/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityMarkTakenIntent.o",
+    "llvm-bc" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityMarkTakenIntent.bc",
+    "object" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityMarkTakenIntent.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityMarkTakenIntent.swiftdeps",
+    "swiftmodule" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityMarkTakenIntent~partial.swiftmodule"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaAppLiveActivityExtension/LiveActivityRemindLaterIntent.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityRemindLaterIntent.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityRemindLaterIntent.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityRemindLaterIntent.dia",
+    "index-unit-output-path" : "/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityRemindLaterIntent.o",
+    "llvm-bc" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityRemindLaterIntent.bc",
+    "object" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityRemindLaterIntent.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityRemindLaterIntent.swiftdeps",
+    "swiftmodule" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/LiveActivityRemindLaterIntent~partial.swiftmodule"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaAppLiveActivityExtension/PharmaAppLiveActivityBundle.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/PharmaAppLiveActivityBundle.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/PharmaAppLiveActivityBundle.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/PharmaAppLiveActivityBundle.dia",
+    "index-unit-output-path" : "/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/PharmaAppLiveActivityBundle.o",
+    "llvm-bc" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/PharmaAppLiveActivityBundle.bc",
+    "object" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/PharmaAppLiveActivityBundle.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/PharmaAppLiveActivityBundle.swiftdeps",
+    "swiftmodule" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/PharmaAppLiveActivityBundle~partial.swiftmodule"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaAppLiveActivityExtension/RefillActivityAttributes.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillActivityAttributes.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillActivityAttributes.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillActivityAttributes.dia",
+    "index-unit-output-path" : "/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillActivityAttributes.o",
+    "llvm-bc" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillActivityAttributes.bc",
+    "object" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillActivityAttributes.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillActivityAttributes.swiftdeps",
+    "swiftmodule" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillActivityAttributes~partial.swiftmodule"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaAppLiveActivityExtension/RefillLiveActivityURLBuilder.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityURLBuilder.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityURLBuilder.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityURLBuilder.dia",
+    "index-unit-output-path" : "/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityURLBuilder.o",
+    "llvm-bc" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityURLBuilder.bc",
+    "object" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityURLBuilder.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityURLBuilder.swiftdeps",
+    "swiftmodule" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityURLBuilder~partial.swiftmodule"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaAppLiveActivityExtension/RefillLiveActivityWidget.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityWidget.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityWidget.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityWidget.dia",
+    "index-unit-output-path" : "/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityWidget.o",
+    "llvm-bc" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityWidget.bc",
+    "object" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityWidget.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityWidget.swiftdeps",
+    "swiftmodule" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/RefillLiveActivityWidget~partial.swiftmodule"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaAppLiveActivityExtension/ScanWidget.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/ScanWidget.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/ScanWidget.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/ScanWidget.dia",
+    "index-unit-output-path" : "/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/ScanWidget.o",
+    "llvm-bc" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/ScanWidget.bc",
+    "object" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/ScanWidget.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/ScanWidget.swiftdeps",
+    "swiftmodule" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/ScanWidget~partial.swiftmodule"
+  },
+  "/Users/mattiadebonis/pharmaapp/PharmaAppLiveActivityExtension/StaticWidgetProvider.swift" : {
+    "const-values" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/StaticWidgetProvider.swiftconstvalues",
+    "dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/StaticWidgetProvider.d",
+    "diagnostics" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/StaticWidgetProvider.dia",
+    "index-unit-output-path" : "/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/StaticWidgetProvider.o",
+    "llvm-bc" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/StaticWidgetProvider.bc",
+    "object" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/StaticWidgetProvider.o",
+    "swift-dependencies" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/StaticWidgetProvider.swiftdeps",
+    "swiftmodule" : "/Users/mattiadebonis/pharmaapp/build/PharmaApp.build/Debug-iphoneos/PharmaAppLiveActivityExtension.build/Objects-normal/arm64/StaticWidgetProvider~partial.swiftmodule"
+  }
+}

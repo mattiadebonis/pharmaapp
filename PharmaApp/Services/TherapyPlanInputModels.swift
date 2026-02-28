@@ -154,6 +154,7 @@ public enum LogType: String, Codable {
 public struct LogEntry {
     public let type: LogType
     public let timestamp: Date
+    public let scheduledDueAt: Date?
     public let operationId: UUID?
     public let reversalOfOperationId: UUID?
     public let therapyId: TherapyId?
@@ -162,6 +163,7 @@ public struct LogEntry {
     public init(
         type: LogType,
         timestamp: Date,
+        scheduledDueAt: Date?,
         operationId: UUID?,
         reversalOfOperationId: UUID?,
         therapyId: TherapyId?,
@@ -169,6 +171,7 @@ public struct LogEntry {
     ) {
         self.type = type
         self.timestamp = timestamp
+        self.scheduledDueAt = scheduledDueAt
         self.operationId = operationId
         self.reversalOfOperationId = reversalOfOperationId
         self.therapyId = therapyId

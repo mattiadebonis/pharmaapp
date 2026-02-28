@@ -8,7 +8,6 @@
 import Foundation
 import CoreData
 
-@objc(DoseEvent)
 public class DoseEventRecord: NSManagedObject, Identifiable {
     @NSManaged public var id: UUID
     @NSManaged public var due_at: Date?

@@ -100,6 +100,7 @@ final class StockService {
         package: Package?,
         therapy: Therapy? = nil,
         timestamp: Date = Date(),
+        scheduledDueAt: Date? = nil,
         operationId: UUID,
         logId: UUID = UUID(),
         reversalOfOperationId: UUID? = nil,
@@ -123,6 +124,7 @@ final class StockService {
         newLog.synced_at = nil
         newLog.type = type
         newLog.timestamp = timestamp
+        newLog.scheduled_due_at = scheduledDueAt
         newLog.medicine = medicine
         newLog.package = package
         newLog.therapy = therapy

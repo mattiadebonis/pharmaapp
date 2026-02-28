@@ -108,6 +108,7 @@ struct CoreDataSnapshotBuilder {
         return LogEntry(
             type: type,
             timestamp: log.timestamp,
+            scheduledDueAt: log.scheduled_due_at,
             operationId: log.operation_id,
             reversalOfOperationId: log.reversal_of_operation_id,
             therapyId: log.therapy.map { TherapyId($0.id) },

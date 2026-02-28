@@ -15,6 +15,7 @@ public class Log : NSManagedObject , Identifiable{
     @NSManaged public var id: UUID
     @NSManaged public var operation_id: UUID?
     @NSManaged public var reversal_of_operation_id: UUID?
+    @NSManaged public var scheduled_due_at: Date?
     @NSManaged public var source: String?
     @NSManaged public var synced_at: Date?
     @NSManaged public var type: String

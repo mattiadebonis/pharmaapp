@@ -9,8 +9,7 @@ struct CriticalDoseLiveActivityWidget: Widget {
                 // ── Confirmation state ──
                 confirmationBanner(medicineName: confirmedName)
                     .padding(10)
-                    .activityBackgroundTint(Color(.systemBackground))
-                    .activitySystemActionForegroundColor(.accentColor)
+                    .modifier(TherapyActivityBackgroundModifier())
             } else {
                 // ── Normal state ──
                 VStack(alignment: .leading, spacing: 8) {
@@ -65,8 +64,7 @@ struct CriticalDoseLiveActivityWidget: Widget {
                     }
                 }
                 .padding(10)
-                .activityBackgroundTint(Color(.systemBackground))
-                .activitySystemActionForegroundColor(.accentColor)
+                .modifier(TherapyActivityBackgroundModifier())
             }
         } dynamicIsland: { context in
             DynamicIsland {
@@ -266,4 +264,12 @@ struct CriticalDoseLiveActivityWidget: Widget {
         formatter.dateFormat = "HH:mm"
         return formatter
     }()
+}
+
+private struct TherapyActivityBackgroundModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .activityBackgroundTint(.clear)
+            .activitySystemActionForegroundColor(.accentColor)
+    }
 }

@@ -21,6 +21,7 @@ final class MedicineActionService {
     private let context: NSManagedObjectContext
     private let clock: Clock
     private lazy var stockService = StockService(context: context)
+    private lazy var doseScheduleService = TherapyDoseScheduleService(context: context)
     private lazy var eventStore: EventStore = CoreDataEventStore(context: context)
     private lazy var recordPurchaseUseCase = RecordPurchaseUseCase(eventStore: eventStore, clock: clock)
     private lazy var requestPrescriptionUseCase = RequestPrescriptionUseCase(eventStore: eventStore, clock: clock)
@@ -139,6 +140,17 @@ final class MedicineActionService {
     }
 
     @discardableResult
+    func markAsTaken(for medicine: Medicine, package: Package, operationId: UUID) -> Log? {
+        let medicine = context.object(with: medicine.objectID) as! Medicine
+        let package = context.object(with: package.objectID) as! Package
+        let therapy = resolveTherapyCandidate(for: medicine, package: package, now: Date())
+        if let therapy {
+            return addIntakeLog(for: medicine, therapy: therapy, operationId: operationId)
+        }
+        return addLog(for: medicine, package: package, type: "intake", operationId: operationId)
+    }
+
+    @discardableResult
     func markAsTaken(for entry: MedicinePackage, operationId: UUID) -> Log? {
         let therapy = resolveTherapyCandidate(for: entry, now: Date())
         if let therapy {
@@ -150,6 +162,67 @@ final class MedicineActionService {
     @discardableResult
     func markAsTaken(for therapy: Therapy, operationId: UUID) -> Log? {
         addIntakeLog(for: therapy.medicine, therapy: therapy, operationId: operationId)
+    }
+
+    func missedDoseCandidate(for medicine: Medicine, package: Package? = nil, now: Date = Date()) -> MissedDoseCandidate? {
+        doseScheduleService.missedDoseCandidate(for: medicine, package: package, now: now)
+    }
+
+    func missedDoseCandidate(for entry: MedicinePackage, now: Date = Date()) -> MissedDoseCandidate? {
+        let entry = context.object(with: entry.objectID) as! MedicinePackage
+        if let set = entry.therapies, !set.isEmpty {
+            return doseScheduleService.missedDoseCandidate(for: Array(set), now: now)
+        }
+        let therapies = Array(entry.medicine.therapies ?? []).filter { $0.package.objectID == entry.package.objectID }
+        return doseScheduleService.missedDoseCandidate(for: therapies, now: now)
+    }
+
+    @discardableResult
+    func recordMissedDoseIntake(
+        candidate: MissedDoseCandidate,
+        takenAt: Date,
+        nextAction: MissedDoseNextAction,
+        operationId: UUID
+    ) -> Log? {
+        let therapy = context.object(with: candidate.therapy.objectID) as! Therapy
+        guard let log = stockService.createLog(
+            type: "intake",
+            medicine: therapy.medicine,
+            package: therapy.package,
+            therapy: therapy,
+            timestamp: takenAt,
+            scheduledDueAt: candidate.scheduledAt,
+            operationId: operationId,
+            save: false
+        ) else {
+            return nil
+        }
+
+        if nextAction == .postponeByStandardInterval,
+           let nextScheduledAt = candidate.nextScheduledAt {
+            let interval = nextScheduledAt.timeIntervalSince(candidate.scheduledAt)
+            if interval > 0 {
+                let postponedAt = takenAt.addingTimeInterval(interval)
+                if minuteBucket(for: postponedAt) != minuteBucket(for: nextScheduledAt) {
+                    var cursor = candidate.scheduledAt
+                    while let occurrence = doseScheduleService.nextScheduledTime(for: therapy, after: cursor),
+                          occurrence < postponedAt {
+                        doseScheduleService.setOverrideStatus(.skipped, for: therapy, dueAt: occurrence)
+                        cursor = occurrence
+                    }
+                    doseScheduleService.setOverrideStatus(.planned, for: therapy, dueAt: postponedAt)
+                }
+            }
+        }
+
+        do {
+            try context.save()
+            return log
+        } catch {
+            context.rollback()
+            print("⚠️ recordMissedDoseIntake: \(error)")
+            return nil
+        }
     }
 
     func guardedMarkAsTaken(for medicine: Medicine, operationId: UUID, now: Date = Date()) -> IntakeGuardrailResult {
@@ -260,12 +333,35 @@ final class MedicineActionService {
         if let set = entry.therapies, !set.isEmpty {
             return Array(set)
         }
-        let all = entry.medicine.therapies as? Set<Therapy> ?? []
+        let all = entry.medicine.therapies ?? []
         return all.filter { $0.package == entry.package }
     }
 
     private func resolveTherapyCandidate(for medicine: Medicine, now: Date) -> Therapy? {
         guard let therapies = medicine.therapies, !therapies.isEmpty else { return nil }
+        let recurrenceManager = RecurrenceManager(context: context)
+
+        let candidates: [(therapy: Therapy, date: Date)] = therapies.compactMap { therapy in
+            guard let next = medicine.nextIntakeDate(
+                for: therapy,
+                from: now,
+                recurrenceManager: recurrenceManager
+            ) else {
+                return nil
+            }
+            return (therapy, next)
+        }
+
+        if let chosen = candidates.min(by: { $0.date < $1.date }) {
+            return chosen.therapy
+        }
+
+        return therapies.first
+    }
+
+    private func resolveTherapyCandidate(for medicine: Medicine, package: Package, now: Date) -> Therapy? {
+        let therapies = (medicine.therapies ?? []).filter { $0.package.objectID == package.objectID }
+        guard !therapies.isEmpty else { return nil }
         let recurrenceManager = RecurrenceManager(context: context)
 
         let candidates: [(therapy: Therapy, date: Date)] = therapies.compactMap { therapy in
@@ -334,6 +430,8 @@ final class MedicineActionService {
         package: Package,
         type: String,
         therapy: Therapy? = nil,
+        timestamp: Date = Date(),
+        scheduledDueAt: Date? = nil,
         operationId: UUID
     ) -> Log? {
         return stockService.createLog(
@@ -341,8 +439,14 @@ final class MedicineActionService {
             medicine: medicine,
             package: package,
             therapy: therapy,
+            timestamp: timestamp,
+            scheduledDueAt: scheduledDueAt,
             operationId: operationId
         )
+    }
+
+    private func minuteBucket(for date: Date) -> Int {
+        Int(date.timeIntervalSince1970 / 60)
     }
 
     private func existingLog(operationId: UUID) -> Log? {

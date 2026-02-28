@@ -6,12 +6,15 @@ enum TestCoreDataFactory {
     private static let requiredEntityNames = [
         "Medicine",
         "Package",
+        "MedicinePackage",
         "Log",
         "MonitoringMeasurement",
         "Stock",
         "Therapy",
         "Dose",
+        "DoseEvent",
         "Person",
+        "Cabinet",
         "Option"
     ]
 
@@ -116,6 +119,42 @@ enum TestCoreDataFactory {
         package.medicine = medicine
         medicine.packages = [package]
         return package
+    }
+
+    static func makeMedicinePackage(
+        context: NSManagedObjectContext,
+        id: UUID = UUID(),
+        medicine: Medicine,
+        package: Package,
+        cabinet: Cabinet? = nil
+    ) throws -> MedicinePackage {
+        guard let entity = NSEntityDescription.entity(forEntityName: "MedicinePackage", in: context) else {
+            throw NSError(domain: "TestCoreDataFactory", code: 7, userInfo: [NSLocalizedDescriptionKey: "MedicinePackage entity not found"])
+        }
+        let entry = MedicinePackage(entity: entity, insertInto: context)
+        entry.id = id
+        entry.created_at = Date()
+        entry.medicine = medicine
+        entry.package = package
+        entry.cabinet = cabinet
+        medicine.addToMedicinePackages(entry)
+        return entry
+    }
+
+    static func makeCabinet(
+        context: NSManagedObjectContext,
+        id: UUID = UUID(),
+        name: String = "Casa"
+    ) throws -> Cabinet {
+        guard let entity = NSEntityDescription.entity(forEntityName: "Cabinet", in: context) else {
+            throw NSError(domain: "TestCoreDataFactory", code: 8, userInfo: [NSLocalizedDescriptionKey: "Cabinet entity not found"])
+        }
+        let cabinet = Cabinet(entity: entity, insertInto: context)
+        cabinet.id = id
+        cabinet.name = name
+        cabinet.created_at = Date()
+        cabinet.is_shared = false
+        return cabinet
     }
 
     static func makeTherapy(

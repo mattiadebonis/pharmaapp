@@ -45,6 +45,30 @@ final class AppRouterRouteStoreTests: XCTestCase {
         XCTAssertEqual(router.selectedTab, .profilo)
         XCTAssertEqual(router.pendingRoute, .profile)
     }
+
+    @MainActor
+    func testRouterOpenScanApreTabArmadietto() {
+        let fakeStore = FakeRouteStore()
+        let router = AppRouter(routeStore: fakeStore)
+
+        router.open(.scan)
+
+        XCTAssertEqual(fakeStore.savedRoute, .scan)
+        XCTAssertEqual(router.selectedTab, .medicine)
+        XCTAssertEqual(router.pendingRoute, .scan)
+    }
+
+    @MainActor
+    func testRouterOpenAddMedicineApreTabArmadietto() {
+        let fakeStore = FakeRouteStore()
+        let router = AppRouter(routeStore: fakeStore)
+
+        router.open(.addMedicine)
+
+        XCTAssertEqual(fakeStore.savedRoute, .addMedicine)
+        XCTAssertEqual(router.selectedTab, .medicine)
+        XCTAssertEqual(router.pendingRoute, .addMedicine)
+    }
 }
 
 private final class FakeRouteStore: PendingAppRouteStoring {

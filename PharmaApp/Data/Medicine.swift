@@ -223,20 +223,26 @@ extension Medicine {
     ) -> Date? {
         let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
         let startDate = therapy.start_date ?? date
-        let timesOnDay = scheduledIntakeTimes(
-            on: date,
-            for: therapy,
-            recurrenceManager: recurrenceManager,
-            calendar: calendar
-        )
+        let scheduleService = doseScheduleService(for: therapy, calendar: calendar)
+        let timesOnDay = scheduleService?.effectiveScheduledTimes(on: date, for: therapy)
+            ?? scheduledIntakeTimes(
+                on: date,
+                for: therapy,
+                recurrenceManager: recurrenceManager,
+                calendar: calendar
+            )
 
         if !timesOnDay.isEmpty {
-            let takenCount = intakeCount(on: date, for: therapy, calendar: calendar)
-            if takenCount >= timesOnDay.count {
+            let completedCount = scheduleService?.completedScheduledTimes(on: date, for: therapy).count
+                ?? intakeCount(on: date, for: therapy, calendar: calendar)
+            if completedCount >= timesOnDay.count {
                 let endOfDay = calendar.date(
                     byAdding: DateComponents(day: 1, second: -1),
                     to: calendar.startOfDay(for: date)
                 ) ?? date
+                if let next = scheduleService?.nextScheduledTime(for: therapy, after: endOfDay) {
+                    return next
+                }
                 return recurrenceManager.nextOccurrence(
                     rule: rule,
                     startDate: startDate,
@@ -245,8 +251,12 @@ extension Medicine {
                 )
             }
 
-            let pending = Array(timesOnDay.dropFirst(min(takenCount, timesOnDay.count)))
+            let pending = Array(timesOnDay.dropFirst(min(completedCount, timesOnDay.count)))
             return pending.first
+        }
+
+        if let next = scheduleService?.nextScheduledTime(for: therapy, after: date) {
+            return next
         }
 
         return recurrenceManager.nextOccurrence(
@@ -308,6 +318,10 @@ extension Medicine {
         for therapy: Therapy,
         calendar: Calendar = .current
     ) -> Int {
+        if let service = doseScheduleService(for: therapy, calendar: calendar) {
+            return service.completedScheduledTimes(on: date, for: therapy).count
+        }
+
         let logsOnDay = effectiveIntakeLogs(on: date, calendar: calendar)
         let assigned = logsOnDay.filter { $0.therapy == therapy }.count
         if assigned > 0 { return assigned }
@@ -324,6 +338,10 @@ extension Medicine {
         recurrenceManager: RecurrenceManager,
         calendar: Calendar = .current
     ) -> [Date] {
+        if let service = doseScheduleService(for: therapy, calendar: calendar) {
+            return service.effectiveScheduledTimes(on: date, for: therapy)
+        }
+
         let day = calendar.startOfDay(for: date)
         let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
         let startDate = therapy.start_date ?? day
@@ -389,6 +407,11 @@ extension Medicine {
                 return opId
             }
         )
+    }
+
+    private func doseScheduleService(for therapy: Therapy, calendar: Calendar) -> TherapyDoseScheduleService? {
+        guard let context = therapy.managedObjectContext ?? managedObjectContext else { return nil }
+        return TherapyDoseScheduleService(context: context, calendar: calendar)
     }
 
 

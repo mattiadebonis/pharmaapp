@@ -46,7 +46,8 @@ struct NotificationSchedulerDescriptorTests {
             body: "stock",
             kind: .stockLow,
             origin: .immediate,
-            userInfo: ["type": NotificationPlanKind.stockLow.rawValue, "medicineId": UUID().uuidString]
+            userInfo: ["type": NotificationPlanKind.stockLow.rawValue, "medicineId": UUID().uuidString],
+            isSilenced: false
         )
         let firstTherapy = makeTherapyItem(
             id: "therapy-first",
@@ -104,7 +105,8 @@ struct NotificationSchedulerDescriptorTests {
                 "type": NotificationPlanKind.therapy.rawValue,
                 "therapyId": "therapy-id",
                 "medicineId": medicineId
-            ]
+            ],
+            isSilenced: false
         )
     }
 }

@@ -13,7 +13,6 @@ struct DoctorDetailView: View {
     @ObservedObject var doctor: Doctor
 
     @State private var nome: String
-    @State private var cognome: String
     @State private var mail: String
     @State private var telefono: String
     @State private var indirizzo: String
@@ -23,8 +22,7 @@ struct DoctorDetailView: View {
 
     init(doctor: Doctor) {
         self.doctor = doctor
-        _nome = State(initialValue: doctor.nome ?? "")
-        _cognome = State(initialValue: doctor.cognome ?? "")
+        _nome = State(initialValue: Self.doctorDisplayName(for: doctor))
         _mail = State(initialValue: doctor.mail ?? "")
         _telefono = State(initialValue: doctor.telefono ?? "")
         _indirizzo = State(initialValue: doctor.indirizzo ?? "")
@@ -34,8 +32,7 @@ struct DoctorDetailView: View {
     var body: some View {
         Form {
             Section(header: Text("Dettagli Dottore")) {
-                TextField("Nome", text: $nome)
-                TextField("Cognome", text: $cognome)
+                TextField("Nome e cognome", text: $nome)
                 TextField("Email", text: $mail)
                     .keyboardType(.emailAddress)
                 TextField("Telefono", text: $telefono)
@@ -91,7 +88,7 @@ struct DoctorDetailView: View {
 
     private func saveChanges() {
         doctor.nome = normalizedValue(from: nome)
-        doctor.cognome = normalizedValue(from: cognome)
+        doctor.cognome = nil
         doctor.mail = normalizedValue(from: mail)
         doctor.telefono = normalizedValue(from: telefono)
         doctor.indirizzo = normalizedValue(from: indirizzo)
@@ -125,5 +122,12 @@ struct DoctorDetailView: View {
     private func normalizedValue(from value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func doctorDisplayName(for doctor: Doctor) -> String {
+        let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let full = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+        return full
     }
 }

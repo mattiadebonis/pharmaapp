@@ -20,7 +20,7 @@ struct AddDoctorView: View {
     var body: some View {
         Form {
             Section(header: Text("Dettagli Dottore")) {
-                TextField("Nome", text: $nome)
+                TextField("Nome e cognome", text: $nome)
                 TextField("Email", text: $mail)
                     .keyboardType(.emailAddress)
                 TextField("Telefono", text: $telefono)
