@@ -11,6 +11,9 @@ struct GlobalSearchView: View {
     @FetchRequest(fetchRequest: Medicine.extractMedicines())
     private var medicines: FetchedResults<Medicine>
 
+    @FetchRequest(fetchRequest: MedicinePackage.extractEntries())
+    private var medicineEntries: FetchedResults<MedicinePackage>
+
     @FetchRequest(fetchRequest: Therapy.extractTherapies())
     private var therapies: FetchedResults<Therapy>
 
@@ -21,11 +24,13 @@ struct GlobalSearchView: View {
     private var persons: FetchedResults<Person>
 
     @StateObject private var locationVM = LocationSearchViewModel()
+    @StateObject private var cabinetViewModel = CabinetViewModel()
     @State private var query: String = ""
     @State private var selectedScope: SearchScope = .all
     @State private var activeShortcut: SearchShortcut?
 
     @State private var selectedMedicine: Medicine?
+    @State private var selectedMedicineEntry: MedicinePackage?
     @State private var selectedPackage: Package?
     @State private var selectedDoctor: Doctor?
     @State private var isDoctorDetailPresented = false
@@ -88,6 +93,7 @@ struct GlobalSearchView: View {
 
     private enum RecentKind: String, Codable {
         case medicine
+        case medicineEntry
         case therapy
         case doctor
         case person
@@ -188,6 +194,10 @@ struct GlobalSearchView: View {
 
     private var option: Option? {
         Option.current(in: managedObjectContext)
+    }
+
+    private var medicineRowSnapshots: [NSManagedObjectID: CabinetViewModel.CabinetRowSnapshot] {
+        cabinetViewModel.buildRowSnapshots(entries: filteredMedicineEntries, option: option)
     }
 
     private var recentItems: [RecentItem] {
@@ -346,62 +356,14 @@ struct GlobalSearchView: View {
         .map { $0 }
     }
 
-    private var filteredMedicines: [Medicine] {
+    private var filteredMedicineEntries: [MedicinePackage] {
         guard !trimmedQuery.isEmpty else { return [] }
         guard selectedScope == .all || selectedScope == .medicines else { return [] }
-        return medicines.filter { medicine in
-            medicine.nome.localizedCaseInsensitiveContains(trimmedQuery)
-            || medicine.principio_attivo.localizedCaseInsensitiveContains(trimmedQuery)
-        }
-        .sorted { lhs, rhs in
-            lhs.nome.localizedCaseInsensitiveCompare(rhs.nome) == .orderedAscending
-        }
-    }
-
-    private var filteredCatalogMedicines: [CatalogSelection] {
-        guard !trimmedQuery.isEmpty else { return [] }
-        guard selectedScope == .all || selectedScope == .medicines else { return [] }
-
-        let normalizedQuery = normalizeCatalogText(trimmedQuery)
-        guard !normalizedQuery.isEmpty else { return [] }
-
-        let sortedMatches = catalogMedicines
-            .filter { item in
-                let name = normalizeCatalogText(item.name)
-                let principle = normalizeCatalogText(item.principle)
-                let packageLabel = normalizeCatalogText(item.packageLabel)
-                return name.contains(normalizedQuery)
-                    || principle.contains(normalizedQuery)
-                    || packageLabel.contains(normalizedQuery)
-            }
-            .sorted { lhs, rhs in
-                if lhs.name == rhs.name {
-                    return lhs.packageLabel.localizedCaseInsensitiveCompare(rhs.packageLabel) == .orderedAscending
-                }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-            }
-
-        var seenKeys: Set<String> = []
-        var results: [CatalogSelection] = []
-
-        for item in sortedMatches {
-            let key = catalogIdentityKey(name: item.name, principle: item.principle)
-            let normalizedName = normalizeCatalogText(item.name)
-
-            if medicinesInCabinetIdentityKeys.contains(key) || medicinesInCabinetNames.contains(normalizedName) {
-                continue
-            }
-
-            if seenKeys.insert(key).inserted {
-                results.append(item)
-            }
-
-            if results.count >= 40 {
-                break
-            }
-        }
-
-        return results
+        return cabinetViewModel.searchEntries(
+            query: trimmedQuery,
+            entries: Array(medicineEntries),
+            option: option
+        )
     }
 
     private var filteredTherapies: [Therapy] {
@@ -426,6 +388,7 @@ struct GlobalSearchView: View {
         return doctors.filter { doctor in
             (doctor.nome ?? "").localizedCaseInsensitiveContains(trimmedQuery)
             || (doctor.cognome ?? "").localizedCaseInsensitiveContains(trimmedQuery)
+            || (doctor.telefono ?? "").localizedCaseInsensitiveContains(trimmedQuery)
         }
         .sorted { lhs, rhs in
             doctorDisplayName(lhs).localizedCaseInsensitiveCompare(doctorDisplayName(rhs)) == .orderedAscending
@@ -438,6 +401,7 @@ struct GlobalSearchView: View {
         return persons.filter { person in
             (person.nome ?? "").localizedCaseInsensitiveContains(trimmedQuery)
             || (person.cognome ?? "").localizedCaseInsensitiveContains(trimmedQuery)
+            || (person.codice_fiscale ?? "").localizedCaseInsensitiveContains(trimmedQuery)
         }
         .sorted { lhs, rhs in
             personDisplayName(for: lhs).localizedCaseInsensitiveCompare(personDisplayName(for: rhs)) == .orderedAscending
@@ -445,8 +409,10 @@ struct GlobalSearchView: View {
     }
 
     private var hasTextSearchResults: Bool {
-        !filteredMedicines.isEmpty
-            || !filteredCatalogMedicines.isEmpty
+        !filteredMedicineEntries.isEmpty
+            || !filteredTherapies.isEmpty
+            || !filteredDoctors.isEmpty
+            || !filteredPersons.isEmpty
     }
 
     private var medicinesInCabinetIdentityKeys: Set<String> {
@@ -486,10 +452,22 @@ struct GlobalSearchView: View {
 
     var body: some View {
         List {
-            if !trimmedQuery.isEmpty {
-                searchResultsSections
+            headerSection
+
+            if trimmedQuery.isEmpty {
+                shortcutSection
+
+                if let activeShortcut {
+                    shortcutResultsSection(for: activeShortcut)
+                } else {
+                    focusSuggestionsSections
+                    watchSection
+                    utilitySection
+                    recentSection
+                }
             } else {
-                recentSection
+                scopeSection
+                searchResultsSections
             }
         }
         .listStyle(.plain)
@@ -497,7 +475,7 @@ struct GlobalSearchView: View {
         .searchable(
             text: $query,
             placement: .navigationBarDrawer(displayMode: .always),
-            prompt: "Inserisci un farmaco"
+            prompt: "Cerca farmaci, terapie, contatti"
         )
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
@@ -506,36 +484,12 @@ struct GlobalSearchView: View {
             addRecentQuery(trimmedQuery)
         }
         .background(
-            SearchFieldScannerAccessoryInstaller(
-                shouldFocus: shouldAutoFocusSearch,
-                onDidFocus: {
-                    shouldAutoFocusSearch = false
-                },
-                onTapScanner: {
-                    shouldAutoStartScan = true
-                    isCatalogSearchPresented = true
-                }
-            )
+            SearchFieldAutoFocusInstaller(shouldFocus: shouldAutoFocusSearch) {
+                shouldAutoFocusSearch = false
+            }
         )
         .onAppear {
             shouldAutoFocusSearch = true
-            loadCatalogMedicinesIfNeeded()
-            if appRouter.pendingRoute == .scan {
-                appRouter.markRouteHandled(.scan)
-                shouldAutoStartScan = true
-                isCatalogSearchPresented = true
-            } else if appRouter.pendingRoute == .addMedicine {
-                appRouter.markRouteHandled(.addMedicine)
-            }
-        }
-        .onChange(of: appRouter.pendingRoute) { route in
-            if route == .scan {
-                appRouter.markRouteHandled(.scan)
-                shouldAutoStartScan = true
-                isCatalogSearchPresented = true
-            } else if route == .addMedicine {
-                appRouter.markRouteHandled(.addMedicine)
-            }
         }
         .onChange(of: appRouter.selectedTab) { tab in
             if tab == .search {
@@ -548,15 +502,24 @@ struct GlobalSearchView: View {
             }
         }
         .sheet(isPresented: Binding(
-            get: { selectedMedicine != nil },
+            get: { selectedMedicine != nil || selectedMedicineEntry != nil },
             set: { isPresented in
                 if !isPresented {
                     selectedMedicine = nil
+                    selectedMedicineEntry = nil
                     selectedPackage = nil
                 }
             }
         )) {
-            if let medicine = selectedMedicine {
+            if let entry = selectedMedicineEntry {
+                MedicineDetailView(
+                    medicine: entry.medicine,
+                    package: entry.package,
+                    medicinePackage: entry
+                )
+                .presentationDetents([.fraction(0.75), .large])
+                .presentationDragIndicator(.visible)
+            } else if let medicine = selectedMedicine {
                 if let package = selectedPackage ?? getPackage(for: medicine) {
                     MedicineDetailView(medicine: medicine, package: package)
                         .presentationDetents([.fraction(0.75), .large])
@@ -584,66 +547,6 @@ struct GlobalSearchView: View {
                 PersonDetailView(person: person)
             }
         }
-        .sheet(isPresented: $isCatalogSearchPresented, onDismiss: {
-            shouldAutoStartScan = false
-            if let pending = pendingCatalogSelection {
-                pendingCatalogSelection = nil
-                DispatchQueue.main.async {
-                    selectedScope = .medicines
-                    activeShortcut = nil
-                    query = pending.name
-                }
-            }
-        }) {
-            NavigationStack {
-                CatalogSearchScreen(autoStartScan: shouldAutoStartScan) { selection in
-                    pendingCatalogSelection = selection
-                    isCatalogSearchPresented = false
-                }
-            }
-        }
-        .sheet(item: $catalogStockEditorState) { state in
-            CatalogStockEditorSheet(
-                medicineName: camelCase(state.context.medicine.nome),
-                initialUnits: state.initialUnits,
-                initialDeadlineMonth: state.deadlineMonth,
-                initialDeadlineYear: state.deadlineYear
-            ) { units, monthText, yearText in
-                saveCatalogStock(
-                    state.context,
-                    targetUnits: units,
-                    monthInput: monthText,
-                    yearInput: yearText
-                )
-            }
-            .presentationDetents([.medium, .large])
-        }
-        .sheet(item: $catalogTherapyEditorState) { state in
-            NavigationStack {
-                TherapyFormView(
-                    medicine: state.context.medicine,
-                    package: state.context.package,
-                    context: managedObjectContext,
-                    medicinePackage: state.context.entry,
-                    onSave: {
-                        catalogTherapyEditorState = nil
-                        inlineFeedback = CommandFeedback(
-                            kind: .success,
-                            message: "Terapia aggiunta e farmaco inserito nell'armadietto."
-                        )
-                    },
-                    isEmbedded: true
-                )
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Chiudi") {
-                            catalogTherapyEditorState = nil
-                        }
-                    }
-                }
-            }
-            .presentationDetents([.large])
-        }
         .fullScreenCover(isPresented: Binding(
             get: { fullscreenBarcodeCodiceFiscale != nil },
             set: { if !$0 { fullscreenBarcodeCodiceFiscale = nil } }
@@ -653,13 +556,6 @@ struct GlobalSearchView: View {
                     fullscreenBarcodeCodiceFiscale = nil
                 }
             }
-        }
-        .alert(item: $inlineFeedback) { feedback in
-            Alert(
-                title: Text(feedback.kind.title),
-                message: Text(feedback.message),
-                dismissButton: .default(Text("OK"))
-            )
         }
     }
 
@@ -673,6 +569,37 @@ struct GlobalSearchView: View {
                     .foregroundStyle(.secondary)
             }
             .padding(.vertical, 4)
+        }
+        .listRowSeparator(.hidden)
+    }
+
+    private var scopeSection: some View {
+        Section {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(SearchScope.allCases) { scope in
+                        Button {
+                            selectedScope = scope
+                        } label: {
+                            Text(scope.rawValue)
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(selectedScope == scope ? Color.white : Color.primary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(selectedScope == scope ? Color.accentColor : Color.secondary.opacity(0.16))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        } footer: {
+            Text(scopeFooterText)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(.secondary)
         }
         .listRowSeparator(.hidden)
     }
@@ -901,13 +828,13 @@ struct GlobalSearchView: View {
 
     @ViewBuilder
     private var searchResultsSections: some View {
-        if !filteredMedicines.isEmpty {
+        if !filteredMedicineEntries.isEmpty {
             Section {
-                ForEach(filteredMedicines) { medicine in
+                ForEach(filteredMedicineEntries) { entry in
                     Button {
-                        openMedicine(medicine)
+                        openMedicineEntry(entry)
                     } label: {
-                        medicineRow(medicine)
+                        medicineRow(entry)
                     }
                     .buttonStyle(.plain)
                 }
@@ -916,21 +843,88 @@ struct GlobalSearchView: View {
             }
         }
 
-        if !filteredCatalogMedicines.isEmpty {
+        if !filteredTherapies.isEmpty {
             Section {
-                ForEach(filteredCatalogMedicines) { selection in
-                    catalogMedicineRow(selection)
+                ForEach(filteredTherapies) { therapy in
+                    Button {
+                        openTherapy(therapy)
+                    } label: {
+                        therapyRow(therapy)
+                    }
+                    .buttonStyle(.plain)
                 }
             } header: {
-                sectionHeader("Aggiungi dall'elenco farmaci")
+                sectionHeader("Terapie")
+            }
+        }
+
+        if !filteredDoctors.isEmpty {
+            Section {
+                ForEach(filteredDoctors) { doctor in
+                    Button {
+                        openDoctor(doctor)
+                    } label: {
+                        doctorRow(doctor)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } header: {
+                sectionHeader("Dottori")
+            }
+        }
+
+        if !filteredPersons.isEmpty {
+            Section {
+                ForEach(filteredPersons) { person in
+                    Button {
+                        openPerson(person)
+                    } label: {
+                        personRow(person)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } header: {
+                sectionHeader("Persone")
             }
         }
 
         if !hasTextSearchResults {
             Section {
-                emptyLine("Nessun risultato per \"\(trimmedQuery)\"")
+                VStack(alignment: .leading, spacing: 4) {
+                    emptyLine("Nessun risultato per \"\(trimmedQuery)\"")
+                    Text(emptySearchMessage)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .listRowSeparator(.hidden)
+        }
+    }
+
+    private var scopeFooterText: String {
+        switch selectedScope {
+        case .all:
+            return "Farmaci presenti nell'armadietto, terapie e contatti."
+        case .medicines:
+            return "Mostra solo farmaci gia presenti nell'armadietto."
+        case .therapies:
+            return "Mostra solo terapie attive o salvate."
+        case .contacts:
+            return "Mostra solo dottori e persone."
+        }
+    }
+
+    private var emptySearchMessage: String {
+        switch selectedScope {
+        case .all:
+            return "La ricerca include farmaci gia nell'armadietto, terapie e contatti. Per aggiungere un nuovo farmaco usa il + nella schermata Armadietto."
+        case .medicines:
+            return "La ricerca farmaci vale solo per quelli gia nell'armadietto. Per aggiungerne uno nuovo usa il + nella schermata Armadietto."
+        case .therapies:
+            return "Nessuna terapia trovata con questa ricerca."
+        case .contacts:
+            return "Nessun contatto trovato con questa ricerca."
         }
     }
 
@@ -1059,61 +1053,13 @@ struct GlobalSearchView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func medicineRow(_ medicine: Medicine) -> some View {
-        MedicineRowView(medicine: medicine)
-    }
-
-    private func catalogMedicineRow(_ item: CatalogSelection) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(camelCase(item.name))
-                    .font(.system(size: 18, weight: .regular))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                Spacer(minLength: 8)
-
-                Text("Catalogo")
-                    .font(.system(size: 12, weight: .semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color.secondary.opacity(0.18))
-                    )
-                    .foregroundStyle(.primary)
-            }
-
-            HStack(spacing: 8) {
-                Button {
-                    handleCatalogAddToCabinet(item)
-                } label: {
-                    Text("Armadietto")
-                        .font(.caption.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(CapsuleActionButtonStyle(fill: .blue, textColor: .white))
-
-                Button {
-                    handleCatalogAddPackage(item)
-                } label: {
-                    Text("Confezione")
-                        .font(.caption.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(CapsuleActionButtonStyle(fill: .green, textColor: .white))
-
-                Button {
-                    handleCatalogAddTherapy(item)
-                } label: {
-                    Text("Terapia")
-                        .font(.caption.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(CapsuleActionButtonStyle(fill: .orange, textColor: .white))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    private func medicineRow(_ entry: MedicinePackage) -> some View {
+        MedicineRowView(
+            medicine: entry.medicine,
+            medicinePackage: entry,
+            subtitleMode: .activeTherapies,
+            snapshot: medicineRowSnapshots[entry.objectID]?.presentation
+        )
     }
 
     private func therapyRow(_ therapy: Therapy) -> some View {
@@ -1248,12 +1194,25 @@ struct GlobalSearchView: View {
         _ medicine: Medicine,
         package: Package? = nil
     ) {
+        selectedMedicineEntry = nil
         selectedPackage = package
         selectedMedicine = medicine
         addRecent(
             kind: .medicine,
             objectID: medicine.objectID,
             title: camelCase(medicine.nome),
+            subtitle: nil
+        )
+    }
+
+    private func openMedicineEntry(_ entry: MedicinePackage) {
+        selectedMedicine = nil
+        selectedPackage = nil
+        selectedMedicineEntry = entry
+        addRecent(
+            kind: .medicineEntry,
+            objectID: entry.objectID,
+            title: camelCase(entry.medicine.nome),
             subtitle: nil
         )
     }
@@ -2050,6 +2009,10 @@ struct GlobalSearchView: View {
         case .medicine:
             guard let medicine: Medicine = object(from: item.objectURI) else { return }
             openMedicine(medicine)
+
+        case .medicineEntry:
+            guard let entry: MedicinePackage = object(from: item.objectURI) else { return }
+            openMedicineEntry(entry)
 
         case .therapy:
             guard let therapy: Therapy = object(from: item.objectURI) else { return }

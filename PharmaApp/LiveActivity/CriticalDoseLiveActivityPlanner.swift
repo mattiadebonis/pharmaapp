@@ -218,6 +218,7 @@ struct CriticalDoseLiveActivityPlanner {
         let tolerance = max(config.leadTimeInterval, config.overdueToleranceInterval)
         let intakeLogs = intakeLogsByMedicineID[therapy.medicine.objectID] ?? []
         guard !intakeLogs.isEmpty else { return false }
+        let targetBucket = Int(eventDate.timeIntervalSince1970 / 60)
 
         for log in intakeLogs {
             if let logTherapy = log.therapy {
@@ -229,6 +230,11 @@ struct CriticalDoseLiveActivityPlanner {
                 } else if log.package != therapy.package {
                     continue
                 }
+            }
+
+            if let scheduledDueAt = log.scheduled_due_at,
+               Int(scheduledDueAt.timeIntervalSince1970 / 60) == targetBucket {
+                return true
             }
 
             let delta = abs(log.timestamp.timeIntervalSince(eventDate))

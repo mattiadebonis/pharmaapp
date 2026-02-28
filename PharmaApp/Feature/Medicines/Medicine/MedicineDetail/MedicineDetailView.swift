@@ -22,12 +22,17 @@ struct MedicineDetailView: View {
     @State private var emailDetent: PresentationDetent = .fraction(0.55)
     @State private var selectedDoctorID: NSManagedObjectID? = nil
     @State private var therapySheet: TherapySheetState?
+    @State private var missedDoseSheet: MissedDoseSheetState?
     @State private var showDoctorSheet = false
     @State private var deadlineMonthInput: String = ""
     @State private var deadlineYearInput: String = ""
 
     private var stockService: MedicineStockService {
         MedicineStockService(context: context)
+    }
+
+    private var actionService: MedicineActionService {
+        MedicineActionService(context: context)
     }
     
     @ObservedObject var medicine: Medicine
@@ -216,6 +221,19 @@ struct MedicineDetailView: View {
                 editingTherapy: state.therapy
             )
             .presentationDetents([.large])
+        }
+        .sheet(item: $missedDoseSheet) { state in
+            MissedDoseIntakeSheet(candidate: state.candidate) { takenAt, nextAction in
+                let log = actionService.recordMissedDoseIntake(
+                    candidate: state.candidate,
+                    takenAt: takenAt,
+                    nextAction: nextAction,
+                    operationId: state.operationId
+                )
+                if let key = state.operationKey {
+                    handleOperationResult(log, key: key)
+                }
+            }
         }
         .alert("Soglia scorte", isPresented: $showThresholdAlert) {
             TextField("Giorni", text: $thresholdInput)
@@ -823,7 +841,7 @@ extension MedicineDetailView {
             }
 
             Button {
-                actionsViewModel.addIntake(for: medicine, package: package)
+                beginMarkTaken()
             } label: {
                 Label("Assunto", systemImage: "checkmark.circle.fill")
                     .frame(maxWidth: .infinity)
@@ -888,6 +906,47 @@ extension MedicineDetailView {
             }
         }
         .textCase(nil)
+    }
+
+    private func beginMarkTaken() {
+        let token = intakeOperationToken()
+        if let candidate = actionService.missedDoseCandidate(for: medicine, package: package) {
+            missedDoseSheet = MissedDoseSheetState(
+                candidate: candidate,
+                operationId: token.id,
+                operationKey: token.key
+            )
+            return
+        }
+
+        let log: Log?
+        if let medicinePackage {
+            log = actionService.markAsTaken(for: medicinePackage, operationId: token.id)
+        } else {
+            log = actionService.markAsTaken(for: medicine, package: package, operationId: token.id)
+        }
+        handleOperationResult(log, key: token.key)
+    }
+
+    private func intakeOperationToken() -> (id: UUID, key: OperationKey) {
+        let key = OperationKey.medicineAction(
+            action: .intake,
+            medicineId: medicine.id,
+            packageId: package.id,
+            source: .medicineRow
+        )
+        let id = OperationIdProvider.shared.operationId(for: key, ttl: 3)
+        return (id, key)
+    }
+
+    private func handleOperationResult(_ log: Log?, key: OperationKey) {
+        if log != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+                OperationIdProvider.shared.clear(key)
+            }
+        } else {
+            OperationIdProvider.shared.clear(key)
+        }
     }
 
     private func syncDeadlineInputs() {

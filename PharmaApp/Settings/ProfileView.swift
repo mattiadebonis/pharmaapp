@@ -106,7 +106,7 @@ struct ProfileView: View {
                         selectedDoctor = doctor
                         isDoctorDetailPresented = true
                     } label: {
-                        Text(doctor.nome ?? "Dottore")
+                        Text(doctorDisplayName(for: doctor))
                             .font(.headline)
                             .foregroundStyle(.primary)
                     }
@@ -231,6 +231,13 @@ struct ProfileView: View {
         let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let full = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
         return full.isEmpty ? "Persona" : full
+    }
+
+    private func doctorDisplayName(for doctor: Doctor) -> String {
+        let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let full = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+        return full.isEmpty ? "Dottore" : full
     }
 
     private func deletePerson(_ person: Person) {

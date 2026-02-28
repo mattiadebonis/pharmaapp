@@ -51,6 +51,7 @@
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="operation_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="reversal_of_operation_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="scheduled_due_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="source" optional="YES" attributeType="String"/>
         <attribute name="synced_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>

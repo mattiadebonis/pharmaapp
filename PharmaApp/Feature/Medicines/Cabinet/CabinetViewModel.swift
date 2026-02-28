@@ -205,10 +205,8 @@ class CabinetViewModel: ObservableObject {
             let skippedDose = hasSkippedDose(
                 entry: entry,
                 therapies: entryTherapies,
-                intakeLogsToday: intakeLogsToday,
                 now: now,
-                calendar: calendar,
-                recurrenceManager: recurrenceManager
+                calendar: calendar
             )
 
             let presentation = MedicineRowView.Snapshot(
@@ -238,6 +236,29 @@ class CabinetViewModel: ObservableObject {
         return snapshots
     }
 
+    func searchEntries(
+        query: String,
+        entries: [MedicinePackage],
+        option: Option?
+    ) -> [MedicinePackage] {
+        let normalizedQuery = normalizedSearchText(query)
+        guard !normalizedQuery.isEmpty else { return [] }
+
+        let filteredEntries = entries.filter { entry in
+            guard entry.medicine.in_cabinet else { return false }
+
+            let medicineName = normalizedSearchText(entry.medicine.nome)
+            let principle = normalizedSearchText(entry.medicine.principio_attivo)
+            let packageSummary = normalizedSearchText(packageSearchSummary(for: entry.package))
+
+            return medicineName.contains(normalizedQuery)
+                || principle.contains(normalizedQuery)
+                || packageSummary.contains(normalizedQuery)
+        }
+
+        return orderedMedicinePackages(entries: filteredEntries, option: option)
+    }
+
     // MARK: - Sorting
     private func orderedMedicinePackages(
         entries: [MedicinePackage],
@@ -245,6 +266,37 @@ class CabinetViewModel: ObservableObject {
     ) -> [MedicinePackage] {
         let sections = computeSections(for: entries, option: option)
         return sections.purchase + sections.oggi + sections.ok
+    }
+
+    private func normalizedSearchText(_ text: String) -> String {
+        let folded = text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        let cleaned = folded.replacingOccurrences(
+            of: "[^A-Za-z0-9]",
+            with: " ",
+            options: .regularExpression
+        )
+        return cleaned
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+
+    private func packageSearchSummary(for package: Package) -> String {
+        var parts: [String] = []
+        if package.numero > 0 {
+            parts.append("\(package.numero)")
+        }
+        if !package.tipologia.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append(package.tipologia)
+        }
+        if package.valore > 0 {
+            let unit = package.unita.trimmingCharacters(in: .whitespacesAndNewlines)
+            parts.append(unit.isEmpty ? "\(package.valore)" : "\(package.valore) \(unit)")
+        }
+        if !package.volume.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append(package.volume)
+        }
+        return parts.joined(separator: " ")
     }
 
     private func therapies(for entry: MedicinePackage) -> [Therapy] {
@@ -326,73 +378,13 @@ class CabinetViewModel: ObservableObject {
     private func hasSkippedDose(
         entry: MedicinePackage,
         therapies: [Therapy],
-        intakeLogsToday: [Log],
         now: Date,
-        calendar: Calendar,
-        recurrenceManager: RecurrenceManager
+        calendar: Calendar
     ) -> Bool {
-        let manualTherapies = therapies.filter { $0.manual_intake_registration }
+        let manualTherapies = therapies.filter { $0.manual_intake_registration || entry.medicine.manual_intake_registration }
         guard !manualTherapies.isEmpty else { return false }
-        let plannedTimes = scheduledTimesToday(
-            for: manualTherapies,
-            now: now,
-            calendar: calendar,
-            recurrenceManager: recurrenceManager
-        )
-        guard !plannedTimes.isEmpty else { return false }
-
-        let takenCount = intakeLogsToday.count
-        let pendingTimes = plannedTimes.dropFirst(min(takenCount, plannedTimes.count))
-        return pendingTimes.first(where: { $0 <= now }) != nil
-    }
-
-    private func scheduledTimesToday(
-        for therapies: [Therapy],
-        now: Date,
-        calendar: Calendar,
-        recurrenceManager: RecurrenceManager
-    ) -> [Date] {
-        let today = calendar.startOfDay(for: now)
-        var planned: [Date] = []
-
-        for therapy in therapies {
-            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-            let start = therapy.start_date ?? today
-            let doses = (therapy.doses ?? []).sorted { $0.time < $1.time }
-            let perDay = max(1, doses.count)
-            let allowed = recurrenceManager.allowedEvents(
-                on: today,
-                rule: rule,
-                startDate: start,
-                dosesPerDay: perDay,
-                calendar: calendar
-            )
-            guard allowed > 0 else { continue }
-            guard !doses.isEmpty else { continue }
-
-            let limitedDoses = doses.prefix(min(allowed, doses.count))
-            for dose in limitedDoses {
-                if let combined = combine(day: today, withTime: dose.time, calendar: calendar) {
-                    planned.append(combined)
-                }
-            }
-        }
-
-        return planned.sorted()
-    }
-
-    private func combine(day: Date, withTime time: Date, calendar: Calendar) -> Date? {
-        let dayComponents = calendar.dateComponents([.year, .month, .day], from: day)
-        let timeComponents = calendar.dateComponents([.hour, .minute, .second], from: time)
-
-        var merged = DateComponents()
-        merged.year = dayComponents.year
-        merged.month = dayComponents.month
-        merged.day = dayComponents.day
-        merged.hour = timeComponents.hour
-        merged.minute = timeComponents.minute
-        merged.second = timeComponents.second
-        return calendar.date(from: merged)
+        let scheduleService = TherapyDoseScheduleService(context: viewContext, calendar: calendar)
+        return scheduleService.missedDoseCandidate(for: manualTherapies, now: now) != nil
     }
 
     private func deadlineIndicator(for medicine: Medicine) -> MedicineRowView.Snapshot.DeadlineIndicator? {

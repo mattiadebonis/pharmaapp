@@ -20,9 +20,11 @@ struct CabinetView: View {
 
     private enum Layout {
         static let horizontalInset: CGFloat = 28
+        static let summaryTrailingInset: CGFloat = 40
     }
 
     @EnvironmentObject private var appVM: AppViewModel
+    @EnvironmentObject private var appRouter: AppRouter
     @EnvironmentObject private var favoritesStore: FavoritesStore
     @Environment(\.managedObjectContext) private var managedObjectContext
     @StateObject private var viewModel = CabinetViewModel()
@@ -39,11 +41,12 @@ struct CabinetView: View {
     @State private var entryToMove: MedicinePackage?
     @State private var isNewCabinetPresented = false
     @State private var newCabinetName = ""
-    @State private var isSearchPresented = false
+    @State private var isCatalogAddPresented = false
+    @State private var shouldAutoStartCatalogScan = false
     @State private var isProfilePresented = false
-    @State private var catalogActionMessage: String?
     @State private var selectedEntry: MedicinePackage?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
+    @State private var missedDoseSheet: MissedDoseSheetState?
     @State private var cachedSummaryLines: [String] = ["Tutto sotto controllo"]
     @State private var cachedShelfState: ShelfViewState = .empty
     @State private var rowSnapshotsByEntryID: [NSManagedObjectID: CabinetViewModel.CabinetRowSnapshot] = [:]
@@ -64,9 +67,22 @@ struct CabinetView: View {
             }
             .navigationTitle("Armadietto")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        shouldAutoStartCatalogScan = false
+                        isCatalogAddPresented = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.headline)
+                    }
+                    .accessibilityLabel("Aggiungi farmaco")
+                }
+            }
             .onAppear {
                 locationVM.ensureStarted()
                 recomputeAllCachedState()
+                handlePendingRoute(appRouter.pendingRoute)
             }
             .onChange(of: medicinePackages.count) { _ in
                 recomputeAllCachedState()
@@ -101,6 +117,9 @@ struct CabinetView: View {
                 recomputeSummaryLines()
                 syncSummaryToWidgetDebounced()
             }
+            .onChange(of: appRouter.pendingRoute) { route in
+                handlePendingRoute(route)
+            }
     }
 
     private func recomputeAllCachedState() {
@@ -111,6 +130,23 @@ struct CabinetView: View {
 
     private func recomputeSummaryLines() {
         cachedSummaryLines = computeSummaryLines()
+    }
+
+    private func handlePendingRoute(_ route: AppRoute?) {
+        guard let route else { return }
+
+        switch route {
+        case .addMedicine:
+            shouldAutoStartCatalogScan = false
+            isCatalogAddPresented = true
+            appRouter.markRouteHandled(.addMedicine)
+        case .scan:
+            shouldAutoStartCatalogScan = true
+            isCatalogAddPresented = true
+            appRouter.markRouteHandled(.scan)
+        case .pharmacy, .codiceFiscaleFullscreen, .profile:
+            break
+        }
     }
 
     private func syncSummaryToWidgetDebounced() {
@@ -150,12 +186,11 @@ struct CabinetView: View {
             .sheet(isPresented: $isNewCabinetPresented, onDismiss: { newCabinetName = "" }) {
                 newCabinetSheet
             }
-            .sheet(isPresented: $isSearchPresented) {
+            .sheet(isPresented: $isCatalogAddPresented, onDismiss: {
+                shouldAutoStartCatalogScan = false
+            }) {
                 NavigationStack {
-                    CatalogSearchScreen { selection in
-                        addCatalogSelectionToCabinet(selection)
-                        isSearchPresented = false
-                    }
+                    CatalogAddMedicineView(autoStartScan: shouldAutoStartCatalogScan)
                 }
             }
             .sheet(isPresented: $isProfilePresented) {
@@ -163,131 +198,6 @@ struct CabinetView: View {
                     ProfileView()
                 }
             }
-            .alert(
-                "Operazione completata",
-                isPresented: Binding(
-                    get: { catalogActionMessage != nil },
-                    set: { if !$0 { catalogActionMessage = nil } }
-                )
-            ) {
-                Button("OK", role: .cancel) {
-                    catalogActionMessage = nil
-                }
-            } message: {
-                Text(catalogActionMessage ?? "")
-            }
-    }
-
-    private func addCatalogSelectionToCabinet(_ selection: CatalogSelection) {
-        let medicine = existingCatalogMedicine(for: selection) ?? createCatalogMedicine(from: selection)
-        medicine.in_cabinet = true
-        medicine.obbligo_ricetta = medicine.obbligo_ricetta || selection.requiresPrescription
-
-        let package = existingCatalogPackage(for: medicine, selection: selection)
-            ?? createCatalogPackage(for: medicine, selection: selection)
-        _ = existingCatalogEntry(for: medicine, package: package)
-            ?? createCatalogEntry(for: medicine, package: package)
-
-        do {
-            try managedObjectContext.save()
-            catalogActionMessage = "Aggiunto all'armadietto."
-        } catch {
-            managedObjectContext.rollback()
-            catalogActionMessage = "Non sono riuscito ad aggiungere il farmaco."
-        }
-    }
-
-    private func existingCatalogMedicine(for selection: CatalogSelection) -> Medicine? {
-        let identity = catalogIdentityKey(name: selection.name, principle: selection.principle)
-        let medicines = uniqueMedicines
-        if let exact = medicines.first(where: {
-            catalogIdentityKey(name: $0.nome, principle: $0.principio_attivo) == identity
-        }) {
-            return exact
-        }
-
-        let normalizedName = normalizeCatalogText(selection.name)
-        return medicines.first(where: { normalizeCatalogText($0.nome) == normalizedName })
-    }
-
-    private func existingCatalogPackage(for medicine: Medicine, selection: CatalogSelection) -> Package? {
-        medicine.packages.first(where: { packageMatchesCatalogSelection($0, selection: selection) })
-    }
-
-    private func existingCatalogEntry(for medicine: Medicine, package: Package) -> MedicinePackage? {
-        medicine.medicinePackages?.first(where: { $0.package.objectID == package.objectID })
-    }
-
-    private func packageMatchesCatalogSelection(_ package: Package, selection: CatalogSelection) -> Bool {
-        let sameUnits = Int(package.numero) == max(1, selection.units)
-        let sameType = normalizeCatalogText(package.tipologia) == normalizeCatalogText(selection.tipologia)
-        let sameValue = package.valore == selection.valore
-        let sameUnit = normalizeCatalogText(package.unita) == normalizeCatalogText(selection.unita)
-        let sameVolume = normalizeCatalogText(package.volume) == normalizeCatalogText(selection.volume)
-        return sameUnits && sameType && sameValue && sameUnit && sameVolume
-    }
-
-    private func createCatalogMedicine(from selection: CatalogSelection) -> Medicine {
-        let medicine = Medicine(context: managedObjectContext)
-        medicine.id = UUID()
-        medicine.source_id = medicine.id
-        medicine.visibility = "local"
-        medicine.nome = selection.name
-        medicine.principio_attivo = selection.principle
-        medicine.obbligo_ricetta = selection.requiresPrescription
-        medicine.in_cabinet = true
-        return medicine
-    }
-
-    private func createCatalogPackage(for medicine: Medicine, selection: CatalogSelection) -> Package {
-        let package = Package(context: managedObjectContext)
-        package.id = UUID()
-        package.source_id = package.id
-        package.visibility = "local"
-        package.tipologia = selection.tipologia.isEmpty ? "Confezione" : selection.tipologia
-        package.numero = Int32(max(1, selection.units))
-        package.unita = selection.unita.isEmpty ? "unita" : selection.unita
-        package.volume = selection.volume
-        package.valore = max(0, selection.valore)
-        package.principio_attivo = selection.principle
-        package.medicine = medicine
-        medicine.addToPackages(package)
-        return package
-    }
-
-    private func createCatalogEntry(for medicine: Medicine, package: Package) -> MedicinePackage {
-        let entry = MedicinePackage(context: managedObjectContext)
-        entry.id = UUID()
-        entry.created_at = Date()
-        entry.source_id = entry.id
-        entry.visibility = "local"
-        entry.medicine = medicine
-        entry.package = package
-        entry.cabinet = nil
-        medicine.addToMedicinePackages(entry)
-        return entry
-    }
-
-    private func catalogIdentityKey(name: String, principle: String) -> String {
-        let normalizedName = normalizeCatalogText(name)
-        let normalizedPrinciple = normalizeCatalogText(principle)
-        if normalizedPrinciple.isEmpty {
-            return normalizedName
-        }
-        return "\(normalizedName)|\(normalizedPrinciple)"
-    }
-
-    private func normalizeCatalogText(_ text: String) -> String {
-        let folded = text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-        let cleaned = folded.replacingOccurrences(
-            of: "[^A-Za-z0-9]",
-            with: " ",
-            options: .regularExpression
-        )
-        return cleaned
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
     }
 
     private var cabinetListWithDetailSheet: some View {
@@ -316,6 +226,19 @@ struct CabinetView: View {
                     }
                 )
                 .presentationDetents([.medium, .large])
+            }
+            .sheet(item: $missedDoseSheet) { state in
+                MissedDoseIntakeSheet(candidate: state.candidate) { takenAt, nextAction in
+                    let log = viewModel.actionService.recordMissedDoseIntake(
+                        candidate: state.candidate,
+                        takenAt: takenAt,
+                        nextAction: nextAction,
+                        operationId: state.operationId
+                    )
+                    if let key = state.operationKey {
+                        handleOperationResult(log, key: key)
+                    }
+                }
             }
     }
 
@@ -390,7 +313,7 @@ struct CabinetView: View {
                         top: 14,
                         leading: Layout.horizontalInset,
                         bottom: 24,
-                        trailing: Layout.horizontalInset
+                        trailing: Layout.summaryTrailingInset
                     )
                 )
                 .listRowBackground(Color.clear)
@@ -586,8 +509,7 @@ struct CabinetView: View {
             onToggleSelection: { viewModel.toggleSelection(for: entry) },
             onEnterSelection: { viewModel.enterSelectionMode(with: entry) },
             onMarkTaken: {
-                let opId = operationToken(for: .intake, entry: entry).id
-                viewModel.actionService.markAsTaken(for: entry, operationId: opId)
+                beginMarkTaken(for: entry)
             },
             onMarkPurchased: {
                 let token = operationToken(for: .purchase, entry: entry)
@@ -613,6 +535,21 @@ struct CabinetView: View {
                 trailing: Layout.horizontalInset
             )
         )
+    }
+
+    private func beginMarkTaken(for entry: MedicinePackage) {
+        let token = operationToken(for: .intake, entry: entry)
+        if let candidate = viewModel.actionService.missedDoseCandidate(for: entry) {
+            missedDoseSheet = MissedDoseSheetState(
+                candidate: candidate,
+                operationId: token.id,
+                operationKey: token.key
+            )
+            return
+        }
+
+        let log = viewModel.actionService.markAsTaken(for: entry, operationId: token.id)
+        handleOperationResult(log, key: token.key)
     }
 
     private func cabinetRow(for cabinet: Cabinet, entries: [MedicinePackage]) -> some View {

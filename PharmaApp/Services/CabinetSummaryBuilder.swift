@@ -152,43 +152,13 @@ struct CabinetSummaryBuilder {
         guard !therapies.isEmpty else {
             return 0
         }
+        guard let context = medicine.managedObjectContext else { return 0 }
+        let scheduleService = TherapyDoseScheduleService(context: context, calendar: calendar)
 
-        let plannedTimes = scheduledTimesToday(for: therapies, now: now)
-        guard !plannedTimes.isEmpty else { return 0 }
-
-        let takenCount = medicine.effectiveIntakeLogs(on: now, calendar: calendar).count
-        let pendingTimes = plannedTimes.dropFirst(min(takenCount, plannedTimes.count))
-        return pendingTimes.filter { $0 <= now }.count
-    }
-
-    private func scheduledTimesToday(for therapies: Set<Therapy>, now: Date) -> [Date] {
-        let today = calendar.startOfDay(for: now)
-        var planned: [Date] = []
-
-        for therapy in therapies {
-            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-            let start = therapy.start_date ?? today
-            let doses = (therapy.doses ?? []).sorted { $0.time < $1.time }
-            let perDay = max(1, doses.count)
-            let allowed = recurrenceManager.allowedEvents(
-                on: today,
-                rule: rule,
-                startDate: start,
-                dosesPerDay: perDay,
-                calendar: calendar
-            )
-            guard allowed > 0 else { continue }
-            guard !doses.isEmpty else { continue }
-
-            let limitedDoses = doses.prefix(min(allowed, doses.count))
-            for dose in limitedDoses {
-                guard let combined = combine(day: today, withTime: dose.time) else { continue }
-                guard combined >= start else { continue }
-                planned.append(combined)
-            }
+        return therapies.reduce(0) { partialResult, therapy in
+            let pending = scheduleService.pendingScheduledTimes(on: now, for: therapy)
+            return partialResult + pending.filter { $0 <= now }.count
         }
-
-        return planned.sorted()
     }
 
     private func missedSummaryLine(for summary: MissedDoseSummary) -> String {
@@ -230,20 +200,6 @@ struct CabinetSummaryBuilder {
         name.localizedCapitalized
     }
 
-    private func combine(day: Date, withTime time: Date) -> Date? {
-        let dayComponents = calendar.dateComponents([.year, .month, .day], from: day)
-        let timeComponents = calendar.dateComponents([.hour, .minute, .second], from: time)
-
-        var merged = DateComponents()
-        merged.year = dayComponents.year
-        merged.month = dayComponents.month
-        merged.day = dayComponents.day
-        merged.hour = timeComponents.hour
-        merged.minute = timeComponents.minute
-        merged.second = timeComponents.second
-
-        return calendar.date(from: merged)
-    }
 }
 
 private extension String {

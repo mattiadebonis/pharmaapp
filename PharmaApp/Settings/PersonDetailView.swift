@@ -23,7 +23,7 @@ struct PersonDetailView: View {
     init(person: Person) {
         self.person = person
         _nome = State(initialValue: person.nome ?? "")
-        _conditions = State(initialValue: Self.parsedConditions(from: person.condizione))
+        _conditions = State(initialValue: ConditionListFormatter.parsed(from: person.condizione))
         _codiceFiscale = State(initialValue: person.codice_fiscale ?? "")
     }
 
@@ -33,31 +33,7 @@ struct PersonDetailView: View {
                 TextField("Nome", text: $nome)
             }
 
-            Section(header: Text("Condizioni")) {
-                if conditions.isEmpty {
-                    Text("Nessuna condizione inserita.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(Array(conditions.indices), id: \.self) { index in
-                        HStack(spacing: 8) {
-                            TextField("Condizione \(index + 1)", text: conditionBinding(for: index))
-                            Button(role: .destructive) {
-                                removeCondition(at: index)
-                            } label: {
-                                Image(systemName: "minus.circle.fill")
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                Button {
-                    conditions.append("")
-                } label: {
-                    Label("Aggiungi condizione", systemImage: "plus.circle")
-                }
-            }
+            ConditionsEditorSection(conditions: $conditions)
 
             Section(header: Text("Codice fiscale")) {
                 TextField("Codice fiscale (opzionale)", text: $codiceFiscale)
@@ -153,7 +129,7 @@ struct PersonDetailView: View {
         errorMessage = nil
         person.nome = normalizedValue(from: nome)
         person.cognome = nil
-        person.condizione = normalizedConditions(from: conditions)
+        person.condizione = ConditionListFormatter.serialized(from: conditions)
         person.codice_fiscale = normalizedCF.isEmpty ? nil : normalizedCF
 
         let context = person.managedObjectContext ?? managedObjectContext
@@ -183,52 +159,5 @@ struct PersonDetailView: View {
     private func normalizedValue(from value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private func normalizedConditions(from values: [String]) -> String? {
-        var output: [String] = []
-        for value in values {
-            let chunks = value.components(separatedBy: CharacterSet(charactersIn: ",;\n"))
-            for chunk in chunks {
-                let trimmed = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { continue }
-                if !output.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) {
-                    output.append(trimmed)
-                }
-            }
-        }
-        return output.isEmpty ? nil : output.joined(separator: "\n")
-    }
-
-    private static func parsedConditions(from value: String?) -> [String] {
-        guard let value else { return [] }
-        let chunks = value.components(separatedBy: CharacterSet(charactersIn: ",;\n"))
-        var output: [String] = []
-        for chunk in chunks {
-            let trimmed = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            if !output.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) {
-                output.append(trimmed)
-            }
-        }
-        return output
-    }
-
-    private func conditionBinding(for index: Int) -> Binding<String> {
-        Binding(
-            get: {
-                guard conditions.indices.contains(index) else { return "" }
-                return conditions[index]
-            },
-            set: { newValue in
-                guard conditions.indices.contains(index) else { return }
-                conditions[index] = newValue
-            }
-        )
-    }
-
-    private func removeCondition(at index: Int) {
-        guard conditions.indices.contains(index) else { return }
-        conditions.remove(at: index)
     }
 }

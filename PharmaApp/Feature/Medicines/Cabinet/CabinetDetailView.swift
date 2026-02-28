@@ -19,6 +19,7 @@ struct CabinetDetailView: View {
     
     @State private var selectedEntry: MedicinePackage?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
+    @State private var missedDoseSheet: MissedDoseSheetState?
     @State private var entryToMove: MedicinePackage?
     @State private var isDeleteDialogPresented = false
     @State private var isMoveCabinetSheetPresented = false
@@ -81,6 +82,19 @@ struct CabinetDetailView: View {
             )
             .presentationDetents([PresentationDetent.medium, PresentationDetent.large])
         }
+        .sheet(item: $missedDoseSheet) { state in
+            MissedDoseIntakeSheet(candidate: state.candidate) { takenAt, nextAction in
+                let log = viewModel.actionService.recordMissedDoseIntake(
+                    candidate: state.candidate,
+                    takenAt: takenAt,
+                    nextAction: nextAction,
+                    operationId: state.operationId
+                )
+                if let key = state.operationKey {
+                    handleOperationResult(log, key: key)
+                }
+            }
+        }
 
         .sheet(isPresented: $isMoveCabinetSheetPresented) {
             MoveCabinetSelectionSheet(
@@ -133,8 +147,7 @@ struct CabinetDetailView: View {
             onToggleSelection: { viewModel.toggleSelection(for: entry) },
             onEnterSelection: { viewModel.enterSelectionMode(with: entry) },
             onMarkTaken: {
-                let opId = operationToken(for: .intake, entry: entry).id
-                viewModel.actionService.markAsTaken(for: entry, operationId: opId)
+                beginMarkTaken(for: entry)
             },
             onMarkPurchased: {
                 let token = operationToken(for: .purchase, entry: entry)
@@ -151,6 +164,21 @@ struct CabinetDetailView: View {
         )
         .listRowSeparator(.hidden, edges: .all)
         .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
+    }
+
+    private func beginMarkTaken(for entry: MedicinePackage) {
+        let token = operationToken(for: .intake, entry: entry)
+        if let candidate = viewModel.actionService.missedDoseCandidate(for: entry) {
+            missedDoseSheet = MissedDoseSheetState(
+                candidate: candidate,
+                operationId: token.id,
+                operationKey: token.key
+            )
+            return
+        }
+
+        let log = viewModel.actionService.markAsTaken(for: entry, operationId: token.id)
+        handleOperationResult(log, key: token.key)
     }
     
     private func shouldShowPrescriptionAction(for entry: MedicinePackage) -> Bool {

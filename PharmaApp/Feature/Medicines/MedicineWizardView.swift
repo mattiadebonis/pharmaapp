@@ -42,6 +42,10 @@ struct MedicineWizardView: View {
         MedicineStockService(context: context)
     }
 
+    private var catalogResolver: CatalogSelectionResolver {
+        CatalogSelectionResolver(context: context)
+    }
+
     init(
         prefill: CatalogSelection? = nil,
         initialQuickAction: QuickAction = .actions,
@@ -288,94 +292,21 @@ struct MedicineWizardView: View {
     }
 
     private func resolveOrCreateContext(for item: CatalogSelection) throws -> CreatedContext {
-        let medicine = existingMedicine(for: item) ?? createMedicine(from: item)
-        medicine.in_cabinet = true
-        medicine.obbligo_ricetta = medicine.obbligo_ricetta || item.requiresPrescription
-
-        let package = existingPackage(for: medicine, selection: item) ?? createPackage(for: medicine, selection: item)
-        let entry = existingEntry(for: medicine, package: package) ?? createEntry(for: medicine, package: package)
-
-        return CreatedContext(medicine: medicine, package: package, entry: entry)
+        let resolved = catalogResolver.resolveOrCreateContext(for: item)
+        return CreatedContext(
+            medicine: resolved.medicine,
+            package: resolved.package,
+            entry: resolved.entry
+        )
     }
 
     private func existingContext(for item: CatalogSelection) -> CreatedContext? {
-        guard let medicine = existingMedicine(for: item) else { return nil }
-        let package = existingPackage(for: medicine, selection: item) ?? medicine.packages.first
-        guard let package else { return nil }
-        let entry = existingEntry(for: medicine, package: package)
-        guard let entry else { return nil }
-        return CreatedContext(medicine: medicine, package: package, entry: entry)
-    }
-
-    private func existingMedicine(for item: CatalogSelection) -> Medicine? {
-        let identity = catalogIdentityKey(name: item.name, principle: item.principle)
-        if let exact = medicines.first(where: {
-            catalogIdentityKey(name: $0.nome, principle: $0.principio_attivo) == identity
-        }) {
-            return exact
-        }
-
-        let normalizedName = normalize(item.name)
-        return medicines.first(where: { normalize($0.nome) == normalizedName })
-    }
-
-    private func existingPackage(for medicine: Medicine, selection: CatalogSelection) -> Package? {
-        medicine.packages.first(where: { packageMatches($0, selection: selection) })
-    }
-
-    private func existingEntry(for medicine: Medicine, package: Package) -> MedicinePackage? {
-        medicine.medicinePackages?.first(where: { $0.package.objectID == package.objectID })
-    }
-
-    private func packageMatches(_ package: Package, selection: CatalogSelection) -> Bool {
-        let sameUnits = Int(package.numero) == max(1, selection.units)
-        let sameType = normalize(package.tipologia) == normalize(selection.tipologia)
-        let sameValue = package.valore == selection.valore
-        let sameUnit = normalize(package.unita) == normalize(selection.unita)
-        let sameVolume = normalize(package.volume) == normalize(selection.volume)
-
-        return sameUnits && sameType && sameValue && sameUnit && sameVolume
-    }
-
-    private func createMedicine(from item: CatalogSelection) -> Medicine {
-        let medicine = Medicine(context: context)
-        medicine.id = UUID()
-        medicine.source_id = medicine.id
-        medicine.visibility = "local"
-        medicine.nome = item.name
-        medicine.principio_attivo = item.principle
-        medicine.obbligo_ricetta = item.requiresPrescription
-        medicine.in_cabinet = true
-        return medicine
-    }
-
-    private func createPackage(for medicine: Medicine, selection: CatalogSelection) -> Package {
-        let package = Package(context: context)
-        package.id = UUID()
-        package.source_id = package.id
-        package.visibility = "local"
-        package.tipologia = selection.tipologia.isEmpty ? "Confezione" : selection.tipologia
-        package.numero = Int32(max(1, selection.units))
-        package.unita = selection.unita.isEmpty ? "unita" : selection.unita
-        package.volume = selection.volume
-        package.valore = max(0, selection.valore)
-        package.principio_attivo = selection.principle
-        package.medicine = medicine
-        medicine.addToPackages(package)
-        return package
-    }
-
-    private func createEntry(for medicine: Medicine, package: Package) -> MedicinePackage {
-        let entry = MedicinePackage(context: context)
-        entry.id = UUID()
-        entry.created_at = Date()
-        entry.source_id = entry.id
-        entry.visibility = "local"
-        entry.medicine = medicine
-        entry.package = package
-        entry.cabinet = nil
-        medicine.addToMedicinePackages(entry)
-        return entry
+        guard let existing = catalogResolver.existingContext(for: item) else { return nil }
+        return CreatedContext(
+            medicine: existing.medicine,
+            package: existing.package,
+            entry: existing.entry
+        )
     }
 
     private func saveIfNeeded() throws {
@@ -472,28 +403,6 @@ struct MedicineWizardView: View {
             parts.append(item.volume)
         }
         return parts.isEmpty ? "Confezione" : parts.joined(separator: " · ")
-    }
-
-    private func catalogIdentityKey(name: String, principle: String) -> String {
-        let normalizedName = normalize(name)
-        let normalizedPrinciple = normalize(principle)
-        if normalizedPrinciple.isEmpty {
-            return normalizedName
-        }
-        return "\(normalizedName)|\(normalizedPrinciple)"
-    }
-
-    private func normalize(_ text: String) -> String {
-        let folded = text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-        let cleaned = folded.replacingOccurrences(
-            of: "[^A-Za-z0-9]",
-            with: " ",
-            options: .regularExpression
-        )
-        return cleaned
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
     }
 
     private func camelCase(_ text: String) -> String {

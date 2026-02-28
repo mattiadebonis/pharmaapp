@@ -1349,20 +1349,32 @@ public struct TherapyPlanBuilder {
         guard !logsToday.isEmpty else { return 0 }
 
         let schedule = scheduledTimes.sorted()
-        let logTimes = logsToday.map(\.timestamp).sorted()
+        let explicitBuckets = Set(
+            logsToday.compactMap(\.scheduledDueAt)
+                .filter { calendar.isDate($0, inSameDayAs: now) }
+                .map(minuteBucket(for:))
+        )
+        var completedBuckets = explicitBuckets
+        var remainingSchedule = schedule.filter { !explicitBuckets.contains(minuteBucket(for: $0)) }
+        let logTimes = logsToday
+            .filter { $0.scheduledDueAt == nil }
+            .map(\.timestamp)
+            .sorted()
         var scheduleIndex = schedule.count - 1
-        var completed = 0
+        if remainingSchedule.count != schedule.count {
+            scheduleIndex = remainingSchedule.count - 1
+        }
 
         for logTime in logTimes.sorted(by: >) {
-            while scheduleIndex >= 0, schedule[scheduleIndex] > logTime {
+            while scheduleIndex >= 0, remainingSchedule[scheduleIndex] > logTime {
                 scheduleIndex -= 1
             }
             if scheduleIndex < 0 { break }
-            completed += 1
+            completedBuckets.insert(minuteBucket(for: remainingSchedule[scheduleIndex]))
             scheduleIndex -= 1
         }
 
-        return completed
+        return schedule.filter { completedBuckets.contains(minuteBucket(for: $0)) }.count
     }
 
     private static func hasPendingIntakeToday(
@@ -1460,6 +1472,10 @@ public struct TherapyPlanBuilder {
         }
         let normalizedTitle = normalizedName(item.title)
         return medicines.first { normalizedName($0.name) == normalizedTitle }
+    }
+
+    private static func minuteBucket(for date: Date) -> Int {
+        Int(date.timeIntervalSince1970 / 60)
     }
 
     private static func purchaseSortValue(
