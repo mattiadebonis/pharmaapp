@@ -16,19 +16,22 @@ final class CriticalDoseLiveActivityCoordinator: CriticalDoseLiveActivityRefresh
         context: PersistenceController.shared.container.viewContext
     )
 
-    private let planner: CriticalDoseLiveActivityPlanning
+    private let planner: CriticalDoseLiveActivityPlanning?
     private let client: CriticalDoseLiveActivityClientProtocol
     private let clock: Clock
+    private let container: NSPersistentContainer
 
     init(
         context: NSManagedObjectContext,
         planner: CriticalDoseLiveActivityPlanning? = nil,
         client: CriticalDoseLiveActivityClientProtocol = CriticalDoseLiveActivityClient(),
-        clock: Clock = SystemClock()
+        clock: Clock = SystemClock(),
+        container: NSPersistentContainer = PersistenceController.shared.container
     ) {
-        self.planner = planner ?? CriticalDoseLiveActivityPlanner(context: context)
+        self.planner = planner
         self.client = client
         self.clock = clock
+        self.container = container
     }
 
     func refresh(reason: String, now: Date? = nil) async -> Date? {
@@ -40,7 +43,7 @@ final class CriticalDoseLiveActivityCoordinator: CriticalDoseLiveActivityRefresh
             return nil
         }
 
-        let plan = planner.makePlan(now: now)
+        let plan = await makePlan(now: now)
         guard let aggregate = plan.aggregate else {
             await endAllActivities()
             return plan.nextRefreshAt
@@ -109,6 +112,22 @@ final class CriticalDoseLiveActivityCoordinator: CriticalDoseLiveActivityRefresh
         let ids = client.currentActivityIDs()
         for id in ids {
             await client.end(activityID: id, dismissalPolicy: .immediate)
+        }
+    }
+
+    private func makePlan(now: Date) async -> CriticalDosePlan {
+        if let planner {
+            return planner.makePlan(now: now)
+        }
+
+        let backgroundContext = container.newBackgroundContext()
+        backgroundContext.mergePolicy = NSMergeByPropertyStoreTrumpMergePolicy
+
+        return await withCheckedContinuation { continuation in
+            backgroundContext.perform {
+                let planner = CriticalDoseLiveActivityPlanner(context: backgroundContext)
+                continuation.resume(returning: planner.makePlan(now: now))
+            }
         }
     }
 

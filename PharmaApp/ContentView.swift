@@ -25,62 +25,9 @@ struct ContentView: View {
     var body: some View {
         Group {
             if #available(iOS 18.0, *) {
-                TabView(selection: $appRouter.selectedTab) {
-                    Tab("Armadietto", systemImage: "pills", value: AppTabRoute.medicine) {
-                        NavigationStack {
-                            CabinetView()
-                        }
-                    }
-                    Tab("Profilo", systemImage: "person.crop.circle", value: AppTabRoute.profilo) {
-                        NavigationStack {
-                            ProfileView(showsDoneButton: false)
-                                .navigationTitle("Profilo")
-                                .navigationBarTitleDisplayMode(.inline)
-                        }
-                    }
-                    Tab(
-                        "Aggiungi",
-                        systemImage: "plus",
-                        value: AppTabRoute.search,
-                        role: .search
-                    ) {
-                        NavigationStack {
-                            GlobalSearchView()
-                                .navigationTitle("Aggiungi")
-                                .navigationBarTitleDisplayMode(.inline)
-                        }
-                    }
-                }
+                modernTabView
             } else {
-                TabView(selection: $appRouter.selectedTab) {
-                    NavigationStack {
-                        CabinetView()
-                    }
-                    .tabItem {
-                        Label("Armadietto", systemImage: "pills")
-                    }
-                    .tag(AppTabRoute.medicine)
-
-                    NavigationStack {
-                        ProfileView(showsDoneButton: false)
-                            .navigationTitle("Profilo")
-                            .navigationBarTitleDisplayMode(.inline)
-                    }
-                    .tabItem {
-                        Label("Profilo", systemImage: "person.crop.circle")
-                    }
-                    .tag(AppTabRoute.profilo)
-
-                    NavigationStack {
-                        GlobalSearchView()
-                            .navigationTitle("Aggiungi")
-                            .navigationBarTitleDisplayMode(.inline)
-                    }
-                    .tabItem {
-                        Label("Aggiungi", systemImage: "plus")
-                    }
-                    .tag(AppTabRoute.search)
-                }
+                legacyTabView
             }
         }
         .fullScreenCover(isPresented: $isGlobalCodiceFiscalePresented) {
@@ -114,6 +61,68 @@ struct ContentView: View {
             break // handled by GlobalSearchView
         }
     }
+
+    @available(iOS 18.0, *)
+    private var modernTabView: some View {
+        TabView(selection: $appRouter.selectedTab) {
+            Tab("Armadietto", systemImage: "pills", value: AppTabRoute.medicine) {
+                NavigationStack {
+                    CabinetView()
+                }
+            }
+            Tab("Profilo", systemImage: "person.crop.circle", value: AppTabRoute.profilo) {
+                NavigationStack {
+                    ProfileView(showsDoneButton: false)
+                        .navigationTitle("Profilo")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+            }
+            Tab(
+                "Aggiungi",
+                systemImage: "magnifyingglass",
+                value: AppTabRoute.search,
+                role: .search
+            ) {
+                NavigationStack {
+                    GlobalSearchView()
+                        .navigationTitle("Aggiungi")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+            }
+        }
+    }
+
+    private var legacyTabView: some View {
+        TabView(selection: $appRouter.selectedTab) {
+            NavigationStack {
+                CabinetView()
+            }
+            .tabItem {
+                Label("Armadietto", systemImage: "pills")
+            }
+            .tag(AppTabRoute.medicine)
+
+            NavigationStack {
+                ProfileView(showsDoneButton: false)
+                    .navigationTitle("Profilo")
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+            .tabItem {
+                Label("Profilo", systemImage: "person.crop.circle")
+            }
+            .tag(AppTabRoute.profilo)
+
+            NavigationStack {
+                GlobalSearchView()
+                    .navigationTitle("Aggiungi")
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+            .tabItem {
+                Label("Aggiungi", systemImage: "magnifyingglass")
+            }
+            .tag(AppTabRoute.search)
+        }
+    }
 }
 // MARK: – Preview
 #Preview {
@@ -126,6 +135,7 @@ struct ContentView: View {
 // Placeholder ricerca catalogo se non è presente un componente dedicato.
 struct CatalogSearchScreen: View {
     @Environment(\.dismiss) private var dismiss
+    var autoStartScan: Bool = false
     var onSelect: (CatalogSelection) -> Void
     @State private var searchText: String = ""
     @State private var shouldAutoFocusSearch = false
@@ -200,7 +210,13 @@ struct CatalogSearchScreen: View {
                 }
             }
         }
-        .onAppear { shouldAutoFocusSearch = true }
+        .onAppear {
+            if autoStartScan {
+                startScan()
+            } else {
+                shouldAutoFocusSearch = true
+            }
+        }
         .task { loadCatalogIfNeeded() }
         .background(
             SearchFieldAutoFocusInstaller(shouldFocus: shouldAutoFocusSearch) {
@@ -314,12 +330,6 @@ struct CatalogSearchScreen: View {
             Text(naturalPackageLabel(for: item))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            if !item.principle.isEmpty {
-                Text(item.principle)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)

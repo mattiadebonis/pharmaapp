@@ -21,6 +21,7 @@ public class Therapy: NSManagedObject, Identifiable {
     @NSManaged public var source_id: UUID?
     @NSManaged public var visibility: String?
     @NSManaged public var id: UUID
+    @NSManaged public var condizione: String?
     @NSManaged public var medicine: Medicine
     @NSManaged public var start_date: Date?
     @NSManaged public var rrule: String?
@@ -30,6 +31,7 @@ public class Therapy: NSManagedObject, Identifiable {
     @NSManaged public var importance: String?
     @NSManaged public var logs: Log?
     @NSManaged public var manual_intake_registration: Bool
+    @NSManaged public var notifications_silenced: Bool
     @NSManaged public var clinicalRules: Data?
     @NSManaged public var medicinePackage: MedicinePackage?
 
@@ -100,6 +102,10 @@ extension Therapy {
 }
 
 extension Therapy {
+    var automaticIntakeEnabled: Bool {
+        !manual_intake_registration
+    }
+
     var doseAmounts: [Double] {
         guard let doses, !doses.isEmpty else { return [] }
         return doses.map { $0.amountValue }

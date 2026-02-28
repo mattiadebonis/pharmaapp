@@ -249,6 +249,10 @@ final class NotificationCoordinator: ObservableObject {
         liveActivityTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
             guard let self else { return }
+            guard self.shouldRefreshCriticalLiveActivity(reason: "live-activity-checkpoint") else {
+                self.liveActivityTask = nil
+                return
+            }
             let next = await self.liveActivityCoordinator.refresh(reason: "live-activity-checkpoint")
             self.scheduleNextLiveActivityRefresh(nextDate: next)
         }
@@ -286,7 +290,7 @@ final class NotificationCoordinator: ObservableObject {
         case .fullAutomation:
             return true
         case .foregroundInteractive:
-            return UIApplication.shared.applicationState != .active
+            return true
         }
     }
 
@@ -295,10 +299,12 @@ final class NotificationCoordinator: ObservableObject {
         case .fullAutomation:
             return true
         case .foregroundInteractive:
+            if reason == "live-activity-checkpoint" {
+                return UIApplication.shared.applicationState != .active
+            }
             return reason == "startup"
                 || reason == "background"
                 || reason == "auto-intake"
-                || reason == "live-activity-checkpoint"
         }
     }
 

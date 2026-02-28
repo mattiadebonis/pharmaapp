@@ -71,6 +71,7 @@ struct TherapyFormView: View {
     
     // Nuovo state per la persona selezionata
     @State private var selectedPerson: Person?
+    @State private var selectedCondition: String = ""
     
     // MARK: - Modello
     var medicine: Medicine
@@ -127,11 +128,9 @@ struct TherapyFormView: View {
     @State private var monitoringDoseRelation: MonitoringDoseRelation = .beforeDose
     @State private var monitoringOffsetMinutes: Int = 30
     @State private var missedDosePreset: MissedDosePreset = .none
+    @State private var automaticIntakeEnabled: Bool
+    @State private var notificationsSilenced: Bool = false
     private let showClinicalRuleControls = false
-
-    private var manualIntakeEnabled: Bool {
-        medicine.manual_intake_registration
-    }
     
     // Sezione Orari: con pulsante + per aggiungere e - per rimuovere
     @State private var doses: [DoseEntry] = [DoseEntry(time: Date(), amount: 1)]
@@ -154,6 +153,7 @@ struct TherapyFormView: View {
         self.editingTherapy = editingTherapy
         self.onSave = onSave
         self.isEmbedded = isEmbedded
+        _automaticIntakeEnabled = State(initialValue: !medicine.manual_intake_registration)
         _therapyFormViewModel = StateObject(
             wrappedValue: TherapyFormViewModel(context: context)
         )
@@ -260,13 +260,35 @@ struct TherapyFormView: View {
             .listRowBackground(Color(.systemGroupedBackground))
 
             Section(header: Text("Persona")) {
-                Picker("Seleziona Persona", selection: $selectedPerson) {
+                Picker("Seleziona Persona", selection: selectedPersonBinding) {
                     ForEach(persons, id: \.self) { person in
                         Text(person.nome ?? "")
                             .tag(person as Person?)
                     }
                 }
                 .accessibilityIdentifier("PersonPicker")
+
+                if !conditionPickerOptions.isEmpty {
+                    Picker("Condizione", selection: $selectedCondition) {
+                        Text("Nessuna")
+                            .tag("")
+                        ForEach(conditionPickerOptions, id: \.self) { condition in
+                            Text(condition)
+                                .tag(condition)
+                        }
+                    }
+                } else {
+                    TextField("Condizione associata (opzionale)", text: $selectedCondition)
+                }
+            }
+            .listRowBackground(Color(.systemGroupedBackground))
+
+            Section(
+                header: Text("Automazioni terapia"),
+                footer: Text("Queste impostazioni valgono solo per questa terapia.")
+            ) {
+                Toggle("Registra assunzioni automaticamente", isOn: $automaticIntakeEnabled)
+                Toggle("Notifiche in silenzioso", isOn: $notificationsSilenced)
             }
             .listRowBackground(Color(.systemGroupedBackground))
 
@@ -314,7 +336,6 @@ struct TherapyFormView: View {
             // Edit: popola dai dati della therapy
             if let therapy = editingTherapy {
                 populateFromTherapy(therapy)
-                selectedPerson = therapy.person
             } else {
                 // Edge case: se esiste una sola therapy per questa medicina, assumiamo modalità "edit" implicita
                 if selectedPerson == nil {
@@ -330,9 +351,9 @@ struct TherapyFormView: View {
                     }()
                     if candidates.count == 1, let only = candidates.first {
                         populateFromTherapy(only)
-                        selectedPerson = only.person
                     } else {
                         selectedPerson = persons.first
+                        selectedCondition = defaultCondition(for: selectedPerson)
                     }
                 }
             }
@@ -439,6 +460,52 @@ struct TherapyFormView: View {
         guard let _ = selectedPerson else { return false }
         // In edit sempre abilitato; in creazione abilitiamo comunque perché la logica di save evita duplicati aggiornando.
         return true
+    }
+
+    private var selectedPersonBinding: Binding<Person?> {
+        Binding(
+            get: { selectedPerson },
+            set: { newValue in
+                selectedPerson = newValue
+                selectedCondition = defaultCondition(for: newValue)
+            }
+        )
+    }
+
+    private var selectedConditionValue: String? {
+        normalizedCondition(selectedCondition)
+    }
+
+    private var conditionPickerOptions: [String] {
+        var options = parseConditionOptions(from: selectedPerson?.condizione)
+        if let selectedConditionValue,
+           !options.contains(where: { $0.caseInsensitiveCompare(selectedConditionValue) == .orderedSame }) {
+            options.insert(selectedConditionValue, at: 0)
+        }
+        return options
+    }
+
+    private func defaultCondition(for person: Person?) -> String {
+        parseConditionOptions(from: person?.condizione).first ?? ""
+    }
+
+    private func parseConditionOptions(from rawValue: String?) -> [String] {
+        guard let rawValue = normalizedCondition(rawValue) else { return [] }
+        let chunks = rawValue.components(separatedBy: CharacterSet(charactersIn: ",;\n"))
+        var output: [String] = []
+        for chunk in chunks {
+            guard let normalized = normalizedCondition(chunk) else { continue }
+            if !output.contains(where: { $0.caseInsensitiveCompare(normalized) == .orderedSame }) {
+                output.append(normalized)
+            }
+        }
+        return output
+    }
+
+    private func normalizedCondition(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private var monitoringStatusText: String {
@@ -768,14 +835,18 @@ struct TherapyFormView: View {
     private var therapyDescriptionSummaryText: String {
         var parts: [String] = []
         if let personName = selectedPersonName, !personName.isEmpty {
-            parts.append("Per \(personName)")
+            if let selectedConditionValue {
+                parts.append("Per \(personName) (\(selectedConditionValue))")
+            } else {
+                parts.append("Per \(personName)")
+            }
         }
         parts.append(doseSummaryText)
         parts.append(frequencySummaryText)
         if let timesText = timesDescriptionText {
             parts.append(timesText)
         }
-        let confirmation = manualIntakeEnabled ? "chiedi conferma" : "senza conferma"
+        let confirmation = automaticIntakeEnabled ? "registrazione automatica" : "chiedi conferma"
         if parts.isEmpty {
             return confirmation
         }
@@ -938,6 +1009,7 @@ struct TherapyFormView: View {
 
         if let person = parsed.person {
             selectedPerson = person
+            selectedCondition = defaultCondition(for: person)
         }
 
         var parsedDoseAmount: Double?
@@ -1134,6 +1206,7 @@ extension TherapyFormView {
             newPerson.id = UUID()
             newPerson.nome = ""
             newPerson.cognome = nil
+            newPerson.condizione = selectedConditionValue
             return newPerson
         }()
 
@@ -1154,7 +1227,9 @@ extension TherapyFormView {
                 medicinePackage: effectiveMedicinePackage,
                 importance: effectiveImportance,
                 person: effectivePerson,
-                manualIntake: manualIntakeEnabled,
+                condition: selectedConditionValue,
+                manualIntake: !automaticIntakeEnabled,
+                notificationsSilenced: notificationsSilenced,
                 clinicalRules: clinicalRules
             )
         } else {
@@ -1174,7 +1249,9 @@ extension TherapyFormView {
                 medicinePackage: effectiveMedicinePackage,
                 importance: "standard",
                 person: effectivePerson,
-                manualIntake: manualIntakeEnabled,
+                condition: selectedConditionValue,
+                manualIntake: !automaticIntakeEnabled,
+                notificationsSilenced: notificationsSilenced,
                 clinicalRules: clinicalRules
             )
         }
@@ -1205,6 +1282,10 @@ extension TherapyFormView {
     }
     
     private func populateFromTherapy(_ therapy: Therapy) {
+        selectedPerson = therapy.person
+        selectedCondition = normalizedCondition(therapy.condizione) ?? defaultCondition(for: therapy.person)
+        automaticIntakeEnabled = therapy.automaticIntakeEnabled
+        notificationsSilenced = therapy.notifications_silenced
         startDate = Calendar.current.startOfDay(for: therapy.start_date ?? startDateToday)
         if let rruleString = therapy.rrule, !rruleString.isEmpty {
             let parsedRule = RecurrenceManager(context: context)

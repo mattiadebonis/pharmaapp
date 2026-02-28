@@ -34,9 +34,13 @@ struct GlobalSearchView: View {
 
     @State private var fullscreenBarcodeCodiceFiscale: String?
     @State private var isCatalogSearchPresented = false
+    @State private var shouldAutoStartScan = false
+    @State private var shouldAutoFocusSearch = false
     @State private var pendingCatalogSelection: CatalogSelection?
-    @State private var catalogSelection: CatalogSelection?
+    @State private var catalogStockEditorState: CatalogStockEditorState?
+    @State private var catalogTherapyEditorState: CatalogTherapyEditorState?
     @State private var catalogMedicines: [CatalogSelection] = []
+    @State private var inlineFeedback: CommandFeedback?
 
     @AppStorage("search.recent.items") private var recentItemsRaw: String = ""
 
@@ -106,6 +110,46 @@ struct GlobalSearchView: View {
         var id: NSManagedObjectID { medicine.objectID }
     }
 
+    private struct CommandFeedback: Identifiable {
+        enum Kind {
+            case success
+            case error
+
+            var title: String {
+                switch self {
+                case .success:
+                    return "Operazione completata"
+                case .error:
+                    return "Operazione non riuscita"
+                }
+            }
+        }
+
+        let id: UUID = UUID()
+        let kind: Kind
+        let message: String
+    }
+
+    private struct CatalogResolvedContext {
+        let selection: CatalogSelection
+        let medicine: Medicine
+        let package: Package
+        let entry: MedicinePackage
+    }
+
+    private struct CatalogStockEditorState: Identifiable {
+        let id: UUID = UUID()
+        let context: CatalogResolvedContext
+        let initialUnits: Int
+        let deadlineMonth: String
+        let deadlineYear: String
+    }
+
+    private struct CatalogTherapyEditorState: Identifiable {
+        let id: UUID = UUID()
+        let context: CatalogResolvedContext
+    }
+
     private struct WatchEntry: Identifiable {
         enum Badge {
             case lowStock
@@ -136,6 +180,10 @@ struct GlobalSearchView: View {
 
     private var recurrenceManager: RecurrenceManager {
         .shared
+    }
+
+    private var stockService: MedicineStockService {
+        MedicineStockService(context: managedObjectContext)
     }
 
     private var option: Option? {
@@ -360,15 +408,15 @@ struct GlobalSearchView: View {
         guard !trimmedQuery.isEmpty else { return [] }
         guard selectedScope == .all || selectedScope == .therapies else { return [] }
         return therapies.filter { therapy in
-            let medicineName = therapy.medicine.nome
-            let principle = therapy.medicine.principio_attivo
-            let personName = personDisplayName(for: therapy.person)
+            let medicineName = therapyMedicine(therapy)?.nome ?? ""
+            let principle = therapyMedicine(therapy)?.principio_attivo ?? ""
+            let personName = therapyPerson(therapy).map(personDisplayName(for:)) ?? "Persona"
             return medicineName.localizedCaseInsensitiveContains(trimmedQuery)
             || principle.localizedCaseInsensitiveContains(trimmedQuery)
             || personName.localizedCaseInsensitiveContains(trimmedQuery)
         }
         .sorted { lhs, rhs in
-            lhs.medicine.nome.localizedCaseInsensitiveCompare(rhs.medicine.nome) == .orderedAscending
+            therapyMedicineName(lhs).localizedCaseInsensitiveCompare(therapyMedicineName(rhs)) == .orderedAscending
         }
     }
 
@@ -396,7 +444,7 @@ struct GlobalSearchView: View {
         }
     }
 
-    private var hasSearchResults: Bool {
+    private var hasTextSearchResults: Bool {
         !filteredMedicines.isEmpty
             || !filteredCatalogMedicines.isEmpty
     }
@@ -446,7 +494,11 @@ struct GlobalSearchView: View {
         }
         .listStyle(.plain)
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Inserisci un farmaco")
+        .searchable(
+            text: $query,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Inserisci un farmaco"
+        )
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .onSubmit(of: .search) {
@@ -454,14 +506,23 @@ struct GlobalSearchView: View {
             addRecentQuery(trimmedQuery)
         }
         .background(
-            SearchFieldScannerAccessoryInstaller {
-                isCatalogSearchPresented = true
-            }
+            SearchFieldScannerAccessoryInstaller(
+                shouldFocus: shouldAutoFocusSearch,
+                onDidFocus: {
+                    shouldAutoFocusSearch = false
+                },
+                onTapScanner: {
+                    shouldAutoStartScan = true
+                    isCatalogSearchPresented = true
+                }
+            )
         )
         .onAppear {
+            shouldAutoFocusSearch = true
             loadCatalogMedicinesIfNeeded()
             if appRouter.pendingRoute == .scan {
                 appRouter.markRouteHandled(.scan)
+                shouldAutoStartScan = true
                 isCatalogSearchPresented = true
             } else if appRouter.pendingRoute == .addMedicine {
                 appRouter.markRouteHandled(.addMedicine)
@@ -470,9 +531,15 @@ struct GlobalSearchView: View {
         .onChange(of: appRouter.pendingRoute) { route in
             if route == .scan {
                 appRouter.markRouteHandled(.scan)
+                shouldAutoStartScan = true
                 isCatalogSearchPresented = true
             } else if route == .addMedicine {
                 appRouter.markRouteHandled(.addMedicine)
+            }
+        }
+        .onChange(of: appRouter.selectedTab) { tab in
+            if tab == .search {
+                shouldAutoFocusSearch = true
             }
         }
         .onChange(of: query) { value in
@@ -518,26 +585,64 @@ struct GlobalSearchView: View {
             }
         }
         .sheet(isPresented: $isCatalogSearchPresented, onDismiss: {
+            shouldAutoStartScan = false
             if let pending = pendingCatalogSelection {
                 pendingCatalogSelection = nil
                 DispatchQueue.main.async {
-                    catalogSelection = pending
+                    selectedScope = .medicines
+                    activeShortcut = nil
+                    query = pending.name
                 }
             }
         }) {
             NavigationStack {
-                CatalogSearchScreen { selection in
+                CatalogSearchScreen(autoStartScan: shouldAutoStartScan) { selection in
                     pendingCatalogSelection = selection
                     isCatalogSearchPresented = false
                 }
             }
         }
-        .sheet(item: $catalogSelection) { selection in
-            MedicineWizardView(prefill: selection) {
-                catalogSelection = nil
+        .sheet(item: $catalogStockEditorState) { state in
+            CatalogStockEditorSheet(
+                medicineName: camelCase(state.context.medicine.nome),
+                initialUnits: state.initialUnits,
+                initialDeadlineMonth: state.deadlineMonth,
+                initialDeadlineYear: state.deadlineYear
+            ) { units, monthText, yearText in
+                saveCatalogStock(
+                    state.context,
+                    targetUnits: units,
+                    monthInput: monthText,
+                    yearInput: yearText
+                )
             }
-            .environment(\.managedObjectContext, managedObjectContext)
-            .presentationDetents([.fraction(0.5), .large])
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $catalogTherapyEditorState) { state in
+            NavigationStack {
+                TherapyFormView(
+                    medicine: state.context.medicine,
+                    package: state.context.package,
+                    context: managedObjectContext,
+                    medicinePackage: state.context.entry,
+                    onSave: {
+                        catalogTherapyEditorState = nil
+                        inlineFeedback = CommandFeedback(
+                            kind: .success,
+                            message: "Terapia aggiunta e farmaco inserito nell'armadietto."
+                        )
+                    },
+                    isEmbedded: true
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Chiudi") {
+                            catalogTherapyEditorState = nil
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.large])
         }
         .fullScreenCover(isPresented: Binding(
             get: { fullscreenBarcodeCodiceFiscale != nil },
@@ -548,6 +653,13 @@ struct GlobalSearchView: View {
                     fullscreenBarcodeCodiceFiscale = nil
                 }
             }
+        }
+        .alert(item: $inlineFeedback) { feedback in
+            Alert(
+                title: Text(feedback.kind.title),
+                message: Text(feedback.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
 
@@ -729,7 +841,7 @@ struct GlobalSearchView: View {
                         openMedicine(entry.medicine)
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Terapia attiva · \(entry.medicine.nome)")
+                            Text("Terapia attiva · \(camelCase(entry.medicine.nome))")
                                 .font(.system(size: 17, weight: .regular))
                                 .foregroundStyle(.primary)
                             Text("Prossima dose alle \(hourFormatter.string(from: entry.nextDose))")
@@ -745,7 +857,7 @@ struct GlobalSearchView: View {
                         openMedicine(item.medicine)
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Farmaco usato spesso · \(item.medicine.nome)")
+                            Text("Farmaco usato spesso · \(camelCase(item.medicine.nome))")
                                 .font(.system(size: 17, weight: .regular))
                                 .foregroundStyle(.primary)
                             Text("\(item.intakeCount) registrazioni")
@@ -789,38 +901,32 @@ struct GlobalSearchView: View {
 
     @ViewBuilder
     private var searchResultsSections: some View {
-        if hasSearchResults {
-            if !filteredMedicines.isEmpty {
-                Section {
-                    ForEach(filteredMedicines) { medicine in
-                        Button {
-                            openMedicine(medicine)
-                        } label: {
-                            medicineRow(medicine)
-                        }
-                        .buttonStyle(.plain)
+        if !filteredMedicines.isEmpty {
+            Section {
+                ForEach(filteredMedicines) { medicine in
+                    Button {
+                        openMedicine(medicine)
+                    } label: {
+                        medicineRow(medicine)
                     }
-                } header: {
-                    sectionHeader("Farmaci")
+                    .buttonStyle(.plain)
                 }
+            } header: {
+                sectionHeader("Farmaci")
             }
+        }
 
-            if !filteredCatalogMedicines.isEmpty {
-                Section {
-                    ForEach(filteredCatalogMedicines) { selection in
-                        Button {
-                            openCatalogMedicine(selection)
-                        } label: {
-                            catalogMedicineRow(selection)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                } header: {
-                    sectionHeader("Aggiungi dall'elenco farmaci")
+        if !filteredCatalogMedicines.isEmpty {
+            Section {
+                ForEach(filteredCatalogMedicines) { selection in
+                    catalogMedicineRow(selection)
                 }
+            } header: {
+                sectionHeader("Aggiungi dall'elenco farmaci")
             }
+        }
 
-        } else {
+        if !hasTextSearchResults {
             Section {
                 emptyLine("Nessun risultato per \"\(trimmedQuery)\"")
             }
@@ -915,7 +1021,7 @@ struct GlobalSearchView: View {
 
     private func watchRow(_ entry: WatchEntry) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(entry.medicine.nome)
+            Text(camelCase(entry.medicine.nome))
                 .font(.system(size: 17, weight: .regular))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
@@ -954,46 +1060,57 @@ struct GlobalSearchView: View {
     }
 
     private func medicineRow(_ medicine: Medicine) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(medicine.nome)
-                .font(.system(size: 18, weight: .regular))
-                .foregroundStyle(.primary)
-            if !medicine.principio_attivo.isEmpty {
-                Text(medicine.principio_attivo)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        MedicineRowView(medicine: medicine)
     }
 
     private func catalogMedicineRow(_ item: CatalogSelection) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(item.name)
+                Text(camelCase(item.name))
                     .font(.system(size: 18, weight: .regular))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Spacer(minLength: 8)
 
-                Text("Aggiungi")
+                Text("Catalogo")
                     .font(.system(size: 12, weight: .semibold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(Color.accentColor.opacity(0.18))
+                            .fill(Color.secondary.opacity(0.18))
                     )
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(.primary)
             }
 
-            if !item.principle.isEmpty {
-                Text(item.principle)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            HStack(spacing: 8) {
+                Button {
+                    handleCatalogAddToCabinet(item)
+                } label: {
+                    Text("Armadietto")
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(CapsuleActionButtonStyle(fill: .blue, textColor: .white))
+
+                Button {
+                    handleCatalogAddPackage(item)
+                } label: {
+                    Text("Confezione")
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(CapsuleActionButtonStyle(fill: .green, textColor: .white))
+
+                Button {
+                    handleCatalogAddTherapy(item)
+                } label: {
+                    Text("Terapia")
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(CapsuleActionButtonStyle(fill: .orange, textColor: .white))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1001,7 +1118,7 @@ struct GlobalSearchView: View {
 
     private func therapyRow(_ therapy: Therapy) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(therapy.medicine.nome)
+            Text(therapyMedicineName(therapy))
                 .font(.system(size: 18, weight: .regular))
                 .foregroundStyle(.primary)
 
@@ -1017,7 +1134,7 @@ struct GlobalSearchView: View {
                     .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(.secondary)
             } else {
-                Text(personDisplayName(for: therapy.person))
+                Text(therapyPerson(therapy).map(personDisplayName(for:)) ?? "Persona")
                     .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(.secondary)
             }
@@ -1057,7 +1174,7 @@ struct GlobalSearchView: View {
 
     private func medicineStatusRow(medicine: Medicine, badge: String, detail: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(medicine.nome)
+            Text(camelCase(medicine.nome))
                 .font(.system(size: 17, weight: .regular))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
@@ -1127,28 +1244,241 @@ struct GlobalSearchView: View {
         activeShortcut = shortcut
     }
 
-    private func openMedicine(_ medicine: Medicine, package: Package? = nil) {
+    private func openMedicine(
+        _ medicine: Medicine,
+        package: Package? = nil
+    ) {
         selectedPackage = package
         selectedMedicine = medicine
         addRecent(
             kind: .medicine,
             objectID: medicine.objectID,
-            title: medicine.nome,
-            subtitle: medicine.principio_attivo.isEmpty ? nil : medicine.principio_attivo
+            title: camelCase(medicine.nome),
+            subtitle: nil
         )
     }
 
-    private func openCatalogMedicine(_ selection: CatalogSelection) {
-        catalogSelection = selection
+    private func handleCatalogAddToCabinet(_ selection: CatalogSelection) {
+        _ = resolveCatalogContext(for: selection)
+        do {
+            try saveManagedContextIfNeeded()
+            inlineFeedback = CommandFeedback(kind: .success, message: "Aggiunto all'armadietto.")
+        } catch {
+            managedObjectContext.rollback()
+            inlineFeedback = CommandFeedback(
+                kind: .error,
+                message: "Non sono riuscito ad aggiungere il farmaco all'armadietto."
+            )
+        }
+    }
+
+    private func handleCatalogAddPackage(_ selection: CatalogSelection) {
+        let resolved = resolveCatalogContext(for: selection)
+        do {
+            try saveManagedContextIfNeeded()
+        } catch {
+            managedObjectContext.rollback()
+            inlineFeedback = CommandFeedback(
+                kind: .error,
+                message: "Non sono riuscito a preparare la modifica scorte."
+            )
+            return
+        }
+
+        let currentUnits = StockService(context: managedObjectContext).units(for: resolved.package)
+        let (month, year) = deadlineInputs(for: resolved.medicine)
+        let defaultTarget = currentUnits + max(1, selection.units)
+        catalogStockEditorState = CatalogStockEditorState(
+            context: resolved,
+            initialUnits: defaultTarget,
+            deadlineMonth: month,
+            deadlineYear: year
+        )
+    }
+
+    private func handleCatalogAddTherapy(_ selection: CatalogSelection) {
+        let resolved = resolveCatalogContext(for: selection)
+        do {
+            try saveManagedContextIfNeeded()
+            catalogTherapyEditorState = CatalogTherapyEditorState(context: resolved)
+        } catch {
+            managedObjectContext.rollback()
+            inlineFeedback = CommandFeedback(
+                kind: .error,
+                message: "Non sono riuscito ad aprire il form terapia."
+            )
+        }
+    }
+
+    private func resolveCatalogContext(for selection: CatalogSelection) -> CatalogResolvedContext {
+        let medicine = existingCatalogMedicine(for: selection) ?? createCatalogMedicine(from: selection)
+        medicine.in_cabinet = true
+        medicine.obbligo_ricetta = medicine.obbligo_ricetta || selection.requiresPrescription
+
+        let package = existingCatalogPackage(for: medicine, selection: selection)
+            ?? createCatalogPackage(for: medicine, selection: selection)
+        let entry = existingCatalogEntry(for: medicine, package: package)
+            ?? createCatalogEntry(for: medicine, package: package)
+
+        return CatalogResolvedContext(
+            selection: selection,
+            medicine: medicine,
+            package: package,
+            entry: entry
+        )
+    }
+
+    private func existingCatalogMedicine(for selection: CatalogSelection) -> Medicine? {
+        let identity = catalogIdentityKey(name: selection.name, principle: selection.principle)
+        if let exact = medicines.first(where: {
+            catalogIdentityKey(name: $0.nome, principle: $0.principio_attivo) == identity
+        }) {
+            return exact
+        }
+
+        let normalizedName = normalizeCatalogText(selection.name)
+        return medicines.first(where: { normalizeCatalogText($0.nome) == normalizedName })
+    }
+
+    private func existingCatalogPackage(for medicine: Medicine, selection: CatalogSelection) -> Package? {
+        medicine.packages.first(where: { packageMatchesCatalogSelection($0, selection: selection) })
+    }
+
+    private func existingCatalogEntry(for medicine: Medicine, package: Package) -> MedicinePackage? {
+        medicine.medicinePackages?.first(where: { $0.package.objectID == package.objectID })
+    }
+
+    private func packageMatchesCatalogSelection(_ package: Package, selection: CatalogSelection) -> Bool {
+        let sameUnits = Int(package.numero) == max(1, selection.units)
+        let sameType = normalizeCatalogText(package.tipologia) == normalizeCatalogText(selection.tipologia)
+        let sameValue = package.valore == selection.valore
+        let sameUnit = normalizeCatalogText(package.unita) == normalizeCatalogText(selection.unita)
+        let sameVolume = normalizeCatalogText(package.volume) == normalizeCatalogText(selection.volume)
+        return sameUnits && sameType && sameValue && sameUnit && sameVolume
+    }
+
+    private func createCatalogMedicine(from selection: CatalogSelection) -> Medicine {
+        let medicine = Medicine(context: managedObjectContext)
+        medicine.id = UUID()
+        medicine.source_id = medicine.id
+        medicine.visibility = "local"
+        medicine.nome = selection.name
+        medicine.principio_attivo = selection.principle
+        medicine.obbligo_ricetta = selection.requiresPrescription
+        medicine.in_cabinet = true
+        return medicine
+    }
+
+    private func createCatalogPackage(for medicine: Medicine, selection: CatalogSelection) -> Package {
+        let package = Package(context: managedObjectContext)
+        package.id = UUID()
+        package.source_id = package.id
+        package.visibility = "local"
+        package.tipologia = selection.tipologia.isEmpty ? "Confezione" : selection.tipologia
+        package.numero = Int32(max(1, selection.units))
+        package.unita = selection.unita.isEmpty ? "unita" : selection.unita
+        package.volume = selection.volume
+        package.valore = max(0, selection.valore)
+        package.principio_attivo = selection.principle
+        package.medicine = medicine
+        medicine.addToPackages(package)
+        return package
+    }
+
+    private func createCatalogEntry(for medicine: Medicine, package: Package) -> MedicinePackage {
+        let entry = MedicinePackage(context: managedObjectContext)
+        entry.id = UUID()
+        entry.created_at = Date()
+        entry.source_id = entry.id
+        entry.visibility = "local"
+        entry.medicine = medicine
+        entry.package = package
+        entry.cabinet = nil
+        medicine.addToMedicinePackages(entry)
+        return entry
+    }
+
+    private func saveManagedContextIfNeeded() throws {
+        if managedObjectContext.hasChanges {
+            try managedObjectContext.save()
+        }
+    }
+
+    private func saveCatalogStock(
+        _ resolved: CatalogResolvedContext,
+        targetUnits: Int,
+        monthInput: String,
+        yearInput: String
+    ) -> Bool {
+        guard applyDeadline(monthInput: monthInput, yearInput: yearInput, to: resolved.medicine) else {
+            inlineFeedback = CommandFeedback(
+                kind: .error,
+                message: "Scadenza non valida. Usa formato MM/YYYY."
+            )
+            return false
+        }
+
+        do {
+            try saveManagedContextIfNeeded()
+        } catch {
+            managedObjectContext.rollback()
+            inlineFeedback = CommandFeedback(
+                kind: .error,
+                message: "Non sono riuscito a salvare la scadenza."
+            )
+            return false
+        }
+
+        stockService.addPurchase(medicine: resolved.medicine, package: resolved.package)
+        stockService.setStockUnits(
+            medicine: resolved.medicine,
+            package: resolved.package,
+            targetUnits: max(0, targetUnits)
+        )
+
+        catalogStockEditorState = nil
+        inlineFeedback = CommandFeedback(
+            kind: .success,
+            message: "Confezione aggiunta e scorte aggiornate."
+        )
+        return true
+    }
+
+    private func applyDeadline(monthInput: String, yearInput: String, to medicine: Medicine) -> Bool {
+        let monthText = monthInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let yearText = yearInput.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if monthText.isEmpty && yearText.isEmpty {
+            medicine.updateDeadline(month: nil, year: nil)
+            return true
+        }
+
+        guard let month = Int(monthText),
+              let year = Int(yearText),
+              (1...12).contains(month),
+              (2000...2100).contains(year) else {
+            return false
+        }
+
+        medicine.updateDeadline(month: month, year: year)
+        return true
+    }
+
+    private func deadlineInputs(for medicine: Medicine) -> (month: String, year: String) {
+        if let info = medicine.deadlineMonthYear {
+            return (String(format: "%02d", info.month), String(info.year))
+        }
+        return ("", "")
     }
 
     private func openTherapy(_ therapy: Therapy) {
-        selectedPackage = therapy.package
-        selectedMedicine = therapy.medicine
+        guard let medicine = therapyMedicine(therapy) else { return }
+        selectedPackage = therapyPackage(therapy) ?? getPackage(for: medicine)
+        selectedMedicine = medicine
         addRecent(
             kind: .therapy,
             objectID: therapy.objectID,
-            title: therapy.medicine.nome,
+            title: medicine.nome,
             subtitle: "Terapia"
         )
     }
@@ -1398,9 +1728,31 @@ struct GlobalSearchView: View {
         return full.isEmpty ? "Persona" : full
     }
 
+    private func therapyPerson(_ therapy: Therapy) -> Person? {
+        therapy.value(forKey: "person") as? Person
+    }
+
+    private func therapyMedicine(_ therapy: Therapy) -> Medicine? {
+        therapy.value(forKey: "medicine") as? Medicine
+    }
+
+    private func therapyPackage(_ therapy: Therapy) -> Package? {
+        therapy.value(forKey: "package") as? Package
+    }
+
+    private func therapyUUID(_ therapy: Therapy) -> UUID? {
+        therapy.value(forKey: "id") as? UUID
+    }
+
+    private func therapyMedicineName(_ therapy: Therapy) -> String {
+        camelCase(therapyMedicine(therapy)?.nome ?? "Terapia")
+    }
+
     private func getPackage(for medicine: Medicine) -> Package? {
         if let therapies = medicine.therapies, let therapy = therapies.first {
-            return therapy.package
+            if let therapyPackage = therapyPackage(therapy) {
+                return therapyPackage
+            }
         }
         let purchaseLogs = medicine.effectivePurchaseLogs()
         if let package = purchaseLogs.sorted(by: { $0.timestamp > $1.timestamp }).first?.package {
@@ -1636,6 +1988,17 @@ struct GlobalSearchView: View {
             .lowercased()
     }
 
+    private func camelCase(_ text: String) -> String {
+        text
+            .lowercased()
+            .split(separator: " ")
+            .map { part in
+                guard let first = part.first else { return "" }
+                return String(first).uppercased() + part.dropFirst()
+            }
+            .joined(separator: " ")
+    }
+
     private func catalogIdentityKey(name: String, principle: String) -> String {
         let normalizedName = normalizeCatalogText(name)
         let normalizedPrinciple = normalizeCatalogText(principle)
@@ -1731,6 +2094,13 @@ struct GlobalSearchView: View {
         return formatter
     }()
 
+    private static let logDateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "it_IT")
+        formatter.dateFormat = "dd MMM HH:mm"
+        return formatter
+    }()
+
     private var hourFormatter: DateFormatter {
         Self.hourFormatter
     }
@@ -1738,13 +2108,124 @@ struct GlobalSearchView: View {
     private var doseDateTimeFormatter: DateFormatter {
         Self.doseDateTimeFormatter
     }
+
+    private var logDateTimeFormatter: DateFormatter {
+        Self.logDateTimeFormatter
+    }
+}
+
+private struct CatalogStockEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let medicineName: String
+    let initialUnits: Int
+    let initialDeadlineMonth: String
+    let initialDeadlineYear: String
+    let onSave: (_ targetUnits: Int, _ monthInput: String, _ yearInput: String) -> Bool
+
+    @State private var targetUnits: Int
+    @State private var monthInput: String
+    @State private var yearInput: String
+
+    init(
+        medicineName: String,
+        initialUnits: Int,
+        initialDeadlineMonth: String,
+        initialDeadlineYear: String,
+        onSave: @escaping (_ targetUnits: Int, _ monthInput: String, _ yearInput: String) -> Bool
+    ) {
+        self.medicineName = medicineName
+        self.initialUnits = initialUnits
+        self.initialDeadlineMonth = initialDeadlineMonth
+        self.initialDeadlineYear = initialDeadlineYear
+        self.onSave = onSave
+        _targetUnits = State(initialValue: initialUnits)
+        _monthInput = State(initialValue: initialDeadlineMonth)
+        _yearInput = State(initialValue: initialDeadlineYear)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(header: Text("Scorte")) {
+                    Stepper(value: $targetUnits, in: 0...9999) {
+                        Text("Unità disponibili: \(targetUnits)")
+                    }
+                }
+
+                Section(header: Text("Scadenza")) {
+                    HStack(spacing: 8) {
+                        TextField("MM", text: Binding(
+                            get: { monthInput },
+                            set: { monthInput = sanitizeMonthInput($0) }
+                        ))
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.center)
+                        .frame(width: 50)
+
+                        Text("/")
+                            .foregroundStyle(.secondary)
+
+                        TextField("YYYY", text: Binding(
+                            get: { yearInput },
+                            set: { yearInput = sanitizeYearInput($0) }
+                        ))
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.center)
+                        .frame(width: 70)
+
+                        Spacer()
+                    }
+                    Text(deadlineSummaryText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle(medicineName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annulla") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Salva") {
+                        if onSave(targetUnits, monthInput, yearInput) {
+                            dismiss()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var deadlineSummaryText: String {
+        guard let month = Int(monthInput),
+              let year = Int(yearInput),
+              (1...12).contains(month),
+              (2000...2100).contains(year) else {
+            return "Scadenza non impostata"
+        }
+        return String(format: "Scadenza: %02d/%04d", month, year)
+    }
+
+    private func sanitizeMonthInput(_ value: String) -> String {
+        String(value.filter { $0.isNumber }.prefix(2))
+    }
+
+    private func sanitizeYearInput(_ value: String) -> String {
+        String(value.filter { $0.isNumber }.prefix(4))
+    }
 }
 
 private struct SearchFieldScannerAccessoryInstaller: UIViewControllerRepresentable {
+    let shouldFocus: Bool
+    let onDidFocus: () -> Void
     let onTapScanner: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onTapScanner: onTapScanner)
+        Coordinator(onDidFocus: onDidFocus, onTapScanner: onTapScanner)
     }
 
     func makeUIViewController(context: Context) -> UIViewController {
@@ -1754,27 +2235,52 @@ private struct SearchFieldScannerAccessoryInstaller: UIViewControllerRepresentab
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        context.coordinator.onDidFocus = onDidFocus
         context.coordinator.onTapScanner = onTapScanner
-        context.coordinator.installScannerButton(from: uiViewController)
+        context.coordinator.configureSearchField(from: uiViewController, shouldFocus: shouldFocus)
     }
 
     final class Coordinator: NSObject {
+        var onDidFocus: () -> Void
         var onTapScanner: () -> Void
         private weak var installedTextField: UISearchTextField?
         private var retryScheduled = false
+        private var isAttemptingFocus = false
         private let scannerContainerTag = 9_241
 
-        init(onTapScanner: @escaping () -> Void) {
+        init(onDidFocus: @escaping () -> Void, onTapScanner: @escaping () -> Void) {
+            self.onDidFocus = onDidFocus
             self.onTapScanner = onTapScanner
         }
 
-        func installScannerButton(from viewController: UIViewController) {
+        func configureSearchField(from viewController: UIViewController, shouldFocus: Bool) {
             guard let searchController = viewController.findSearchControllerForSearchTab() else {
-                scheduleRetry(from: viewController)
+                scheduleRetry(from: viewController, shouldFocus: shouldFocus)
                 return
             }
 
             let textField = searchController.searchBar.searchTextField
+            restoreSearchIcon(on: searchController.searchBar, textField: textField)
+
+            installScannerButton(on: textField)
+            if shouldFocus {
+                requestFocus(from: viewController)
+            }
+        }
+
+        private func restoreSearchIcon(on searchBar: UISearchBar, textField: UISearchTextField) {
+            searchBar.setImage(UIImage(systemName: "magnifyingglass"), for: .search, state: .normal)
+            if textField.leftView == nil {
+                let imageView = UIImageView(image: UIImage(systemName: "magnifyingglass"))
+                imageView.tintColor = .secondaryLabel
+                imageView.contentMode = .scaleAspectFit
+                imageView.frame = CGRect(x: 0, y: 0, width: 16, height: 16)
+                textField.leftView = imageView
+            }
+            textField.leftViewMode = .always
+        }
+
+        private func installScannerButton(on textField: UISearchTextField) {
             if installedTextField === textField, textField.rightView?.tag == scannerContainerTag {
                 return
             }
@@ -1803,13 +2309,49 @@ private struct SearchFieldScannerAccessoryInstaller: UIViewControllerRepresentab
             installedTextField = textField
         }
 
-        private func scheduleRetry(from viewController: UIViewController) {
+        private func requestFocus(from viewController: UIViewController) {
+            guard !isAttemptingFocus else { return }
+            isAttemptingFocus = true
+            attemptFocus(from: viewController, attemptsRemaining: 12)
+        }
+
+        private func attemptFocus(from viewController: UIViewController, attemptsRemaining: Int) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak viewController] in
+                guard let self, let viewController else { return }
+                guard let searchController = viewController.findSearchControllerForSearchTab() else {
+                    return self.retryFocus(from: viewController, attemptsRemaining: attemptsRemaining - 1)
+                }
+
+                searchController.isActive = true
+                let textField = searchController.searchBar.searchTextField
+                if !textField.isFirstResponder {
+                    textField.becomeFirstResponder()
+                }
+
+                if textField.isFirstResponder {
+                    self.isAttemptingFocus = false
+                    self.onDidFocus()
+                } else {
+                    self.retryFocus(from: viewController, attemptsRemaining: attemptsRemaining - 1)
+                }
+            }
+        }
+
+        private func retryFocus(from viewController: UIViewController, attemptsRemaining: Int) {
+            guard attemptsRemaining > 0 else {
+                isAttemptingFocus = false
+                return
+            }
+            attemptFocus(from: viewController, attemptsRemaining: attemptsRemaining)
+        }
+
+        private func scheduleRetry(from viewController: UIViewController, shouldFocus: Bool) {
             guard !retryScheduled else { return }
             retryScheduled = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self, weak viewController] in
                 guard let self, let viewController else { return }
                 self.retryScheduled = false
-                self.installScannerButton(from: viewController)
+                self.configureSearchField(from: viewController, shouldFocus: shouldFocus)
             }
         }
 

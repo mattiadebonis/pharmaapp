@@ -33,6 +33,7 @@ struct NotificationPlanItem: Equatable {
     let kind: NotificationPlanKind
     let origin: NotificationPlanOrigin
     let userInfo: [String: String]
+    let isSilenced: Bool
 }
 
 struct NotificationPlan {
@@ -173,7 +174,8 @@ struct NotificationPlanner {
                     body: body,
                     kind: .therapy,
                     origin: origin,
-                    userInfo: userInfo
+                    userInfo: userInfo,
+                    isSilenced: therapy.notifications_silenced
                 )
             )
         }
@@ -216,7 +218,8 @@ struct NotificationPlanner {
                             body: body,
                             kind: kind,
                             origin: .immediate,
-                            userInfo: userInfo
+                            userInfo: userInfo,
+                            isSilenced: false
                         )
                     )
                     stockAlertStore.setState(
@@ -248,7 +251,8 @@ struct NotificationPlanner {
                             body: "Le scorte di \(medicine.nome) stanno per finire",
                             kind: .stockLow,
                             origin: .scheduled,
-                            userInfo: userInfo
+                            userInfo: userInfo,
+                            isSilenced: false
                         )
                     )
                 }
@@ -269,7 +273,8 @@ struct NotificationPlanner {
                             body: "Le scorte di \(medicine.nome) stanno terminando",
                             kind: .stockOut,
                             origin: .scheduled,
-                            userInfo: userInfo
+                            userInfo: userInfo,
+                            isSilenced: false
                         )
                     )
                 }

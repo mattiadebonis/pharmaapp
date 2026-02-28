@@ -129,6 +129,7 @@ struct PharmaAppApp: App {
                     let context = persistenceController.container.viewContext
                     DataManager.shared.performOneTimeBootstrapIfNeeded()
                     DataManager.shared.migrateManualIntakeDefaultIfNeeded()
+                    DataManager.shared.migrateTherapyManualIntakeScopeIfNeeded()
                     UserIdentityProvider.shared.ensureProfile(in: context)
                     AccountPersonService.shared.ensureAccountPerson(in: context)
                     AccountPersonService.shared.migrateLegacyCodiceFiscaleIfNeeded(in: context)

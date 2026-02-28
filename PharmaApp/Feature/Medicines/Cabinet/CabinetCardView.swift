@@ -68,7 +68,7 @@ struct CabinetCardView: View {
     }
     
     private var subtitleColor: Color {
-        Color.primary.opacity(0.45)
+        .black
     }
 
     private var subtitleFont: Font {

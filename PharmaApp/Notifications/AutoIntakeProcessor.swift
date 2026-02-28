@@ -131,12 +131,7 @@ final class AutoIntakeProcessor {
     }
 
     private func requiresManualConfirmation(_ therapy: Therapy) -> Bool {
-        if let option = Option.current(in: context) {
-            return option.manual_intake_registration
-        }
-        if therapy.manual_intake_registration { return true }
-        if therapy.medicine.manual_intake_registration { return true }
-        return false
+        therapy.manual_intake_registration
     }
 
     private func buildIntakeMinuteIndex(therapies: [Therapy]) -> [NSManagedObjectID: Set<Int>] {

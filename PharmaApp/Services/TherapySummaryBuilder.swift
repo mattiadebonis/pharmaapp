@@ -1,9 +1,25 @@
 import Foundation
 import CoreData
 
+enum TherapyLineStatusIcon: String, Hashable {
+    case automaticIntake = "sparkle"
+    case silentNotifications = "bell.slash.fill"
+
+    var accessibilityLabel: String {
+        switch self {
+        case .automaticIntake:
+            return "Assunzioni automatiche"
+        case .silentNotifications:
+            return "Notifiche in silenzioso"
+        }
+    }
+}
+
 struct TherapyLine: Hashable {
     let prefix: String?
     let description: String
+    var hasOverdueDose: Bool = false
+    var statusIcons: [TherapyLineStatusIcon] = []
 }
 
 struct TherapySummaryBuilder {
@@ -19,16 +35,31 @@ struct TherapySummaryBuilder {
 
     /// Summary style matching the Therapy list in MedicineDetailView.
     func summary(for therapy: Therapy) -> String {
-        descriptionText(for: therapy, includeTimes: true)
+        descriptionText(for: therapy, includeTimes: true, includeCondition: false)
     }
 
     func line(for therapy: Therapy, now: Date = Date()) -> TherapyLine {
-        let description = descriptionText(for: therapy, includeTimes: false)
+        let description = descriptionText(for: therapy, includeTimes: false, includeCondition: true)
         let prefix = timePrefix(for: therapy, now: now)
-        return TherapyLine(prefix: prefix, description: description)
+        return TherapyLine(
+            prefix: prefix,
+            description: description,
+            statusIcons: statusIcons(for: therapy)
+        )
     }
 
-    private func descriptionText(for therapy: Therapy, includeTimes: Bool) -> String {
+    private func statusIcons(for therapy: Therapy) -> [TherapyLineStatusIcon] {
+        var icons: [TherapyLineStatusIcon] = []
+        if therapy.automaticIntakeEnabled {
+            icons.append(.automaticIntake)
+        }
+        if therapy.notifications_silenced {
+            icons.append(.silentNotifications)
+        }
+        return icons
+    }
+
+    private func descriptionText(for therapy: Therapy, includeTimes: Bool, includeCondition: Bool) -> String {
         let personName = personDisplayName(for: therapy.person)
         let dose = doseDisplayText(for: therapy)
         let frequency = frequencySummaryText(for: therapy)
@@ -39,6 +70,9 @@ struct TherapySummaryBuilder {
         if let personName, !personName.isEmpty {
             sentence += " per \(personName)"
         }
+        if includeCondition, let conditionText = treatmentConditionText(for: therapy) {
+            sentence += " per il trattamento \(conditionText)"
+        }
         return sentence.prefix(1).uppercased() + sentence.dropFirst()
     }
 
@@ -46,6 +80,55 @@ struct TherapySummaryBuilder {
         guard let person else { return nil }
         let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return first.isEmpty ? nil : first
+    }
+
+    private func treatmentConditionText(for therapy: Therapy) -> String? {
+        guard let condition = normalizedCondition(from: therapy.condizione) else { return nil }
+        let lower = condition.lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
+        let alreadyQualifiedPrefixes = [
+            "di ",
+            "del ",
+            "della ",
+            "dell'",
+            "dello ",
+            "dei ",
+            "degli ",
+            "delle "
+        ]
+        if alreadyQualifiedPrefixes.contains(where: { lower.hasPrefix($0) }) {
+            return condition
+        }
+        if lower.hasPrefix("gn")
+            || lower.hasPrefix("pn")
+            || lower.hasPrefix("ps")
+            || lower.hasPrefix("x")
+            || lower.hasPrefix("y")
+            || lower.hasPrefix("z")
+            || startsWithImpureS(lower) {
+            return "dello \(condition)"
+        }
+        if let first = lower.first, "aeiou".contains(first) {
+            return "dell'\(condition)"
+        }
+        if lower.hasSuffix("a") {
+            return "della \(condition)"
+        }
+        return "del \(condition)"
+    }
+
+    private func startsWithImpureS(_ lower: String) -> Bool {
+        guard lower.hasPrefix("s") else { return false }
+        guard let second = lower.dropFirst().first else { return false }
+        return !"aeiou".contains(second)
+    }
+
+    private func normalizedCondition(from value: String?) -> String? {
+        guard let value else { return nil }
+        let candidates = value
+            .components(separatedBy: CharacterSet(charactersIn: "\n,;"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return candidates.first
     }
 
     private func doseDisplayText(for therapy: Therapy) -> String {
@@ -145,9 +228,11 @@ struct TherapySummaryBuilder {
 
     private func timePrefix(for therapy: Therapy, now: Date) -> String? {
         let calendar = Calendar.current
-        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-        let start = therapy.start_date ?? now
-        let next = recurrenceManager.nextOccurrence(rule: rule, startDate: start, after: now, doses: therapy.doses as NSSet?)
+        let next = therapy.medicine.nextIntakeDate(
+            for: therapy,
+            from: now,
+            recurrenceManager: recurrenceManager
+        )
         let dayPrefix = next.map { dayPrefixLabel(for: $0, now: now, calendar: calendar) }
 
         if let doseSet = therapy.doses as? Set<Dose>, !doseSet.isEmpty {

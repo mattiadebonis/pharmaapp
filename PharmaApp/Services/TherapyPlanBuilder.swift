@@ -214,7 +214,8 @@ public struct TherapyPlanBuilder {
                 for: therapy,
                 medicine: medicine,
                 now: now,
-                recurrenceService: recurrenceService
+                recurrenceService: recurrenceService,
+                calendar: calendar
             )
         }
         return upcoming.sorted().first
@@ -232,7 +233,7 @@ public struct TherapyPlanBuilder {
         guard manualEnabled else { return nil }
 
         var best: (date: Date, personName: String?, therapyId: TherapyId)?
-        for therapy in medicine.therapies {
+        for therapy in medicine.therapies where therapy.manualIntakeRegistration {
             guard let next = nextUpcomingDoseDateConsideringIntake(
                 for: therapy,
                 medicine: medicine,
@@ -828,7 +829,8 @@ public struct TherapyPlanBuilder {
                 for: therapy,
                 medicine: medicine,
                 now: now,
-                recurrenceService: recurrenceService
+                recurrenceService: recurrenceService,
+                calendar: calendar
             )
         }
         guard let next = upcomingDates.sorted().first else { return nil }
@@ -848,22 +850,16 @@ public struct TherapyPlanBuilder {
         calendar: Calendar
     ) -> String? {
         guard !medicine.therapies.isEmpty else { return nil }
-        let today = calendar.startOfDay(for: now)
-        var timesToday: [Date] = []
-        for therapy in medicine.therapies {
-            let rule = recurrenceService.parseRecurrenceString(therapy.rrule ?? "")
-            let startDate = therapy.startDate ?? now
-            let next = recurrenceService.nextOccurrence(
-                rule: rule,
-                startDate: startDate,
-                after: today,
-                doses: therapy.doses,
+        let timesToday = medicine.therapies.compactMap { therapy in
+            nextUpcomingDoseDateConsideringIntake(
+                for: therapy,
+                medicine: medicine,
+                now: now,
+                recurrenceService: recurrenceService,
                 calendar: calendar
             )
-            if let next, calendar.isDateInToday(next) {
-                timesToday.append(next)
-            }
         }
+        .filter { calendar.isDateInToday($0) }
         guard let nextToday = timesToday.sorted().first else { return nil }
         let timeText = timeFormatter.string(from: nextToday)
         return "\(medicine.name): \(timeText)"
@@ -913,7 +909,8 @@ public struct TherapyPlanBuilder {
                 for: therapy,
                 medicine: medicine,
                 now: now,
-                recurrenceService: recurrenceService
+                recurrenceService: recurrenceService,
+                calendar: calendar
             ) else { continue }
             if next <= limit { return true }
         }
@@ -932,7 +929,8 @@ public struct TherapyPlanBuilder {
                 for: therapy,
                 medicine: medicine,
                 now: now,
-                recurrenceService: recurrenceService
+                recurrenceService: recurrenceService,
+                calendar: calendar
             )
         }
         return upcoming.filter { calendar.isDateInToday($0) }.sorted().first
@@ -942,13 +940,15 @@ public struct TherapyPlanBuilder {
         for therapy: TherapySnapshot,
         medicine: MedicineSnapshot,
         now: Date,
-        recurrenceService: PureRecurrenceService
+        recurrenceService: PureRecurrenceService,
+        calendar: Calendar
     ) -> Date? {
-        recurrenceService.nextOccurrence(
-            rule: recurrenceService.parseRecurrenceString(therapy.rrule ?? ""),
-            startDate: therapy.startDate ?? now,
-            after: now,
-            doses: therapy.doses
+        nextUpcomingDoseDateConsideringIntake(
+            for: therapy,
+            medicine: medicine,
+            now: now,
+            recurrenceService: recurrenceService,
+            calendar: calendar
         )
     }
 
@@ -1278,8 +1278,7 @@ public struct TherapyPlanBuilder {
         option: OptionSnapshot?,
         therapies: [TherapySnapshot]?
     ) -> Bool {
-        // Default: sempre conferma (true). Si disattiva per singolo farmaco.
-        return medicine.manualIntakeRegistration
+        therapies?.contains(where: { $0.manualIntakeRegistration }) ?? false
     }
 
     private static func scheduledTimesToday(
@@ -1615,7 +1614,8 @@ public struct TherapyPlanBuilder {
                 for: therapy,
                 medicine: medicine,
                 now: now,
-                recurrenceService: recurrenceService
+                recurrenceService: recurrenceService,
+                calendar: calendar
             ) else {
                 return nil
             }

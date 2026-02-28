@@ -17,7 +17,7 @@ private struct EntryMetrics {
     let nameKey: String
 }
 
-func computeSections(for medicines: [Medicine], logs: [Log], option: Option?) -> (purchase: [Medicine], oggi: [Medicine], ok: [Medicine]) {
+func computeSections(for medicines: [Medicine], option: Option?) -> (purchase: [Medicine], oggi: [Medicine], ok: [Medicine]) {
     let rec = RecurrenceManager.shared
     let now = Date()
     let cal = Calendar.current
@@ -35,7 +35,7 @@ func computeSections(for medicines: [Medicine], logs: [Log], option: Option?) ->
 
         if therapies.isEmpty {
             if medicine.managedObjectContext != nil {
-                remainingUnits = stockService.units(for: medicine)
+                remainingUnits = stockService.unitsReadOnly(for: medicine)
             } else {
                 remainingUnits = medicine.remainingUnitsWithoutTherapy()
             }
@@ -73,7 +73,12 @@ func computeSections(for medicines: [Medicine], logs: [Log], option: Option?) ->
                 if allowed > 0 {
                     containsToday = true
                 }
-                if let next = rec.nextOccurrence(rule: rule, startDate: startDate, after: now, doses: therapy.doses as NSSet?) {
+                if let next = medicine.nextIntakeDate(
+                    for: therapy,
+                    from: now,
+                    recurrenceManager: rec,
+                    calendar: cal
+                ) {
                     if let current = candidateNext {
                         candidateNext = min(current, next)
                     } else {
@@ -199,7 +204,7 @@ func computeSections(for medicines: [Medicine], logs: [Log], option: Option?) ->
     return (purchase, oggi, ok)
 }
 
-func computeSections(for entries: [MedicinePackage], logs: [Log], option: Option?) -> (purchase: [MedicinePackage], oggi: [MedicinePackage], ok: [MedicinePackage]) {
+func computeSections(for entries: [MedicinePackage], option: Option?) -> (purchase: [MedicinePackage], oggi: [MedicinePackage], ok: [MedicinePackage]) {
     let rec = RecurrenceManager.shared
     let now = Date()
     let cal = Calendar.current
@@ -210,7 +215,7 @@ func computeSections(for entries: [MedicinePackage], logs: [Log], option: Option
         if let set = entry.therapies, !set.isEmpty {
             return Array(set)
         }
-        let all = entry.medicine.therapies as? Set<Therapy> ?? []
+        let all = entry.medicine.therapies ?? []
         return all.filter { $0.package == entry.package }
     }
 
@@ -223,7 +228,7 @@ func computeSections(for entries: [MedicinePackage], logs: [Log], option: Option
         let stockStatus: SectionStockStatus
 
         if entryTherapies.isEmpty {
-            let remaining = stockService.units(for: entry.package)
+            let remaining = stockService.unitsReadOnly(for: entry.package)
             remainingUnits = remaining
             nextOccurrence = nil
             occursToday = false
@@ -253,7 +258,12 @@ func computeSections(for entries: [MedicinePackage], logs: [Log], option: Option
                 if allowed > 0 {
                     containsToday = true
                 }
-                if let next = rec.nextOccurrence(rule: rule, startDate: start, after: now, doses: therapy.doses as NSSet?) {
+                if let next = entry.medicine.nextIntakeDate(
+                    for: therapy,
+                    from: now,
+                    recurrenceManager: rec,
+                    calendar: cal
+                ) {
                     if let current = candidateNext {
                         candidateNext = min(current, next)
                     } else {

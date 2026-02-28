@@ -160,6 +160,7 @@ public struct ClinicalContextBuilder {
             guard let policy = rules.missedDosePolicy, policy != .none else { continue }
 
             let medicine = medicinesByID[therapy.medicineId]
+            guard requiresManualConfirmation(therapy: therapy, medicine: medicine) else { continue }
             if let medicine, hasMatchingIntakeLog(for: event, therapy: therapy, medicine: medicine, tolerance: tolerance) {
                 continue
             }
@@ -180,6 +181,13 @@ public struct ClinicalContextBuilder {
         }
 
         return todos
+    }
+
+    private func requiresManualConfirmation(
+        therapy: TherapySnapshot,
+        medicine: MedicineSnapshot?
+    ) -> Bool {
+        therapy.manualIntakeRegistration
     }
 
     private func hasMatchingIntakeLog(

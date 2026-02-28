@@ -1,6 +1,6 @@
 import Foundation
 
-struct CriticalDoseLiveActivityConfig: Equatable {
+struct CriticalDoseLiveActivityConfig: Equatable, Sendable {
     let leadTimeMinutes: Int
     let overdueToleranceMinutes: Int
     let snoozeMinutes: Int
@@ -24,7 +24,7 @@ struct CriticalDoseLiveActivityConfig: Equatable {
     }
 }
 
-struct CriticalDoseCandidate: Equatable {
+struct CriticalDoseCandidate: Equatable, Sendable {
     let therapyId: UUID
     let medicineId: UUID
     let medicineName: String
@@ -32,14 +32,14 @@ struct CriticalDoseCandidate: Equatable {
     let scheduledAt: Date
 }
 
-struct CriticalDoseAggregate: Equatable {
+struct CriticalDoseAggregate: Equatable, Sendable {
     let primary: CriticalDoseCandidate
     let additionalCount: Int
     let subtitleDisplay: String
     let expiryAt: Date
 }
 
-struct CriticalDosePlan: Equatable {
+struct CriticalDosePlan: Equatable, Sendable {
     let aggregate: CriticalDoseAggregate?
     let nextRefreshAt: Date?
 

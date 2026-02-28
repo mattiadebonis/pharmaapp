@@ -198,19 +198,63 @@ extension Medicine {
     }
 
     /// Restituisce la prossima assunzione programmata a partire da `date`, calcolata sulle terapie e sulle regole di ricorrenza.
-    func nextIntakeDate(from date: Date = Date(), recurrenceManager: RecurrenceManager) -> Date? {
+    func nextIntakeDate(
+        from date: Date = Date(),
+        recurrenceManager: RecurrenceManager,
+        calendar: Calendar = .current
+    ) -> Date? {
         guard let therapies = therapies, !therapies.isEmpty else { return nil }
         let candidates: [Date] = therapies.compactMap { therapy in
-            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-            let start = therapy.start_date ?? date
-            return recurrenceManager.nextOccurrence(
-                rule: rule,
-                startDate: start,
-                after: date,
-                doses: therapy.doses as NSSet?
+            nextIntakeDate(
+                for: therapy,
+                from: date,
+                recurrenceManager: recurrenceManager,
+                calendar: calendar
             )
         }
         return candidates.sorted().first
+    }
+
+    func nextIntakeDate(
+        for therapy: Therapy,
+        from date: Date = Date(),
+        recurrenceManager: RecurrenceManager,
+        calendar: Calendar = .current
+    ) -> Date? {
+        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+        let startDate = therapy.start_date ?? date
+        let timesOnDay = scheduledIntakeTimes(
+            on: date,
+            for: therapy,
+            recurrenceManager: recurrenceManager,
+            calendar: calendar
+        )
+
+        if !timesOnDay.isEmpty {
+            let takenCount = intakeCount(on: date, for: therapy, calendar: calendar)
+            if takenCount >= timesOnDay.count {
+                let endOfDay = calendar.date(
+                    byAdding: DateComponents(day: 1, second: -1),
+                    to: calendar.startOfDay(for: date)
+                ) ?? date
+                return recurrenceManager.nextOccurrence(
+                    rule: rule,
+                    startDate: startDate,
+                    after: endOfDay,
+                    doses: therapy.doses as NSSet?
+                )
+            }
+
+            let pending = Array(timesOnDay.dropFirst(min(takenCount, timesOnDay.count)))
+            return pending.first
+        }
+
+        return recurrenceManager.nextOccurrence(
+            rule: rule,
+            startDate: startDate,
+            after: date,
+            doses: therapy.doses as NSSet?
+        )
     }
 
     /// True se esiste un'assunzione prevista oggi (a partire da `date`).
@@ -257,6 +301,67 @@ extension Medicine {
 
     func effectivePrescriptionRequestLogs() -> [Log] {
         effectiveLogs(type: "new_prescription_request", undoType: "prescription_request_undo")
+    }
+
+    func intakeCount(
+        on date: Date,
+        for therapy: Therapy,
+        calendar: Calendar = .current
+    ) -> Int {
+        let logsOnDay = effectiveIntakeLogs(on: date, calendar: calendar)
+        let assigned = logsOnDay.filter { $0.therapy == therapy }.count
+        if assigned > 0 { return assigned }
+
+        let unassigned = logsOnDay.filter { $0.therapy == nil }
+        let therapyCount = therapies?.count ?? 0
+        if therapyCount == 1 { return unassigned.count }
+        return unassigned.filter { $0.package == therapy.package }.count
+    }
+
+    func scheduledIntakeTimes(
+        on date: Date,
+        for therapy: Therapy,
+        recurrenceManager: RecurrenceManager,
+        calendar: Calendar = .current
+    ) -> [Date] {
+        let day = calendar.startOfDay(for: date)
+        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+        let startDate = therapy.start_date ?? day
+        guard let doses = therapy.doses, !doses.isEmpty else { return [] }
+
+        let sortedDoses = doses.sorted { $0.time < $1.time }
+        let allowed = recurrenceManager.allowedEvents(
+            on: day,
+            rule: rule,
+            startDate: startDate,
+            dosesPerDay: max(1, sortedDoses.count),
+            calendar: calendar
+        )
+        guard allowed > 0 else { return [] }
+
+        let limitedDoses = sortedDoses.prefix(min(allowed, sortedDoses.count))
+        return limitedDoses.compactMap { dose in
+            combinedDoseDate(day: day, time: dose.time, calendar: calendar)
+        }
+    }
+
+    private func combinedDoseDate(
+        day: Date,
+        time: Date,
+        calendar: Calendar
+    ) -> Date? {
+        let dayComponents = calendar.dateComponents([.year, .month, .day], from: day)
+        let timeComponents = calendar.dateComponents([.hour, .minute, .second], from: time)
+
+        var mergedComponents = DateComponents()
+        mergedComponents.year = dayComponents.year
+        mergedComponents.month = dayComponents.month
+        mergedComponents.day = dayComponents.day
+        mergedComponents.hour = timeComponents.hour
+        mergedComponents.minute = timeComponents.minute
+        mergedComponents.second = timeComponents.second
+
+        return calendar.date(from: mergedComponents)
     }
 
     func effectivePrescriptionReceivedLogs() -> [Log] {
@@ -327,6 +432,11 @@ extension Medicine {
         case expired
     }
 
+    struct DeadlineDisplay: Equatable {
+        let label: String
+        let status: DeadlineStatus
+    }
+
     var deadlineMonthYear: (month: Int, year: Int)? {
         guard let month = normalizedDeadlineMonth,
               let year = normalizedDeadlineYear else {
@@ -341,27 +451,64 @@ extension Medicine {
     }
 
     var deadlineMonthStartDate: Date? {
+        resolvedDeadlineMonthStartDate(calendar: .current)
+    }
+
+    private func resolvedDeadlineMonthStartDate(calendar: Calendar) -> Date? {
         guard let info = deadlineMonthYear else { return nil }
         var comps = DateComponents()
+        comps.calendar = calendar
+        comps.timeZone = calendar.timeZone
         comps.year = info.year
         comps.month = info.month
         comps.day = 1
-        return Calendar.current.date(from: comps)
+        return calendar.date(from: comps)
     }
 
     var monthsUntilDeadline: Int? {
-        guard let deadlineStart = deadlineMonthStartDate else { return nil }
-        let calendar = Calendar.current
-        let now = Date()
-        let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
+        monthsUntilDeadline(referenceDate: Date(), calendar: .current)
+    }
+
+    func monthsUntilDeadline(referenceDate: Date = Date(), calendar: Calendar = .current) -> Int? {
+        guard let deadlineStart = resolvedDeadlineMonthStartDate(calendar: calendar) else { return nil }
+        let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: referenceDate)) ?? referenceDate
         return calendar.dateComponents([.month], from: monthStart, to: deadlineStart).month
     }
 
     var deadlineStatus: DeadlineStatus {
-        guard let months = monthsUntilDeadline else { return .none }
+        deadlineStatus(referenceDate: Date(), calendar: .current)
+    }
+
+    func deadlineStatus(referenceDate: Date = Date(), calendar: Calendar = .current) -> DeadlineStatus {
+        guard let months = monthsUntilDeadline(referenceDate: referenceDate, calendar: calendar) else { return .none }
         if months < 0 { return .expired }
         if months <= 1 { return .expiringSoon }
         return .ok
+    }
+
+    func deadlineDisplay(referenceDate: Date = Date(), calendar: Calendar = .current) -> DeadlineDisplay? {
+        guard let label = deadlineLabel else { return nil }
+        let status = deadlineStatus(referenceDate: referenceDate, calendar: calendar)
+
+        switch status {
+        case .none:
+            return nil
+        case .expired:
+            return DeadlineDisplay(label: "Scaduto · \(label)", status: .expired)
+        case .expiringSoon:
+            let months = monthsUntilDeadline(referenceDate: referenceDate, calendar: calendar) ?? 0
+            let remainingLabel: String
+            if months <= 0 {
+                remainingLabel = "Questo mese"
+            } else if months == 1 {
+                remainingLabel = "Tra 1 mese"
+            } else {
+                remainingLabel = "Tra \(months) mesi"
+            }
+            return DeadlineDisplay(label: "\(remainingLabel) · \(label)", status: .expiringSoon)
+        case .ok:
+            return DeadlineDisplay(label: label, status: .ok)
+        }
     }
 
     func updateDeadline(month: Int?, year: Int?) {

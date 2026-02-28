@@ -2,524 +2,217 @@ import SwiftUI
 import CoreData
 
 struct MedicineWizardView: View {
-    enum Step: Int, CaseIterable {
-        case review
-        case recurrenceDuration
-        case schedule
-        case person
+    enum QuickAction {
+        case actions
+        case addToCabinet
+        case addPackage
+        case addTherapy
+    }
+
+    private enum Screen {
+        case actions
         case stock
-
-        var label: String {
-            switch self {
-            case .review: return "Farmaco"
-            case .recurrenceDuration: return "Ripetizione e durata"
-            case .schedule: return "Orari"
-            case .person: return "Persona"
-            case .stock: return "Scorte"
-            }
-        }
     }
 
-    private struct CatalogItem: Identifiable, Hashable {
-        let id: String
-        let name: String
-        let principle: String
-        let requiresPrescription: Bool
-        let packages: [CatalogPackage]
-    }
-
-    private struct CatalogPackage: Identifiable, Hashable {
-        let id: String
-        let label: String
-        let units: Int
-        let tipologia: String
-        let dosageValue: Int32
-        let dosageUnit: String
-        let volume: String
-        let requiresPrescription: Bool
-    }
-
-    private struct TherapyDraft {
-        var selectedFrequencyType: FrequencyType = .daily
-        var byDay: [String] = ["MO"]
-        var interval: Int = 1
-        var cycleOnDays: Int = 7
-        var cycleOffDays: Int = 21
-
-        var useUntil: Bool = false
-        var untilDate: Date = Date().addingTimeInterval(60 * 60 * 24 * 30)
-        var useCount: Bool = false
-        var countNumber: Int = 1
-
-        var doseUnit: String = "compressa"
-        var doses: [DoseEntry] = [DoseEntry(time: Date(), amount: 1)]
-
-        var courseEnabled: Bool = false
-        var courseTotalDays: Int = 7
-        var taperEnabled: Bool = false
-        var taperSteps: [TaperStepDraft] = []
-
-        var monitoringEnabled: Bool = false
-        var monitoringKind: MonitoringKind = .bloodPressure
-        var monitoringDoseRelation: MonitoringDoseRelation = .beforeDose
-        var monitoringOffsetMinutes: Int = 30
-
-        var missedDosePreset: MissedDosePreset = .none
-        var selectedPerson: Person?
+    private struct CreatedContext: Identifiable {
+        let id = UUID()
+        let medicine: Medicine
+        let package: Package
+        let entry: MedicinePackage
     }
 
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
-    @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
-    @FetchRequest(fetchRequest: Person.extractPersons()) private var persons: FetchedResults<Person>
-
-    @StateObject private var therapyFormViewModel = TherapyFormViewModel(
-        context: PersistenceController.shared.container.viewContext
-    )
+    @FetchRequest(fetchRequest: Medicine.extractMedicines()) private var medicines: FetchedResults<Medicine>
 
     private let prefill: CatalogSelection?
-    private let onFinish: (() -> Void)?
-    @State private var didApplyPrefill = false
-    @State private var step: Step = .review
-    @State private var selectedItem: CatalogItem?
-    @State private var selectedPackage: CatalogPackage?
-    @State private var therapyDraft = TherapyDraft()
-    @State private var recurrenceInput: String = ""
-    @State private var lastAutoRecurrenceText: String = ""
-    @State private var isRecurrenceValid: Bool = false
+    private let initialQuickAction: QuickAction
+    private let onFinish: ((String) -> Void)?
+
+    @State private var screen: Screen = .actions
+    @State private var therapyContext: CreatedContext?
     @State private var stockUnits: Int = 0
-    @State private var wizardDetent: PresentationDetent = .medium
+    @State private var baselineUnits: Int = 0
     @State private var deadlineMonthInput: String = ""
     @State private var deadlineYearInput: String = ""
-    @State private var showTaperEditor = false
-
-    // Temporaneamente nasconde il tab "Scorte/Statistiche" dal Wizard.
-    private var visibleSteps: [Step] {
-        Step.allCases.filter { $0 != .stock }
-    }
-
-    private var currentVisibleStepIndex: Int {
-        visibleSteps.firstIndex(of: step) ?? max(0, visibleSteps.count - 1)
-    }
+    @State private var errorMessage: String?
+    @State private var didApplyInitialQuickAction = false
 
     private var stockService: MedicineStockService {
         MedicineStockService(context: context)
     }
 
-    init(prefill: CatalogSelection? = nil, onFinish: (() -> Void)? = nil) {
+    init(
+        prefill: CatalogSelection? = nil,
+        initialQuickAction: QuickAction = .actions,
+        onFinish: ((String) -> Void)? = nil
+    ) {
         self.prefill = prefill
+        self.initialQuickAction = initialQuickAction
         self.onFinish = onFinish
     }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                wizardHeader
-                Divider()
-                    .opacity(0.3)
-                stepContent
-            }
-            .navigationTitle(wizardTitle)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Indietro") { goBack() }
+            content
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Chiudi") {
+                            dismiss()
+                        }
+                    }
                 }
-            }
         }
         .onAppear {
-            applyPrefillIfNeeded()
-            ensureSelectedPerson()
-            updateRecurrenceInputIfNeeded(force: true)
+            prepareDefaultStockInputs()
+            performInitialQuickActionIfNeeded()
         }
-        .onChange(of: step) { newStep in
-            wizardDetent = defaultDetent(for: newStep)
-        }
-        .onChange(of: persons.count) { _ in
-            ensureSelectedPerson()
-        }
-        .presentationDetents(Set(detentsForCurrentStep), selection: $wizardDetent)
-    }
-
-    private var wizardHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(visibleSteps, id: \.self) { item in
-                        Button {
-                            step = item
-                        } label: {
-                            Text(item.label)
-                                .font(.callout.weight(.semibold))
-                                .foregroundStyle(step == item ? .white : .secondary)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(
-                                    Capsule().fill(step == item ? Color.accentColor : Color(.secondarySystemBackground))
-                                )
+        .sheet(item: $therapyContext) { target in
+            NavigationStack {
+                TherapyFormView(
+                    medicine: target.medicine,
+                    package: target.package,
+                    context: context,
+                    medicinePackage: target.entry,
+                    onSave: {
+                        complete(message: "Terapia aggiunta e farmaco inserito nell'armadietto.")
+                    },
+                    isEmbedded: true
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Chiudi") {
+                            therapyContext = nil
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
-            ProgressView(
-                value: Double(currentVisibleStepIndex + 1),
-                total: Double(visibleSteps.count)
-            )
-            .tint(.accentColor)
+            .presentationDetents([.large])
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color(.systemBackground))
+        .alert(
+            "Errore",
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                errorMessage = nil
+            }
+        } message: {
+            Text(errorMessage ?? "Operazione non riuscita.")
+        }
     }
 
     @ViewBuilder
-    private var stepContent: some View {
-        if selectedItem == nil {
-            missingSelectionView
-        } else {
-            switch step {
-            case .review:
-                reviewStep
-            case .recurrenceDuration:
-                recurrenceDurationStep
-            case .schedule:
-                scheduleStep
-            case .person:
-                personStep
+    private var content: some View {
+        if let item = prefill {
+            switch screen {
+            case .actions:
+                actionsView(for: item)
             case .stock:
-                stockStep
+                stockView(for: item)
             }
+        } else {
+            VStack(spacing: 12) {
+                Text("Nessun farmaco selezionato")
+                    .foregroundStyle(.secondary)
+                Button("Chiudi") {
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    private var detentsForCurrentStep: [PresentationDetent] {
-        [.medium, .large]
-    }
-
-    private func defaultDetent(for step: Step) -> PresentationDetent {
-        .medium
-    }
-
-    private var reviewStep: some View {
+    private func actionsView(for item: CatalogSelection) -> some View {
         Form {
-            if let item = selectedItem {
-                Section(header: Text("Farmaco riconosciuto")) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(camelCase(item.name))
-                            .font(.title3.weight(.semibold))
-                        if !item.principle.isEmpty {
-                            Text(item.principle)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-
-                if let pkg = selectedPackage {
-                    Section(header: Text("Confezione")) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            if pkg.units > 0 {
-                                Label("\(pkg.units) unità", systemImage: "pills")
-                                    .font(.subheadline)
-                            }
-                            if pkg.dosageValue > 0 {
-                                let unit = pkg.dosageUnit.trimmingCharacters(in: .whitespacesAndNewlines)
-                                Label(unit.isEmpty ? "\(pkg.dosageValue)" : "\(pkg.dosageValue) \(unit)", systemImage: "scalemass")
-                                    .font(.subheadline)
-                            }
-                            if !pkg.volume.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                Label(pkg.volume, systemImage: "drop")
-                                    .font(.subheadline)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-
-                    Section {
-                        HStack {
-                            Text("Ricetta")
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text(pkg.requiresPrescription ? "Richiesta" : "Non richiesta")
-                                .foregroundStyle(pkg.requiresPrescription ? .orange : .green)
-                                .font(.subheadline.weight(.medium))
-                        }
-                    }
-                }
-            }
-
-            Section {
-                Button {
-                    step = .recurrenceDuration
-                } label: {
-                    Label("Prosegui alla terapia", systemImage: "arrow.right.circle.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(CapsuleActionButtonStyle(fill: .blue, textColor: .white))
-            }
-        }
-    }
-
-    private var recurrenceDurationStep: some View {
-        Form {
-            Section(header: Text("Frequenza")) {
-                HStack(spacing: 8) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        TextField("Es: ogni giorno / lunedì, mercoledì / 7 giorni terapia, 21 giorni pausa", text: $recurrenceInput)
-                            .multilineTextAlignment(.leading)
-                            .textInputAutocapitalization(.never)
-                            .disableAutocorrection(true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .onChange(of: recurrenceInput) { newValue in
-                                applyRecurrenceInput(newValue)
-                            }
-                        Divider()
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    if isRecurrenceValid {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                    }
-                }
-            }
-
-            Section(header: Text("Durata")) {
-                durationRow(.none)
-                durationRow(.days)
-                durationRow(.count)
-            }
-
-            if selectedDurationMode == .days {
-                daysSectionView
-            }
-
-            if selectedDurationMode == .count {
-                countSectionView
-            }
-
-            Section {
-                Button {
-                    step = .schedule
-                } label: {
-                    Label("Prosegui agli orari", systemImage: "arrow.right.circle.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(CapsuleActionButtonStyle(fill: .blue, textColor: .white))
-            }
-        }
-        .onChange(of: therapyDraft.courseTotalDays) { _ in
-            if selectedDurationMode == .days {
-                syncCourseUntilFromCourse()
-            }
-        }
-    }
-
-    private var scheduleStep: some View {
-        Form {
-            Section(header: Text("Orari")) {
-                ForEach(therapyDraft.doses.indices, id: \.self) { index in
-                    HStack {
-                        DatePicker("", selection: $therapyDraft.doses[index].time, displayedComponents: .hourAndMinute)
-                            .labelsHidden()
-                        Stepper(value: $therapyDraft.doses[index].amount, in: 0.5...12, step: 0.5) {
-                            Text(doseDisplayText(amount: therapyDraft.doses[index].amount, unit: doseUnitLabel))
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button {
-                            therapyDraft.doses.remove(at: index)
-                        } label: {
-                            Image(systemName: "minus.circle.fill")
-                                .foregroundStyle(.red)
-                        }
-                    }
-                }
-                Button {
-                    therapyDraft.doses.append(DoseEntry(time: Date(), amount: defaultDoseAmount))
-                } label: {
-                    Label("Aggiungi un orario", systemImage: "plus.circle")
-                }
-            }
-
-            Section(header: Text("Scala")) {
-                Toggle("Scala (taper)", isOn: $therapyDraft.taperEnabled)
-                if therapyDraft.taperEnabled {
-                    Button("Configura step") { showTaperEditor = true }
-                        .buttonStyle(.bordered)
-                    if !therapyDraft.taperSteps.isEmpty {
-                        Text("Step configurati: \(therapyDraft.taperSteps.count)")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            // Temporaneamente nascosto: impostazioni monitoraggi nel Wizard.
-            /*
-            Section(
-                header: Text("Monitoraggi"),
-                footer: Text("Se attivi, crea un promemoria prima o dopo ogni dose.")
-            ) {
-                Toggle("Richiedi un monitoraggio legato alla dose", isOn: $therapyDraft.monitoringEnabled)
-                if therapyDraft.monitoringEnabled {
-                    Picker("Cosa controllare", selection: $therapyDraft.monitoringKind) {
-                        ForEach(MonitoringKind.allCases, id: \.self) { kind in
-                            Text(kind.label).tag(kind)
-                        }
-                    }
-
-                    Picker("Quando", selection: $therapyDraft.monitoringDoseRelation) {
-                        ForEach(MonitoringDoseRelation.allCases, id: \.self) { relation in
-                            Text(relation.label).tag(relation)
-                        }
-                    }
-
-                    TextField(
-                        "Minuti",
-                        value: Binding(
-                            get: { therapyDraft.monitoringOffsetMinutes },
-                            set: { therapyDraft.monitoringOffsetMinutes = max(0, $0) }
-                        ),
-                        format: .number
-                    )
-                    .keyboardType(.numberPad)
-
-                    Text(
-                        therapyDraft.monitoringDoseRelation == .beforeDose
-                        ? "Promemoria: \(therapyDraft.monitoringOffsetMinutes) min prima della dose."
-                        : "Promemoria: \(therapyDraft.monitoringOffsetMinutes) min dopo la dose."
-                    )
-                        .font(.footnote)
+            Section(header: Text("Farmaco")) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(camelCase(item.name))
+                        .font(.title3.weight(.semibold))
+                    Text(packageSummary(for: item))
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+                .padding(.vertical, 4)
             }
-            */
 
-            Section {
+            Section(header: Text("Azioni")) {
                 Button {
-                    step = .person
+                    addMedicineToCabinet(item)
                 } label: {
-                    Label("Prosegui alla persona", systemImage: "arrow.right.circle.fill")
+                    Label("Aggiungi nell'armadietto", systemImage: "pills.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(CapsuleActionButtonStyle(fill: .blue, textColor: .white))
-            }
-        }
-        .sheet(isPresented: $showTaperEditor) {
-            NavigationStack {
-                TaperStepEditorView(steps: $therapyDraft.taperSteps)
-            }
-        }
-    }
 
-    private var personStep: some View {
-        Form {
-            Section(header: Text("Persona")) {
-                Picker("Seleziona Persona", selection: $therapyDraft.selectedPerson) {
-                    ForEach(persons, id: \.self) { person in
-                        Text(person.nome ?? "")
-                            .tag(person as Person?)
-                    }
-                }
-                .accessibilityIdentifier("PersonPicker")
-            }
-
-            Section(
-                header: Text("Dose mancata"),
-                footer: Text("Questa indicazione viene mostrata quando una dose non risulta registrata.")
-            ) {
-                Picker("Se salti una dose", selection: $therapyDraft.missedDosePreset) {
-                    ForEach(MissedDosePreset.allCases) { preset in
-                        Text(preset.label).tag(preset)
-                    }
-                }
-                .pickerStyle(.menu)
-
-                if let policy = therapyDraft.missedDosePreset.policy, case let .info(title, text) = policy {
-                    VStack(alignment: .leading, spacing: 4) {
-                        if let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text(title)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        Text(text)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.top, 4)
-                }
-            }
-
-            Section {
                 Button {
-                    finishWizard()
+                    openStockStep(for: item)
                 } label: {
-                    Label("Fine", systemImage: "checkmark.circle.fill")
+                    Label("Aggiungi confezione", systemImage: "shippingbox.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(CapsuleActionButtonStyle(fill: .green, textColor: .white))
+
+                Button {
+                    openTherapyForm(for: item)
+                } label: {
+                    Label("Aggiungi terapia", systemImage: "calendar.badge.plus")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(CapsuleActionButtonStyle(fill: .orange, textColor: .white))
             }
         }
     }
 
-    private var stockStep: some View {
+    private func stockView(for item: CatalogSelection) -> some View {
         Form {
-            Section(header: Text("Confezioni e scorte")) {
-                Stepper(value: $stockUnits, in: 0...400) {
-                    Text("\(stockUnits) unita disponibili")
+            Section(header: Text("Scorte")) {
+                Stepper(value: $stockUnits, in: 0...9999) {
+                    Text("Unità disponibili: \(stockUnits)")
                 }
-                Text("Registra quante unita possiedi ora; aggiungiamo o rimuoviamo log di scorta automaticamente.")
+                Text("Unità attuali: \(baselineUnits)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section(header: Text("Scadenza")) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        TextField("MM", text: Binding(
-                            get: { deadlineMonthInput },
-                            set: { newValue in
-                                let sanitized = sanitizeMonthInput(newValue)
-                                if sanitized != deadlineMonthInput {
-                                    deadlineMonthInput = sanitized
-                                }
-                            }
-                        ))
-                        .keyboardType(.numberPad)
-                        .multilineTextAlignment(.center)
-                        .frame(width: 50)
+                HStack(spacing: 8) {
+                    TextField("MM", text: Binding(
+                        get: { deadlineMonthInput },
+                        set: { deadlineMonthInput = sanitizeMonthInput($0) }
+                    ))
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 50)
 
-                        Text("/")
-                            .foregroundStyle(.secondary)
-
-                        TextField("YYYY", text: Binding(
-                            get: { deadlineYearInput },
-                            set: { newValue in
-                                let sanitized = sanitizeYearInput(newValue)
-                                if sanitized != deadlineYearInput {
-                                    deadlineYearInput = sanitized
-                                }
-                            }
-                        ))
-                        .keyboardType(.numberPad)
-                        .multilineTextAlignment(.center)
-                        .frame(width: 70)
-
-                        Spacer()
-                    }
-                    Text("Scadenza attuale: \(deadlineSummaryText)")
-                        .font(.footnote)
+                    Text("/")
                         .foregroundStyle(.secondary)
+
+                    TextField("YYYY", text: Binding(
+                        get: { deadlineYearInput },
+                        set: { deadlineYearInput = sanitizeYearInput($0) }
+                    ))
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 70)
+
+                    Spacer()
                 }
+                Text("Scadenza: \(deadlineSummaryText)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
                 Button {
-                    finishWizard()
+                    saveStockStep(item)
                 } label: {
-                    Label("Fine", systemImage: "checkmark.circle.fill")
+                    Label("Salva scorte", systemImage: "checkmark.circle.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(CapsuleActionButtonStyle(fill: .green, textColor: .white))
@@ -527,400 +220,152 @@ struct MedicineWizardView: View {
         }
     }
 
-    private var missingSelectionView: some View {
-        VStack(spacing: 12) {
-            Text("Seleziona un farmaco per continuare")
-                .foregroundStyle(.secondary)
-            Button("Indietro") {
-                dismiss()
-            }
-            .buttonStyle(.bordered)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func ensureSelectedPerson() {
-        if therapyDraft.selectedPerson == nil {
-            therapyDraft.selectedPerson = persons.first
-        }
-    }
-
-    private func goBack() {
-        switch step {
-        case .review:
-            dismiss()
-        case .recurrenceDuration:
-            step = .review
-        case .schedule:
-            step = .recurrenceDuration
-        case .person:
-            step = .schedule
+    private var title: String {
+        switch screen {
+        case .actions:
+            return prefill.map { camelCase($0.name) } ?? "Aggiungi farmaco"
         case .stock:
-            step = .person
+            return "Scorte"
         }
     }
 
-    private enum DurationMode: String, CaseIterable, Identifiable {
-        case none
-        case days
-        case count
+    private var deadlineSummaryText: String {
+        guard let month = Int(deadlineMonthInput),
+              let year = Int(deadlineYearInput),
+              (1...12).contains(month),
+              (2000...2100).contains(year) else {
+            return "Non impostata"
+        }
+        return String(format: "%02d/%04d", month, year)
+    }
 
-        var id: String { rawValue }
-
-        var label: String {
-            switch self {
-            case .none:
-                return "Mai"
-            case .days:
-                return "Giorni"
-            case .count:
-                return "Numero assunzioni"
-            }
+    private func addMedicineToCabinet(_ item: CatalogSelection) {
+        do {
+            _ = try resolveOrCreateContext(for: item)
+            try saveIfNeeded()
+            complete(message: "Aggiunto all'armadietto.")
+        } catch {
+            errorMessage = "Non sono riuscito ad aggiungere il farmaco all'armadietto."
         }
     }
 
-    private var selectedDurationMode: DurationMode {
-        if therapyDraft.useCount { return .count }
-        if therapyDraft.courseEnabled { return .days }
-        return .none
+    private func openStockStep(for item: CatalogSelection) {
+        if let existing = existingContext(for: item) {
+            baselineUnits = StockService(context: context).units(for: existing.package)
+            syncDeadlineInputs(from: existing.medicine)
+        } else {
+            baselineUnits = 0
+            deadlineMonthInput = ""
+            deadlineYearInput = ""
+        }
+        stockUnits = baselineUnits + max(1, item.units)
+        screen = .stock
     }
 
-    private var recurrenceSummaryText: String {
-        switch therapyDraft.selectedFrequencyType {
-        case .daily:
-            if therapyDraft.interval == 1 { return "Ogni giorno" }
-            return "Ogni \(therapyDraft.interval) giorni"
-        case .specificDays:
-            let dayNames = therapyDraft.byDay.map { dayName(for: $0) }
-            return dayNames.isEmpty ? "In giorni specifici" : dayNames.joined(separator: ", ")
-        case .cycle:
-            return "\(therapyDraft.cycleOnDays) giorni di terapia, \(therapyDraft.cycleOffDays) giorni di pausa"
+    private func saveStockStep(_ item: CatalogSelection) {
+        do {
+            let resolved = try resolveOrCreateContext(for: item)
+            applyDeadlineInputs(to: resolved.medicine)
+            try saveIfNeeded()
+
+            stockService.addPurchase(medicine: resolved.medicine, package: resolved.package)
+            stockService.setStockUnits(medicine: resolved.medicine, package: resolved.package, targetUnits: stockUnits)
+
+            complete(message: "Confezione aggiunta e scorte aggiornate.")
+        } catch {
+            errorMessage = "Non sono riuscito ad aggiornare le scorte."
         }
     }
 
-    private func dayName(for icsDay: String) -> String {
-        switch icsDay {
-        case "MO": return "Lunedì"
-        case "TU": return "Martedì"
-        case "WE": return "Mercoledì"
-        case "TH": return "Giovedì"
-        case "FR": return "Venerdì"
-        case "SA": return "Sabato"
-        case "SU": return "Domenica"
-        default: return icsDay
+    private func openTherapyForm(for item: CatalogSelection) {
+        do {
+            let resolved = try resolveOrCreateContext(for: item)
+            try saveIfNeeded()
+            therapyContext = resolved
+        } catch {
+            errorMessage = "Non sono riuscito ad aprire il form terapia."
         }
     }
 
-    private func applyRecurrenceInput(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            isRecurrenceValid = false
-            return
-        }
+    private func resolveOrCreateContext(for item: CatalogSelection) throws -> CreatedContext {
+        let medicine = existingMedicine(for: item) ?? createMedicine(from: item)
+        medicine.in_cabinet = true
+        medicine.obbligo_ricetta = medicine.obbligo_ricetta || item.requiresPrescription
 
-        let parser = TherapyDescriptionParser(persons: Array(persons), defaultPerson: persons.first)
-        guard let frequency = parser.parseFrequencyOnly(trimmed),
-              isAllowedFrequency(frequency) else {
-            isRecurrenceValid = false
-            return
-        }
+        let package = existingPackage(for: medicine, selection: item) ?? createPackage(for: medicine, selection: item)
+        let entry = existingEntry(for: medicine, package: package) ?? createEntry(for: medicine, package: package)
 
-        switch frequency {
-        case .daily(let intervalDays):
-            therapyDraft.selectedFrequencyType = .daily
-            therapyDraft.interval = max(1, intervalDays)
-        case .weekly(let weekDays):
-            therapyDraft.selectedFrequencyType = .specificDays
-            therapyDraft.byDay = weekDays
-        case .cycle(let onDays, let offDays):
-            therapyDraft.selectedFrequencyType = .cycle
-            therapyDraft.interval = 1
-            therapyDraft.byDay = []
-            therapyDraft.cycleOnDays = onDays
-            therapyDraft.cycleOffDays = offDays
-        }
-        isRecurrenceValid = true
+        return CreatedContext(medicine: medicine, package: package, entry: entry)
     }
 
-    private func isAllowedFrequency(_ frequency: ParsedTherapyDescription.Frequency) -> Bool {
-        switch frequency {
-        case .daily(let intervalDays):
-            return (1...30).contains(intervalDays)
-        case .weekly(let weekDays):
-            let allowed = Set(["MO", "TU", "WE", "TH", "FR", "SA", "SU"])
-            return !weekDays.isEmpty && weekDays.allSatisfy { allowed.contains($0) }
-        case .cycle(let onDays, let offDays):
-            return (1...365).contains(onDays) && (1...365).contains(offDays)
-        }
+    private func existingContext(for item: CatalogSelection) -> CreatedContext? {
+        guard let medicine = existingMedicine(for: item) else { return nil }
+        let package = existingPackage(for: medicine, selection: item) ?? medicine.packages.first
+        guard let package else { return nil }
+        let entry = existingEntry(for: medicine, package: package)
+        guard let entry else { return nil }
+        return CreatedContext(medicine: medicine, package: package, entry: entry)
     }
 
-    private func updateRecurrenceInputIfNeeded(force: Bool) {
-        let summary = recurrenceSummaryText
-        let trimmed = recurrenceInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        if summary.isEmpty { return }
-        if force || trimmed.isEmpty || recurrenceInput == lastAutoRecurrenceText {
-            if recurrenceInput != summary {
-                recurrenceInput = summary
-            }
-            lastAutoRecurrenceText = summary
-            isRecurrenceValid = true
-        }
-    }
-
-    private func durationRow(_ mode: DurationMode) -> some View {
-        Button {
-            applyDurationMode(mode)
-        } label: {
-            HStack {
-                Text(mode.label)
-                Spacer()
-                if selectedDurationMode == mode {
-                    Image(systemName: "checkmark")
-                        .foregroundColor(.blue)
-                }
-            }
-        }
-    }
-
-    private func applyDurationMode(_ mode: DurationMode) {
-        switch mode {
-        case .none:
-            therapyDraft.courseEnabled = false
-            therapyDraft.useUntil = false
-            therapyDraft.useCount = false
-        case .days:
-            therapyDraft.courseEnabled = true
-            therapyDraft.useCount = false
-            syncCourseUntilFromCourse()
-        case .count:
-            therapyDraft.courseEnabled = false
-            therapyDraft.useUntil = false
-            therapyDraft.useCount = true
-        }
-    }
-
-    private var daysSectionView: some View {
-        let dayLabel = therapyDraft.courseTotalDays == 1 ? "giorno" : "giorni"
-        return Section("Giorni") {
-            Stepper(
-                "Durata: \(therapyDraft.courseTotalDays) \(dayLabel)",
-                value: $therapyDraft.courseTotalDays,
-                in: 1...365
-            )
-            if let endDate = courseEndDate(from: startDateToday, totalDays: therapyDraft.courseTotalDays) {
-                Text("Fine il \(endDate.formatted(date: .long, time: .omitted))")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            Text("Calcolato da oggi.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var countSectionView: some View {
-        Section("Numero assunzioni") {
-            Stepper("Numero assunzioni: \(therapyDraft.countNumber)", value: $therapyDraft.countNumber, in: 1...100)
-            Text("Totale assunzioni pianificate.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var doseUnitLabel: String {
-        if let tipologia = selectedPackage?.tipologia.lowercased() {
-            if tipologia.contains("capsul") { return "capsula" }
-            if tipologia.contains("compress") { return "compressa" }
-        }
-        if let unit = selectedPackage?.dosageUnit.trimmingCharacters(in: .whitespacesAndNewlines), !unit.isEmpty {
-            return unit.lowercased()
-        }
-        return therapyDraft.doseUnit
-    }
-
-    private var defaultDoseAmount: Double {
-        let amounts = therapyDraft.doses.map { $0.amount }
-        guard let first = amounts.first else { return 1 }
-        let isUniform = amounts.allSatisfy { abs($0 - first) < 0.0001 }
-        return isUniform ? first : 1
-    }
-
-    private func doseDisplayText(amount: Double, unit: String) -> String {
-        if amount == 0.5 {
-            return "1/2 \(unit)"
-        }
-        let isInt = abs(amount.rounded() - amount) < 0.0001
-        let numberString: String = {
-            if isInt { return String(Int(amount.rounded())) }
-            return String(amount).replacingOccurrences(of: ".", with: ",")
-        }()
-        let unitString: String = {
-            guard amount > 1 else { return unit }
-            if unit == "compressa" { return "compresse" }
-            if unit == "capsula" { return "capsule" }
-            return unit
-        }()
-        return "\(numberString) \(unitString)"
-    }
-
-    private var startDateToday: Date {
-        Calendar.current.startOfDay(for: Date())
-    }
-
-    private func courseEndDate(from start: Date, totalDays: Int) -> Date? {
-        let offset = max(0, totalDays - 1)
-        let calendar = Calendar.current
-        let startDay = calendar.startOfDay(for: start)
-        guard therapyDraft.selectedFrequencyType == .cycle,
-              therapyDraft.cycleOnDays > 0,
-              therapyDraft.cycleOffDays > 0 else {
-            return calendar.date(byAdding: .day, value: offset, to: startDay)
+    private func existingMedicine(for item: CatalogSelection) -> Medicine? {
+        let identity = catalogIdentityKey(name: item.name, principle: item.principle)
+        if let exact = medicines.first(where: {
+            catalogIdentityKey(name: $0.nome, principle: $0.principio_attivo) == identity
+        }) {
+            return exact
         }
 
-        var remaining = max(1, totalDays)
-        var cursor = startDay
-        while remaining > 0 {
-            if isCycleOnDay(cursor, startDay: startDay) {
-                remaining -= 1
-                if remaining == 0 { return cursor }
-            }
-            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
-            cursor = next
-        }
-        return nil
+        let normalizedName = normalize(item.name)
+        return medicines.first(where: { normalize($0.nome) == normalizedName })
     }
 
-    private func isCycleOnDay(_ day: Date, startDay: Date) -> Bool {
-        let onDays = therapyDraft.cycleOnDays
-        let offDays = therapyDraft.cycleOffDays
-        guard onDays > 0, offDays > 0 else { return true }
-        let calendar = Calendar.current
-        let daySOD = calendar.startOfDay(for: day)
-        let diff = calendar.dateComponents([.day], from: startDay, to: daySOD).day ?? 0
-        if diff < 0 { return false }
-        let cycleLength = onDays + offDays
-        guard cycleLength > 0 else { return true }
-        let dayIndex = diff % cycleLength
-        return dayIndex < onDays
+    private func existingPackage(for medicine: Medicine, selection: CatalogSelection) -> Package? {
+        medicine.packages.first(where: { packageMatches($0, selection: selection) })
     }
 
-    private func syncCourseUntilFromCourse() {
-        therapyDraft.useUntil = true
-        therapyDraft.useCount = false
-        if let endDate = courseEndDate(from: startDateToday, totalDays: therapyDraft.courseTotalDays) {
-            therapyDraft.untilDate = endDate
-        }
+    private func existingEntry(for medicine: Medicine, package: Package) -> MedicinePackage? {
+        medicine.medicinePackages?.first(where: { $0.package.objectID == package.objectID })
     }
 
-    private func buildClinicalRules() -> ClinicalRules? {
-        let course: CoursePlan? = (therapyDraft.courseEnabled && !therapyDraft.useCount)
-            ? CoursePlan(totalDays: therapyDraft.courseTotalDays)
-            : nil
+    private func packageMatches(_ package: Package, selection: CatalogSelection) -> Bool {
+        let sameUnits = Int(package.numero) == max(1, selection.units)
+        let sameType = normalize(package.tipologia) == normalize(selection.tipologia)
+        let sameValue = package.valore == selection.valore
+        let sameUnit = normalize(package.unita) == normalize(selection.unita)
+        let sameVolume = normalize(package.volume) == normalize(selection.volume)
 
-        let taper: TaperPlan? = {
-            guard therapyDraft.taperEnabled, !therapyDraft.taperSteps.isEmpty else { return nil }
-            let steps = therapyDraft.taperSteps.map { draft in
-                TaperStep(startDate: nil, durationDays: draft.durationDays, dosageLabel: draft.dosagePreset.label)
-            }
-            return steps.isEmpty ? nil : TaperPlan(steps: steps)
-        }()
-
-        let monitoring: [MonitoringAction]? = therapyDraft.monitoringEnabled
-            ? [
-                MonitoringAction(
-                    kind: therapyDraft.monitoringKind,
-                    doseRelation: therapyDraft.monitoringDoseRelation,
-                    offsetMinutes: therapyDraft.monitoringOffsetMinutes,
-                    requiredBeforeDose: therapyDraft.monitoringDoseRelation == .beforeDose,
-                    schedule: nil,
-                    leadMinutes: therapyDraft.monitoringOffsetMinutes
-                )
-            ]
-            : nil
-
-        let missedDosePolicy: MissedDosePolicy? = therapyDraft.missedDosePreset.policy
-
-        let rules = ClinicalRules(
-            safety: nil,
-            course: course,
-            taper: taper,
-            interactions: nil,
-            monitoring: monitoring,
-            missedDosePolicy: missedDosePolicy
-        )
-
-        let hasAnyRule = course != nil || taper != nil || monitoring != nil || missedDosePolicy != nil
-        return hasAnyRule ? rules : nil
+        return sameUnits && sameType && sameValue && sameUnit && sameVolume
     }
 
-    private func resolvePerson() -> Person {
-        if let selected = therapyDraft.selectedPerson { return selected }
-        if let first = persons.first { return first }
-        let newPerson = Person(context: context)
-        newPerson.id = UUID()
-        newPerson.nome = "Persona"
-        newPerson.cognome = nil
-        return newPerson
-    }
-
-    private func saveTherapyDraft(medicine: Medicine, package: Package, medicinePackage: MedicinePackage?) {
-        if therapyDraft.courseEnabled && !therapyDraft.useCount {
-            syncCourseUntilFromCourse()
-        }
-
-        let effectivePerson = resolvePerson()
-        let clinicalRules = buildClinicalRules()
-        let freq = therapyDraft.selectedFrequencyType == .specificDays ? "WEEKLY" : "DAILY"
-        let byDay = therapyDraft.selectedFrequencyType == .specificDays ? therapyDraft.byDay : []
-        let cycleOn = therapyDraft.selectedFrequencyType == .cycle ? therapyDraft.cycleOnDays : nil
-        let cycleOff = therapyDraft.selectedFrequencyType == .cycle ? therapyDraft.cycleOffDays : nil
-
-        therapyFormViewModel.saveTherapy(
-            medicine: medicine,
-            freq: freq,
-            interval: max(1, therapyDraft.interval),
-            until: therapyDraft.useUntil ? therapyDraft.untilDate : nil,
-            count: therapyDraft.useCount ? therapyDraft.countNumber : nil,
-            byDay: byDay,
-            cycleOnDays: cycleOn,
-            cycleOffDays: cycleOff,
-            startDate: startDateToday,
-            doses: therapyDraft.doses,
-            package: package,
-            medicinePackage: medicinePackage,
-            importance: "standard",
-            person: effectivePerson,
-            manualIntake: options.first?.manual_intake_registration ?? false,
-            clinicalRules: clinicalRules
-        )
-    }
-
-    private func finishWizard() {
-        guard let item = selectedItem, let pkg = selectedPackage ?? item.packages.first else {
-            return
-        }
-
+    private func createMedicine(from item: CatalogSelection) -> Medicine {
         let medicine = Medicine(context: context)
         medicine.id = UUID()
         medicine.source_id = medicine.id
         medicine.visibility = "local"
         medicine.nome = item.name
         medicine.principio_attivo = item.principle
-        medicine.obbligo_ricetta = item.requiresPrescription || pkg.requiresPrescription
+        medicine.obbligo_ricetta = item.requiresPrescription
         medicine.in_cabinet = true
+        return medicine
+    }
 
+    private func createPackage(for medicine: Medicine, selection: CatalogSelection) -> Package {
         let package = Package(context: context)
         package.id = UUID()
         package.source_id = package.id
         package.visibility = "local"
-        package.tipologia = pkg.tipologia
-        package.unita = pkg.dosageUnit
-        package.volume = pkg.volume
-        package.valore = pkg.dosageValue
-        package.numero = Int32(max(1, pkg.units))
+        package.tipologia = selection.tipologia.isEmpty ? "Confezione" : selection.tipologia
+        package.numero = Int32(max(1, selection.units))
+        package.unita = selection.unita.isEmpty ? "unita" : selection.unita
+        package.volume = selection.volume
+        package.valore = max(0, selection.valore)
+        package.principio_attivo = selection.principle
         package.medicine = medicine
         medicine.addToPackages(package)
+        return package
+    }
 
+    private func createEntry(for medicine: Medicine, package: Package) -> MedicinePackage {
         let entry = MedicinePackage(context: context)
         entry.id = UUID()
         entry.created_at = Date()
@@ -930,39 +375,58 @@ struct MedicineWizardView: View {
         entry.package = package
         entry.cabinet = nil
         medicine.addToMedicinePackages(entry)
+        return entry
+    }
 
-        applyDeadlineInputs(to: medicine)
-        saveTherapyDraft(medicine: medicine, package: package, medicinePackage: entry)
+    private func saveIfNeeded() throws {
+        if context.hasChanges {
+            try context.save()
+        }
+    }
 
-        // Con tab scorte nascosto usiamo un fallback sensato (unita confezione) se non impostato.
-        let resolvedStockUnits = stockUnits > 0 ? stockUnits : max(1, pkg.units)
-        stockService.addPurchase(medicine: medicine, package: package)
-        stockService.setStockUnits(medicine: medicine, package: package, targetUnits: resolvedStockUnits)
-
-        onFinish?()
+    private func complete(message: String) {
+        onFinish?(message)
         dismiss()
     }
 
-    private var deadlineSummaryText: String {
-        let monthText = deadlineMonthInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        let yearText = deadlineYearInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let month = Int(monthText),
-              let year = Int(yearText),
-              (1...12).contains(month),
-              (2000...2100).contains(year) else {
-            return "Non impostata"
+    private func prepareDefaultStockInputs() {
+        guard let item = prefill else { return }
+        if let existing = existingContext(for: item) {
+            baselineUnits = StockService(context: context).units(for: existing.package)
+            syncDeadlineInputs(from: existing.medicine)
+        } else {
+            baselineUnits = 0
+            deadlineMonthInput = ""
+            deadlineYearInput = ""
         }
-        return String(format: "%02d/%04d", month, year)
+        stockUnits = baselineUnits + max(1, item.units)
     }
 
-    private func sanitizeMonthInput(_ value: String) -> String {
-        let digits = value.filter { $0.isNumber }
-        return String(digits.prefix(2))
+    private func performInitialQuickActionIfNeeded() {
+        guard !didApplyInitialQuickAction else { return }
+        didApplyInitialQuickAction = true
+        guard let item = prefill else { return }
+
+        switch initialQuickAction {
+        case .actions:
+            break
+        case .addToCabinet:
+            addMedicineToCabinet(item)
+        case .addPackage:
+            openStockStep(for: item)
+        case .addTherapy:
+            openTherapyForm(for: item)
+        }
     }
 
-    private func sanitizeYearInput(_ value: String) -> String {
-        let digits = value.filter { $0.isNumber }
-        return String(digits.prefix(4))
+    private func syncDeadlineInputs(from medicine: Medicine) {
+        if let info = medicine.deadlineMonthYear {
+            deadlineMonthInput = String(format: "%02d", info.month)
+            deadlineYearInput = String(info.year)
+        } else {
+            deadlineMonthInput = ""
+            deadlineYearInput = ""
+        }
     }
 
     private func applyDeadlineInputs(to medicine: Medicine) {
@@ -984,37 +448,52 @@ struct MedicineWizardView: View {
         medicine.updateDeadline(month: month, year: year)
     }
 
-    private func applyPrefillIfNeeded() {
-        guard !didApplyPrefill, let prefill else { return }
-        let pkg = CatalogPackage(
-            id: prefill.id,
-            label: prefill.packageLabel.isEmpty ? "Confezione" : prefill.packageLabel,
-            units: max(1, prefill.units),
-            tipologia: prefill.tipologia.isEmpty ? prefill.packageLabel : prefill.tipologia,
-            dosageValue: prefill.valore,
-            dosageUnit: prefill.unita,
-            volume: prefill.volume,
-            requiresPrescription: prefill.requiresPrescription
-        )
-        let item = CatalogItem(
-            id: prefill.id,
-            name: prefill.name,
-            principle: prefill.principle,
-            requiresPrescription: prefill.requiresPrescription,
-            packages: [pkg]
-        )
-        selectedItem = item
-        selectedPackage = pkg
-        stockUnits = max(1, pkg.units)
-        step = .review
-        didApplyPrefill = true
+    private func sanitizeMonthInput(_ value: String) -> String {
+        String(value.filter { $0.isNumber }.prefix(2))
     }
 
-    private var wizardTitle: String {
-        if let item = selectedItem {
-            return camelCase(item.name)
+    private func sanitizeYearInput(_ value: String) -> String {
+        String(value.filter { $0.isNumber }.prefix(4))
+    }
+
+    private func packageSummary(for item: CatalogSelection) -> String {
+        var parts: [String] = []
+        if item.units > 0 {
+            parts.append("\(item.units) unità")
         }
-        return "Nuovo medicinale"
+        if !item.tipologia.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append(item.tipologia)
+        }
+        if item.valore > 0 {
+            let unit = item.unita.trimmingCharacters(in: .whitespacesAndNewlines)
+            parts.append(unit.isEmpty ? "\(item.valore)" : "\(item.valore) \(unit)")
+        }
+        if !item.volume.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append(item.volume)
+        }
+        return parts.isEmpty ? "Confezione" : parts.joined(separator: " · ")
+    }
+
+    private func catalogIdentityKey(name: String, principle: String) -> String {
+        let normalizedName = normalize(name)
+        let normalizedPrinciple = normalize(principle)
+        if normalizedPrinciple.isEmpty {
+            return normalizedName
+        }
+        return "\(normalizedName)|\(normalizedPrinciple)"
+    }
+
+    private func normalize(_ text: String) -> String {
+        let folded = text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        let cleaned = folded.replacingOccurrences(
+            of: "[^A-Za-z0-9]",
+            with: " ",
+            options: .regularExpression
+        )
+        return cleaned
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 
     private func camelCase(_ text: String) -> String {

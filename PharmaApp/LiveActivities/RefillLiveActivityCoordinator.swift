@@ -152,7 +152,7 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         let _ = reason
         let now = now ?? clock.now()
 
-        let summary = purchaseSummaryProvider.summary(
+        let summary = await purchaseSummaryProvider.summary(
             maxVisible: 3,
             strategy: policy == .foregroundInteractive ? .lightweightTodos : .fullTherapyPlan
         )
@@ -217,7 +217,7 @@ final class RefillLiveActivityCoordinator: NSObject, RefillLiveActivityRefreshin
         guard liveActivitiesEnabled else { return }
 
         let now = clock.now()
-        let summary = purchaseSummaryProvider.summary(
+        let summary = await purchaseSummaryProvider.summary(
             maxVisible: 3,
             strategy: policy == .foregroundInteractive ? .lightweightTodos : .fullTherapyPlan
         )

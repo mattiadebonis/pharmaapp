@@ -17,28 +17,34 @@ struct PrescriptionMessageTemplateSettingsView: View {
     var body: some View {
         Form {
             Section(
-                header: Text("Template messaggio"),
-                footer: Text("Il template deve includere entrambi i placeholder: \(PrescriptionMessageTemplateRenderer.doctorPlaceholder) e \(PrescriptionMessageTemplateRenderer.medicinesPlaceholder).")
+                header: Text("Testo del messaggio"),
+                footer: Text("Inserisci entrambi i campi automatici per completare il messaggio in modo corretto.")
             ) {
                 TextEditor(text: $templateText)
                     .frame(minHeight: 180)
                     .font(.body)
 
                 if !isTemplateValid {
-                    Text("Template non valido: inserisci entrambi i placeholder richiesti.")
+                    Text("Testo non valido: aggiungi entrambi i campi automatici richiesti.")
                         .font(.footnote)
                         .foregroundStyle(.red)
                 }
             }
 
-            Section("Placeholder disponibili") {
-                HStack(spacing: 10) {
-                    placeholderButton(PrescriptionMessageTemplateRenderer.doctorPlaceholder)
-                    placeholderButton(PrescriptionMessageTemplateRenderer.medicinesPlaceholder)
+            Section("Campi automatici") {
+                VStack(spacing: 10) {
+                    placeholderButton(
+                        title: "Nome del medico",
+                        placeholder: PrescriptionMessageTemplateRenderer.doctorPlaceholder
+                    )
+                    placeholderButton(
+                        title: "Farmaci richiesti",
+                        placeholder: PrescriptionMessageTemplateRenderer.medicinesPlaceholder
+                    )
                 }
             }
 
-            Section("Anteprima") {
+            Section("Esempio del messaggio") {
                 Text(previewMessage)
                     .font(.body)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -48,12 +54,12 @@ struct PrescriptionMessageTemplateSettingsView: View {
             }
 
             Section {
-                Button("Ripristina default") {
+                Button("Ripristina testo predefinito") {
                     templateText = PrescriptionMessageTemplateRenderer.defaultTemplate
                 }
             }
         }
-        .navigationTitle("Messaggio medico")
+        .navigationTitle("Messaggio per la ricetta")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -65,10 +71,10 @@ struct PrescriptionMessageTemplateSettingsView: View {
         .onAppear {
             loadTemplateIfNeeded()
         }
-        .alert("Template non valido", isPresented: $showValidationAlert) {
+        .alert("Testo non valido", isPresented: $showValidationAlert) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text("Inserisci entrambi i placeholder \(PrescriptionMessageTemplateRenderer.doctorPlaceholder) e \(PrescriptionMessageTemplateRenderer.medicinesPlaceholder) prima di salvare.")
+            Text("Inserisci entrambi i campi automatici disponibili prima di salvare.")
         }
         .alert(
             "Errore",
@@ -97,7 +103,7 @@ struct PrescriptionMessageTemplateSettingsView: View {
 
     private var previewMessage: String {
         guard isTemplateValid else {
-            return "Anteprima non disponibile finché il template non contiene entrambi i placeholder."
+            return "L'esempio sarà disponibile quando il testo conterrà entrambi i campi automatici."
         }
         return PrescriptionMessageTemplateRenderer.render(
             template: trimmedTemplate,
@@ -106,12 +112,18 @@ struct PrescriptionMessageTemplateSettingsView: View {
         )
     }
 
-    private func placeholderButton(_ placeholder: String) -> some View {
+    private func placeholderButton(title: String, placeholder: String) -> some View {
         Button {
             appendPlaceholder(placeholder)
         } label: {
-            Text(placeholder)
-                .font(.callout.weight(.semibold))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.callout.weight(.semibold))
+                Text(placeholder)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.bordered)
     }

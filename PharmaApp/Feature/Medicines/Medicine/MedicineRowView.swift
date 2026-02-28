@@ -15,20 +15,42 @@ struct MedicineRowView: View {
     @ObservedObject var medicine: Medicine
     var medicinePackage: MedicinePackage? = nil
     var subtitleMode: MedicineSubtitleMode = .nextDose
+    var snapshot: Snapshot? = nil
     var isSelected: Bool = false
     var isInSelectionMode: Bool = false
     enum RowSection { case purchase, tuttoOk }
+
+    struct Snapshot {
+        enum Tone: Equatable {
+            case normal
+            case warning
+            case danger
+        }
+
+        struct DeadlineIndicator {
+            let label: String
+            let tone: Tone
+        }
+
+        let line1: String
+        let line2: String
+        let therapyLines: [TherapyLine]
+        let line1Tone: Tone
+        let line2Tone: Tone
+        let therapyLineTone: Tone
+        let deadlineIndicator: DeadlineIndicator?
+    }
     
     // MARK: - Computed
     private var option: Option? { options.first }
     private var therapies: Set<Therapy> {
         guard let entry = medicinePackage else {
-            return medicine.therapies as? Set<Therapy> ?? []
+            return medicine.therapies ?? []
         }
         if let entryTherapies = entry.therapies, !entryTherapies.isEmpty {
             return entryTherapies
         }
-        let all = medicine.therapies as? Set<Therapy> ?? []
+        let all = medicine.therapies ?? []
         return Set(all.filter { $0.package == entry.package })
     }
     private var totalDoseCount: Int {
@@ -107,6 +129,9 @@ struct MedicineRowView: View {
             acc + allowedEvents(on: now, for: t)
         }
     }
+    private var manualConfirmationTherapies: Set<Therapy> {
+        Set(therapies.filter { $0.manual_intake_registration })
+    }
     private var intakeLogsToday: Int {
         let now = Date()
         let cal = Calendar.current
@@ -118,12 +143,12 @@ struct MedicineRowView: View {
         let now = Date()
         let cal = Calendar.current
         let today = cal.startOfDay(for: now)
-        guard !therapies.isEmpty else { return [] }
+        guard !manualConfirmationTherapies.isEmpty else { return [] }
         var times: [Date] = []
-        for t in therapies {
+        for t in manualConfirmationTherapies {
             let allowed = allowedEvents(on: today, for: t)
             guard allowed > 0 else { continue }
-            if let doseSet = t.doses as? Set<Dose> {
+            if let doseSet = t.doses {
                 let sortedDoses = doseSet.sorted { $0.time < $1.time }
                 let limitedDoses = sortedDoses.prefix(min(allowed, sortedDoses.count))
                 for d in limitedDoses {
@@ -185,7 +210,7 @@ struct MedicineRowView: View {
         guard therapies.isEmpty else { return nil }
         if let entry = medicinePackage {
             let context = medicine.managedObjectContext ?? entry.package.managedObjectContext ?? PersistenceController.shared.container.viewContext
-            return StockService(context: context).units(for: entry.package)
+            return StockService(context: context).unitsReadOnly(for: entry.package)
         }
         return medicine.remainingUnitsWithoutTherapy()
     }
@@ -222,10 +247,26 @@ struct MedicineRowView: View {
         let line2: String
         let therapyLines: [TherapyLine]
         let deadlineIndicator: (symbol: String, color: Color, label: String)?
+        let line1Color: Color
+        let line2Color: Color
+        let therapyLineColor: Color
         let stockWarning: (text: String, color: Color, icon: String)?
     }
 
     private var presentationSnapshot: MedicineRowPresentationSnapshot {
+        if subtitleMode == .activeTherapies, let snapshot {
+            return MedicineRowPresentationSnapshot(
+                line1: snapshot.line1,
+                line2: snapshot.line2,
+                therapyLines: snapshot.therapyLines,
+                deadlineIndicator: deadlineIndicator(from: snapshot.deadlineIndicator),
+                line1Color: color(for: snapshot.line1Tone),
+                line2Color: color(for: snapshot.line2Tone),
+                therapyLineColor: color(for: snapshot.therapyLineTone),
+                stockWarning: nil
+            )
+        }
+
         let now = Date()
         switch subtitleMode {
         case .activeTherapies:
@@ -242,6 +283,9 @@ struct MedicineRowView: View {
                 line2: payload.line2,
                 therapyLines: payload.therapyLines,
                 deadlineIndicator: deadlineIndicator,
+                line1Color: fallbackLine1Color,
+                line2Color: fallbackLine2Color,
+                therapyLineColor: fallbackTherapyLineColor,
                 stockWarning: nil
             )
         case .nextDose:
@@ -255,6 +299,9 @@ struct MedicineRowView: View {
                 line2: subtitle.line2,
                 therapyLines: [],
                 deadlineIndicator: deadlineIndicator,
+                line1Color: fallbackLine1Color,
+                line2Color: fallbackLine2Color,
+                therapyLineColor: fallbackTherapyLineColor,
                 stockWarning: stocksWarning
             )
         }
@@ -273,16 +320,16 @@ struct MedicineRowView: View {
             if !snapshot.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(snapshot.line1)
                     .font(subtitleFont)
-                    .foregroundColor(line1Color)
+                    .foregroundColor(snapshot.line1Color)
                     .lineLimit(1)
                     .multilineTextAlignment(.leading)
                     .truncationMode(.tail)
             }
             if subtitleMode == .activeTherapies {
-                therapyLinesView(snapshot.therapyLines)
+                therapyLinesView(snapshot.therapyLines, color: snapshot.therapyLineColor)
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    line2View(for: snapshot.line2)
+                    line2View(for: snapshot.line2, color: snapshot.line2Color)
                 }
             }
             if let indicator = snapshot.deadlineIndicator {
@@ -292,23 +339,14 @@ struct MedicineRowView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
-            if !medicine.manual_intake_registration {
-                HStack(spacing: 4) {
-                    Image(systemName: "bolt.fill")
-                    Text("Assunzione automatica")
-                }
-                .font(subtitleFont)
-                .foregroundColor(.orange)
-                .lineLimit(1)
-            }
         }
     }
 
     @ViewBuilder
-    private func line2View(for line: String) -> some View {
+    private func line2View(for line: String, color: Color) -> some View {
         Text(line)
             .font(subtitleFont)
-            .foregroundColor(line2Color)
+            .foregroundColor(color)
             .lineLimit(subtitleMode == .activeTherapies ? nil : 1)
             .multilineTextAlignment(.leading)
             .truncationMode(.tail)
@@ -323,22 +361,11 @@ struct MedicineRowView: View {
     }
 
     @ViewBuilder
-    private func therapyLinesView(_ lines: [TherapyLine]) -> some View {
-        if lines.isEmpty {
-            Text("Nessuna terapia attiva")
-                .font(subtitleFont)
-                .foregroundColor(subtitleColor)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        } else {
+    private func therapyLinesView(_ lines: [TherapyLine], color: Color) -> some View {
+        if !lines.isEmpty {
             VStack(alignment: .leading, spacing: subtitleBlockSpacing) {
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                    therapyLineText(line)
-                        .font(subtitleFont)
-                        .foregroundColor(therapyLineColor)
-                        .lineLimit(nil)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
+                    therapyLineView(line, color: color)
                 }
             }
         }
@@ -354,10 +381,10 @@ struct MedicineRowView: View {
     }
 
     private var hasSkippedDose: Bool {
-        earliestOverdueDoseTime != nil
+        return earliestOverdueDoseTime != nil
     }
 
-    private var line1Color: Color {
+    private var fallbackLine1Color: Color {
         switch subtitleMode {
         case .activeTherapies:
             return isAutonomyBelowThreshold ? .red : subtitleColor
@@ -366,7 +393,7 @@ struct MedicineRowView: View {
         }
     }
 
-    private var line2Color: Color {
+    private var fallbackLine2Color: Color {
         switch subtitleMode {
         case .activeTherapies:
             return subtitleColor
@@ -375,19 +402,49 @@ struct MedicineRowView: View {
         }
     }
 
-    private var therapyLineColor: Color {
+    private var fallbackTherapyLineColor: Color {
         hasSkippedDose ? .red : subtitleColor
     }
 
-    private func therapyLineText(_ line: TherapyLine) -> Text {
+    private func therapyLineText(_ line: TherapyLine, color: Color) -> Text {
+        let baseText: Text
         if let prefix = line.prefix, !prefix.isEmpty {
-            return Text(prefix)
-                + Text(" ")
-                + Text(Image(systemName: "repeat"))
-                + Text(" ")
-                + Text(line.description)
+            baseText =
+                Text(prefix).font(subtitleFont).foregroundColor(color)
+                + Text(" ").font(subtitleFont).foregroundColor(color)
+                + Text(Image(systemName: "repeat")).font(subtitleFont).foregroundColor(color)
+                + Text(" ").font(subtitleFont).foregroundColor(color)
+                + Text(line.description).font(subtitleFont).foregroundColor(color)
+        } else {
+            baseText = Text(line.description).font(subtitleFont).foregroundColor(color)
         }
-        return Text(line.description)
+
+        return line.statusIcons.reduce(baseText) { partial, icon in
+            partial
+                + Text(verbatim: "\u{00A0}")
+                + Text(Image(systemName: icon.rawValue))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Color(.systemGray2))
+        }
+    }
+
+    private func therapyLineAccessibilityLabel(_ line: TherapyLine) -> String {
+        var components: [String] = []
+        if let prefix = line.prefix, !prefix.isEmpty {
+            components.append(prefix)
+        }
+        components.append(line.description)
+        components.append(contentsOf: line.statusIcons.map(\.accessibilityLabel))
+        return components.joined(separator: ", ")
+    }
+
+    @ViewBuilder
+    private func therapyLineView(_ line: TherapyLine, color: Color) -> some View {
+        therapyLineText(line, color: color)
+            .lineLimit(nil)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityLabel(therapyLineAccessibilityLabel(line))
     }
 
     private var subtitleBlockSpacing: CGFloat {
@@ -395,14 +452,27 @@ struct MedicineRowView: View {
     }
 
     private var deadlineIndicator: (symbol: String, color: Color, label: String)? {
-        switch medicine.deadlineStatus {
-        case .expired:
-            return ("alarm.fill", .red, "Scaduto")
-        case .expiringSoon:
-            return ("alarm", .orange, "Scadenza vicina")
-        case .ok, .none:
-            return nil
+        deadlineIndicator(from: makeMedicineRowDeadlineIndicator(for: medicine))
+    }
+
+    private func color(for tone: Snapshot.Tone) -> Color {
+        switch tone {
+        case .normal:
+            return subtitleColor
+        case .warning:
+            return .orange
+        case .danger:
+            return .red
         }
+    }
+
+    private func deadlineIndicator(from indicator: Snapshot.DeadlineIndicator?) -> (symbol: String, color: Color, label: String)? {
+        guard let indicator else { return nil }
+        return (
+            symbol: indicator.tone == .danger ? "alarm.fill" : "alarm",
+            color: color(for: indicator.tone),
+            label: indicator.label
+        )
     }
 
     private var titleLine: some View {
@@ -412,7 +482,7 @@ struct MedicineRowView: View {
         let dosage = primaryPackageDosage
         return HStack(alignment: .bottom, spacing: 4) {
             Text(name)
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(size: 16, weight: .regular))
                 .foregroundColor(.primary)
                 .lineLimit(2)
             if let dosage {
@@ -457,7 +527,6 @@ struct MedicineRowView: View {
     }
 
     private func packageDescriptionLabel(_ pkg: Package) -> String? {
-        let qty = pkg.numero > 0 ? "\(pkg.numero)" : nil
         let formRaw = pkg.tipologia.trimmingCharacters(in: .whitespacesAndNewlines)
         let tokens = formRaw.split(separator: "-").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
 
@@ -510,57 +579,12 @@ struct MedicineRowView: View {
             .joined(separator: " ")
     }
     
-    private func nextOccurrence(for therapy: Therapy) -> Date? {
-        recurrenceManager.nextOccurrence(
-            rule: recurrenceManager.parseRecurrenceString(therapy.rrule ?? ""),
-            startDate: therapy.start_date ?? Date(),
-            after: Date(),
-            doses: therapy.doses as NSSet?
-        )
-    }
-
-    private func intakeCountToday(for therapy: Therapy, now: Date) -> Int {
-        let calendar = Calendar.current
-        let logsToday = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
-        let assigned = logsToday.filter { $0.therapy == therapy }.count
-        if assigned > 0 { return assigned }
-
-        let unassigned = logsToday.filter { $0.therapy == nil }
-        if therapies.count == 1 { return unassigned.count }
-        return unassigned.filter { $0.package == therapy.package }.count
-    }
-
-    private func scheduledTimesToday(for therapy: Therapy, now: Date) -> [Date] {
-        let today = Calendar.current.startOfDay(for: now)
-        let allowed = allowedEvents(on: today, for: therapy)
-        guard allowed > 0 else { return [] }
-        guard let doseSet = therapy.doses as? Set<Dose>, !doseSet.isEmpty else { return [] }
-        let sortedDoses = doseSet.sorted { $0.time < $1.time }
-        let limitedDoses = sortedDoses.prefix(min(allowed, sortedDoses.count))
-        return limitedDoses.compactMap { dose in
-            combine(day: today, withTime: dose.time)
-        }
-    }
-
     private func nextUpcomingDoseDate(for therapy: Therapy, now: Date) -> Date? {
-        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-        let startDate = therapy.start_date ?? now
-
-        let calendar = Calendar.current
-        let timesToday = scheduledTimesToday(for: therapy, now: now)
-        if calendar.isDateInToday(now), !timesToday.isEmpty {
-            let takenCount = intakeCountToday(for: therapy, now: now)
-            if takenCount >= timesToday.count {
-                let endOfDay = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: calendar.startOfDay(for: now)) ?? now
-                return recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: endOfDay, doses: therapy.doses as NSSet?)
-            }
-            let pending = Array(timesToday.dropFirst(min(takenCount, timesToday.count)))
-            if let nextToday = pending.first(where: { $0 > now }) {
-                return nextToday
-            }
-        }
-
-        return recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: now, doses: therapy.doses as NSSet?)
+        medicine.nextIntakeDate(
+            for: therapy,
+            from: now,
+            recurrenceManager: recurrenceManager
+        )
     }
     
     private func personName(for therapy: Therapy) -> String? {
@@ -835,9 +859,33 @@ struct MedicineRowView: View {
     }
 }
 
+func makeMedicineRowDeadlineIndicator(
+    for medicine: Medicine,
+    referenceDate: Date = Date(),
+    calendar: Calendar = .current
+) -> MedicineRowView.Snapshot.DeadlineIndicator? {
+    guard let display = medicine.deadlineDisplay(referenceDate: referenceDate, calendar: calendar) else {
+        return nil
+    }
+
+    let tone: MedicineRowView.Snapshot.Tone
+    switch display.status {
+    case .expired:
+        tone = .danger
+    case .expiringSoon:
+        tone = .warning
+    case .ok:
+        tone = .normal
+    case .none:
+        return nil
+    }
+
+    return MedicineRowView.Snapshot.DeadlineIndicator(label: display.label, tone: tone)
+}
+
 // MARK: - Convenienza
 private extension Medicine {
     var totalLeftover: Int {
-        Int((therapies as? Set<Therapy> ?? []).reduce(0) { $0 + $1.leftover() })
+        Int((therapies ?? []).reduce(0) { $0 + $1.leftover() })
     }
 }

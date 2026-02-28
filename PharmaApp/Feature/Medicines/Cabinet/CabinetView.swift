@@ -9,6 +9,17 @@ struct CabinetView: View {
         let cabinetEntries: [CabinetViewModel.ShelfEntry]
         let otherMedicineEntries: [CabinetViewModel.ShelfEntry]
         let orderedEntriesByCabinetID: [NSManagedObjectID: [MedicinePackage]]
+
+        static let empty = ShelfViewState(
+            favoriteEntries: [],
+            cabinetEntries: [],
+            otherMedicineEntries: [],
+            orderedEntriesByCabinetID: [:]
+        )
+    }
+
+    private enum Layout {
+        static let horizontalInset: CGFloat = 28
     }
 
     @EnvironmentObject private var appVM: AppViewModel
@@ -21,8 +32,6 @@ struct CabinetView: View {
     private var medicinePackages: FetchedResults<MedicinePackage>
     @FetchRequest(fetchRequest: Option.extractOptions())
     private var options: FetchedResults<Option>
-    @FetchRequest(fetchRequest: Log.extractRecentLogs(days: 7))
-    private var logs: FetchedResults<Log>
     @FetchRequest(fetchRequest: Cabinet.extractCabinets())
     private var cabinets: FetchedResults<Cabinet>
 
@@ -32,11 +41,12 @@ struct CabinetView: View {
     @State private var newCabinetName = ""
     @State private var isSearchPresented = false
     @State private var isProfilePresented = false
-    @State private var catalogSelection: CatalogSelection?
-    @State private var pendingCatalogSelection: CatalogSelection?
+    @State private var catalogActionMessage: String?
     @State private var selectedEntry: MedicinePackage?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
     @State private var cachedSummaryLines: [String] = ["Tutto sotto controllo"]
+    @State private var cachedShelfState: ShelfViewState = .empty
+    @State private var rowSnapshotsByEntryID: [NSManagedObjectID: CabinetViewModel.CabinetRowSnapshot] = [:]
     @State private var syncWorkItem: DispatchWorkItem?
 
     var body: some View {
@@ -49,25 +59,54 @@ struct CabinetView: View {
 
     private var cabinetListWithNavigation: some View {
         cabinetListWithNewCabinetSheet
+            .background {
+                NavigationBarInsetConfigurator(horizontalInset: Layout.horizontalInset)
+            }
             .navigationTitle("Armadietto")
             .navigationBarTitleDisplayMode(.large)
             .onAppear {
                 locationVM.ensureStarted()
-                recomputeSummaryLines()
-                syncSummaryToWidgetDebounced()
+                recomputeAllCachedState()
             }
             .onChange(of: medicinePackages.count) { _ in
-                recomputeSummaryLines()
-                syncSummaryToWidgetDebounced()
+                recomputeAllCachedState()
             }
-            .onChange(of: logs.count) { _ in
-                recomputeSummaryLines()
-                syncSummaryToWidgetDebounced()
+            .onChange(of: cabinets.count) { _ in
+                recomputeAllCachedState()
+            }
+            .onChange(of: options.count) { _ in
+                recomputeAllCachedState()
+            }
+            .onReceive(favoritesStore.objectWillChange) { _ in
+                recomputeShelfState()
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: .NSManagedObjectContextObjectsDidChange,
+                    object: managedObjectContext
+                )
+            ) { notification in
+                guard hasRelevantCabinetChanges(notification) else { return }
+                recomputeAllCachedState()
             }
             .onChange(of: locationVM.pinItem?.title) { _ in
                 recomputeSummaryLines()
                 syncSummaryToWidgetDebounced()
             }
+            .onChange(of: locationVM.isLikelyOpen) { _ in
+                recomputeSummaryLines()
+                syncSummaryToWidgetDebounced()
+            }
+            .onChange(of: locationVM.distanceString) { _ in
+                recomputeSummaryLines()
+                syncSummaryToWidgetDebounced()
+            }
+    }
+
+    private func recomputeAllCachedState() {
+        recomputeSummaryLines()
+        recomputeShelfState()
+        syncSummaryToWidgetDebounced()
     }
 
     private func recomputeSummaryLines() {
@@ -84,22 +123,37 @@ struct CabinetView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
     }
 
+    private func hasRelevantCabinetChanges(_ notification: Notification) -> Bool {
+        let keys: [String] = [NSInsertedObjectsKey, NSUpdatedObjectsKey, NSDeletedObjectsKey]
+
+        for key in keys {
+            guard let objects = notification.userInfo?[key] as? Set<NSManagedObject> else { continue }
+            if objects.contains(where: isRelevantCabinetObject) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private func isRelevantCabinetObject(_ object: NSManagedObject) -> Bool {
+        switch object {
+        case is MedicinePackage, is Medicine, is Therapy, is Dose, is Stock, is Log, is Cabinet, is Option, is Package:
+            return true
+        default:
+            return false
+        }
+    }
+
     private var cabinetListWithNewCabinetSheet: some View {
         cabinetListWithDetailSheet
             .sheet(isPresented: $isNewCabinetPresented, onDismiss: { newCabinetName = "" }) {
                 newCabinetSheet
             }
-            .sheet(isPresented: $isSearchPresented, onDismiss: {
-                if let pending = pendingCatalogSelection {
-                    pendingCatalogSelection = nil
-                    DispatchQueue.main.async {
-                        catalogSelection = pending
-                    }
-                }
-            }) {
+            .sheet(isPresented: $isSearchPresented) {
                 NavigationStack {
                     CatalogSearchScreen { selection in
-                        pendingCatalogSelection = selection
+                        addCatalogSelectionToCabinet(selection)
                         isSearchPresented = false
                     }
                 }
@@ -109,14 +163,131 @@ struct CabinetView: View {
                     ProfileView()
                 }
             }
-            .sheet(item: $catalogSelection) { selection in
-                MedicineWizardView(prefill: selection) {
-                    catalogSelection = nil
+            .alert(
+                "Operazione completata",
+                isPresented: Binding(
+                    get: { catalogActionMessage != nil },
+                    set: { if !$0 { catalogActionMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {
+                    catalogActionMessage = nil
                 }
-                .environmentObject(appVM)
-                .environment(\.managedObjectContext, managedObjectContext)
-                .presentationDetents([.fraction(0.5), .large])
+            } message: {
+                Text(catalogActionMessage ?? "")
             }
+    }
+
+    private func addCatalogSelectionToCabinet(_ selection: CatalogSelection) {
+        let medicine = existingCatalogMedicine(for: selection) ?? createCatalogMedicine(from: selection)
+        medicine.in_cabinet = true
+        medicine.obbligo_ricetta = medicine.obbligo_ricetta || selection.requiresPrescription
+
+        let package = existingCatalogPackage(for: medicine, selection: selection)
+            ?? createCatalogPackage(for: medicine, selection: selection)
+        _ = existingCatalogEntry(for: medicine, package: package)
+            ?? createCatalogEntry(for: medicine, package: package)
+
+        do {
+            try managedObjectContext.save()
+            catalogActionMessage = "Aggiunto all'armadietto."
+        } catch {
+            managedObjectContext.rollback()
+            catalogActionMessage = "Non sono riuscito ad aggiungere il farmaco."
+        }
+    }
+
+    private func existingCatalogMedicine(for selection: CatalogSelection) -> Medicine? {
+        let identity = catalogIdentityKey(name: selection.name, principle: selection.principle)
+        let medicines = uniqueMedicines
+        if let exact = medicines.first(where: {
+            catalogIdentityKey(name: $0.nome, principle: $0.principio_attivo) == identity
+        }) {
+            return exact
+        }
+
+        let normalizedName = normalizeCatalogText(selection.name)
+        return medicines.first(where: { normalizeCatalogText($0.nome) == normalizedName })
+    }
+
+    private func existingCatalogPackage(for medicine: Medicine, selection: CatalogSelection) -> Package? {
+        medicine.packages.first(where: { packageMatchesCatalogSelection($0, selection: selection) })
+    }
+
+    private func existingCatalogEntry(for medicine: Medicine, package: Package) -> MedicinePackage? {
+        medicine.medicinePackages?.first(where: { $0.package.objectID == package.objectID })
+    }
+
+    private func packageMatchesCatalogSelection(_ package: Package, selection: CatalogSelection) -> Bool {
+        let sameUnits = Int(package.numero) == max(1, selection.units)
+        let sameType = normalizeCatalogText(package.tipologia) == normalizeCatalogText(selection.tipologia)
+        let sameValue = package.valore == selection.valore
+        let sameUnit = normalizeCatalogText(package.unita) == normalizeCatalogText(selection.unita)
+        let sameVolume = normalizeCatalogText(package.volume) == normalizeCatalogText(selection.volume)
+        return sameUnits && sameType && sameValue && sameUnit && sameVolume
+    }
+
+    private func createCatalogMedicine(from selection: CatalogSelection) -> Medicine {
+        let medicine = Medicine(context: managedObjectContext)
+        medicine.id = UUID()
+        medicine.source_id = medicine.id
+        medicine.visibility = "local"
+        medicine.nome = selection.name
+        medicine.principio_attivo = selection.principle
+        medicine.obbligo_ricetta = selection.requiresPrescription
+        medicine.in_cabinet = true
+        return medicine
+    }
+
+    private func createCatalogPackage(for medicine: Medicine, selection: CatalogSelection) -> Package {
+        let package = Package(context: managedObjectContext)
+        package.id = UUID()
+        package.source_id = package.id
+        package.visibility = "local"
+        package.tipologia = selection.tipologia.isEmpty ? "Confezione" : selection.tipologia
+        package.numero = Int32(max(1, selection.units))
+        package.unita = selection.unita.isEmpty ? "unita" : selection.unita
+        package.volume = selection.volume
+        package.valore = max(0, selection.valore)
+        package.principio_attivo = selection.principle
+        package.medicine = medicine
+        medicine.addToPackages(package)
+        return package
+    }
+
+    private func createCatalogEntry(for medicine: Medicine, package: Package) -> MedicinePackage {
+        let entry = MedicinePackage(context: managedObjectContext)
+        entry.id = UUID()
+        entry.created_at = Date()
+        entry.source_id = entry.id
+        entry.visibility = "local"
+        entry.medicine = medicine
+        entry.package = package
+        entry.cabinet = nil
+        medicine.addToMedicinePackages(entry)
+        return entry
+    }
+
+    private func catalogIdentityKey(name: String, principle: String) -> String {
+        let normalizedName = normalizeCatalogText(name)
+        let normalizedPrinciple = normalizeCatalogText(principle)
+        if normalizedPrinciple.isEmpty {
+            return normalizedName
+        }
+        return "\(normalizedName)|\(normalizedPrinciple)"
+    }
+
+    private func normalizeCatalogText(_ text: String) -> String {
+        let folded = text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        let cleaned = folded.replacingOccurrences(
+            of: "[^A-Za-z0-9]",
+            with: " ",
+            options: .regularExpression
+        )
+        return cleaned
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 
     private var cabinetListWithDetailSheet: some View {
@@ -161,77 +332,26 @@ struct CabinetView: View {
             .scrollIndicators(.hidden)
     }
 
-    private func camelCaseName(_ text: String) -> String {
-        text.lowercased().split(separator: " ").map { part in
-            guard let first = part.first else { return "" }
-            return String(first).uppercased() + part.dropFirst()
-        }.joined(separator: " ")
+    private var summaryTextView: some View {
+        Text(cachedSummaryLines.joined(separator: "\n"))
+            .font(.title3.weight(.regular))
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.leading)
     }
 
     private func computeSummaryLines() -> [String] {
-        let medicines = uniqueMedicines
-        guard let option = options.first else {
-            return ["Tutto sotto controllo"]
-        }
-        let recurrence = RecurrenceManager.shared
-
-        let lowStock = medicines.filter { $0.isInEsaurimento(option: option, recurrenceManager: recurrence) }
-
-        let now = Date()
-        let calendar = Calendar.current
-        let startOfToday = calendar.startOfDay(for: now)
-        let justBeforeToday = startOfToday.addingTimeInterval(-1)
-        let missedDoses = medicines.filter { medicine in
-            guard let firstDoseToday = medicine.nextIntakeDate(from: justBeforeToday, recurrenceManager: recurrence) else { return false }
-            return calendar.isDateInToday(firstDoseToday)
-                && firstDoseToday < now
-                && !medicine.hasIntakeLoggedToday(calendar: calendar)
-        }
-
-        let stockOk = lowStock.isEmpty
-        let therapyOk = missedDoses.isEmpty
-
-        if stockOk && therapyOk {
-            return ["Tutto sotto controllo"]
-        }
-
-        var lines: [String] = []
-
-        if stockOk {
-            lines.append("Scorte a posto")
-        } else {
-            let names = lowStock.prefix(3).map { camelCaseName($0.nome) }
-            let label = names.joined(separator: ", ")
-            if lowStock.count > 3 {
-                lines.append("\(label) e altri \(lowStock.count - 3) in esaurimento")
-            } else {
-                lines.append("\(label) in esaurimento")
-            }
-            if let pharmacyName = locationVM.pinItem?.title {
-                var pharmacyLine = pharmacyName
-                if let open = locationVM.isLikelyOpen {
-                    pharmacyLine += open ? " · aperta" : " · chiusa"
-                }
-                if let distance = locationVM.distanceString {
-                    pharmacyLine += " · \(distance)"
-                }
-                lines.append(pharmacyLine)
-            }
-        }
-
-        if therapyOk {
-            lines.append("Terapie in regola")
-        } else {
-            let names = missedDoses.prefix(3).map { camelCaseName($0.nome) }
-            let label = names.joined(separator: ", ")
-            if missedDoses.count > 3 {
-                lines.append("\(label) e altri \(missedDoses.count - 3) da assumere")
-            } else {
-                lines.append("\(label) da assumere")
-            }
-        }
-
-        return lines
+        let builder = CabinetSummaryBuilder(
+            recurrenceManager: RecurrenceManager(context: managedObjectContext)
+        )
+        return builder.buildLines(
+            medicines: uniqueMedicines,
+            option: options.first,
+            pharmacy: CabinetSummaryPharmacyInfo(
+                name: locationVM.pinItem?.title,
+                isOpen: locationVM.isLikelyOpen,
+                distanceText: locationVM.distanceString
+            )
+        )
     }
 
     private var uniqueMedicines: [Medicine] {
@@ -243,78 +363,96 @@ struct CabinetView: View {
         }
     }
 
-    private var cabinetListView: AnyView {
-        let viewState = buildShelfViewState()
-        return AnyView(List {
-            Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(cachedSummaryLines, id: \.self) { line in
-                        Text(line)
-                            .font(.title3.weight(.regular))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 24, trailing: 20))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-            }
-            .listSectionSeparator(.hidden)
-
-            if appVM.suggestNearestPharmacies {
-                Section {
-                    smartBannerCard
-                        .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 16, trailing: 20))
-                        .listRowBackground(Color.clear)
-                }
-                .listSectionSeparator(.hidden)
-            }
-
-            if !viewState.favoriteEntries.isEmpty {
-                Section(header: sectionHeader("Preferiti")) {
-                    ForEach(viewState.favoriteEntries, id: \.id) { entry in
-                        shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
-                    }
-                }
-                .listSectionSeparator(.hidden)
-            }
-
-            if !viewState.cabinetEntries.isEmpty {
-                Section(header: sectionHeader("Armadietti")) {
-                    ForEach(viewState.cabinetEntries, id: \.id) { entry in
-                        shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
-                    }
-                }
-                .listSectionSeparator(.hidden)
-            }
-
-            if !viewState.otherMedicineEntries.isEmpty {
-                let showOtherMedicinesHeader = !(viewState.favoriteEntries.isEmpty && viewState.cabinetEntries.isEmpty)
-                if showOtherMedicinesHeader {
-                    Section(header: sectionHeader("Altri medicinali")) {
-                        ForEach(viewState.otherMedicineEntries, id: \.id) { entry in
-                            shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
-                        }
-                    }
-                    .listSectionSeparator(.hidden)
-                } else {
-                    Section {
-                        ForEach(viewState.otherMedicineEntries, id: \.id) { entry in
-                            shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
-                        }
-                    }
-                    .listSectionSeparator(.hidden)
-                }
-            }
-        })
+    private var cabinetListView: some View {
+        let viewState = cachedShelfState
+        return List {
+            standardCabinetSections(viewState: viewState)
+        }
     }
 
-    private func buildShelfViewState() -> ShelfViewState {
+    private func recomputeShelfState() {
+        let entries = Array(medicinePackages)
         let shelfState = viewModel.shelfViewState(
-            entries: Array(medicinePackages),
-            logs: Array(logs),
+            entries: entries,
             option: options.first,
             cabinets: Array(cabinets)
         )
+        cachedShelfState = shelfSections(from: shelfState)
+        rowSnapshotsByEntryID = viewModel.buildRowSnapshots(entries: entries, option: options.first)
+    }
+
+    @ViewBuilder
+    private func standardCabinetSections(viewState: ShelfViewState) -> some View {
+        Section {
+            summaryTextView
+                .listRowInsets(
+                    EdgeInsets(
+                        top: 14,
+                        leading: Layout.horizontalInset,
+                        bottom: 24,
+                        trailing: Layout.horizontalInset
+                    )
+                )
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+        }
+        .listSectionSeparator(.hidden)
+
+        if appVM.suggestNearestPharmacies {
+            Section {
+                smartBannerCard
+                    .listRowInsets(
+                        EdgeInsets(
+                            top: 12,
+                            leading: Layout.horizontalInset,
+                            bottom: 16,
+                            trailing: Layout.horizontalInset
+                        )
+                    )
+                    .listRowBackground(Color.clear)
+            }
+            .listSectionSeparator(.hidden)
+        }
+
+        if !viewState.favoriteEntries.isEmpty {
+            Section(header: sectionHeader("Preferiti")) {
+                ForEach(viewState.favoriteEntries, id: \.id) { entry in
+                    shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
+                }
+            }
+            .listSectionSeparator(.hidden)
+        }
+
+        if !viewState.cabinetEntries.isEmpty {
+            Section(header: sectionHeader("Armadietti")) {
+                ForEach(viewState.cabinetEntries, id: \.id) { entry in
+                    shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
+                }
+            }
+            .listSectionSeparator(.hidden)
+        }
+
+        if !viewState.otherMedicineEntries.isEmpty {
+            let showOtherMedicinesHeader = !(viewState.favoriteEntries.isEmpty && viewState.cabinetEntries.isEmpty)
+            if showOtherMedicinesHeader {
+                Section(header: sectionHeader("Altri medicinali")) {
+                    ForEach(viewState.otherMedicineEntries, id: \.id) { entry in
+                        shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
+                    }
+                }
+                .listSectionSeparator(.hidden)
+            } else {
+                Section {
+                    ForEach(viewState.otherMedicineEntries, id: \.id) { entry in
+                        shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
+                    }
+                }
+                .listSectionSeparator(.hidden)
+            }
+        }
+    }
+
+    private func shelfSections(from shelfState: CabinetViewModel.ShelfViewState) -> ShelfViewState {
         var favoriteEntries: [CabinetViewModel.ShelfEntry] = []
         var cabinetEntries: [CabinetViewModel.ShelfEntry] = []
         var otherMedicineEntries: [CabinetViewModel.ShelfEntry] = []
@@ -369,7 +507,7 @@ struct CabinetView: View {
         }
         .padding(.top, 12)
         .padding(.bottom, 6)
-        .padding(.horizontal, 24)
+        .padding(.horizontal, Layout.horizontalInset)
     }
 
     private func swipeLabel(_ text: String, systemImage: String) -> some View {
@@ -427,7 +565,8 @@ struct CabinetView: View {
     }
 
     private func row(for entry: MedicinePackage) -> some View {
-        let shouldShowRx = viewModel.shouldShowPrescriptionAction(for: entry)
+        let rowSnapshot = rowSnapshotsByEntryID[entry.objectID]
+        let shouldShowRx = rowSnapshot?.shouldShowPrescription ?? viewModel.shouldShowPrescriptionAction(for: entry)
         return MedicineSwipeRow(
             entry: entry,
             isSelected: viewModel.selectedEntries.contains(entry),
@@ -461,11 +600,19 @@ struct CabinetView: View {
                 handleOperationResult(log, key: token.key)
             } : nil,
             onMove: { entryToMove = entry },
-            subtitleMode: .activeTherapies
+            subtitleMode: .activeTherapies,
+            snapshot: rowSnapshot?.presentation
         )
         .accessibilityIdentifier("MedicineRow_\(entry.objectID)")
         .listRowSeparator(.hidden, edges: .all)
-        .listRowInsets(EdgeInsets(top: 1, leading: 24, bottom: 1, trailing: 24))
+        .listRowInsets(
+            EdgeInsets(
+                top: 1,
+                leading: Layout.horizontalInset,
+                bottom: 1,
+                trailing: Layout.horizontalInset
+            )
+        )
     }
 
     private func cabinetRow(for cabinet: Cabinet, entries: [MedicinePackage]) -> some View {
@@ -504,7 +651,14 @@ struct CabinetView: View {
         }
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden, edges: .all)
-        .listRowInsets(EdgeInsets(top: 1, leading: 24, bottom: 1, trailing: 24))
+        .listRowInsets(
+            EdgeInsets(
+                top: 1,
+                leading: Layout.horizontalInset,
+                bottom: 1,
+                trailing: Layout.horizontalInset
+            )
+        )
     }
 
     private func operationToken(for action: OperationAction, entry: MedicinePackage) -> (id: UUID, key: OperationKey) {
@@ -561,45 +715,75 @@ struct CabinetView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Prescription helpers reused
-    private func needsPrescriptionBeforePurchase(_ medicine: Medicine, recurrenceManager: RecurrenceManager) -> Bool {
-        guard medicine.obbligo_ricetta else { return false }
-        if medicine.hasEffectivePrescriptionReceived() { return false }
-        if let therapies = medicine.therapies, !therapies.isEmpty {
-            var totalLeft: Double = 0
-            var dailyUsage: Double = 0
-            for therapy in therapies {
-                totalLeft += Double(therapy.leftover())
-                dailyUsage += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
-            }
-            if totalLeft <= 0 { return true }
-            guard dailyUsage > 0 else { return false }
-            let days = totalLeft / dailyUsage
-            let threshold = Double(medicine.stockThreshold(option: options.first))
-            return days < threshold
-        }
-        if let remaining = medicine.remainingUnitsWithoutTherapy() {
-            return remaining <= medicine.stockThreshold(option: options.first)
-        }
-        return false
-    }
 }
 
-private struct ToolbarIconButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(6)
-            .background(
-                Circle()
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay(
-                Circle()
-                    .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
-            )
-            .overlay(
-                Circle()
-                    .fill(configuration.isPressed ? Color.primary.opacity(0.12) : Color.clear)
-            )
+private struct NavigationBarInsetConfigurator: UIViewControllerRepresentable {
+    let horizontalInset: CGFloat
+
+    func makeUIViewController(context: Context) -> Controller {
+        Controller(horizontalInset: horizontalInset)
+    }
+
+    func updateUIViewController(_ uiViewController: Controller, context: Context) {
+        uiViewController.horizontalInset = horizontalInset
+        uiViewController.applyInsetIfNeeded()
+    }
+
+    final class Controller: UIViewController {
+        var horizontalInset: CGFloat
+        private weak var observedNavigationBar: UINavigationBar?
+        private var previousDirectionalLayoutMargins: NSDirectionalEdgeInsets?
+
+        init(horizontalInset: CGFloat) {
+            self.horizontalInset = horizontalInset
+            super.init(nibName: nil, bundle: nil)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            applyInsetIfNeeded()
+        }
+
+        override func viewDidDisappear(_ animated: Bool) {
+            super.viewDidDisappear(animated)
+            restoreInsetsIfNeeded()
+        }
+
+        func applyInsetIfNeeded() {
+            guard let navigationBar = navigationController?.navigationBar else { return }
+
+            if observedNavigationBar !== navigationBar {
+                restoreInsetsIfNeeded()
+                observedNavigationBar = navigationBar
+                previousDirectionalLayoutMargins = navigationBar.directionalLayoutMargins
+            } else if previousDirectionalLayoutMargins == nil {
+                previousDirectionalLayoutMargins = navigationBar.directionalLayoutMargins
+            }
+
+            var margins = navigationBar.directionalLayoutMargins
+            margins.leading = horizontalInset
+            margins.trailing = horizontalInset
+            navigationBar.directionalLayoutMargins = margins
+            navigationBar.setNeedsLayout()
+            navigationBar.layoutIfNeeded()
+        }
+
+        private func restoreInsetsIfNeeded() {
+            guard
+                let navigationBar = observedNavigationBar,
+                let previousDirectionalLayoutMargins
+            else { return }
+
+            navigationBar.directionalLayoutMargins = previousDirectionalLayoutMargins
+            navigationBar.setNeedsLayout()
+            navigationBar.layoutIfNeeded()
+            observedNavigationBar = nil
+            self.previousDirectionalLayoutMargins = nil
+        }
     }
 }

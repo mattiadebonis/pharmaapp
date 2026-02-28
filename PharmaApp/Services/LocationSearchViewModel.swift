@@ -28,8 +28,13 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
     private let maxLocationAge: TimeInterval = 20
     private let maxFallbackLocationAge: TimeInterval = 300
     private let minRequeryDistance: CLLocationDistance = 60
+    private let locationRetryDelay: TimeInterval = 2
+    private let maxLocationRetryAttempts = 3
     private var userLocation: CLLocation?
     private var routeEstimateToken = UUID()
+    private var lastLocationRequestDate: Date?
+    private var locationRetryAttempts = 0
+    private var locationRetryWorkItem: DispatchWorkItem?
 
     override init() {
         super.init()
@@ -38,8 +43,18 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
         manager.distanceFilter = 20
     }
 
+    deinit {
+        locationRetryWorkItem?.cancel()
+    }
+
     func ensureStarted() {
         guard CLLocationManager.locationServicesEnabled() else { return }
+        let now = Date()
+        if let current = userLocation,
+           isCurrentEnough(current, now: now),
+           pinItem != nil {
+            return
+        }
         handleAuthorizationStatus(manager.authorizationStatus)
     }
 
@@ -52,33 +67,18 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let best = bestAvailableLocation(from: locations, now: Date()) else { return }
-
-        let shouldSearch: Bool
-        if let previous = userLocation {
-            let moved = best.distance(from: previous) > minRequeryDistance
-            let improved = best.horizontalAccuracy + 5 < previous.horizontalAccuracy
-            shouldSearch = moved || improved
-        } else {
-            shouldSearch = true
-        }
-
-        userLocation = best
-        if shouldSearch {
-            searchNearestPharmacy(around: best)
-        }
-        if best.horizontalAccuracy <= desiredAccuracy {
-            manager.stopUpdatingLocation()
-        }
+        let now = Date()
+        guard let best = bestAvailableLocation(from: locations, now: now) else { return }
+        handleResolvedLocation(best, now: now)
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         guard let clError = error as? CLError else { return }
         switch clError.code {
         case .locationUnknown:
-            // Riprova rapidamente: su device reale il primo fix può fallire in indoor o con rete instabile.
-            manager.requestLocation()
+            scheduleLocationRetry(after: 0.75)
         case .denied:
+            cancelLocationRetry()
             manager.stopUpdatingLocation()
         default:
             break
@@ -197,6 +197,7 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
         case .authorizedWhenInUse, .authorizedAlways:
             startLocationAcquisition()
         case .denied, .restricted:
+            cancelLocationRetry()
             manager.stopUpdatingLocation()
         @unknown default:
             break
@@ -204,11 +205,13 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
     }
 
     private func startLocationAcquisition() {
-        if let cached = manager.location {
-            locationManager(manager, didUpdateLocations: [cached])
+        let now = Date()
+        if let cached = manager.location,
+           cached.horizontalAccuracy >= 0,
+           now.timeIntervalSince(cached.timestamp) <= maxFallbackLocationAge {
+            handleResolvedLocation(cached, now: now)
         }
-        manager.requestLocation()
-        manager.startUpdatingLocation()
+        requestFreshLocation(resetRetryAttempts: true)
     }
 
     private func bestAvailableLocation(from locations: [CLLocation], now: Date) -> CLLocation? {
@@ -226,6 +229,80 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
         }
 
         return valid.min(by: { $0.horizontalAccuracy < $1.horizontalAccuracy })
+    }
+
+    private func handleResolvedLocation(_ best: CLLocation, now: Date) {
+        cancelLocationRetry()
+
+        let shouldSearch: Bool
+        if let previous = userLocation {
+            let moved = best.distance(from: previous) > minRequeryDistance
+            let improved = best.horizontalAccuracy + 5 < previous.horizontalAccuracy
+            let previousWasStale = !isCurrentEnough(previous, now: now)
+            let currentIsFresh = isCurrentEnough(best, now: now)
+            shouldSearch = moved || improved || (previousWasStale && currentIsFresh) || pinItem == nil
+        } else {
+            shouldSearch = true
+        }
+
+        userLocation = best
+        if shouldSearch {
+            searchNearestPharmacy(around: best)
+        }
+
+        if isCurrentEnough(best, now: now), best.horizontalAccuracy <= desiredAccuracy {
+            locationRetryAttempts = 0
+            manager.stopUpdatingLocation()
+        } else {
+            scheduleLocationRetry()
+        }
+    }
+
+    private func requestFreshLocation(resetRetryAttempts: Bool = false) {
+        if resetRetryAttempts {
+            locationRetryAttempts = 0
+        }
+        lastLocationRequestDate = Date()
+        cancelLocationRetry()
+        manager.startUpdatingLocation()
+        manager.requestLocation()
+        scheduleLocationRetry()
+    }
+
+    private func scheduleLocationRetry(after delay: TimeInterval? = nil) {
+        locationRetryWorkItem?.cancel()
+        guard locationRetryAttempts < maxLocationRetryAttempts else { return }
+
+        let retryDelay = delay ?? locationRetryDelay
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+
+            let now = Date()
+            if let current = self.userLocation,
+               let requestDate = self.lastLocationRequestDate,
+               current.timestamp >= requestDate,
+               self.isCurrentEnough(current, now: now) {
+                return
+            }
+
+            self.locationRetryAttempts += 1
+            self.lastLocationRequestDate = now
+            self.manager.startUpdatingLocation()
+            self.manager.requestLocation()
+            self.scheduleLocationRetry()
+        }
+
+        locationRetryWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + retryDelay, execute: workItem)
+    }
+
+    private func cancelLocationRetry() {
+        locationRetryWorkItem?.cancel()
+        locationRetryWorkItem = nil
+    }
+
+    private func isCurrentEnough(_ location: CLLocation, now: Date) -> Bool {
+        now.timeIntervalSince(location.timestamp) <= maxLocationAge
     }
 
     private func filtered(items: [MKMapItem]) -> [MKMapItem] {
@@ -382,7 +459,7 @@ final class LocationSearchViewModel: NSObject, ObservableObject, CLLocationManag
         // Stima semplice: 5 km/h a piedi (~83 m/min), 45 km/h in auto (~750 m/min)
         let walkingMinutes = max(1, Int(round(distance / 83.0)))
         let drivingMinutes = max(1, Int(round(distance / 750.0)))
-        return "∼\(walkingMinutes) min a piedi · ∼\(drivingMinutes) min in auto"
+        return "\(walkingMinutes) min a piedi · \(drivingMinutes) min in auto"
     }
 
     // MARK: - Orari farmacia (da JSON locale)

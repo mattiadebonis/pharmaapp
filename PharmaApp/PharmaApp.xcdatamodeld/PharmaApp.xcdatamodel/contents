@@ -231,11 +231,12 @@
     </entity>
     <entity name="Person" representedClassName=".Person" syncable="YES">
         <attribute name="codice_fiscale" optional="YES" attributeType="String"/>
+        <attribute name="condizione" optional="YES" attributeType="String"/>
         <attribute name="cognome" optional="YES" attributeType="String"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="is_account" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="nome" optional="YES" attributeType="String"/>
-        <relationship name="therapies" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Therapy" inverseName="person" inverseEntity="Therapy"/>
+        <relationship name="therapies" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Therapy" inverseName="person" inverseEntity="Therapy"/>
     </entity>
     <entity name="Pharmacie" representedClassName=".Pharmacie" syncable="YES">
         <attribute name="address" optional="YES" attributeType="String"/>
@@ -245,9 +246,11 @@
         <relationship name="openingtimes" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="OpeningTime" inverseName="pharmacie" inverseEntity="OpeningTime"/>
     </entity>
     <entity name="Therapy" representedClassName=".Therapy" syncable="YES">
+        <attribute name="condizione" optional="YES" attributeType="String"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="importance" optional="YES" attributeType="String"/>
         <attribute name="manual_intake_registration" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="notifications_silenced" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="clinicalRules" optional="YES" attributeType="Transformable" valueTransformerName="NSSecureUnarchiveFromDataTransformerName"/>
         <attribute name="rrule" optional="YES" attributeType="String"/>
         <attribute name="source_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>

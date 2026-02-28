@@ -83,9 +83,9 @@ struct MedicineSummaryBuilder {
         } else if therapies.isEmpty, let remainingUnits = stockUnitsFallback ?? medicine.remainingUnitsWithoutTherapy() {
             let clamped = max(0, remainingUnits)
             let unitsText = formatCount(clamped, singular: "unità", plural: "unità")
-            line2 = "Scorte: \(unitsText)"
+            line2 = unitsText
         } else {
-            line2 = "Scorte: —"
+            line2 = "—"
         }
 
         let chip = chipCandidate(
@@ -224,4 +224,3 @@ private let timeFormatter: DateFormatter = {
     formatter.dateFormat = "HH:mm"
     return formatter
 }()
-

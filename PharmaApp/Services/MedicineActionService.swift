@@ -239,9 +239,11 @@ final class MedicineActionService {
         let recurrenceManager = RecurrenceManager(context: context)
 
         let candidates: [(therapy: Therapy, date: Date)] = therapies.compactMap { therapy in
-            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-            let start = therapy.start_date ?? now
-            guard let next = recurrenceManager.nextOccurrence(rule: rule, startDate: start, after: now, doses: therapy.doses as NSSet?) else {
+            guard let next = entry.medicine.nextIntakeDate(
+                for: therapy,
+                from: now,
+                recurrenceManager: recurrenceManager
+            ) else {
                 return nil
             }
             return (therapy, next)
@@ -267,9 +269,11 @@ final class MedicineActionService {
         let recurrenceManager = RecurrenceManager(context: context)
 
         let candidates: [(therapy: Therapy, date: Date)] = therapies.compactMap { therapy in
-            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-            let start = therapy.start_date ?? now
-            guard let next = recurrenceManager.nextOccurrence(rule: rule, startDate: start, after: now, doses: therapy.doses as NSSet?) else {
+            guard let next = medicine.nextIntakeDate(
+                for: therapy,
+                from: now,
+                recurrenceManager: recurrenceManager
+            ) else {
                 return nil
             }
             return (therapy, next)

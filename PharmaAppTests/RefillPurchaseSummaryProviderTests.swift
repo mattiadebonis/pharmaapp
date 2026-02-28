@@ -19,7 +19,7 @@ struct RefillPurchaseSummaryProviderTests {
     }
 
     @MainActor
-    @Test func summaryIncludesOnlyMedicinesUnderThreshold() throws {
+    @Test func summaryIncludesOnlyMedicinesUnderThreshold() async throws {
         let container = try TestCoreDataFactory.makeContainer()
         let context = container.viewContext
 
@@ -38,7 +38,7 @@ struct RefillPurchaseSummaryProviderTests {
         try context.save()
 
         let provider = RefillPurchaseSummaryProvider(context: context)
-        let summary = provider.summary(maxVisible: 5, strategy: .lightweightTodos)
+        let summary = await provider.summary(maxVisible: 5, strategy: .lightweightTodos)
 
         #expect(summary.allNames == ["Tachipirina"])
         #expect(summary.hasItems)

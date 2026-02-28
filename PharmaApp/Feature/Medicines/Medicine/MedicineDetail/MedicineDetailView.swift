@@ -3,6 +3,14 @@ import CoreData
 import UIKit
 import MessageUI
 
+enum MedicineDetailInitialAction: Equatable {
+    case none
+    case openPrescriptionRequest
+    case openLogs
+    case createTherapy
+    case editFirstTherapy
+}
+
 struct MedicineDetailView: View {
 
     @Environment(\.managedObjectContext) private var context
@@ -25,6 +33,7 @@ struct MedicineDetailView: View {
     @ObservedObject var medicine: Medicine
     let package: Package
     let medicinePackage: MedicinePackage?
+    let initialAction: MedicineDetailInitialAction
     
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
     @FetchRequest private var therapies: FetchedResults<Therapy>
@@ -37,6 +46,7 @@ struct MedicineDetailView: View {
     @State private var showLogsSheet = false
     @State private var showThresholdAlert = false
     @State private var thresholdInput: String = ""
+    @State private var didHandleInitialAction = false
 
     
     private let stockDateFormatter: DateFormatter = {
@@ -54,10 +64,16 @@ struct MedicineDetailView: View {
         }
     }
     
-    init(medicine: Medicine, package: Package, medicinePackage: MedicinePackage? = nil) {
+    init(
+        medicine: Medicine,
+        package: Package,
+        medicinePackage: MedicinePackage? = nil,
+        initialAction: MedicineDetailInitialAction = .none
+    ) {
         _medicine = ObservedObject(wrappedValue: medicine)
         self.package = package
         self.medicinePackage = medicinePackage
+        self.initialAction = initialAction
         let predicate: NSPredicate
         if let medicinePackage {
             predicate = NSPredicate(format: "medicinePackage == %@", medicinePackage)
@@ -84,7 +100,7 @@ struct MedicineDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text(medicine.nome.isEmpty ? "Dettagli" : medicine.nome)
-                        .font(.headline)
+                        .font(.headline.weight(.regular))
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -107,19 +123,6 @@ struct MedicineDetailView: View {
                         } label: {
                             let days = medicine.custom_stock_threshold > 0 ? Int(medicine.custom_stock_threshold) : 7
                             Label("Soglia scorte (\(days) gg)", systemImage: "exclamationmark.triangle")
-                        }
-                        Button {
-                            medicine.manual_intake_registration.toggle()
-                            saveContext()
-                        } label: {
-                            Label(
-                                medicine.manual_intake_registration
-                                    ? "Conferma assunzione: attiva"
-                                    : "Conferma assunzione: disattivata",
-                                systemImage: medicine.manual_intake_registration
-                                    ? "checkmark.circle"
-                                    : "checkmark.circle.badge.xmark"
-                            )
                         }
                         Button(role: .destructive) {
                             deleteMedicine()
@@ -146,6 +149,9 @@ struct MedicineDetailView: View {
         .onAppear {
             selectedDoctorID = medicine.obbligo_ricetta ? medicine.prescribingDoctor?.objectID : nil
             syncDeadlineInputs()
+            guard !didHandleInitialAction else { return }
+            didHandleInitialAction = true
+            handleInitialAction()
         }
         .sheet(isPresented: Binding(
             get: { medicine.obbligo_ricetta && showDoctorSheet },
@@ -245,6 +251,23 @@ struct MedicineDetailView: View {
             therapySheet = .edit(therapy)
         } else {
             therapySheet = .create()
+        }
+    }
+
+    private func handleInitialAction() {
+        switch initialAction {
+        case .none:
+            break
+        case .openPrescriptionRequest:
+            if medicine.obbligo_ricetta {
+                showEmailSheet = true
+            }
+        case .openLogs:
+            showLogsSheet = true
+        case .createTherapy:
+            openTherapyForm(for: nil)
+        case .editFirstTherapy:
+            openTherapyForm(for: therapies.first)
         }
     }
 
@@ -431,49 +454,13 @@ struct MedicineDetailView: View {
         return allowedEvents(on: now, for: therapy) > 0
     }
 
-    private func scheduledTimesToday(for therapy: Therapy, now: Date) -> [Date] {
-        let today = Calendar.current.startOfDay(for: now)
-        let allowed = allowedEvents(on: today, for: therapy)
-        guard allowed > 0 else { return [] }
-        guard let doseSet = therapy.doses as? Set<Dose>, !doseSet.isEmpty else { return [] }
-        let sortedDoses = doseSet.sorted { $0.time < $1.time }
-        let limitedDoses = sortedDoses.prefix(min(allowed, sortedDoses.count))
-        return limitedDoses.compactMap { dose in
-            combine(day: today, withTime: dose.time)
-        }
-    }
-
-    private func intakeCountToday(for therapy: Therapy, now: Date) -> Int {
-        let calendar = Calendar.current
-        let logsToday = intakeLogs.filter { calendar.isDate($0.timestamp, inSameDayAs: now) }
-        let assigned = logsToday.filter { $0.therapy == therapy }.count
-        if assigned > 0 { return assigned }
-
-        let unassigned = logsToday.filter { $0.therapy == nil }
-        if therapies.count == 1 { return unassigned.count }
-        return unassigned.filter { $0.package == therapy.package }.count
-    }
-    
     private func nextDose(for therapy: Therapy) -> Date? {
         let now = Date()
-        let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
-        let startDate = therapy.start_date ?? now
-
-        let calendar = Calendar.current
-        let timesToday = scheduledTimesToday(for: therapy, now: now)
-        if calendar.isDateInToday(now), !timesToday.isEmpty {
-            let takenCount = intakeCountToday(for: therapy, now: now)
-            if takenCount >= timesToday.count {
-                let endOfDay = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: calendar.startOfDay(for: now)) ?? now
-                return recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: endOfDay, doses: therapy.doses as NSSet?)
-            }
-            let pending = Array(timesToday.dropFirst(min(takenCount, timesToday.count)))
-            if let nextToday = pending.first(where: { $0 > now }) {
-                return nextToday
-            }
-        }
-
-        return recurrenceManager.nextOccurrence(rule: rule, startDate: startDate, after: now, doses: therapy.doses as NSSet?)
+        return medicine.nextIntakeDate(
+            for: therapy,
+            from: now,
+            recurrenceManager: recurrenceManager
+        )
     }
     
     private func formattedDate(_ date: Date) -> String {

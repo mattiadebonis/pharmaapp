@@ -7,7 +7,7 @@ enum RefillSummaryStrategy {
     case fullTherapyPlan
 }
 
-struct RefillPurchaseSummary: Equatable {
+struct RefillPurchaseSummary: Equatable, Sendable {
     let allNames: [String]
     let allItems: [RefillActivityAttributes.PurchaseItem]
     let maxVisible: Int
@@ -33,7 +33,6 @@ struct RefillPurchaseSummary: Equatable {
     }
 }
 
-@MainActor
 final class RefillPurchaseSummaryProvider {
     private let context: NSManagedObjectContext
     private let perfLog = OSLog(subsystem: "PharmaApp", category: "Performance")
@@ -47,24 +46,67 @@ final class RefillPurchaseSummaryProvider {
     func summary(
         maxVisible: Int = 3,
         strategy: RefillSummaryStrategy = .lightweightTodos
-    ) -> RefillPurchaseSummary {
+    ) async -> RefillPurchaseSummary {
         let signpostID = OSSignpostID(log: perfLog)
         os_signpost(.begin, log: perfLog, name: "RefillSummary", signpostID: signpostID)
         defer { os_signpost(.end, log: perfLog, name: "RefillSummary", signpostID: signpostID) }
 
-        switch strategy {
-        case .lightweightTodos:
-            return underThresholdSummary(maxVisible: maxVisible)
-        case .fullTherapyPlan:
-            return underThresholdSummary(maxVisible: maxVisible)
+        guard let workerContext = makeWorkerContext() else {
+            return Self.buildSummary(
+                in: context,
+                maxVisible: maxVisible,
+                strategy: strategy
+            )
+        }
+
+        return await withCheckedContinuation { continuation in
+            workerContext.perform {
+                continuation.resume(returning: Self.buildSummary(
+                    in: workerContext,
+                    maxVisible: maxVisible,
+                    strategy: strategy
+                ))
+            }
         }
     }
 
-    private func underThresholdSummary(maxVisible: Int) -> RefillPurchaseSummary {
+    private func makeWorkerContext() -> NSManagedObjectContext? {
+        guard let coordinator = context.persistentStoreCoordinator else { return nil }
+        let worker = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
+        worker.persistentStoreCoordinator = coordinator
+        worker.mergePolicy = NSMergeByPropertyStoreTrumpMergePolicy
+        return worker
+    }
+
+    private static func buildSummary(
+        in context: NSManagedObjectContext,
+        maxVisible: Int,
+        strategy: RefillSummaryStrategy
+    ) -> RefillPurchaseSummary {
+        switch strategy {
+        case .lightweightTodos:
+            return underThresholdSummary(in: context, maxVisible: maxVisible)
+        case .fullTherapyPlan:
+            return underThresholdSummary(in: context, maxVisible: maxVisible)
+        }
+    }
+
+    private static func underThresholdSummary(
+        in context: NSManagedObjectContext,
+        maxVisible: Int
+    ) -> RefillPurchaseSummary {
         let request = Medicine.extractMedicines()
+        request.relationshipKeyPathsForPrefetching = [
+            "therapies",
+            "therapies.doses",
+            "logs",
+            "packages",
+            "stocks"
+        ]
+        request.returnsObjectsAsFaults = false
         let medicines = (try? context.fetch(request)) ?? []
         let option = Option.current(in: context)
-        let sections = computeSections(for: medicines, logs: [], option: option)
+        let sections = computeSections(for: medicines, option: option)
         let recurrenceManager = RecurrenceManager(context: context)
 
         var names: [String] = []
@@ -77,7 +119,7 @@ final class RefillPurchaseSummaryProvider {
             guard seen.insert(name.lowercased()).inserted else { continue }
 
             let days = Self.autonomyDays(for: medicine, recurrenceManager: recurrenceManager)
-            let units = Self.remainingUnits(for: medicine)
+            let units = Self.remainingUnits(for: medicine, context: context)
             names.append(name)
             items.append(RefillActivityAttributes.PurchaseItem(name: name, autonomyDays: days, remainingUnits: units))
         }
@@ -104,9 +146,9 @@ final class RefillPurchaseSummaryProvider {
         return ordered
     }
 
-    private static func remainingUnits(for medicine: Medicine) -> Int? {
+    private static func remainingUnits(for medicine: Medicine, context: NSManagedObjectContext) -> Int? {
         guard let therapies = medicine.therapies, !therapies.isEmpty else {
-            return medicine.remainingUnitsWithoutTherapy()
+            return StockService(context: context).unitsReadOnly(for: medicine)
         }
         let total = therapies.reduce(0) { $0 + Int($1.leftover()) }
         return max(0, total)

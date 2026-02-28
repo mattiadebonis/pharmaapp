@@ -92,6 +92,82 @@ final class SiriIntentQueryTests: XCTestCase {
         XCTAssertEqual(summary.remainingCount, summary.totalCount - 3)
     }
 
+    func testNextIntakeDateMantieneLaDoseSaltataFincheNonC_eUnaNuovaAssunzione() throws {
+        let calendar = makeCalendar()
+        let (context, medicine, package) = try makeMedicineFixture(name: "Metformina")
+        let therapy = try attachDailyTherapy(
+            to: medicine,
+            package: package,
+            context: context,
+            doseTimes: [
+                makeDate(2026, 2, 28, 8, 0, calendar: calendar),
+                makeDate(2026, 2, 28, 20, 0, calendar: calendar)
+            ],
+            startDate: makeDate(2026, 2, 27, 8, 0, calendar: calendar)
+        )
+        try context.save()
+
+        let recurrenceManager = RecurrenceManager(context: context)
+        let beforeIntake = makeDate(2026, 2, 28, 12, 0, calendar: calendar)
+        XCTAssertEqual(
+            medicine.nextIntakeDate(from: beforeIntake, recurrenceManager: recurrenceManager, calendar: calendar),
+            makeDate(2026, 2, 28, 8, 0, calendar: calendar)
+        )
+
+        _ = try makeIntakeLog(
+            context: context,
+            medicine: medicine,
+            package: package,
+            therapy: therapy,
+            timestamp: makeDate(2026, 2, 28, 15, 0, calendar: calendar)
+        )
+        try context.save()
+
+        let afterIntake = makeDate(2026, 2, 28, 15, 30, calendar: calendar)
+        XCTAssertEqual(
+            medicine.nextIntakeDate(from: afterIntake, recurrenceManager: recurrenceManager, calendar: calendar),
+            makeDate(2026, 2, 28, 20, 0, calendar: calendar)
+        )
+    }
+
+    func testProviderNextUpcomingDoseDateMantieneLaDoseSaltataFincheNonC_eUnaNuovaAssunzione() throws {
+        let calendar = makeCalendar()
+        let (context, medicine, package) = try makeMedicineFixture(name: "Bisoprololo")
+        let therapy = try attachDailyTherapy(
+            to: medicine,
+            package: package,
+            context: context,
+            doseTimes: [
+                makeDate(2026, 2, 28, 8, 0, calendar: calendar),
+                makeDate(2026, 2, 28, 20, 0, calendar: calendar)
+            ],
+            startDate: makeDate(2026, 2, 27, 8, 0, calendar: calendar)
+        )
+        try context.save()
+
+        let provider = CoreDataTherapyPlanProvider(context: context, calendar: calendar)
+        let beforeIntake = makeDate(2026, 2, 28, 12, 0, calendar: calendar)
+        XCTAssertEqual(
+            provider.nextUpcomingDoseDate(for: medicine, now: beforeIntake),
+            makeDate(2026, 2, 28, 8, 0, calendar: calendar)
+        )
+
+        _ = try makeIntakeLog(
+            context: context,
+            medicine: medicine,
+            package: package,
+            therapy: therapy,
+            timestamp: makeDate(2026, 2, 28, 15, 0, calendar: calendar)
+        )
+        try context.save()
+
+        let afterIntake = makeDate(2026, 2, 28, 15, 30, calendar: calendar)
+        XCTAssertEqual(
+            provider.nextUpcomingDoseDate(for: medicine, now: afterIntake),
+            makeDate(2026, 2, 28, 20, 0, calendar: calendar)
+        )
+    }
+
     private func makeMedicineFixture(name: String) throws -> (NSManagedObjectContext, Medicine, Package) {
         let container = try TestCoreDataFactory.makeContainer()
         let context = container.viewContext
@@ -133,6 +209,92 @@ final class SiriIntentQueryTests: XCTestCase {
         therapy.doses = [dose]
 
         return therapy
+    }
+
+    private func attachDailyTherapy(
+        to medicine: Medicine,
+        package: Package,
+        context: NSManagedObjectContext,
+        doseTimes: [Date],
+        startDate: Date
+    ) throws -> Therapy {
+        let therapy = try TestCoreDataFactory.makeTherapy(context: context, medicine: medicine)
+        therapy.package = package
+        therapy.rrule = "RRULE:FREQ=DAILY;INTERVAL=1"
+        therapy.start_date = startDate
+
+        guard let personEntity = NSEntityDescription.entity(forEntityName: "Person", in: context) else {
+            throw NSError(domain: "SiriIntentQueryTests", code: 12, userInfo: [NSLocalizedDescriptionKey: "Person entity missing"])
+        }
+        let person = Person(entity: personEntity, insertInto: context)
+        person.id = UUID()
+        person.nome = "Persona Test"
+        therapy.person = person
+
+        guard let doseEntity = NSEntityDescription.entity(forEntityName: "Dose", in: context) else {
+            throw NSError(domain: "SiriIntentQueryTests", code: 13, userInfo: [NSLocalizedDescriptionKey: "Dose entity missing"])
+        }
+
+        var doses: Set<Dose> = []
+        for time in doseTimes {
+            let dose = Dose(entity: doseEntity, insertInto: context)
+            dose.id = UUID()
+            dose.amount = NSNumber(value: 1)
+            dose.time = time
+            dose.therapy = therapy
+            doses.insert(dose)
+        }
+        therapy.doses = doses
+
+        return therapy
+    }
+
+    private func makeIntakeLog(
+        context: NSManagedObjectContext,
+        medicine: Medicine,
+        package: Package,
+        therapy: Therapy,
+        timestamp: Date
+    ) throws -> Log {
+        guard let logEntity = NSEntityDescription.entity(forEntityName: "Log", in: context) else {
+            throw NSError(domain: "SiriIntentQueryTests", code: 14, userInfo: [NSLocalizedDescriptionKey: "Log entity missing"])
+        }
+
+        let log = Log(entity: logEntity, insertInto: context)
+        log.id = UUID()
+        log.type = "intake"
+        log.timestamp = timestamp
+        log.medicine = medicine
+        log.package = package
+        log.therapy = therapy
+        medicine.addToLogs(log)
+        return log
+    }
+
+    private func makeCalendar() -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "it_IT")
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        return calendar
+    }
+
+    private func makeDate(
+        _ year: Int,
+        _ month: Int,
+        _ day: Int,
+        _ hour: Int,
+        _ minute: Int,
+        calendar: Calendar
+    ) -> Date {
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = hour
+        components.minute = minute
+        components.second = 0
+        components.timeZone = calendar.timeZone
+        return calendar.date(from: components) ?? Date()
     }
 }
 

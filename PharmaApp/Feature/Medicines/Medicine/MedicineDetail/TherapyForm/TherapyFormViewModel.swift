@@ -70,18 +70,26 @@ class TherapyFormViewModel: ObservableObject {
         medicinePackage: MedicinePackage?,
         importance: String,
         person: Person,
+        condition: String?,
         manualIntake: Bool,
+        notificationsSilenced: Bool,
         clinicalRules: ClinicalRules?
     ) {
         // Creazione di una nuova Therapy senza effettuare il fetch di una già esistente
-        let therapy = Therapy(context: context)
+        guard let therapyEntity = NSEntityDescription.entity(forEntityName: "Therapy", in: context) else {
+            errorMessage = "Errore durante il salvataggio: entità Therapy non disponibile."
+            return
+        }
+        let therapy = Therapy(entity: therapyEntity, insertInto: context)
         therapy.id = UUID()
         therapy.medicine = medicine
         therapy.package = package
         therapy.medicinePackage = medicinePackage
         therapy.importance = importance
         therapy.person = person  // associa la persona
+        therapy.condizione = normalizedCondition(from: condition)
         therapy.manual_intake_registration = manualIntake
+        therapy.notifications_silenced = notificationsSilenced
         therapy.clinicalRulesValue = clinicalRules
 
         var rule = RecurrenceRule(freq: freq ?? "DAILY")
@@ -105,7 +113,11 @@ class TherapyFormViewModel: ObservableObject {
         }
 
         for entry in doses {
-            let dose = Dose(context: context)
+            guard let doseEntity = NSEntityDescription.entity(forEntityName: "Dose", in: context) else {
+                errorMessage = "Errore durante il salvataggio: entità Dose non disponibile."
+                return
+            }
+            let dose = Dose(entity: doseEntity, insertInto: context)
             dose.id = UUID()
             dose.time = entry.time
             dose.amount = NSNumber(value: entry.amount)
@@ -140,7 +152,9 @@ class TherapyFormViewModel: ObservableObject {
         medicinePackage: MedicinePackage?,
         importance: String,
         person: Person,
+        condition: String?,
         manualIntake: Bool,
+        notificationsSilenced: Bool,
         clinicalRules: ClinicalRules?
     ) {
         therapy.importance = importance
@@ -149,7 +163,9 @@ class TherapyFormViewModel: ObservableObject {
             therapy.medicinePackage = medicinePackage
         }
         therapy.person = person  // aggiorna la persona
+        therapy.condizione = normalizedCondition(from: condition)
         therapy.manual_intake_registration = manualIntake
+        therapy.notifications_silenced = notificationsSilenced
         therapy.clinicalRulesValue = clinicalRules
         
         var rule = RecurrenceRule(freq: freq ?? "DAILY")
@@ -171,7 +187,11 @@ class TherapyFormViewModel: ObservableObject {
         }
         
         for entry in doses {
-            let dose = Dose(context: context)
+            guard let doseEntity = NSEntityDescription.entity(forEntityName: "Dose", in: context) else {
+                errorMessage = "Errore durante l'aggiornamento: entità Dose non disponibile."
+                return
+            }
+            let dose = Dose(entity: doseEntity, insertInto: context)
             dose.id = UUID()
             dose.time = entry.time
             dose.amount = NSNumber(value: entry.amount)
@@ -188,5 +208,11 @@ class TherapyFormViewModel: ObservableObject {
             errorMessage = "Errore durante l'aggiornamento: \(error.localizedDescription)"
             print("Errore aggiornamento Therapy: \(error.localizedDescription)")
         }
+    }
+
+    private func normalizedCondition(from value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

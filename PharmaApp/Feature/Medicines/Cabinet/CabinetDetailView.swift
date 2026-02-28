@@ -15,7 +15,6 @@ struct CabinetDetailView: View {
     @Environment(\.dismiss) private var dismiss
     
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
-    @FetchRequest(fetchRequest: Log.extractLogs()) private var logs: FetchedResults<Log>
     @FetchRequest(fetchRequest: Cabinet.extractCabinets()) private var cabinets: FetchedResults<Cabinet>
     
     @State private var selectedEntry: MedicinePackage?
@@ -105,7 +104,7 @@ struct CabinetDetailView: View {
     }
 
     private func buildRows() -> [DetailRow] {
-        let sections = computeSections(for: entries, logs: Array(logs), option: options.first)
+        let sections = computeSections(for: entries, option: options.first)
         let purchase = sections.purchase.map { DetailRow(entry: $0) }
         let today = sections.oggi.map { DetailRow(entry: $0) }
         let ok = sections.ok.map { DetailRow(entry: $0) }

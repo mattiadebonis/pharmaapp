@@ -17,6 +17,7 @@ struct NotificationScheduleRequestDescriptor: Equatable {
     let threadIdentifier: String
     let categoryIdentifier: String
     let interruptionLevel: NotificationInterruptionPriority
+    let playsSound: Bool
 }
 
 final class NotificationScheduler {
@@ -130,7 +131,7 @@ final class NotificationScheduler {
         var descriptors: [NotificationScheduleRequestDescriptor] = []
         for item in items {
             let baseDate = item.origin == .immediate ? now.addingTimeInterval(1) : item.date
-            if item.kind == .therapy, preferences.level == .alarm {
+            if item.kind == .therapy, preferences.level == .alarm, !item.isSilenced {
                 let seriesId = UUID().uuidString
                 for index in 0...TherapyNotificationPreferences.alarmRepeatCount {
                     var userInfo = item.userInfo
@@ -150,14 +151,15 @@ final class NotificationScheduler {
                             userInfo: userInfo,
                             threadIdentifier: item.kind.rawValue,
                             categoryIdentifier: TherapyAlarmNotificationConstants.categoryIdentifier,
-                            interruptionLevel: .timeSensitive
+                            interruptionLevel: .timeSensitive,
+                            playsSound: true
                         )
                     )
                 }
                 continue
             }
 
-            let interruptionLevel: NotificationInterruptionPriority = item.kind == .therapy
+            let interruptionLevel: NotificationInterruptionPriority = item.kind == .therapy && !item.isSilenced
                 ? .timeSensitive
                 : .active
             descriptors.append(
@@ -169,7 +171,8 @@ final class NotificationScheduler {
                     userInfo: item.userInfo,
                     threadIdentifier: item.kind.rawValue,
                     categoryIdentifier: item.kind.rawValue,
-                    interruptionLevel: interruptionLevel
+                    interruptionLevel: interruptionLevel,
+                    playsSound: !item.isSilenced
                 )
             )
         }
@@ -203,7 +206,7 @@ final class NotificationScheduler {
             let content = UNMutableNotificationContent()
             content.title = descriptor.title
             content.body = descriptor.body
-            content.sound = .default
+            content.sound = descriptor.playsSound ? .default : nil
             content.userInfo = descriptor.userInfo
             content.threadIdentifier = descriptor.threadIdentifier
             content.categoryIdentifier = descriptor.categoryIdentifier

@@ -139,7 +139,7 @@ struct ProfileView: View {
                 NavigationLink {
                     PrescriptionMessageTemplateSettingsView()
                 } label: {
-                    Text("Template messaggio con placeholder {medico} e {medicinali}")
+                    Text("Personalizza il testo del messaggio per richiedere una ricetta")
                 }
             }
 
@@ -569,11 +569,7 @@ struct ProfilePharmacyCard: View {
         VStack(alignment: .leading, spacing: 14) {
             pharmacyHeader
             pharmacyMapPreview()
-            HStack(spacing: 8) {
-                routeButton(for: .walking)
-                routeButton(for: .driving)
-                callRouteButton()
-            }
+            routeActionsRow
         }
         .padding(14)
         .background(
@@ -590,34 +586,22 @@ struct ProfilePharmacyCard: View {
     }
 
     private var pharmacyHeader: some View {
-        HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(locationVM.pinItem?.title ?? "Farmacia più vicina")
                     .font(.headline)
                     .lineLimit(2)
-                if locationVM.pinItem == nil {
-                    Text("Attiva la posizione per vedere distanza, orari e contatti.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                } else {
-                    Text("Distanza \(pharmacyDistanceText() ?? "non disponibile")")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                if let statusText = pharmacyStatusText {
+                    Text(statusText.lowercased())
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(pharmacyStatusTextColor)
                 }
             }
-            Spacer(minLength: 8)
-            if let statusText = pharmacyStatusText {
-                Text(statusText)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(pharmacyStatusFillColor)
-                    )
-                    .foregroundStyle(pharmacyStatusTextColor)
+            if locationVM.pinItem == nil {
+                Text("Attiva la posizione per vedere distanza, orari e contatti.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
         }
     }
@@ -668,29 +652,39 @@ struct ProfilePharmacyCard: View {
         }
     }
 
-    private func routeButton(for mode: PharmacyRouteMode) -> some View {
+    @ViewBuilder
+    private var routeActionsRow: some View {
+        if canOpenMaps || canCall {
+            HStack(alignment: .center, spacing: 16) {
+                if canOpenMaps {
+                    routeLink(for: .walking)
+                    routeLink(for: .driving)
+                }
+                Spacer(minLength: 0)
+                if canCall {
+                    callRouteButton()
+                }
+            }
+        }
+    }
+
+    private func routeLink(for mode: PharmacyRouteMode) -> some View {
         Button {
             openDirections(mode)
         } label: {
-            VStack(spacing: 4) {
+            HStack(spacing: 6) {
                 Image(systemName: mode.systemImage)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                Text(routeMinutesText(for: mode))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
+                Text(routeDurationText(for: mode))
+                    .font(.subheadline.weight(.semibold))
+                    .underline()
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.blue)
-            )
+            .foregroundStyle(.blue)
         }
         .buttonStyle(.plain)
-        .disabled(!canOpenMaps)
-        .opacity(canOpenMaps ? 1 : 0.45)
-        .accessibilityLabel(mode.accessibilityLabel)
+        .disabled(!canOpenMaps || routeMinutes(for: mode) == nil)
+        .opacity((canOpenMaps && routeMinutes(for: mode) != nil) ? 1 : 0.45)
+        .accessibilityLabel("\(routeDurationText(for: mode)) \(mode.accessibilityLabel)")
     }
 
     private func callRouteButton() -> some View {
@@ -700,13 +694,11 @@ struct ProfilePharmacyCard: View {
             Image(systemName: "phone.fill")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 17)
+                .padding(10)
                 .background(
                     Capsule(style: .continuous)
                         .fill(Color.green)
                 )
-            .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
         .disabled(!canCall)
@@ -738,15 +730,9 @@ struct ProfilePharmacyCard: View {
         pharmacyStatusText == "Aperta" ? pharmacyAccentColor : .secondary
     }
 
-    private var pharmacyStatusFillColor: Color {
-        pharmacyStatusText == "Aperta"
-            ? pharmacyAccentColor.opacity(0.18)
-            : Color.secondary.opacity(0.18)
-    }
-
-    private func routeMinutesText(for mode: PharmacyRouteMode) -> String {
+    private func routeDurationText(for mode: PharmacyRouteMode) -> String {
         guard let minutes = routeMinutes(for: mode) else { return "–" }
-        return "\(minutes) min"
+        return minutes == 1 ? "1 minuto" : "\(minutes) minuti"
     }
 
     private func routeMinutes(for mode: PharmacyRouteMode) -> Int? {
@@ -763,17 +749,6 @@ struct ProfilePharmacyCard: View {
             }
             return max(1, Int(round(distance / 750.0)))
         }
-    }
-
-    private func pharmacyDistanceText() -> String? {
-        guard let meters = locationVM.distanceMeters else { return nil }
-        if meters < 1000 {
-            let roundedMeters = Int((meters / 10).rounded()) * 10
-            return "\(roundedMeters) m"
-        }
-        let km = meters / 1000
-        let roundedKm = (km * 10).rounded() / 10
-        return String(format: "%.1f km", roundedKm)
     }
 
     private func openDirections(_ mode: PharmacyRouteMode) {

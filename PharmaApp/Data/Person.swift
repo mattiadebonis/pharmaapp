@@ -14,6 +14,7 @@ public class Person: NSManagedObject, Identifiable {
     @NSManaged public var id: UUID?
     @NSManaged public var nome: String?
     @NSManaged public var cognome: String?
+    @NSManaged public var condizione: String?
     @NSManaged public var codice_fiscale: String?
     @NSManaged public var is_account: Bool
     

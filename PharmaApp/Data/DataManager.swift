@@ -323,6 +323,7 @@ class DataManager {
     }
 
     private let manualIntakeMigrationKey = "pharmaapp.migration.manualIntakeDefaultTrue.v1"
+    private let therapyManualIntakeScopeMigrationKey = "pharmaapp.migration.therapyManualIntakeScope.v1"
 
     func migrateManualIntakeDefaultIfNeeded(userDefaults: UserDefaults = .standard) {
         guard !userDefaults.bool(forKey: manualIntakeMigrationKey) else { return }
@@ -337,6 +338,20 @@ class DataManager {
             try? context.save()
         }
         userDefaults.set(true, forKey: manualIntakeMigrationKey)
+    }
+
+    func migrateTherapyManualIntakeScopeIfNeeded(userDefaults: UserDefaults = .standard) {
+        guard !userDefaults.bool(forKey: therapyManualIntakeScopeMigrationKey) else { return }
+        let request: NSFetchRequest<Therapy> = Therapy.fetchRequest() as! NSFetchRequest<Therapy>
+        if let therapies = try? context.fetch(request) {
+            for therapy in therapies {
+                therapy.manual_intake_registration = therapy.medicine.manual_intake_registration
+            }
+        }
+        if context.hasChanges {
+            try? context.save()
+        }
+        userDefaults.set(true, forKey: therapyManualIntakeScopeMigrationKey)
     }
 
     private func requiresPrescription(from packages: [[String: Any]]) -> Bool {

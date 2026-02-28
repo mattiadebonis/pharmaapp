@@ -38,13 +38,18 @@ struct CriticalDoseLiveActivityPlanner {
 
         let generator = DoseEventGenerator(context: context, calendar: calendar)
         let events = generator.generateEvents(therapies: therapies, from: windowStart, to: windowEnd)
+        let intakeLogsByMedicineID = buildIntakeLogCache(for: therapies)
 
         let therapyByObjectID = Dictionary(therapies.map { ($0.objectID, $0) }, uniquingKeysWith: { first, _ in first })
         var activeCandidates: [CriticalDoseCandidate] = []
 
         for event in events {
             guard let therapy = therapyByObjectID[event.therapyId] else { continue }
-            guard !hasMatchingIntakeLog(for: event.date, therapy: therapy) else { continue }
+            guard !hasMatchingIntakeLog(
+                for: event.date,
+                therapy: therapy,
+                intakeLogsByMedicineID: intakeLogsByMedicineID
+            ) else { continue }
             guard !snoozeStore.isSnoozed(therapyId: therapy.id, scheduledAt: event.date, now: now) else { continue }
 
             activeCandidates.append(
@@ -132,13 +137,20 @@ struct CriticalDoseLiveActivityPlanner {
 
     private func fetchEligibleTherapies() -> [Therapy] {
         let request: NSFetchRequest<Therapy> = Therapy.fetchRequest() as! NSFetchRequest<Therapy>
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            NSPredicate(format: "rrule != nil AND rrule != ''"),
+            NSPredicate(format: "doses.@count > 0")
+        ])
+        request.relationshipKeyPathsForPrefetching = [
+            "doses",
+            "medicine",
+            "medicine.logs",
+            "package"
+        ]
+        request.returnsObjectsAsFaults = false
+        request.fetchBatchSize = 64
         do {
-            let fetched = try context.fetch(request)
-            return fetched.filter { therapy in
-                guard let rrule = therapy.rrule, !rrule.isEmpty else { return false }
-                guard let doses = therapy.doses, !doses.isEmpty else { return false }
-                return true
-            }
+            return try context.fetch(request)
         } catch {
             return []
         }
@@ -184,9 +196,27 @@ struct CriticalDoseLiveActivityPlanner {
         return "unità"
     }
 
-    private func hasMatchingIntakeLog(for eventDate: Date, therapy: Therapy) -> Bool {
+    private func buildIntakeLogCache(for therapies: [Therapy]) -> [NSManagedObjectID: [Log]] {
+        var cache: [NSManagedObjectID: [Log]] = [:]
+        var seenMedicineIDs = Set<NSManagedObjectID>()
+
+        for therapy in therapies {
+            let medicine = therapy.medicine
+            let medicineID = medicine.objectID
+            guard seenMedicineIDs.insert(medicineID).inserted else { continue }
+            cache[medicineID] = medicine.effectiveIntakeLogs()
+        }
+
+        return cache
+    }
+
+    private func hasMatchingIntakeLog(
+        for eventDate: Date,
+        therapy: Therapy,
+        intakeLogsByMedicineID: [NSManagedObjectID: [Log]]
+    ) -> Bool {
         let tolerance = max(config.leadTimeInterval, config.overdueToleranceInterval)
-        let intakeLogs = therapy.medicine.effectiveIntakeLogs()
+        let intakeLogs = intakeLogsByMedicineID[therapy.medicine.objectID] ?? []
         guard !intakeLogs.isEmpty else { return false }
 
         for log in intakeLogs {
