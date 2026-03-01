@@ -118,11 +118,8 @@ struct CabinetDetailView: View {
     }
 
     private func buildRows() -> [DetailRow] {
-        let sections = computeSections(for: entries, option: options.first)
-        let purchase = sections.purchase.map { DetailRow(entry: $0) }
-        let today = sections.oggi.map { DetailRow(entry: $0) }
-        let ok = sections.ok.map { DetailRow(entry: $0) }
-        return purchase + today + ok
+        viewModel.sortedEntries(in: cabinet, entries: entries, option: options.first)
+            .map { DetailRow(entry: $0) }
     }
     
     private func row(for entry: MedicinePackage) -> some View {

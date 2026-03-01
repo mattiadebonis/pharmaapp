@@ -72,7 +72,7 @@ struct ContentView: View {
                         .navigationBarTitleDisplayMode(.inline)
                 }
             }
-        }
+        } 
     }
 
     private var legacyTabView: some View {

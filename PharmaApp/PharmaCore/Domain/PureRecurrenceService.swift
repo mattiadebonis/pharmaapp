@@ -1,6 +1,6 @@
 import Foundation
 
-public struct PureRecurrenceService {
+public struct PureRecurrenceService: RecurrencePort {
     public init() {}
 
     public func parseRecurrenceString(_ icsString: String) -> RecurrenceRule {

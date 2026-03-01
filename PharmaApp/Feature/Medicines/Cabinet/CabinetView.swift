@@ -263,13 +263,10 @@ struct CabinetView: View {
     }
 
     private func computeSummaryLines() -> [String] {
-        let builder = CabinetSummaryBuilder(
-            recurrenceManager: RecurrenceManager(context: managedObjectContext)
-        )
-        return builder.buildLines(
+        viewModel.computeSummaryLines(
             medicines: uniqueMedicines,
             option: options.first,
-            pharmacy: CabinetSummaryPharmacyInfo(
+            pharmacy: PharmacyInfo(
                 name: locationVM.pinItem?.title,
                 isOpen: locationVM.isLikelyOpen,
                 distanceText: locationVM.distanceString

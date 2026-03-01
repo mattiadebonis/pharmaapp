@@ -95,6 +95,51 @@ struct CoreDataSnapshotBuilder {
         )
     }
 
+    /// Creates a MedicineSnapshot scoped to a specific MedicinePackage entry.
+    /// Only includes therapies relevant to the entry's package, and stock units for that package.
+    func makeEntrySnapshot(entry: MedicinePackage) -> MedicineSnapshot {
+        let medicine = entry.medicine
+        let package = entry.package
+
+        // Resolve therapies for this entry
+        let entryTherapies: [Therapy]
+        if let set = entry.therapies, !set.isEmpty {
+            entryTherapies = Array(set)
+        } else {
+            let all = medicine.therapies ?? []
+            entryTherapies = all.filter { $0.package == package }
+        }
+
+        let therapySnapshots = entryTherapies.map { makeTherapySnapshot(therapy: $0) }
+        let logEntries = (medicine.logs ?? []).compactMap { logEntry(from: $0) }
+        let deadlineMonth = medicine.deadline_month > 0 ? Int(medicine.deadline_month) : nil
+        let deadlineYear = medicine.deadline_year > 0 ? Int(medicine.deadline_year) : nil
+
+        // Stock for this specific package (not whole medicine)
+        let packageStock: Int?
+        if entryTherapies.isEmpty {
+            packageStock = stockService.unitsReadOnly(for: package)
+        } else {
+            packageStock = nil
+        }
+
+        return MedicineSnapshot(
+            id: MedicineId(medicine.id),
+            externalKey: entry.objectID.uriRepresentation().absoluteString,
+            name: medicine.nome,
+            requiresPrescription: medicine.obbligo_ricetta,
+            inCabinet: medicine.in_cabinet,
+            manualIntakeRegistration: medicine.manual_intake_registration,
+            hasPackages: !medicine.packages.isEmpty,
+            hasMedicinePackages: !(medicine.medicinePackages?.isEmpty ?? true),
+            deadlineMonth: deadlineMonth,
+            deadlineYear: deadlineYear,
+            stockUnitsWithoutTherapy: packageStock,
+            therapies: therapySnapshots,
+            logs: logEntries
+        )
+    }
+
     func makeOptionSnapshot(option: Option?) -> OptionSnapshot? {
         guard let option else { return nil }
         return OptionSnapshot(

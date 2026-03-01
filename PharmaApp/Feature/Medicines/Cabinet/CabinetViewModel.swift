@@ -9,8 +9,25 @@ class CabinetViewModel: ObservableObject {
 
     let actionService: MedicineActionService
 
-    init(actionService: MedicineActionService = MedicineActionService()) {
+    // MARK: - PharmaCore dependencies
+    private let pharmaCoreFactory: PharmaCoreFactory
+    private(set) lazy var sectionCalculator = pharmaCoreFactory.makeSectionCalculator()
+    private(set) lazy var cabinetSummaryReadModel = pharmaCoreFactory.makeCabinetSummaryReadModel()
+    private(set) lazy var doseScheduleReadModel = pharmaCoreFactory.makeDoseScheduleReadModel()
+    private(set) lazy var medicineActionUseCase = pharmaCoreFactory.makeMedicineActionUseCase()
+    private(set) lazy var medicineRepository: MedicineRepository = pharmaCoreFactory.makeMedicineRepository()
+    private(set) lazy var optionRepository: OptionRepository = pharmaCoreFactory.makeOptionRepository()
+
+    private lazy var snapshotBuilder = CoreDataSnapshotBuilder(
+        context: PersistenceController.shared.container.viewContext
+    )
+
+    init(
+        actionService: MedicineActionService = MedicineActionService(),
+        pharmaCoreFactory: PharmaCoreFactory = PharmaCoreFactory()
+    ) {
         self.actionService = actionService
+        self.pharmaCoreFactory = pharmaCoreFactory
     }
 
     // MARK: - Selection
@@ -61,16 +78,6 @@ class CabinetViewModel: ObservableObject {
     struct CabinetRowSnapshot {
         let presentation: MedicineRowView.Snapshot
         let shouldShowPrescription: Bool
-    }
-
-    private struct MedicineLogCache {
-        let intakeLogsToday: [Log]
-        let hasPrescriptionReceived: Bool
-        let hasPrescriptionRequest: Bool
-    }
-
-    private var viewContext: NSManagedObjectContext {
-        PersistenceController.shared.container.viewContext
     }
 
     /// Sezioni ordinate per List (cabinet e medicinali fuori da cabinet).
@@ -145,16 +152,9 @@ class CabinetViewModel: ObservableObject {
     }
 
     func shouldShowPrescriptionAction(for entry: MedicinePackage) -> Bool {
-        let medicine = entry.medicine
-        guard medicine.obbligo_ricetta else { return false }
-        if medicine.hasEffectivePrescriptionReceived() { return false }
-        if medicine.hasNewPrescritpionRequest() { return false }
-        return needsPrescriptionBeforePurchase(
-            medicine,
-            option: nil,
-            recurrenceManager: .shared,
-            stockService: StockService(context: viewContext)
-        )
+        let snapshot = snapshotBuilder.makeEntrySnapshot(entry: entry)
+        let optionSnapshot = snapshotBuilder.makeOptionSnapshot(option: nil)
+        return sectionCalculator.needsPrescriptionBeforePurchase(snapshot, option: optionSnapshot)
     }
 
     func buildRowSnapshots(
@@ -164,50 +164,54 @@ class CabinetViewModel: ObservableObject {
     ) -> [NSManagedObjectID: CabinetRowSnapshot] {
         let recurrenceManager = RecurrenceManager.shared
         let calendar = Calendar.current
-        let stockService = StockService(context: viewContext)
+        let optionSnapshot = snapshotBuilder.makeOptionSnapshot(option: option)
 
         var snapshots: [NSManagedObjectID: CabinetRowSnapshot] = [:]
-        var medicineCache: [NSManagedObjectID: MedicineLogCache] = [:]
+        var medicineLogCache: [NSManagedObjectID: [Log]] = [:]
 
         for entry in entries {
             let medicine = entry.medicine
             let medicineID = medicine.objectID
-            let cached: MedicineLogCache
-            if let existing = medicineCache[medicineID] {
-                cached = existing
+
+            // Cache intake logs per medicine
+            let intakeLogsToday: [Log]
+            if let cached = medicineLogCache[medicineID] {
+                intakeLogsToday = cached
             } else {
-                let computed = MedicineLogCache(
-                    intakeLogsToday: medicine.effectiveIntakeLogs(on: now, calendar: calendar),
-                    hasPrescriptionReceived: medicine.hasEffectivePrescriptionReceived(),
-                    hasPrescriptionRequest: medicine.hasNewPrescritpionRequest()
-                )
-                medicineCache[medicineID] = computed
-                cached = computed
+                let computed = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
+                medicineLogCache[medicineID] = computed
+                intakeLogsToday = computed
             }
 
-            let intakeLogsToday = cached.intakeLogsToday.filter { $0.package == entry.package }
+            let filteredLogs = intakeLogsToday.filter { $0.package == entry.package }
             let payload = makeMedicineActiveTherapiesSubtitle(
                 medicine: medicine,
                 medicinePackage: entry,
                 recurrenceManager: recurrenceManager,
-                intakeLogsToday: intakeLogsToday,
+                intakeLogsToday: filteredLogs,
                 now: now
             )
 
-            let entryTherapies = therapies(for: entry)
-            let autonomyBelowThreshold = isAutonomyBelowThreshold(
-                entry: entry,
-                therapies: entryTherapies,
-                option: option,
-                recurrenceManager: recurrenceManager,
-                stockService: stockService
-            )
-            let skippedDose = hasSkippedDose(
-                entry: entry,
-                therapies: entryTherapies,
-                now: now,
-                calendar: calendar
-            )
+            // Use PharmaCore for stock status
+            let entrySnapshot = snapshotBuilder.makeEntrySnapshot(entry: entry)
+            let stockStatus = sectionCalculator.stockStatus(for: entrySnapshot, option: optionSnapshot)
+            let autonomyBelowThreshold = (stockStatus == .low || stockStatus == .critical)
+
+            // Use PharmaCore for missed dose detection
+            let manualTherapies = entrySnapshot.therapies.filter {
+                $0.manualIntakeRegistration || entrySnapshot.manualIntakeRegistration
+            }
+            let skippedDose: Bool
+            if manualTherapies.isEmpty {
+                skippedDose = false
+            } else {
+                let entryIntakeLogs = entrySnapshot.effectiveIntakeLogs(on: now, calendar: calendar)
+                skippedDose = doseScheduleReadModel.missedDoseCandidate(
+                    for: manualTherapies,
+                    intakeLogs: entryIntakeLogs,
+                    now: now
+                ) != nil
+            }
 
             let presentation = MedicineRowView.Snapshot(
                 line1: payload.line1,
@@ -219,12 +223,10 @@ class CabinetViewModel: ObservableObject {
                 deadlineIndicator: deadlineIndicator(for: medicine)
             )
 
-            let shouldShowPrescription = shouldShowPrescriptionAction(
-                for: entry,
-                cachedState: cached,
-                option: option,
-                recurrenceManager: recurrenceManager,
-                stockService: stockService
+            // Use PharmaCore for prescription check
+            let shouldShowPrescription = sectionCalculator.needsPrescriptionBeforePurchase(
+                entrySnapshot,
+                option: optionSnapshot
             )
 
             snapshots[entry.objectID] = CabinetRowSnapshot(
@@ -259,13 +261,48 @@ class CabinetViewModel: ObservableObject {
         return orderedMedicinePackages(entries: filteredEntries, option: option)
     }
 
-    // MARK: - Sorting
+    /// Computes summary lines for the cabinet header using PharmaCore's CabinetSummaryReadModel.
+    func computeSummaryLines(
+        medicines: [Medicine],
+        option: Option?,
+        pharmacy: PharmacyInfo?
+    ) -> [String] {
+        let medicineSnapshots = medicines.map { medicine in
+            snapshotBuilder.makeMedicineSnapshot(
+                medicine: medicine,
+                logs: Array(medicine.logs ?? [])
+            )
+        }
+        let optionSnapshot = snapshotBuilder.makeOptionSnapshot(option: option)
+        return cabinetSummaryReadModel.buildLines(
+            medicines: medicineSnapshots,
+            option: optionSnapshot,
+            pharmacy: pharmacy
+        )
+    }
+
+    // MARK: - Sorting (via PharmaCore SectionCalculator)
     private func orderedMedicinePackages(
         entries: [MedicinePackage],
         option: Option?
     ) -> [MedicinePackage] {
-        let sections = computeSections(for: entries, option: option)
-        return sections.purchase + sections.oggi + sections.ok
+        // Convert entries to snapshots
+        let optionSnapshot = snapshotBuilder.makeOptionSnapshot(option: option)
+        var snapshotToEntry: [String: MedicinePackage] = [:]
+        var medicineSnapshots: [MedicineSnapshot] = []
+
+        for entry in entries {
+            let snapshot = snapshotBuilder.makeEntrySnapshot(entry: entry)
+            snapshotToEntry[snapshot.externalKey] = entry
+            medicineSnapshots.append(snapshot)
+        }
+
+        // Use PharmaCore SectionCalculator
+        let sections = sectionCalculator.computeSections(for: medicineSnapshots, option: optionSnapshot)
+
+        // Map back to CoreData entities preserving PharmaCore's order
+        let orderedKeys = (sections.purchase + sections.oggi + sections.ok).map(\.externalKey)
+        return orderedKeys.compactMap { snapshotToEntry[$0] }
     }
 
     private func normalizedSearchText(_ text: String) -> String {
@@ -297,94 +334,6 @@ class CabinetViewModel: ObservableObject {
             parts.append(package.volume)
         }
         return parts.joined(separator: " ")
-    }
-
-    private func therapies(for entry: MedicinePackage) -> [Therapy] {
-        if let set = entry.therapies, !set.isEmpty {
-            return Array(set)
-        }
-        let all = entry.medicine.therapies ?? []
-        return all.filter { $0.package == entry.package }
-    }
-
-    private func shouldShowPrescriptionAction(
-        for entry: MedicinePackage,
-        cachedState: MedicineLogCache,
-        option: Option?,
-        recurrenceManager: RecurrenceManager,
-        stockService: StockService
-    ) -> Bool {
-        let medicine = entry.medicine
-        guard medicine.obbligo_ricetta else { return false }
-        if cachedState.hasPrescriptionReceived { return false }
-        if cachedState.hasPrescriptionRequest { return false }
-        return needsPrescriptionBeforePurchase(
-            medicine,
-            option: option,
-            recurrenceManager: recurrenceManager,
-            stockService: stockService
-        )
-    }
-
-    private func needsPrescriptionBeforePurchase(
-        _ medicine: Medicine,
-        option: Option?,
-        recurrenceManager: RecurrenceManager,
-        stockService: StockService
-    ) -> Bool {
-        if let therapies = medicine.therapies, !therapies.isEmpty {
-            var totalLeft: Double = 0
-            var dailyUsage: Double = 0
-            for therapy in therapies {
-                totalLeft += Double(therapy.leftover())
-                dailyUsage += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
-            }
-            if totalLeft <= 0 { return true }
-            guard dailyUsage > 0 else { return false }
-            let days = totalLeft / dailyUsage
-            let threshold = Double(medicine.stockThreshold(option: option))
-            return days < threshold
-        }
-
-        let remaining = stockService.unitsReadOnly(for: medicine)
-        return remaining <= medicine.stockThreshold(option: option)
-    }
-
-    private func isAutonomyBelowThreshold(
-        entry: MedicinePackage,
-        therapies: [Therapy],
-        option: Option?,
-        recurrenceManager: RecurrenceManager,
-        stockService: StockService
-    ) -> Bool {
-        let threshold = entry.medicine.stockThreshold(option: option)
-
-        if !therapies.isEmpty {
-            var totalLeftover: Double = 0
-            var totalDailyUsage: Double = 0
-            for therapy in therapies {
-                totalLeftover += Double(therapy.leftover())
-                totalDailyUsage += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
-            }
-            guard totalDailyUsage > 0 else { return false }
-            let days = Int(totalLeftover / totalDailyUsage)
-            return days < threshold
-        }
-
-        let remainingUnits = stockService.unitsReadOnly(for: entry.package)
-        return remainingUnits < threshold
-    }
-
-    private func hasSkippedDose(
-        entry: MedicinePackage,
-        therapies: [Therapy],
-        now: Date,
-        calendar: Calendar
-    ) -> Bool {
-        let manualTherapies = therapies.filter { $0.manual_intake_registration || entry.medicine.manual_intake_registration }
-        guard !manualTherapies.isEmpty else { return false }
-        let scheduleService = TherapyDoseScheduleService(context: viewContext, calendar: calendar)
-        return scheduleService.missedDoseCandidate(for: manualTherapies, now: now) != nil
     }
 
     private func deadlineIndicator(for medicine: Medicine) -> MedicineRowView.Snapshot.DeadlineIndicator? {
