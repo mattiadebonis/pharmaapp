@@ -2,15 +2,18 @@ import Foundation
 
 public struct SectionCalculator {
     private let recurrenceService: RecurrencePort
+    private let doseScheduleReadModel: DoseScheduleReadModel
     private let clock: Clock
     private let calendar: Calendar
 
     public init(
         recurrenceService: RecurrencePort,
+        doseScheduleReadModel: DoseScheduleReadModel? = nil,
         clock: Clock = SystemClock(),
         calendar: Calendar = .current
     ) {
         self.recurrenceService = recurrenceService
+        self.doseScheduleReadModel = doseScheduleReadModel ?? DoseScheduleReadModel(recurrenceService: recurrenceService, calendar: calendar)
         self.clock = clock
         self.calendar = calendar
     }
@@ -30,6 +33,23 @@ public struct SectionCalculator {
 
         func nextOccurrence(for medicine: MedicineSnapshot) -> Date? {
             guard !medicine.therapies.isEmpty else { return nil }
+
+            // Check for pending overdue doses (skipped/not taken)
+            let manualTherapies = medicine.therapies.filter {
+                $0.manualIntakeRegistration || medicine.manualIntakeRegistration
+            }
+            if !manualTherapies.isEmpty {
+                let intakeLogs = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
+                if let missed = doseScheduleReadModel.missedDoseCandidate(
+                    for: manualTherapies,
+                    intakeLogs: intakeLogs,
+                    now: now
+                ) {
+                    return missed.scheduledAt
+                }
+            }
+
+            // Fall back to recurrence-based next occurrence
             var best: Date? = nil
             for therapy in medicine.therapies {
                 let rule = recurrenceService.parseRecurrenceString(therapy.rrule ?? "")

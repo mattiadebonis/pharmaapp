@@ -85,7 +85,7 @@ final class TherapyDoseScheduleService {
         let baseTimes = baseScheduledTimes(on: dayStart, for: therapy)
         let overrides = overrideRecords(on: dayStart, for: therapy)
 
-        var timesByBucket = Dictionary(uniqueKeysWithValues: baseTimes.map { (minuteBucket(for: $0), $0) })
+        var timesByBucket = Dictionary(baseTimes.map { (minuteBucket(for: $0), $0) }, uniquingKeysWith: { _, latest in latest })
         for override in overrides {
             guard let dueAt = override.due_at else { continue }
             let bucket = minuteBucket(for: dueAt)

@@ -45,7 +45,10 @@ struct PharmaCoreFactory {
     }
 
     func makeSectionCalculator() -> SectionCalculator {
-        SectionCalculator(recurrenceService: makeRecurrenceService())
+        SectionCalculator(
+            recurrenceService: makeRecurrenceService(),
+            doseScheduleReadModel: makeDoseScheduleReadModel()
+        )
     }
 
     func makeDoseScheduleReadModel() -> DoseScheduleReadModel {

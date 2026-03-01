@@ -72,7 +72,9 @@ struct TherapyFormView: View {
     // Nuovo state per la persona selezionata
     @State private var selectedPerson: Person?
     @State private var selectedCondition: String = ""
-    
+    @State private var isAddingCondition = false
+    @State private var newConditionText: String = ""
+
     // MARK: - Modello
     var medicine: Medicine
     var package: Package
@@ -277,8 +279,21 @@ struct TherapyFormView: View {
                                 .tag(condition)
                         }
                     }
+                    Button {
+                        newConditionText = ""
+                        isAddingCondition = true
+                    } label: {
+                        Label("Aggiungi condizione", systemImage: "plus.circle")
+                            .font(.system(size: 15))
+                    }
                 } else {
-                    TextField("Condizione associata (opzionale)", text: $selectedCondition)
+                    Button {
+                        newConditionText = ""
+                        isAddingCondition = true
+                    } label: {
+                        Label("Aggiungi condizione", systemImage: "plus.circle")
+                            .font(.system(size: 15))
+                    }
                 }
             }
             .listRowBackground(Color(.systemGroupedBackground))
@@ -415,6 +430,26 @@ struct TherapyFormView: View {
             NavigationStack {
                 TaperStepEditorView(steps: $taperSteps)
             }
+        }
+        .alert("Nuova condizione", isPresented: $isAddingCondition) {
+            TextField("Nome condizione", text: $newConditionText)
+            Button("Annulla", role: .cancel) { }
+            Button("Aggiungi") {
+                let trimmed = newConditionText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                if let person = selectedPerson {
+                    let existing = ConditionListFormatter.parsed(from: person.condizione)
+                    if !existing.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+                        var updated = existing
+                        updated.append(trimmed)
+                        person.condizione = ConditionListFormatter.serialized(from: updated)
+                        try? context.save()
+                    }
+                }
+                selectedCondition = trimmed
+            }
+        } message: {
+            Text("Inserisci il nome della condizione da associare alla terapia.")
         }
     }
 

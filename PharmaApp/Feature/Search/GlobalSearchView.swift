@@ -27,7 +27,7 @@ struct GlobalSearchView: View {
     @StateObject private var cabinetViewModel = CabinetViewModel()
     @State private var query: String = ""
     @State private var selectedScope: SearchScope = .all
-    @State private var activeShortcut: SearchShortcut?
+    @State private var activeAction: QuickAction?
 
     @State private var selectedMedicine: Medicine?
     @State private var selectedMedicineEntry: MedicinePackage?
@@ -46,6 +46,8 @@ struct GlobalSearchView: View {
     @State private var catalogTherapyEditorState: CatalogTherapyEditorState?
     @State private var catalogMedicines: [CatalogSelection] = []
     @State private var inlineFeedback: CommandFeedback?
+    @State private var pharmacyResults: [PharmacyResult] = []
+    @State private var pharmacySearchTask: Task<Void, Never>?
 
     @AppStorage("search.recent.items") private var recentItemsRaw: String = ""
 
@@ -69,24 +71,18 @@ struct GlobalSearchView: View {
         }
     }
 
-    private enum SearchShortcut: String, CaseIterable, Identifiable {
+    private enum QuickAction: Hashable, Identifiable {
         case lowStock
-        case expiring
-        case nextDoses
-        case pharmacy
-        case doctor
-        case recent
+        case today
+        case person(NSManagedObjectID)
+        case condition(String)
 
-        var id: String { rawValue }
-
-        var title: String {
+        var id: String {
             switch self {
-            case .lowStock: return "Scorte basse"
-            case .expiring: return "In scadenza"
-            case .nextDoses: return "Prossime dosi"
-            case .pharmacy: return "Farmacia"
-            case .doctor: return "Dottore"
-            case .recent: return "Recenti"
+            case .lowStock: return "lowStock"
+            case .today: return "today"
+            case .person(let oid): return "person-\(oid)"
+            case .condition(let c): return "condition-\(c)"
             }
         }
     }
@@ -180,6 +176,23 @@ struct GlobalSearchView: View {
         var id: NSManagedObjectID { medicine.objectID }
     }
 
+    private struct PharmacyResult: Identifiable {
+        let id = UUID()
+        let mapItem: MKMapItem
+        var name: String { mapItem.name ?? "Farmacia" }
+        var address: String? {
+            let pm = mapItem.placemark
+            let text = [pm.thoroughfare, pm.subThoroughfare, pm.locality]
+                .compactMap { $0 }
+                .joined(separator: " ")
+            return text.isEmpty ? nil : text
+        }
+        var phone: String? {
+            guard let p = mapItem.phoneNumber, !p.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return p
+        }
+    }
+
     private var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -209,14 +222,45 @@ struct GlobalSearchView: View {
     }
 
     private var topRecentItems: [RecentItem] {
-        Array(recentItems.prefix(maxRecentItems))
+        Array(
+            recentItems
+                .filter { item in
+                    item.kind == .medicine || item.kind == .medicineEntry
+                }
+                .prefix(maxRecentItems)
+        )
     }
 
-    private var lowStockMedicines: [Medicine] {
-        medicines
-            .filter { medicine in
-                medicine.isInEsaurimento(option: option!, recurrenceManager: recurrenceManager)
-            }
+    private func queryHasResults(_ text: String) -> Bool {
+        let q = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return false }
+        if medicineEntries.contains(where: {
+            ($0.medicine.nome).localizedCaseInsensitiveContains(q)
+            || ($0.medicine.principio_attivo).localizedCaseInsensitiveContains(q)
+        }) { return true }
+        if therapies.contains(where: {
+            (therapyMedicine($0)?.nome ?? "").localizedCaseInsensitiveContains(q)
+            || (therapyMedicine($0)?.principio_attivo ?? "").localizedCaseInsensitiveContains(q)
+        }) { return true }
+        if doctors.contains(where: {
+            ($0.nome ?? "").localizedCaseInsensitiveContains(q)
+            || ($0.cognome ?? "").localizedCaseInsensitiveContains(q)
+        }) { return true }
+        if persons.contains(where: {
+            ($0.nome ?? "").localizedCaseInsensitiveContains(q)
+            || ($0.cognome ?? "").localizedCaseInsensitiveContains(q)
+        }) { return true }
+        return false
+    }
+
+    private var lowStockOrExpiringMedicines: [Medicine] {
+        let lowStock = Set(
+            medicines.filter { $0.isInEsaurimento(option: option!, recurrenceManager: recurrenceManager) }
+        )
+        let expiring = Set(
+            medicines.filter { $0.deadlineStatus == .expiringSoon || $0.deadlineStatus == .expired }
+        )
+        return lowStock.union(expiring)
             .sorted { lhs, rhs in
                 let leftDays = stockCoverageDays(for: lhs) ?? Int.max
                 let rightDays = stockCoverageDays(for: rhs) ?? Int.max
@@ -227,19 +271,17 @@ struct GlobalSearchView: View {
             }
     }
 
-    private var expiringMedicines: [Medicine] {
-        medicines
-            .filter { medicine in
-                medicine.deadlineStatus == .expiringSoon || medicine.deadlineStatus == .expired
+    private var todayDoseEntries: [NextDoseEntry] {
+        let now = Date()
+        let calendar = Calendar.current
+        return medicines.compactMap { medicine in
+            guard let next = medicine.nextIntakeDate(from: now, recurrenceManager: recurrenceManager),
+                  calendar.isDateInToday(next) else {
+                return nil
             }
-            .sorted { lhs, rhs in
-                let leftDays = daysUntilDeadline(for: lhs) ?? Int.max
-                let rightDays = daysUntilDeadline(for: rhs) ?? Int.max
-                if leftDays == rightDays {
-                    return lhs.nome.localizedCaseInsensitiveCompare(rhs.nome) == .orderedAscending
-                }
-                return leftDays < rightDays
-            }
+            return NextDoseEntry(medicine: medicine, nextDose: next)
+        }
+        .sorted { $0.nextDose < $1.nextDose }
     }
 
     private var nextDoseEntries: [NextDoseEntry] {
@@ -251,6 +293,103 @@ struct GlobalSearchView: View {
             return NextDoseEntry(medicine: medicine, nextDose: next)
         }
         .sorted { $0.nextDose < $1.nextDose }
+    }
+
+    private var allConditions: [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for person in persons {
+            for condition in ConditionListFormatter.parsed(from: person.condizione) {
+                let key = condition.lowercased()
+                if !seen.contains(key) {
+                    seen.insert(key)
+                    result.append(condition)
+                }
+            }
+        }
+        return result
+    }
+
+    private func medicinesForPerson(_ person: Person) -> [Medicine] {
+        guard let therapySet = person.therapies else { return [] }
+        var seen = Set<NSManagedObjectID>()
+        var result: [Medicine] = []
+        for therapy in therapySet {
+            let medicine = therapy.medicine
+            if !seen.contains(medicine.objectID) {
+                seen.insert(medicine.objectID)
+                result.append(medicine)
+            }
+        }
+        return result.sorted { $0.nome.localizedCaseInsensitiveCompare($1.nome) == .orderedAscending }
+    }
+
+    private func medicinesForCondition(_ condition: String) -> [Medicine] {
+        let key = condition.lowercased()
+        var seen = Set<NSManagedObjectID>()
+        var result: [Medicine] = []
+        for therapy in therapies {
+            let conditions = ConditionListFormatter.parsed(from: therapy.condizione)
+            if conditions.contains(where: { $0.lowercased() == key }) {
+                let medicine = therapy.medicine
+                if !seen.contains(medicine.objectID) {
+                    seen.insert(medicine.objectID)
+                    result.append(medicine)
+                }
+            }
+        }
+        // Also check person conditions
+        for person in persons {
+            let personConditions = ConditionListFormatter.parsed(from: person.condizione)
+            if personConditions.contains(where: { $0.lowercased() == key }) {
+                for medicine in medicinesForPerson(person) {
+                    if !seen.contains(medicine.objectID) {
+                        seen.insert(medicine.objectID)
+                        result.append(medicine)
+                    }
+                }
+            }
+        }
+        return result.sorted { $0.nome.localizedCaseInsensitiveCompare($1.nome) == .orderedAscending }
+    }
+
+    private var availableQuickActions: [QuickAction] {
+        var actions: [QuickAction] = []
+        actions.append(.lowStock)
+        if !todayDoseEntries.isEmpty {
+            actions.append(.today)
+        }
+        if persons.count > 1 {
+            for person in persons {
+                actions.append(.person(person.objectID))
+            }
+        }
+        for condition in allConditions {
+            actions.append(.condition(condition))
+        }
+        return actions
+    }
+
+    private func quickActionTitle(_ action: QuickAction) -> String {
+        switch action {
+        case .lowStock: return "Scorte basse"
+        case .today: return "Oggi"
+        case .person(let oid):
+            if let person = try? managedObjectContext.existingObject(with: oid) as? Person {
+                return personDisplayName(for: person)
+            }
+            return "Persona"
+        case .condition(let c): return c
+        }
+    }
+
+    private func quickActionCount(_ action: QuickAction) -> Int {
+        switch action {
+        case .lowStock: return lowStockOrExpiringMedicines.count
+        case .today: return todayDoseEntries.count
+        case .person(let oid): return personMedicinesForObjectID(oid).count
+        case .condition(let c): return medicinesForCondition(c).count
+        }
     }
 
     private var watchEntries: [WatchEntry] {
@@ -413,6 +552,7 @@ struct GlobalSearchView: View {
             || !filteredTherapies.isEmpty
             || !filteredDoctors.isEmpty
             || !filteredPersons.isEmpty
+            || !pharmacyResults.isEmpty
     }
 
     private var medicinesInCabinetIdentityKeys: Set<String> {
@@ -452,25 +592,58 @@ struct GlobalSearchView: View {
 
     var body: some View {
         List {
-            headerSection
-
             if trimmedQuery.isEmpty {
-                shortcutSection
-
-                if let activeShortcut {
-                    shortcutResultsSection(for: activeShortcut)
+                if let activeAction {
+                    shortcutResultsSection(for: activeAction)
                 } else {
-                    focusSuggestionsSections
-                    watchSection
-                    utilitySection
                     recentSection
                 }
             } else {
-                scopeSection
                 searchResultsSections
             }
         }
         .listStyle(.plain)
+        .overlay(alignment: .bottomTrailing) {
+            if trimmedQuery.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(Array(availableQuickActions.enumerated()), id: \.element.id) { index, action in
+                        let count = quickActionCount(action)
+                        Button {
+                            handleActionTap(action)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(quickActionTitle(action))
+                                    .font(.system(size: 17, weight: .regular))
+                                if count > 0 {
+                                    Text("\(count)")
+                                        .font(.system(size: 15, weight: .regular))
+                                        .foregroundStyle(activeAction == action ? Color.white.opacity(0.85) : Color.secondary)
+                                }
+                            }
+                            .foregroundStyle(activeAction == action ? Color.white : Color.primary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(activeAction == action ? Color.accentColor : Color.white)
+                                    .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                        .animation(
+                            .spring(response: 0.45, dampingFraction: 0.65, blendDuration: 0)
+                                .delay(Double(index) * 0.06),
+                            value: trimmedQuery.isEmpty
+                        )
+                    }
+                }
+                .padding(.trailing, 16)
+                .padding(.bottom, 16)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .animation(.spring(response: 0.45, dampingFraction: 0.65, blendDuration: 0), value: trimmedQuery.isEmpty)
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .searchable(
             text: $query,
@@ -498,7 +671,7 @@ struct GlobalSearchView: View {
         }
         .onChange(of: query) { value in
             if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                activeShortcut = nil
+                activeAction = nil
             }
         }
         .sheet(isPresented: Binding(
@@ -600,33 +773,6 @@ struct GlobalSearchView: View {
             Text(scopeFooterText)
                 .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(.secondary)
-        }
-        .listRowSeparator(.hidden)
-    }
-
-    private var shortcutSection: some View {
-        Section {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(SearchShortcut.allCases) { shortcut in
-                        Button {
-                            handleShortcutTap(shortcut)
-                        } label: {
-                            Text(shortcut.title)
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundStyle(activeShortcut == shortcut ? Color.white : Color.primary)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(
-                                    Capsule(style: .continuous)
-                                        .fill(activeShortcut == shortcut ? Color.accentColor : Color.secondary.opacity(0.16))
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.vertical, 2)
-            }
         }
         .listRowSeparator(.hidden)
     }
@@ -760,7 +906,7 @@ struct GlobalSearchView: View {
     @ViewBuilder
     private var focusSuggestionsSections: some View {
         Section {
-            if suggestedActiveTherapies.isEmpty && suggestedTopMedicines.isEmpty && recentItems.isEmpty {
+            if suggestedActiveTherapies.isEmpty && suggestedTopMedicines.isEmpty && recentItems.filter({ $0.kind == .medicine || $0.kind == .medicineEntry }).isEmpty {
                 emptyLine("Nessun suggerimento disponibile")
             } else {
                 ForEach(suggestedActiveTherapies) { entry in
@@ -795,7 +941,7 @@ struct GlobalSearchView: View {
                     .buttonStyle(.plain)
                 }
 
-                ForEach(Array(recentItems.prefix(3))) { item in
+                ForEach(Array(recentItems.filter { $0.kind == .medicine || $0.kind == .medicineEntry }.prefix(3))) { item in
                     Button {
                         openRecent(item)
                     } label: {
@@ -818,9 +964,10 @@ struct GlobalSearchView: View {
         }
 
         Section {
-            quickActionRow(title: "Scorte basse") { applyQuickAction(.lowStock) }
-            quickActionRow(title: "In scadenza") { applyQuickAction(.expiring) }
-            quickActionRow(title: "Prossime dosi") { applyQuickAction(.nextDoses) }
+            quickActionRow(title: "Scorte basse") { handleActionTap(.lowStock) }
+            if !todayDoseEntries.isEmpty {
+                quickActionRow(title: "Oggi") { handleActionTap(.today) }
+            }
         } header: {
             sectionHeader("Azioni rapide")
         }
@@ -843,56 +990,11 @@ struct GlobalSearchView: View {
             }
         }
 
-        if !filteredTherapies.isEmpty {
-            Section {
-                ForEach(filteredTherapies) { therapy in
-                    Button {
-                        openTherapy(therapy)
-                    } label: {
-                        therapyRow(therapy)
-                    }
-                    .buttonStyle(.plain)
-                }
-            } header: {
-                sectionHeader("Terapie")
-            }
-        }
-
-        if !filteredDoctors.isEmpty {
-            Section {
-                ForEach(filteredDoctors) { doctor in
-                    Button {
-                        openDoctor(doctor)
-                    } label: {
-                        doctorRow(doctor)
-                    }
-                    .buttonStyle(.plain)
-                }
-            } header: {
-                sectionHeader("Dottori")
-            }
-        }
-
-        if !filteredPersons.isEmpty {
-            Section {
-                ForEach(filteredPersons) { person in
-                    Button {
-                        openPerson(person)
-                    } label: {
-                        personRow(person)
-                    }
-                    .buttonStyle(.plain)
-                }
-            } header: {
-                sectionHeader("Persone")
-            }
-        }
-
-        if !hasTextSearchResults {
+        if filteredMedicineEntries.isEmpty {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    emptyLine("Nessun risultato per \"\(trimmedQuery)\"")
-                    Text(emptySearchMessage)
+                    emptyLine("Nessun farmaco trovato per \"\(trimmedQuery)\"")
+                    Text("La ricerca include solo farmaci presenti nell'armadietto. Per aggiungerne uno nuovo usa il + nella schermata Armadietto.")
                         .font(.system(size: 13, weight: .regular))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -929,22 +1031,18 @@ struct GlobalSearchView: View {
     }
 
     @ViewBuilder
-    private func shortcutResultsSection(for shortcut: SearchShortcut) -> some View {
-        switch shortcut {
+    private func shortcutResultsSection(for action: QuickAction) -> some View {
+        switch action {
         case .lowStock:
             Section {
-                if lowStockMedicines.isEmpty {
-                    emptyLine("Nessun farmaco in scorte basse")
+                if lowStockOrExpiringMedicines.isEmpty {
+                    emptyLine("Nessun farmaco con scorte basse o in scadenza")
                 } else {
-                    ForEach(lowStockMedicines) { medicine in
+                    ForEach(lowStockOrExpiringMedicines) { medicine in
                         Button {
                             openMedicine(medicine)
                         } label: {
-                            medicineStatusRow(
-                                medicine: medicine,
-                                badge: "Scorte basse",
-                                detail: stockCoverageDays(for: medicine).map { "\($0) giorni" } ?? "Da verificare"
-                            )
+                            fullMedicineRow(for: medicine)
                         }
                         .buttonStyle(.plain)
                     }
@@ -953,57 +1051,77 @@ struct GlobalSearchView: View {
                 sectionHeader("Scorte basse")
             }
 
-        case .expiring:
+        case .today:
             Section {
-                if expiringMedicines.isEmpty {
-                    emptyLine("Nessun farmaco in scadenza")
+                if todayDoseEntries.isEmpty {
+                    emptyLine("Nessuna dose per oggi")
                 } else {
-                    ForEach(expiringMedicines) { medicine in
-                        Button {
-                            openMedicine(medicine)
-                        } label: {
-                            let days = daysUntilDeadline(for: medicine) ?? Int.max
-                            medicineStatusRow(
-                                medicine: medicine,
-                                badge: "In scadenza",
-                                detail: days < 0 ? "Scaduto" : "\(days) giorni"
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            } header: {
-                sectionHeader("In scadenza")
-            }
-
-        case .nextDoses:
-            Section {
-                if nextDoseEntries.isEmpty {
-                    emptyLine("Nessuna prossima dose")
-                } else {
-                    ForEach(nextDoseEntries.prefix(10)) { entry in
+                    ForEach(todayDoseEntries) { entry in
                         Button {
                             openMedicine(entry.medicine)
                         } label: {
-                            medicineStatusRow(
-                                medicine: entry.medicine,
-                                badge: Calendar.current.isDateInToday(entry.nextDose) ? "Oggi" : "Prossima",
-                                detail: doseDateTimeFormatter.string(from: entry.nextDose)
-                            )
+                            fullMedicineRow(for: entry.medicine)
                         }
                         .buttonStyle(.plain)
                     }
                 }
             } header: {
-                sectionHeader("Prossime dosi")
+                sectionHeader("Oggi")
             }
 
-        case .recent:
-            recentSection
+        case .person(let oid):
+            let personMedicines = personMedicinesForObjectID(oid)
+            Section {
+                if personMedicines.isEmpty {
+                    emptyLine("Nessun farmaco per questa persona")
+                } else {
+                    ForEach(personMedicines) { medicine in
+                        Button {
+                            openMedicine(medicine)
+                        } label: {
+                            fullMedicineRow(for: medicine)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            } header: {
+                sectionHeader(quickActionTitle(action))
+            }
 
-        case .pharmacy, .doctor:
-            EmptyView()
+        case .condition(let condition):
+            let conditionMedicines = medicinesForCondition(condition)
+            Section {
+                if conditionMedicines.isEmpty {
+                    emptyLine("Nessun farmaco per questa condizione")
+                } else {
+                    ForEach(conditionMedicines) { medicine in
+                        Button {
+                            openMedicine(medicine)
+                        } label: {
+                            fullMedicineRow(for: medicine)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            } header: {
+                sectionHeader(condition)
+            }
         }
+    }
+
+    private func personMedicinesForObjectID(_ oid: NSManagedObjectID) -> [Medicine] {
+        guard let person = try? managedObjectContext.existingObject(with: oid) as? Person else { return [] }
+        return medicinesForPerson(person)
+    }
+
+    private func fullMedicineRow(for medicine: Medicine) -> some View {
+        let entry = medicine.medicinePackages?.first
+        return MedicineRowView(
+            medicine: medicine,
+            medicinePackage: entry,
+            subtitleMode: .activeTherapies,
+            snapshot: entry.flatMap { medicineRowSnapshots[$0.objectID]?.presentation }
+        )
     }
 
     private func sectionHeader(_ title: String) -> some View {
@@ -1039,18 +1157,194 @@ struct GlobalSearchView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    @ViewBuilder
     private func recentRow(_ item: RecentItem) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(item.title)
-                .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(.primary)
-            if let subtitle = item.subtitle, !subtitle.isEmpty {
-                Text(subtitle)
-                    .font(.system(size: 14, weight: .regular))
+        switch item.kind {
+        case .medicine:
+            if let medicine: Medicine = object(from: item.objectURI) {
+                fullMedicineRow(for: medicine)
+            } else {
+                recentFallbackRow(item)
+            }
+
+        case .medicineEntry:
+            if let entry: MedicinePackage = object(from: item.objectURI) {
+                fullMedicineRow(for: entry.medicine)
+            } else {
+                recentFallbackRow(item)
+            }
+
+        case .therapy:
+            if let therapy: Therapy = object(from: item.objectURI) {
+                recentTherapyRow(therapy)
+            } else {
+                recentFallbackRow(item)
+            }
+
+        case .doctor:
+            if let doctor: Doctor = object(from: item.objectURI) {
+                recentDoctorRow(doctor)
+            } else {
+                recentFallbackRow(item)
+            }
+
+        case .person:
+            if let person: Person = object(from: item.objectURI) {
+                recentPersonRow(person)
+            } else {
+                recentFallbackRow(item)
+            }
+
+        case .query:
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.title)
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(.primary)
+                    if let subtitle = item.subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func recentFallbackRow(_ item: RecentItem) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: recentKindIcon(item.kind))
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.title)
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(.primary)
+                if let subtitle = item.subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func recentMedicineRow(_ medicine: Medicine) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "pill")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(camelCase(medicine.nome))
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.primary)
+                HStack(spacing: 6) {
+                    if !medicine.principio_attivo.isEmpty {
+                        Text(medicine.principio_attivo)
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundStyle(.secondary)
+                    }
+                    if let days = stockCoverageDays(for: medicine) {
+                        Text("· \(days) giorni di scorta")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    private func recentTherapyRow(_ therapy: Therapy) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "calendar.badge.clock")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(therapyMedicineName(therapy))
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.primary)
+                let nextDose = recurrenceManager.nextOccurrence(
+                    rule: recurrenceManager.parseRecurrenceString(therapy.rrule ?? ""),
+                    startDate: therapy.start_date ?? Date(),
+                    after: Date(),
+                    doses: therapy.doses as NSSet?
+                )
+                if let nextDose {
+                    Text("Prossima dose \(doseDateTimeFormatter.string(from: nextDose))")
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Terapia")
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    private func recentDoctorRow(_ doctor: Doctor) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "stethoscope")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(doctorDisplayName(doctor))
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Text(doctorPrimaryLineFor(doctor))
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    private func recentPersonRow(_ person: Person) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "person")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(personDisplayName(for: person))
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.primary)
+                if let cf = person.codice_fiscale, !cf.isEmpty {
+                    Text(cf)
+                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    private func recentKindIcon(_ kind: RecentKind) -> String {
+        switch kind {
+        case .medicine, .medicineEntry: return "pill"
+        case .therapy: return "calendar.badge.clock"
+        case .doctor: return "stethoscope"
+        case .person: return "person"
+        case .query: return "magnifyingglass"
+        }
     }
 
     private func medicineRow(_ entry: MedicinePackage) -> some View {
@@ -1118,6 +1412,34 @@ struct GlobalSearchView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func pharmacyRow(_ pharmacy: PharmacyResult) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "cross.case")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.green)
+                .frame(width: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(pharmacy.name)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.primary)
+                if let address = pharmacy.address {
+                    Text(address)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(.secondary)
+                }
+                if let phone = pharmacy.phone {
+                    Text(phone)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Image(systemName: "map")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+        }
+    }
+
     private func medicineStatusRow(medicine: Medicine, badge: String, detail: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(camelCase(medicine.nome))
@@ -1163,31 +1485,13 @@ struct GlobalSearchView: View {
         .buttonStyle(.plain)
     }
 
-    private func handleShortcutTap(_ shortcut: SearchShortcut) {
-        switch shortcut {
-        case .pharmacy:
-            activeShortcut = nil
-            query = ""
-            openPharmacyDirections()
-
-        case .doctor:
-            activeShortcut = nil
-            query = ""
-            openPreferredDoctor()
-
-        default:
-            query = ""
-            if activeShortcut == shortcut {
-                activeShortcut = nil
-            } else {
-                activeShortcut = shortcut
-            }
-        }
-    }
-
-    private func applyQuickAction(_ shortcut: SearchShortcut) {
+    private func handleActionTap(_ action: QuickAction) {
         query = ""
-        activeShortcut = shortcut
+        if activeAction == action {
+            activeAction = nil
+        } else {
+            activeAction = action
+        }
     }
 
     private func openMedicine(
@@ -1968,6 +2272,7 @@ struct GlobalSearchView: View {
     }
 
     private func addRecent(kind: RecentKind, objectID: NSManagedObjectID?, title: String, subtitle: String?) {
+        guard kind == .medicine || kind == .medicineEntry else { return }
         let objectURI = objectID?.uriRepresentation().absoluteString
         let item = RecentItem(
             id: UUID(),
@@ -2004,6 +2309,43 @@ struct GlobalSearchView: View {
         recentItemsRaw = raw
     }
 
+    private func searchNearbyPharmacies(query: String) {
+        pharmacySearchTask?.cancel()
+        guard !query.isEmpty, selectedScope == .all else {
+            pharmacyResults = []
+            return
+        }
+        pharmacySearchTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = "farmacia \(query)"
+            request.resultTypes = .pointOfInterest
+            request.pointOfInterestFilter = MKPointOfInterestFilter(including: [.pharmacy])
+            if let location = locationVM.pinItem?.coordinate ?? CLLocationManager().location?.coordinate {
+                request.region = MKCoordinateRegion(
+                    center: location,
+                    span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
+                )
+            }
+            let search = MKLocalSearch(request: request)
+            do {
+                let response = try await search.start()
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    pharmacyResults = response.mapItems
+                        .prefix(5)
+                        .map { PharmacyResult(mapItem: $0) }
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    pharmacyResults = []
+                }
+            }
+        }
+    }
+
     private func openRecent(_ item: RecentItem) {
         switch item.kind {
         case .medicine:
@@ -2028,7 +2370,7 @@ struct GlobalSearchView: View {
 
         case .query:
             query = item.title
-            activeShortcut = nil
+            activeAction = nil
         }
     }
 
