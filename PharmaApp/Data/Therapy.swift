@@ -31,7 +31,9 @@ public class Therapy: NSManagedObject, Identifiable {
     @NSManaged public var importance: String?
     @NSManaged public var logs: Log?
     @NSManaged public var manual_intake_registration: Bool
+    @NSManaged public var notification_level: String?
     @NSManaged public var notifications_silenced: Bool
+    @NSManaged public var snooze_minutes: Int32
     @NSManaged public var clinicalRules: Data?
     @NSManaged public var medicinePackage: MedicinePackage?
 
@@ -102,6 +104,18 @@ extension Therapy {
 }
 
 extension Therapy {
+    var isPharmacoCritical: Bool {
+        notification_level == TherapyNotificationLevel.alarm.rawValue
+    }
+
+    var effectiveNotificationLevel: TherapyNotificationLevel {
+        TherapyNotificationPreferences.normalizedLevel(rawValue: notification_level)
+    }
+
+    var effectiveSnoozeMinutes: Int {
+        TherapyNotificationPreferences.normalizedSnoozeMinutes(rawValue: Int(snooze_minutes))
+    }
+
     var automaticIntakeEnabled: Bool {
         !manual_intake_registration
     }

@@ -251,7 +251,9 @@
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="importance" optional="YES" attributeType="String"/>
         <attribute name="manual_intake_registration" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="notification_level" optional="YES" attributeType="String" defaultValueString="normal"/>
         <attribute name="notifications_silenced" optional="YES" attributeType="Boolean" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="snooze_minutes" optional="YES" attributeType="Integer 32" defaultValueString="10" usesScalarValueType="YES"/>
         <attribute name="clinicalRules" optional="YES" attributeType="Transformable" valueTransformerName="NSSecureUnarchiveFromDataTransformerName"/>
         <attribute name="rrule" optional="YES" attributeType="String"/>
         <attribute name="source_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>

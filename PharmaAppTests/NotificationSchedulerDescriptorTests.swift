@@ -47,7 +47,9 @@ struct NotificationSchedulerDescriptorTests {
             kind: .stockLow,
             origin: .immediate,
             userInfo: ["type": NotificationPlanKind.stockLow.rawValue, "medicineId": UUID().uuidString],
-            isSilenced: false
+            isSilenced: false,
+            notificationLevel: .normal,
+            snoozeMinutes: 10
         )
         let firstTherapy = makeTherapyItem(
             id: "therapy-first",
@@ -77,7 +79,8 @@ struct NotificationSchedulerDescriptorTests {
         let item = makeTherapyItem(
             id: "therapy-normal",
             date: now.addingTimeInterval(300),
-            medicineId: UUID().uuidString
+            medicineId: UUID().uuidString,
+            notificationLevel: .normal
         )
 
         let descriptors = NotificationScheduler.buildRequestDescriptors(
@@ -93,7 +96,13 @@ struct NotificationSchedulerDescriptorTests {
         #expect(descriptors[0].userInfo[TherapyAlarmNotificationConstants.alarmSeriesIdKey] == nil)
     }
 
-    private func makeTherapyItem(id: String, date: Date, medicineId: String) -> NotificationPlanItem {
+    private func makeTherapyItem(
+        id: String,
+        date: Date,
+        medicineId: String,
+        notificationLevel: TherapyNotificationLevel = .alarm,
+        snoozeMinutes: Int = 10
+    ) -> NotificationPlanItem {
         NotificationPlanItem(
             id: id,
             date: date,
@@ -106,7 +115,9 @@ struct NotificationSchedulerDescriptorTests {
                 "therapyId": "therapy-id",
                 "medicineId": medicineId
             ],
-            isSilenced: false
+            isSilenced: false,
+            notificationLevel: notificationLevel,
+            snoozeMinutes: snoozeMinutes
         )
     }
 }

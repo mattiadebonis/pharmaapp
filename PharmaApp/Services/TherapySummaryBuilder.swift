@@ -4,6 +4,7 @@ import CoreData
 enum TherapyLineStatusIcon: String, Hashable {
     case automaticIntake = "sparkle"
     case silentNotifications = "bell.slash.fill"
+    case pharmacoCritical = "exclamationmark.bell.fill"
 
     var accessibilityLabel: String {
         switch self {
@@ -11,6 +12,8 @@ enum TherapyLineStatusIcon: String, Hashable {
             return "Assunzioni automatiche"
         case .silentNotifications:
             return "Notifiche in silenzioso"
+        case .pharmacoCritical:
+            return "Notifica farmacocritica"
         }
     }
 }
@@ -24,6 +27,7 @@ struct TherapyLine: Hashable {
 
 struct TherapySummaryBuilder {
     private let recurrenceManager: RecurrenceManager
+    private let hasMultiplePersons: Bool
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
@@ -31,6 +35,13 @@ struct TherapySummaryBuilder {
     }()
     init(recurrenceManager: RecurrenceManager) {
         self.recurrenceManager = recurrenceManager
+        if let context = recurrenceManager.context {
+            let request = Person.extractPersons(includeAccount: true)
+            let count = (try? context.count(for: request)) ?? 1
+            self.hasMultiplePersons = count > 1
+        } else {
+            self.hasMultiplePersons = false
+        }
     }
 
     /// Summary style matching the Therapy list in MedicineDetailView.
@@ -56,6 +67,9 @@ struct TherapySummaryBuilder {
         if therapy.notifications_silenced {
             icons.append(.silentNotifications)
         }
+        if therapy.isPharmacoCritical {
+            icons.append(.pharmacoCritical)
+        }
         return icons
     }
 
@@ -67,7 +81,7 @@ struct TherapySummaryBuilder {
         if includeTimes, let timesText = timesDescriptionText(for: therapy) {
             sentence += " \(timesText)"
         }
-        if let personName, !personName.isEmpty {
+        if hasMultiplePersons, let personName, !personName.isEmpty {
             sentence += " per \(personName)"
         }
         if includeCondition, let conditionText = treatmentConditionText(for: therapy) {

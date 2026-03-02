@@ -69,15 +69,15 @@ struct MedicineSummaryBuilder {
         let line2: String
         if let stockDays = stockDays(for: medicine, therapies: therapies, recurrenceManager: recurrenceManager) {
             if stockDays <= 0 {
-                line2 = "Autonomia zero giorni"
+                line2 = "Zero giorni di autonomia"
             } else {
                 let daysText = formatCount(stockDays, singular: "giorno", plural: "giorni")
                 let totalLeftover = Int(therapies.reduce(0.0) { $0 + Double($1.leftover()) })
                 if totalLeftover > 0 {
                     let unitLabel = remainingUnitLabel(for: medicine, therapies: therapies, count: totalLeftover)
-                    line2 = "Autonomia \(daysText) · \(totalLeftover) \(unitLabel)"
+                    line2 = "\(daysText) di autonomia\u{00B7}\(totalLeftover) \(unitLabel)"
                 } else {
-                    line2 = "Autonomia \(daysText)"
+                    line2 = "\(daysText) di autonomia"
                 }
             }
         } else if therapies.isEmpty, let remainingUnits = stockUnitsFallback ?? medicine.remainingUnitsWithoutTherapy() {

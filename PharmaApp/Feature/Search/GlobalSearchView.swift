@@ -355,17 +355,23 @@ struct GlobalSearchView: View {
 
     private var availableQuickActions: [QuickAction] {
         var actions: [QuickAction] = []
-        actions.append(.lowStock)
+        if !lowStockOrExpiringMedicines.isEmpty {
+            actions.append(.lowStock)
+        }
         if !todayDoseEntries.isEmpty {
             actions.append(.today)
         }
         if persons.count > 1 {
             for person in persons {
-                actions.append(.person(person.objectID))
+                if !personMedicinesForObjectID(person.objectID).isEmpty {
+                    actions.append(.person(person.objectID))
+                }
             }
         }
         for condition in allConditions {
-            actions.append(.condition(condition))
+            if !medicinesForCondition(condition).isEmpty {
+                actions.append(.condition(condition))
+            }
         }
         return actions
     }
@@ -605,7 +611,7 @@ struct GlobalSearchView: View {
         .listStyle(.plain)
         .overlay(alignment: .bottomTrailing) {
             if trimmedQuery.isEmpty {
-                VStack(spacing: 8) {
+                VStack(alignment: .trailing, spacing: 8) {
                     ForEach(Array(availableQuickActions.enumerated()), id: \.element.id) { index, action in
                         let count = quickActionCount(action)
                         Button {
@@ -661,14 +667,6 @@ struct GlobalSearchView: View {
                 shouldAutoFocusSearch = false
             }
         )
-        .onAppear {
-            shouldAutoFocusSearch = true
-        }
-        .onChange(of: appRouter.selectedTab) { tab in
-            if tab == .search {
-                shouldAutoFocusSearch = true
-            }
-        }
         .onChange(of: query) { value in
             if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 activeAction = nil
@@ -963,13 +961,17 @@ struct GlobalSearchView: View {
             sectionHeader("Suggerimenti")
         }
 
-        Section {
-            quickActionRow(title: "Scorte basse") { handleActionTap(.lowStock) }
-            if !todayDoseEntries.isEmpty {
-                quickActionRow(title: "Oggi") { handleActionTap(.today) }
+        if !availableQuickActions.isEmpty {
+            Section {
+                if !lowStockOrExpiringMedicines.isEmpty {
+                    quickActionRow(title: "Scorte basse") { handleActionTap(.lowStock) }
+                }
+                if !todayDoseEntries.isEmpty {
+                    quickActionRow(title: "Oggi") { handleActionTap(.today) }
+                }
+            } header: {
+                sectionHeader("Filtri")
             }
-        } header: {
-            sectionHeader("Azioni rapide")
         }
     }
 

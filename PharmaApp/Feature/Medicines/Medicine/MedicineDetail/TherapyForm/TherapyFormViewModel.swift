@@ -73,6 +73,8 @@ class TherapyFormViewModel: ObservableObject {
         condition: String?,
         manualIntake: Bool,
         notificationsSilenced: Bool,
+        notificationLevel: TherapyNotificationLevel = .normal,
+        snoozeMinutes: Int = 10,
         clinicalRules: ClinicalRules?
     ) {
         // Creazione di una nuova Therapy senza effettuare il fetch di una già esistente
@@ -90,6 +92,8 @@ class TherapyFormViewModel: ObservableObject {
         therapy.condizione = normalizedCondition(from: condition)
         therapy.manual_intake_registration = manualIntake
         therapy.notifications_silenced = notificationsSilenced
+        therapy.notification_level = notificationLevel.rawValue
+        therapy.snooze_minutes = Int32(snoozeMinutes)
         therapy.clinicalRulesValue = clinicalRules
 
         var rule = RecurrenceRule(freq: freq ?? "DAILY")
@@ -155,6 +159,8 @@ class TherapyFormViewModel: ObservableObject {
         condition: String?,
         manualIntake: Bool,
         notificationsSilenced: Bool,
+        notificationLevel: TherapyNotificationLevel = .normal,
+        snoozeMinutes: Int = 10,
         clinicalRules: ClinicalRules?
     ) {
         therapy.importance = importance
@@ -166,6 +172,8 @@ class TherapyFormViewModel: ObservableObject {
         therapy.condizione = normalizedCondition(from: condition)
         therapy.manual_intake_registration = manualIntake
         therapy.notifications_silenced = notificationsSilenced
+        therapy.notification_level = notificationLevel.rawValue
+        therapy.snooze_minutes = Int32(snoozeMinutes)
         therapy.clinicalRulesValue = clinicalRules
         
         var rule = RecurrenceRule(freq: freq ?? "DAILY")

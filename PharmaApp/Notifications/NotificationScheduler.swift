@@ -131,11 +131,12 @@ final class NotificationScheduler {
         var descriptors: [NotificationScheduleRequestDescriptor] = []
         for item in items {
             let baseDate = item.origin == .immediate ? now.addingTimeInterval(1) : item.date
-            if item.kind == .therapy, preferences.level == .alarm, !item.isSilenced {
+            if item.kind == .therapy, item.notificationLevel == .alarm, !item.isSilenced {
                 let seriesId = UUID().uuidString
                 for index in 0...TherapyNotificationPreferences.alarmRepeatCount {
                     var userInfo = item.userInfo
                     userInfo[TherapyAlarmNotificationConstants.alarmSeriesIdKey] = seriesId
+                    userInfo["snoozeMinutes"] = String(item.snoozeMinutes)
                     descriptors.append(
                         NotificationScheduleRequestDescriptor(
                             identifier: TherapyNotificationPreferences.alarmIdentifier(
@@ -260,7 +261,7 @@ final class NotificationScheduler {
             .first { $0.date > now } ?? therapyItems.first
         guard let fallback = nextItem else { return }
 
-        let fallbackCap = preferences.level == .alarm
+        let fallbackCap = fallback.notificationLevel == .alarm
             ? TherapyNotificationPreferences.alarmRepeatCount + 1
             : 1
         let fallbackDescriptors = Self.buildRequestDescriptors(

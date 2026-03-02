@@ -132,6 +132,8 @@ struct TherapyFormView: View {
     @State private var missedDosePreset: MissedDosePreset = .none
     @State private var automaticIntakeEnabled: Bool
     @State private var notificationsSilenced: Bool = false
+    @State private var isPharmacoCritical: Bool = false
+    @State private var snoozeMinutes: Int = 10
     private let showClinicalRuleControls = false
     
     // Sezione Orari: con pulsante + per aggiungere e - per rimuovere
@@ -304,6 +306,16 @@ struct TherapyFormView: View {
             ) {
                 Toggle("Registra assunzioni automaticamente", isOn: $automaticIntakeEnabled)
                 Toggle("Notifiche in silenzioso", isOn: $notificationsSilenced)
+
+                Toggle("Notifica farmacocritica", isOn: $isPharmacoCritical)
+
+                if isPharmacoCritical {
+                    Picker("Durata rimando", selection: $snoozeMinutes) {
+                        Text("5 min").tag(5)
+                        Text("10 min").tag(10)
+                        Text("15 min").tag(15)
+                    }
+                }
             }
             .listRowBackground(Color(.systemGroupedBackground))
 
@@ -1265,6 +1277,8 @@ extension TherapyFormView {
                 condition: selectedConditionValue,
                 manualIntake: !automaticIntakeEnabled,
                 notificationsSilenced: notificationsSilenced,
+                notificationLevel: isPharmacoCritical ? .alarm : .normal,
+                snoozeMinutes: snoozeMinutes,
                 clinicalRules: clinicalRules
             )
         } else {
@@ -1287,6 +1301,8 @@ extension TherapyFormView {
                 condition: selectedConditionValue,
                 manualIntake: !automaticIntakeEnabled,
                 notificationsSilenced: notificationsSilenced,
+                notificationLevel: isPharmacoCritical ? .alarm : .normal,
+                snoozeMinutes: snoozeMinutes,
                 clinicalRules: clinicalRules
             )
         }
@@ -1321,6 +1337,8 @@ extension TherapyFormView {
         selectedCondition = normalizedCondition(therapy.condizione) ?? defaultCondition(for: therapy.person)
         automaticIntakeEnabled = therapy.automaticIntakeEnabled
         notificationsSilenced = therapy.notifications_silenced
+        isPharmacoCritical = therapy.isPharmacoCritical
+        snoozeMinutes = therapy.effectiveSnoozeMinutes
         startDate = Calendar.current.startOfDay(for: therapy.start_date ?? startDateToday)
         if let rruleString = therapy.rrule, !rruleString.isEmpty {
             let parsedRule = RecurrenceManager(context: context)

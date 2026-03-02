@@ -28,29 +28,48 @@ public struct CabinetSummaryReadModel {
         now: Date = Date()
     ) -> [String] {
         guard let option else {
-            return ["Tutto sotto controllo"]
+            return ["Tutto sotto controllo!"]
         }
 
         let lowStock = medicines.filter { isLowStock($0, option: option) }
+        let depletedStock = lowStock.filter { autonomyDays(for: $0) == 0 }
+        let oneDayStock = lowStock.filter { autonomyDays(for: $0) == 1 }
         let missedSummary = missedDoseSummary(for: medicines, now: now)
+        let todayTherapyNames = medicinesWithTherapyToday(medicines: medicines, now: now)
 
         let stockOk = lowStock.isEmpty
         let therapyOk = missedSummary.medicines.isEmpty
-        if stockOk && therapyOk {
-            return ["Tutto sotto controllo"]
+        if stockOk && therapyOk && todayTherapyNames.isEmpty {
+            return ["Tutto sotto controllo!"]
         }
 
         var lines: [String] = []
 
+        if !todayTherapyNames.isEmpty {
+            let names = todayTherapyNames.joined(separator: ", ")
+            if todayTherapyNames.count == 1 {
+                lines.append("Oggi in terapia con \(names)")
+            } else {
+                lines.append("Oggi in terapia con \(names)")
+            }
+        }
+
         if stockOk {
-            lines.append("Scorte a posto")
+            if !todayTherapyNames.isEmpty {
+                lines.append("Scorte a posto")
+            }
+        } else if !depletedStock.isEmpty {
+            let subject = medicineNamesDescription(for: depletedStock)
+            let verb = depletedStock.count == 1 ? "ha" : "hanno"
+            lines.append("\(subject) \(verb) le scorte terminate")
+        } else if !oneDayStock.isEmpty {
+            let subject = medicineNamesDescription(for: oneDayStock)
+            lines.append("A \(subject) manca solo un giorno di autonomia")
         } else {
             lines.append(refillLine(for: lowStock, pharmacy: pharmacy))
         }
 
-        if therapyOk {
-            lines.append("Terapie in regola")
-        } else {
+        if !therapyOk {
             lines.append(missedSummaryLine(for: missedSummary))
         }
 
@@ -216,6 +235,27 @@ public struct CabinetSummaryReadModel {
 
         let head = names.dropLast().joined(separator: ", ")
         return "\(head) e \(names[names.count - 1])"
+    }
+
+    private func medicinesWithTherapyToday(medicines: [MedicineSnapshot], now: Date) -> [String] {
+        let doseSchedule = DoseScheduleReadModel(recurrenceService: recurrenceService, calendar: calendar)
+        var seen = Set<String>()
+        var names: [String] = []
+
+        for medicine in medicines {
+            guard !medicine.therapies.isEmpty else { continue }
+            let hasTherapyToday = medicine.therapies.contains { therapy in
+                !doseSchedule.baseScheduledTimes(on: now, for: therapy).isEmpty
+            }
+            guard hasTherapyToday else { continue }
+            let name = medicine.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+            let key = name.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            guard seen.insert(key).inserted else { continue }
+            names.append(name.localizedCapitalized)
+        }
+
+        return names
     }
 
     private func minuteBucket(for date: Date) -> Int {

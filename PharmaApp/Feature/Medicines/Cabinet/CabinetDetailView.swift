@@ -58,10 +58,10 @@ struct CabinetDetailView: View {
             }
         }
         .sheet(isPresented: Binding(
-            get: { selectedEntry != nil },
+            get: { selectedEntry != nil && !(selectedEntry?.isDeleted ?? true) },
             set: { newValue in if !newValue { selectedEntry = nil } }
         )) {
-            if let entry = selectedEntry {
+            if let entry = selectedEntry, !entry.isDeleted, entry.managedObjectContext != nil {
                 MedicineDetailView(
                     medicine: entry.medicine,
                     package: entry.package,
@@ -118,7 +118,8 @@ struct CabinetDetailView: View {
     }
 
     private func buildRows() -> [DetailRow] {
-        viewModel.sortedEntries(in: cabinet, entries: entries, option: options.first)
+        let valid = entries.filter { !$0.isDeleted && $0.managedObjectContext != nil }
+        return viewModel.sortedEntries(in: cabinet, entries: valid, option: options.first)
             .map { DetailRow(entry: $0) }
     }
     

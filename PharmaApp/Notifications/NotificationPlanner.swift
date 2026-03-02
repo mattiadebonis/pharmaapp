@@ -34,6 +34,8 @@ struct NotificationPlanItem: Equatable {
     let origin: NotificationPlanOrigin
     let userInfo: [String: String]
     let isSilenced: Bool
+    let notificationLevel: TherapyNotificationLevel
+    let snoozeMinutes: Int
 }
 
 struct NotificationPlan {
@@ -175,7 +177,9 @@ struct NotificationPlanner {
                     kind: .therapy,
                     origin: origin,
                     userInfo: userInfo,
-                    isSilenced: therapy.notifications_silenced
+                    isSilenced: therapy.notifications_silenced,
+                    notificationLevel: therapy.effectiveNotificationLevel,
+                    snoozeMinutes: therapy.effectiveSnoozeMinutes
                 )
             )
         }
@@ -219,7 +223,9 @@ struct NotificationPlanner {
                             kind: kind,
                             origin: .immediate,
                             userInfo: userInfo,
-                            isSilenced: false
+                            isSilenced: false,
+                            notificationLevel: .normal,
+                            snoozeMinutes: TherapyNotificationPreferences.defaultSnoozeMinutes
                         )
                     )
                     stockAlertStore.setState(
@@ -252,7 +258,9 @@ struct NotificationPlanner {
                             kind: .stockLow,
                             origin: .scheduled,
                             userInfo: userInfo,
-                            isSilenced: false
+                            isSilenced: false,
+                            notificationLevel: .normal,
+                            snoozeMinutes: TherapyNotificationPreferences.defaultSnoozeMinutes
                         )
                     )
                 }
@@ -274,7 +282,9 @@ struct NotificationPlanner {
                             kind: .stockOut,
                             origin: .scheduled,
                             userInfo: userInfo,
-                            isSilenced: false
+                            isSilenced: false,
+                            notificationLevel: .normal,
+                            snoozeMinutes: TherapyNotificationPreferences.defaultSnoozeMinutes
                         )
                     )
                 }

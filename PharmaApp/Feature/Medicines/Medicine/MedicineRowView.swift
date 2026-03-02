@@ -317,21 +317,32 @@ struct MedicineRowView: View {
     private var subtitleBlock: some View {
         let snapshot = presentationSnapshot
         return VStack(alignment: .leading, spacing: subtitleBlockSpacing) {
-            if !snapshot.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(snapshot.line1)
-                    .font(subtitleFont)
-                    .foregroundColor(snapshot.line1Color)
-                    .lineLimit(1)
-                    .multilineTextAlignment(.leading)
-                    .truncationMode(.tail)
-            }
             if subtitleMode == .activeTherapies {
+                // 1. Terapie
                 therapyLinesView(snapshot.therapyLines, color: snapshot.therapyLineColor)
+                // 2. Scorte
+                if !snapshot.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    stockLineText(snapshot.line1, color: snapshot.line1Color)
+                        .lineLimit(1)
+                        .multilineTextAlignment(.leading)
+                        .truncationMode(.tail)
+                }
             } else {
+                // 1. Prossima dose (terapia)
+                if !snapshot.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(snapshot.line1)
+                        .font(subtitleFont)
+                        .foregroundColor(snapshot.line1Color)
+                        .lineLimit(1)
+                        .multilineTextAlignment(.leading)
+                        .truncationMode(.tail)
+                }
+                // 2. Scorte
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     line2View(for: snapshot.line2, color: snapshot.line2Color)
                 }
             }
+            // 3. Scadenze
             if let indicator = snapshot.deadlineIndicator {
                 Text(indicator.label)
                     .font(subtitleFont)
@@ -344,12 +355,24 @@ struct MedicineRowView: View {
 
     @ViewBuilder
     private func line2View(for line: String, color: Color) -> some View {
-        Text(line)
-            .font(subtitleFont)
-            .foregroundColor(color)
+        stockLineText(line, color: color)
             .lineLimit(subtitleMode == .activeTherapies ? nil : 1)
             .multilineTextAlignment(.leading)
             .truncationMode(.tail)
+    }
+
+    private func stockLineText(_ line: String, color: Color) -> Text {
+        let parts = line.components(separatedBy: "\u{00B7}")
+        if parts.count == 2 {
+            let autonomy = parts[0].trimmingCharacters(in: .whitespaces)
+            let units = parts[1].trimmingCharacters(in: .whitespaces)
+            return Text(autonomy).font(subtitleFont).foregroundColor(color)
+                + Text("  ").font(subtitleFont)
+                + Text(Image(systemName: "pills.fill")).font(.system(size: 12)).foregroundColor(color)
+                + Text("  ").font(subtitleFont)
+                + Text(units).font(subtitleFont).foregroundColor(color)
+        }
+        return Text(line).font(subtitleFont).foregroundColor(color)
     }
 
     private var subtitleColor: Color {

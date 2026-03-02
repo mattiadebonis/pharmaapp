@@ -143,8 +143,6 @@ struct ProfileView: View {
                 }
             }
 
-            // MARK: Settaggi terapia
-            TherapySettingsSectionsView()
         }
         .navigationTitle("Profilo")
         .navigationBarTitleDisplayMode(.inline)

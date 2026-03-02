@@ -47,7 +47,7 @@ struct CabinetView: View {
     @State private var selectedEntry: MedicinePackage?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
     @State private var missedDoseSheet: MissedDoseSheetState?
-    @State private var cachedSummaryLines: [String] = ["Tutto sotto controllo"]
+    @State private var cachedSummaryLines: [String] = ["Tutto sotto controllo!"]
     @State private var cachedShelfState: ShelfViewState = .empty
     @State private var rowSnapshotsByEntryID: [NSManagedObjectID: CabinetViewModel.CabinetRowSnapshot] = [:]
     @State private var syncWorkItem: DispatchWorkItem?
@@ -203,10 +203,10 @@ struct CabinetView: View {
     private var cabinetListWithDetailSheet: some View {
         cabinetListStyled
             .sheet(isPresented: Binding(
-                get: { selectedEntry != nil },
+                get: { selectedEntry != nil && !(selectedEntry?.isDeleted ?? true) },
                 set: { newValue in if !newValue { selectedEntry = nil } }
             )) {
-                if let entry = selectedEntry {
+                if let entry = selectedEntry, !entry.isDeleted, entry.managedObjectContext != nil {
                     MedicineDetailView(
                         medicine: entry.medicine,
                         package: entry.package,
@@ -258,7 +258,7 @@ struct CabinetView: View {
     private var summaryTextView: some View {
         Text(cachedSummaryLines.joined(separator: "\n"))
             .font(.title3.weight(.regular))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.primary)
             .multilineTextAlignment(.leading)
     }
 
@@ -277,6 +277,7 @@ struct CabinetView: View {
     private var uniqueMedicines: [Medicine] {
         var seen = Set<NSManagedObjectID>()
         return medicinePackages.compactMap { entry -> Medicine? in
+            guard !entry.isDeleted, entry.managedObjectContext != nil else { return nil }
             let id = entry.medicine.objectID
             guard seen.insert(id).inserted else { return nil }
             return entry.medicine
@@ -309,7 +310,7 @@ struct CabinetView: View {
                     EdgeInsets(
                         top: 14,
                         leading: Layout.horizontalInset,
-                        bottom: 24,
+                        bottom: 40,
                         trailing: Layout.summaryTrailingInset
                     )
                 )

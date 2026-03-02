@@ -46,9 +46,12 @@ final class NotificationActionHandler {
         guard actionIdentifier == TherapyAlarmNotificationConstants.snoozeActionIdentifier else {
             return
         }
-        let preferences = TherapyNotificationPreferences(option: Option.current(in: context))
+        let snoozeMinutesFromUserInfo = (content.userInfo["snoozeMinutes"] as? String).flatMap(Int.init)
+        let snoozeMinutes = TherapyNotificationPreferences.normalizedSnoozeMinutes(
+            rawValue: snoozeMinutesFromUserInfo ?? TherapyNotificationPreferences.defaultSnoozeMinutes
+        )
         let nextSeriesId = UUID().uuidString
-        let baseDate = now.addingTimeInterval(Double(preferences.snoozeMinutes * 60))
+        let baseDate = now.addingTimeInterval(Double(snoozeMinutes * 60))
         await scheduleSnoozedSeries(
             from: content,
             seriesId: nextSeriesId,
