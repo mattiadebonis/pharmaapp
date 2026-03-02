@@ -1,5 +1,7 @@
 import Foundation
 
+// MARK: - Public Types
+
 public struct PharmacyInfo {
     public let name: String?
     public let isOpen: Bool?
@@ -12,6 +14,42 @@ public struct PharmacyInfo {
     }
 }
 
+public enum CabinetSummaryPriority: Int, Comparable {
+    case missedDose = 1
+    case refillBeforeNextDose = 2
+    case refillWithinToday = 3
+    case refillSoon = 4
+    case nextDoseToday = 5
+    case allUnderControl = 6
+
+    public static func < (lhs: Self, rhs: Self) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+}
+
+public enum CabinetSummaryState {
+    case critical
+    case warning
+    case info
+    case ok
+}
+
+public struct CabinetSummary {
+    public let title: String
+    public let subtitle: String
+    public let state: CabinetSummaryState
+    public let priority: CabinetSummaryPriority
+
+    public init(title: String, subtitle: String, state: CabinetSummaryState, priority: CabinetSummaryPriority) {
+        self.title = title
+        self.subtitle = subtitle
+        self.state = state
+        self.priority = priority
+    }
+}
+
+// MARK: - CabinetSummaryReadModel
+
 public struct CabinetSummaryReadModel {
     private let recurrenceService: RecurrencePort
     private let calendar: Calendar
@@ -21,60 +59,313 @@ public struct CabinetSummaryReadModel {
         self.calendar = calendar
     }
 
+    // MARK: - Centralized Copy
+
+    private enum Copy {
+        static let missedDoseTitle = "Una terapia di oggi richiede attenzione."
+        static func missedDoseSubtitle(time: String) -> String {
+            "La prima assunzione non completata era prevista alle \(time)."
+        }
+        static func missedDoseSubtitleWithPharmacy(time: String, distance: String) -> String {
+            "La prima assunzione non completata era prevista alle \(time); farmacia vicina a \(distance)."
+        }
+
+        static let refillBeforeNextDoseTitle = "Serve un rifornimento prima della prossima assunzione."
+        static func refillBeforeNextDoseTimePart(time: String) -> String {
+            "La prossima è prevista alle \(time)"
+        }
+        static let refillBeforeNextDoseTimePartFallback = "La prossima assunzione è imminente"
+        static func refillBeforeNextDoseSubtitle(timePart: String, distancePart: String) -> String {
+            "\(timePart)\(distancePart)."
+        }
+        static func refillBeforeNextDosePluralTitle(count: Int) -> String {
+            "\(count) farmaci in terapia oggi necessitano di rifornimento."
+        }
+
+        static func refillWithinTodayTitle(count: Int) -> String {
+            count == 1
+                ? "1 farmaco va rifornito entro oggi."
+                : "\(count) farmaci vanno riforniti entro oggi."
+        }
+
+        static func refillSoonTitle(count: Int) -> String {
+            count == 1
+                ? "1 farmaco richiede rifornimento a breve."
+                : "\(count) farmaci richiedono rifornimento a breve."
+        }
+
+        static func nextDoseTodayTitle(count: Int) -> String {
+            count == 1
+                ? "Oggi resta 1 assunzione da completare."
+                : "Oggi restano \(count) assunzioni da completare."
+        }
+        static func nextDoseTodaySubtitle(time: String) -> String {
+            "La prossima è prevista alle \(time)."
+        }
+
+        static func pharmacyNearby(distance: String) -> String {
+            "La farmacia più vicina è a \(distance)."
+        }
+
+        static let allUnderControlTitle = "Tutto sotto controllo."
+        static let allUnderControlSubtitle = "Le terapie sono coperte e le scorte sono adeguate."
+    }
+
+    // MARK: - Public API
+
+    public func buildSummary(
+        medicines: [MedicineSnapshot],
+        option: OptionSnapshot?,
+        pharmacy: PharmacyInfo?,
+        now: Date = Date()
+    ) -> CabinetSummary {
+        guard let option else {
+            return .allUnderControl
+        }
+
+        let doseSchedule = DoseScheduleReadModel(recurrenceService: recurrenceService, calendar: calendar)
+        let analyses = medicines.map { analyzeMedicine($0, option: option, doseSchedule: doseSchedule, now: now) }
+        let aggregated = aggregate(analyses)
+
+        return resolveSummary(from: aggregated, pharmacy: pharmacy)
+    }
+
     public func buildLines(
         medicines: [MedicineSnapshot],
         option: OptionSnapshot?,
         pharmacy: PharmacyInfo?,
         now: Date = Date()
     ) -> [String] {
-        guard let option else {
-            return ["Tutto sotto controllo!"]
-        }
-
-        let lowStock = medicines.filter { isLowStock($0, option: option) }
-        let depletedStock = lowStock.filter { autonomyDays(for: $0) == 0 }
-        let oneDayStock = lowStock.filter { autonomyDays(for: $0) == 1 }
-        let missedSummary = missedDoseSummary(for: medicines, now: now)
-        let todayTherapyNames = medicinesWithTherapyToday(medicines: medicines, now: now)
-
-        let stockOk = lowStock.isEmpty
-        let therapyOk = missedSummary.medicines.isEmpty
-        if stockOk && therapyOk && todayTherapyNames.isEmpty {
-            return ["Tutto sotto controllo!"]
-        }
-
-        var lines: [String] = []
-
-        if !todayTherapyNames.isEmpty {
-            let names = todayTherapyNames.joined(separator: ", ")
-            if todayTherapyNames.count == 1 {
-                lines.append("Oggi in terapia con \(names)")
-            } else {
-                lines.append("Oggi in terapia con \(names)")
-            }
-        }
-
-        if stockOk {
-            if !todayTherapyNames.isEmpty {
-                lines.append("Scorte a posto")
-            }
-        } else if !depletedStock.isEmpty {
-            let subject = medicineNamesDescription(for: depletedStock)
-            let verb = depletedStock.count == 1 ? "ha" : "hanno"
-            lines.append("\(subject) \(verb) le scorte terminate")
-        } else if !oneDayStock.isEmpty {
-            let subject = medicineNamesDescription(for: oneDayStock)
-            lines.append("A \(subject) manca solo un giorno di autonomia")
-        } else {
-            lines.append(refillLine(for: lowStock, pharmacy: pharmacy))
-        }
-
-        if !therapyOk {
-            lines.append(missedSummaryLine(for: missedSummary))
-        }
-
-        return lines
+        let summary = buildSummary(medicines: medicines, option: option, pharmacy: pharmacy, now: now)
+        return [summary.title, summary.subtitle].filter { !$0.isEmpty }
     }
+
+    // MARK: - Private Analysis
+
+    private struct MedicineAnalysis {
+        let missedDoseTimes: [Date]
+        let pendingDoseTimes: [Date]
+        let nextScheduledDoseTime: Date?
+        let autonomyDays: Int?
+        let isLowStock: Bool
+        let stockCoversNextDose: Bool
+    }
+
+    private struct AggregatedAnalysis {
+        let earliestMissedDoseTime: Date?
+        let totalMissedDoseCount: Int
+        let nextUpcomingDoseTime: Date?
+        let totalPendingDoseCount: Int
+        let nextScheduledDoseTime: Date?
+        let refillBeforeNextDoseCount: Int
+        let refillWithinTodayCount: Int
+        let refillSoonCount: Int
+        let hasAnyStockIssue: Bool
+    }
+
+    private func analyzeMedicine(
+        _ medicine: MedicineSnapshot,
+        option: OptionSnapshot,
+        doseSchedule: DoseScheduleReadModel,
+        now: Date
+    ) -> MedicineAnalysis {
+        let lowStock = isLowStock(medicine, option: option)
+        let autonomy = autonomyDays(for: medicine)
+
+        let manualTherapies = medicine.therapies.filter {
+            $0.manualIntakeRegistration || medicine.manualIntakeRegistration
+        }
+
+        var allMissedTimes: [Date] = []
+        var allPendingTimes: [Date] = []
+        var earliestNextDose: Date?
+
+        let intakeLogs = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
+
+        for therapy in manualTherapies {
+            let schedule = doseSchedule.baseScheduledTimes(on: now, for: therapy)
+            let therapyLogs = intakeLogs.filter { $0.therapyId == therapy.id || $0.therapyId == nil }
+            let completed = completedBuckets(schedule: schedule, intakeLogs: therapyLogs, on: now)
+            let pending = schedule.filter { !completed.contains(minuteBucket(for: $0)) }
+
+            allMissedTimes.append(contentsOf: pending.filter { $0 <= now })
+            allPendingTimes.append(contentsOf: pending.filter { $0 > now })
+        }
+
+        // Find next scheduled dose across all therapies (manual and non-manual affect stock)
+        for therapy in medicine.therapies {
+            if let next = doseSchedule.nextScheduledTime(for: therapy, after: now) {
+                if earliestNextDose == nil || next < earliestNextDose! {
+                    earliestNextDose = next
+                }
+            }
+        }
+
+        let coversNext = stockCoversNextDose(for: medicine, nextDoseTime: earliestNextDose)
+
+        return MedicineAnalysis(
+            missedDoseTimes: allMissedTimes.sorted(),
+            pendingDoseTimes: allPendingTimes.sorted(),
+            nextScheduledDoseTime: earliestNextDose,
+            autonomyDays: autonomy,
+            isLowStock: lowStock,
+            stockCoversNextDose: coversNext
+        )
+    }
+
+    private func aggregate(_ analyses: [MedicineAnalysis]) -> AggregatedAnalysis {
+        var earliestMissed: Date?
+        var totalMissed = 0
+        var nextUpcoming: Date?
+        var nextScheduled: Date?
+        var totalPending = 0
+        var refillBeforeNext = 0
+        var refillWithinToday = 0
+        var refillSoon = 0
+        var anyStockIssue = false
+
+        for a in analyses {
+            totalMissed += a.missedDoseTimes.count
+            if let first = a.missedDoseTimes.first {
+                if earliestMissed == nil || first < earliestMissed! {
+                    earliestMissed = first
+                }
+            }
+
+            totalPending += a.pendingDoseTimes.count
+            if let first = a.pendingDoseTimes.first {
+                if nextUpcoming == nil || first < nextUpcoming! {
+                    nextUpcoming = first
+                }
+            }
+
+            if let next = a.nextScheduledDoseTime {
+                if nextScheduled == nil || next < nextScheduled! {
+                    nextScheduled = next
+                }
+            }
+
+            if a.isLowStock {
+                anyStockIssue = true
+
+                if a.autonomyDays == 0, a.nextScheduledDoseTime != nil, !a.stockCoversNextDose {
+                    refillBeforeNext += 1
+                } else if let days = a.autonomyDays, days <= 1, a.stockCoversNextDose {
+                    refillWithinToday += 1
+                } else {
+                    refillSoon += 1
+                }
+            }
+        }
+
+        return AggregatedAnalysis(
+            earliestMissedDoseTime: earliestMissed,
+            totalMissedDoseCount: totalMissed,
+            nextUpcomingDoseTime: nextUpcoming,
+            totalPendingDoseCount: totalPending,
+            nextScheduledDoseTime: nextScheduled,
+            refillBeforeNextDoseCount: refillBeforeNext,
+            refillWithinTodayCount: refillWithinToday,
+            refillSoonCount: refillSoon,
+            hasAnyStockIssue: anyStockIssue
+        )
+    }
+
+    // MARK: - Decision Tree
+
+    private func resolveSummary(from a: AggregatedAnalysis, pharmacy: PharmacyInfo?) -> CabinetSummary {
+        // 1. Missed dose
+        if a.totalMissedDoseCount > 0, let missedTime = a.earliestMissedDoseTime {
+            let time = formatTime(missedTime)
+            let subtitle: String
+            if a.hasAnyStockIssue, let distance = pharmacyDistanceText(from: pharmacy) {
+                subtitle = Copy.missedDoseSubtitleWithPharmacy(time: time, distance: distance)
+            } else {
+                subtitle = Copy.missedDoseSubtitle(time: time)
+            }
+            return CabinetSummary(
+                title: Copy.missedDoseTitle,
+                subtitle: subtitle,
+                state: .critical,
+                priority: .missedDose
+            )
+        }
+
+        // 2. Refill before next dose
+        if a.refillBeforeNextDoseCount > 0 {
+            let n = a.refillBeforeNextDoseCount
+            if n == 1 {
+                let distancePart = pharmacyDistanceText(from: pharmacy).map { "; farmacia vicina a \($0)" } ?? ""
+                let timePart: String
+                if let nextTime = a.nextScheduledDoseTime {
+                    timePart = Copy.refillBeforeNextDoseTimePart(time: formatTime(nextTime))
+                } else {
+                    timePart = Copy.refillBeforeNextDoseTimePartFallback
+                }
+                return CabinetSummary(
+                    title: Copy.refillBeforeNextDoseTitle,
+                    subtitle: Copy.refillBeforeNextDoseSubtitle(timePart: timePart, distancePart: distancePart),
+                    state: .critical,
+                    priority: .refillBeforeNextDose
+                )
+            } else {
+                let pharmacySubtitle = pharmacyDistanceText(from: pharmacy)
+                    .map { Copy.pharmacyNearby(distance: $0) } ?? ""
+                return CabinetSummary(
+                    title: Copy.refillBeforeNextDosePluralTitle(count: n),
+                    subtitle: pharmacySubtitle,
+                    state: .critical,
+                    priority: .refillBeforeNextDose
+                )
+            }
+        }
+
+        // 3. Refill within today (promoted from old priority 4)
+        if a.refillWithinTodayCount > 0 {
+            let n = a.refillWithinTodayCount
+            let subtitle = pharmacyDistanceText(from: pharmacy)
+                .map { Copy.pharmacyNearby(distance: $0) } ?? ""
+            return CabinetSummary(
+                title: Copy.refillWithinTodayTitle(count: n),
+                subtitle: subtitle,
+                state: .warning,
+                priority: .refillWithinToday
+            )
+        }
+
+        // 4. Refill soon (promoted from old priority 5)
+        if a.refillSoonCount > 0 {
+            let n = a.refillSoonCount
+            let subtitle = pharmacyDistanceText(from: pharmacy)
+                .map { Copy.pharmacyNearby(distance: $0) } ?? ""
+            return CabinetSummary(
+                title: Copy.refillSoonTitle(count: n),
+                subtitle: subtitle,
+                state: .info,
+                priority: .refillSoon
+            )
+        }
+
+        // 5. Next dose today (demoted from old priority 3)
+        if a.totalPendingDoseCount > 0 {
+            let n = a.totalPendingDoseCount
+            var subtitle = ""
+            if let nextTime = a.nextUpcomingDoseTime {
+                subtitle = Copy.nextDoseTodaySubtitle(time: formatTime(nextTime))
+            }
+            return CabinetSummary(
+                title: Copy.nextDoseTodayTitle(count: n),
+                subtitle: subtitle,
+                state: .warning,
+                priority: .nextDoseToday
+            )
+        }
+
+        // 6. All under control
+        return .allUnderControl
+    }
+
+    // MARK: - Stock Helpers
 
     private func isLowStock(_ medicine: MedicineSnapshot, option: OptionSnapshot) -> Bool {
         if let autonomyDays = autonomyDays(for: medicine) {
@@ -104,84 +395,17 @@ public struct CabinetSummaryReadModel {
         return max(0, Int(floor(totalLeftover / totalDaily)))
     }
 
-    private func refillLine(for medicines: [MedicineSnapshot], pharmacy: PharmacyInfo?) -> String {
-        let subject = medicineNamesDescription(for: medicines)
-        let verb = medicines.count == 1 ? "è" : "sono"
-        let pronoun = medicines.count == 1 ? "rifornirlo" : "rifornirli"
-        guard let pharmacyDescription = pharmacyDescription(from: pharmacy) else {
-            return "\(subject) \(verb) in esaurimento"
-        }
-        return "\(subject) \(verb) in esaurimento e puoi \(pronoun) presso \(pharmacyDescription)"
+    private func stockCoversNextDose(for medicine: MedicineSnapshot, nextDoseTime: Date?) -> Bool {
+        guard nextDoseTime != nil else { return true }
+        let totalLeftover = medicine.therapies.reduce(0.0) { $0 + Double($1.leftoverUnits) }
+        let minDoseAmount = medicine.therapies
+            .flatMap(\.doses)
+            .map(\.amount)
+            .min() ?? 1.0
+        return totalLeftover >= minDoseAmount
     }
 
-    private func pharmacyDescription(from pharmacy: PharmacyInfo?) -> String? {
-        guard let resolvedName = pharmacy?.name?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !resolvedName.isEmpty else {
-            return nil
-        }
-
-        guard let detail = pharmacyDetail(from: pharmacy) else {
-            return resolvedName
-        }
-        return "\(resolvedName), \(detail)"
-    }
-
-    private func pharmacyDetail(from pharmacy: PharmacyInfo?) -> String? {
-        let status = pharmacy?.isOpen.map { $0 ? "aperta" : "chiusa" }
-        let distance: String? = {
-            guard let text = pharmacy?.distanceText?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-                !text.isEmpty else { return nil }
-            return text.replacingOccurrences(of: " · ", with: " o ")
-        }()
-
-        switch (status, distance) {
-        case let (.some(status), .some(distance)):
-            return "\(status) a \(distance)"
-        case let (.some(status), .none):
-            return status
-        case let (.none, .some(distance)):
-            return "a \(distance)"
-        case (.none, .none):
-            return nil
-        }
-    }
-
-    private struct MissedDoseSummary {
-        let medicines: [MedicineSnapshot]
-        let doseCount: Int
-    }
-
-    private func missedDoseSummary(for medicines: [MedicineSnapshot], now: Date) -> MissedDoseSummary {
-        let doseSchedule = DoseScheduleReadModel(recurrenceService: recurrenceService, calendar: calendar)
-        var missedMedicines: [MedicineSnapshot] = []
-        var doseCount = 0
-
-        for medicine in medicines {
-            let manualTherapies = medicine.therapies.filter {
-                $0.manualIntakeRegistration || medicine.manualIntakeRegistration
-            }
-            guard !manualTherapies.isEmpty else { continue }
-
-            var missedCount = 0
-            for therapy in manualTherapies {
-                let schedule = doseSchedule.baseScheduledTimes(on: now, for: therapy)
-                let intakeLogs = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
-                let therapyLogs = intakeLogs.filter { $0.therapyId == therapy.id || $0.therapyId == nil }
-
-                let completedBuckets = self.completedBuckets(schedule: schedule, intakeLogs: therapyLogs, on: now)
-                let pending = schedule.filter { !completedBuckets.contains(minuteBucket(for: $0)) }
-                missedCount += pending.filter { $0 <= now }.count
-            }
-
-            guard missedCount > 0 else { continue }
-            missedMedicines.append(medicine)
-            doseCount += missedCount
-        }
-
-        return MissedDoseSummary(medicines: missedMedicines, doseCount: doseCount)
-    }
+    // MARK: - Dose Schedule Helpers
 
     private func completedBuckets(schedule: [Date], intakeLogs: [LogEntry], on day: Date) -> Set<Int> {
         guard !schedule.isEmpty else { return [] }
@@ -207,58 +431,35 @@ public struct CabinetSummaryReadModel {
         return completedBuckets
     }
 
-    private func missedSummaryLine(for summary: MissedDoseSummary) -> String {
-        let medicinePart = medicineNamesDescription(for: summary.medicines)
-        let verb = summary.medicines.count == 1 ? "ha" : "hanno"
-        let dosePart = summary.doseCount == 1
-            ? "1 dose saltata"
-            : "\(summary.doseCount) dosi saltate"
-        return "\(medicinePart) \(verb) \(dosePart)"
-    }
-
-    private func medicineNamesDescription(for medicines: [MedicineSnapshot]) -> String {
-        var seen = Set<String>()
-        let names = medicines.compactMap { medicine -> String? in
-            let name = medicine.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else { return nil }
-            let key = name.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            guard seen.insert(key).inserted else { return nil }
-            return name.localizedCapitalized
-        }
-
-        guard !names.isEmpty else {
-            return medicines.count == 1 ? "1 medicinale" : "\(medicines.count) medicinali"
-        }
-
-        if names.count == 1 { return names[0] }
-        if names.count == 2 { return "\(names[0]) e \(names[1])" }
-
-        let head = names.dropLast().joined(separator: ", ")
-        return "\(head) e \(names[names.count - 1])"
-    }
-
-    private func medicinesWithTherapyToday(medicines: [MedicineSnapshot], now: Date) -> [String] {
-        let doseSchedule = DoseScheduleReadModel(recurrenceService: recurrenceService, calendar: calendar)
-        var seen = Set<String>()
-        var names: [String] = []
-
-        for medicine in medicines {
-            guard !medicine.therapies.isEmpty else { continue }
-            let hasTherapyToday = medicine.therapies.contains { therapy in
-                !doseSchedule.baseScheduledTimes(on: now, for: therapy).isEmpty
-            }
-            guard hasTherapyToday else { continue }
-            let name = medicine.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else { continue }
-            let key = name.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            guard seen.insert(key).inserted else { continue }
-            names.append(name.localizedCapitalized)
-        }
-
-        return names
-    }
-
     private func minuteBucket(for date: Date) -> Int {
         Int(date.timeIntervalSince1970 / 60)
     }
+
+    // MARK: - Formatting Helpers
+
+    private func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private func pharmacyDistanceText(from pharmacy: PharmacyInfo?) -> String? {
+        guard let text = pharmacy?.distanceText?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !text.isEmpty else { return nil }
+        return text.replacingOccurrences(of: " · ", with: " o ")
+    }
+}
+
+// MARK: - CabinetSummary convenience
+
+extension CabinetSummary {
+    static let allUnderControl = CabinetSummary(
+        title: "Tutto sotto controllo.",
+        subtitle: "Le terapie sono coperte e le scorte sono adeguate.",
+        state: .ok,
+        priority: .allUnderControl
+    )
 }

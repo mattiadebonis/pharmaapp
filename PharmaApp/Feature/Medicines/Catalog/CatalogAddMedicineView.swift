@@ -288,7 +288,7 @@ struct CatalogAddMedicineView: View {
                 Button {
                     handleBuy(selection)
                 } label: {
-                    Text("Compra")
+                    Text("Confezione acquistata (\(catalogPackageShortLabel(selection)))")
                         .font(.caption.weight(.semibold))
                         .frame(maxWidth: .infinity)
                 }
@@ -330,7 +330,7 @@ struct CatalogAddMedicineView: View {
             _ = try resolver.buyOnePackage(selection)
             feedback = Feedback(
                 kind: .success,
-                message: "Confezione acquistata e scorte aggiornate."
+                message: "Confezione acquistata (\(catalogPackageShortLabel(selection))) e scorte aggiornate."
             )
         } catch {
             managedObjectContext.rollback()
@@ -339,6 +339,15 @@ struct CatalogAddMedicineView: View {
                 message: "Non sono riuscito a registrare l'acquisto."
             )
         }
+    }
+
+    private func catalogPackageShortLabel(_ selection: CatalogSelection) -> String {
+        let tipo = selection.tipologia.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if selection.units > 0 {
+            let unitLabel = tipo.isEmpty ? "unità" : tipo
+            return "\(selection.units) \(unitLabel)"
+        }
+        return tipo.isEmpty ? "confezione" : tipo
     }
 
     private func loadCatalogIfNeeded() {

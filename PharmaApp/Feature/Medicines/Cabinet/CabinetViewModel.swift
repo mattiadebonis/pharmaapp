@@ -281,6 +281,26 @@ class CabinetViewModel: ObservableObject {
         )
     }
 
+    /// Computes the structured cabinet summary with priority and state.
+    func computeSummary(
+        medicines: [Medicine],
+        option: Option?,
+        pharmacy: PharmacyInfo?
+    ) -> CabinetSummary {
+        let medicineSnapshots = medicines.map { medicine in
+            snapshotBuilder.makeMedicineSnapshot(
+                medicine: medicine,
+                logs: Array(medicine.logs ?? [])
+            )
+        }
+        let optionSnapshot = snapshotBuilder.makeOptionSnapshot(option: option)
+        return cabinetSummaryReadModel.buildSummary(
+            medicines: medicineSnapshots,
+            option: optionSnapshot,
+            pharmacy: pharmacy
+        )
+    }
+
     // MARK: - Sorting (via PharmaCore SectionCalculator)
     private func orderedMedicinePackages(
         entries: [MedicinePackage],

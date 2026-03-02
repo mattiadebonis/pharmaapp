@@ -421,10 +421,54 @@ struct MedicineDetailView: View {
     private var stockEstimateInlineText: String? {
         guard let coverage = estimatedCoverageDaysForSelectedPackage else { return nil }
         if coverage < 1 {
-            return "<1g"
+            return "stima < 1 giorno"
         }
         let days = Int(coverage.rounded(.down))
-        return days == 1 ? "~1g" : "~\(days)g"
+        return days == 1 ? "stima ~1 giorno" : "stima ~\(days) giorni"
+    }
+
+    private var packageShortLabel: String {
+        let numero = Int(package.numero)
+        let tipo = package.tipologia.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if numero > 0 {
+            let unitLabel = tipo.isEmpty ? "unità" : tipo
+            return "\(numero) \(unitLabel)"
+        }
+        return tipo.isEmpty ? "confezione" : tipo
+    }
+
+    private var lastPurchaseInfoText: String? {
+        let allLogs = medicine.logs ?? []
+        let purchaseLogs = allLogs
+            .filter { $0.type == "purchase" && $0.package?.objectID == package.objectID }
+            .sorted { $0.timestamp > $1.timestamp }
+        guard !purchaseLogs.isEmpty else { return nil }
+
+        let packSize = max(1, Int(package.numero))
+        let currentUnits = stockUnitsForSelectedPackage
+        guard currentUnits > 0 else { return nil }
+
+        // Count how many recent purchases contribute to the current stock
+        var unitsAccounted = 0
+        var contributingLogs: [Log] = []
+        for log in purchaseLogs {
+            contributingLogs.append(log)
+            unitsAccounted += packSize
+            if unitsAccounted >= currentUnits { break }
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        formatter.locale = Locale(identifier: "it_IT")
+
+        if contributingLogs.count == 1 {
+            return "Ultimo acquisto: \(formatter.string(from: contributingLogs[0].timestamp))"
+        } else {
+            let oldest = contributingLogs.last!
+            let newest = contributingLogs.first!
+            return "\(contributingLogs.count) acquisti dal \(formatter.string(from: oldest.timestamp)) al \(formatter.string(from: newest.timestamp))"
+        }
     }
 
     private var currentTherapiesSet: Set<Therapy> {
@@ -772,12 +816,21 @@ extension MedicineDetailView {
                 ),
                 in: 0...9999
             ) {
-                HStack(spacing: 8) {
-                    Text(stockUnitsText)
-                    Spacer()
-                    if let estimate = stockEstimateInlineText {
-                        Text(estimate)
-                            .font(.subheadline)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text(stockUnitsText)
+                        if let estimate = stockEstimateInlineText {
+                            Text("·")
+                                .foregroundStyle(.secondary)
+                            Text(estimate)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                    if let purchaseInfo = lastPurchaseInfoText {
+                        Text(purchaseInfo)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -851,7 +904,7 @@ extension MedicineDetailView {
             Button {
                 stockService.addPurchase(medicine: medicine, package: package)
             } label: {
-                Label("Acquistato", systemImage: "cart.fill")
+                Label("Confezione acquistata (\(packageShortLabel))", systemImage: "cart.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(CapsuleActionButtonStyle(fill: .blue, textColor: .white))
