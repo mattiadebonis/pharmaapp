@@ -31,9 +31,23 @@ struct AddDoctorView: View {
                     .keyboardType(.phonePad)
                 TextField("Specializzazione", text: $specializzazione)
             }
-            
-            Section(header: Text("Orari dottore")) {
-                DoctorScheduleEditor(schedule: $schedule)
+
+            Section(header: Text("Orari reperibilità")) {
+                NavigationLink {
+                    DoctorSchedulePageView(
+                        title: "Orari reperibilità",
+                        sectionTitle: "Orari reperibilità",
+                        schedule: $schedule
+                    )
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Apri pagina orari reperibilità")
+                            .foregroundStyle(.primary)
+                        Text(scheduleSummary(schedule))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Section(header: Text("Segreteria")) {
@@ -100,6 +114,11 @@ struct AddDoctorView: View {
             normalizedValue(from: segreteriaMail)
         ].compactMap { $0 }
         return values.isEmpty ? "Nessuna segreteria configurata" : values.joined(separator: " · ")
+    }
+
+    private func scheduleSummary(_ schedule: DoctorScheduleDTO) -> String {
+        let configuredDays = schedule.days.filter { $0.mode != .closed }.count
+        return configuredDays == 0 ? "Nessun orario configurato" : "\(configuredDays) giorni configurati"
     }
 }
 
@@ -202,6 +221,22 @@ struct DoctorSecretaryEditorView: View {
             }
         }
         .navigationTitle("Segreteria")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct DoctorSchedulePageView: View {
+    let title: String
+    let sectionTitle: String
+    @Binding var schedule: DoctorScheduleDTO
+
+    var body: some View {
+        Form {
+            Section(header: Text(sectionTitle)) {
+                DoctorScheduleEditor(schedule: $schedule)
+            }
+        }
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
     }
 }

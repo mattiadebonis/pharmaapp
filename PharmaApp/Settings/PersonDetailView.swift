@@ -24,6 +24,7 @@ struct PersonDetailView: View {
     @State private var isScannerPresented = false
     @State private var errorMessage: String?
     @State private var showDeleteConfirmation = false
+    @State private var showLogoutConfirmation = false
     @State private var autosaveTask: Task<Void, Never>?
     @State private var isDeleting = false
     @FocusState private var focusedField: Field?
@@ -73,8 +74,7 @@ struct PersonDetailView: View {
             if person.is_account, auth.user != nil {
                 Section {
                     Button(role: .destructive) {
-                        auth.signOut()
-                        dismiss()
+                        showLogoutConfirmation = true
                     } label: {
                         Text("Esci")
                     }
@@ -131,6 +131,15 @@ struct PersonDetailView: View {
             Button("Annulla", role: .cancel) { }
         } message: {
             Text("Le terapie associate verranno assegnate all'account.")
+        }
+        .confirmationDialog("Uscire dall'account?", isPresented: $showLogoutConfirmation, titleVisibility: .visible) {
+            Button("Esci", role: .destructive) {
+                auth.signOut()
+                dismiss()
+            }
+            Button("Annulla", role: .cancel) { }
+        } message: {
+            Text("I dati locali resteranno su questo dispositivo anche dopo l'uscita.")
         }
     }
 

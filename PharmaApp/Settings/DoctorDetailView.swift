@@ -50,8 +50,22 @@ struct DoctorDetailView: View {
                 TextField("Specializzazione", text: $specializzazione)
             }
 
-            Section(header: Text("Orari dottore")) {
-                DoctorScheduleEditor(schedule: $schedule)
+            Section(header: Text("Orari reperibilità")) {
+                NavigationLink {
+                    DoctorSchedulePageView(
+                        title: "Orari reperibilità",
+                        sectionTitle: "Orari reperibilità",
+                        schedule: $schedule
+                    )
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Apri pagina orari reperibilità")
+                            .foregroundStyle(.primary)
+                        Text(scheduleSummary)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Section(header: Text("Segreteria")) {
@@ -194,6 +208,11 @@ struct DoctorDetailView: View {
             normalizedValue(from: segreteriaMail)
         ].compactMap { $0 }
         return values.isEmpty ? "Nessuna segreteria configurata" : values.joined(separator: " · ")
+    }
+
+    private var scheduleSummary: String {
+        let configuredDays = schedule.days.filter { $0.mode != .closed }.count
+        return configuredDays == 0 ? "Nessun orario configurato" : "\(configuredDays) giorni configurati"
     }
 
     private func scheduleAutosave() {
