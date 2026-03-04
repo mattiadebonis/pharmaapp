@@ -200,6 +200,165 @@ public struct SectionCalculator {
         return .unknown
     }
 
+    // MARK: - Priority-based ordering
+
+    /// Returns medicines sorted by the same priority hierarchy used in CabinetSummary:
+    /// missedDose > refillBeforeNextDose > imminentDose > refillWithinToday > refillSoon > nextDoseToday > allUnderControl.
+    /// Within the same priority tier, sorted by earliest dose time, remaining units, deadline, name.
+    public func prioritySortedMedicines(
+        for medicines: [MedicineSnapshot],
+        option: OptionSnapshot?
+    ) -> [MedicineSnapshot] {
+        let now = clock.now()
+        let windowSeconds = Double(CabinetSummaryPresenter.imminentDoseWindowMinutes) * 60
+
+        func medicinePriority(for medicine: MedicineSnapshot) -> CabinetSummaryPriority {
+            let hasTherapy = !medicine.therapies.isEmpty
+
+            // 1. Missed dose
+            if hasTherapy {
+                let manualTherapies = medicine.therapies.filter {
+                    $0.manualIntakeRegistration || medicine.manualIntakeRegistration
+                }
+                if !manualTherapies.isEmpty {
+                    let intakeLogs = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
+                    if doseScheduleReadModel.missedDoseCandidate(
+                        for: manualTherapies, intakeLogs: intakeLogs, now: now
+                    ) != nil {
+                        return .missedDose
+                    }
+                }
+            }
+
+            let status = stockStatus(for: medicine, option: option)
+            let isLow = (status == .critical || status == .low)
+
+            // 2. Refill before next dose (critical, requires therapy)
+            if hasTherapy, isLow {
+                let autonomy = therapyAutonomyDays(for: medicine)
+                if autonomy == 0, !therapyStockCoversNextDose(for: medicine) {
+                    return .refillBeforeNextDose
+                }
+            }
+
+            // 3. Imminent dose (requires therapy)
+            if hasTherapy {
+                if let pending = nextFutureDoseTime(for: medicine, now: now) {
+                    let seconds = pending.timeIntervalSince(now)
+                    if seconds > 0, seconds <= windowSeconds {
+                        return .imminentDose
+                    }
+                }
+            }
+
+            // 4-5. Refill within today / soon (requires therapy)
+            if hasTherapy, isLow {
+                let autonomy = therapyAutonomyDays(for: medicine)
+                if autonomy != nil, autonomy! <= 1 {
+                    return .refillWithinToday
+                }
+                return .refillSoon
+            }
+
+            // 6. Next dose today
+            if hasTherapy, medicine.therapies.contains(where: { therapyOccursToday($0, now: now) }) {
+                return .nextDoseToday
+            }
+
+            // 7. All under control (including no-therapy low-stock)
+            return .allUnderControl
+        }
+
+        func earliestDoseTime(for medicine: MedicineSnapshot) -> Date {
+            guard !medicine.therapies.isEmpty else { return Date.distantFuture }
+            let manualTherapies = medicine.therapies.filter {
+                $0.manualIntakeRegistration || medicine.manualIntakeRegistration
+            }
+            if !manualTherapies.isEmpty {
+                let intakeLogs = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
+                if let missed = doseScheduleReadModel.missedDoseCandidate(
+                    for: manualTherapies, intakeLogs: intakeLogs, now: now
+                ) {
+                    return missed.scheduledAt
+                }
+            }
+            return nextFutureDoseTime(for: medicine, now: now) ?? Date.distantFuture
+        }
+
+        func remainingUnits(for medicine: MedicineSnapshot) -> Int {
+            if !medicine.therapies.isEmpty {
+                return medicine.therapies.reduce(0) { $0 + $1.leftoverUnits }
+            }
+            return medicine.stockUnitsWithoutTherapy ?? Int.max
+        }
+
+        return medicines.sorted { m1, m2 in
+            let p1 = medicinePriority(for: m1)
+            let p2 = medicinePriority(for: m2)
+            if p1 != p2 { return p1 < p2 }
+
+            let d1 = earliestDoseTime(for: m1)
+            let d2 = earliestDoseTime(for: m2)
+            if d1 != d2 { return d1 < d2 }
+
+            let r1 = remainingUnits(for: m1)
+            let r2 = remainingUnits(for: m2)
+            if r1 != r2 { return r1 < r2 }
+
+            let dl1 = m1.deadlineMonthStartDate ?? Date.distantFuture
+            let dl2 = m2.deadlineMonthStartDate ?? Date.distantFuture
+            if dl1 != dl2 { return dl1 < dl2 }
+
+            return m1.name.localizedCaseInsensitiveCompare(m2.name) == .orderedAscending
+        }
+    }
+
+    // MARK: - Shared helpers for priority computation
+
+    private func therapyAutonomyDays(for medicine: MedicineSnapshot) -> Int? {
+        guard !medicine.therapies.isEmpty else { return nil }
+        var totalLeftover: Double = 0
+        var totalDaily: Double = 0
+        for therapy in medicine.therapies {
+            totalLeftover += Double(therapy.leftoverUnits)
+            totalDaily += therapy.stimaConsumoGiornaliero(recurrenceService: recurrenceService)
+        }
+        if totalLeftover <= 0 { return 0 }
+        guard totalDaily > 0 else { return nil }
+        return max(0, Int(floor(totalLeftover / totalDaily)))
+    }
+
+    private func therapyStockCoversNextDose(for medicine: MedicineSnapshot) -> Bool {
+        let totalLeftover = medicine.therapies.reduce(0.0) { $0 + Double($1.leftoverUnits) }
+        let minDose = medicine.therapies.flatMap(\.doses).map(\.amount).min() ?? 1.0
+        return totalLeftover >= minDose
+    }
+
+    private func nextFutureDoseTime(for medicine: MedicineSnapshot, now: Date) -> Date? {
+        var best: Date?
+        for therapy in medicine.therapies {
+            let rule = recurrenceService.parseRecurrenceString(therapy.rrule ?? "")
+            let startDate = therapy.startDate ?? now
+            if let date = recurrenceService.nextOccurrence(
+                rule: rule, startDate: startDate, after: now,
+                doses: therapy.doses, calendar: calendar
+            ) {
+                if best == nil || date < best! { best = date }
+            }
+        }
+        return best
+    }
+
+    private func therapyOccursToday(_ therapy: TherapySnapshot, now: Date) -> Bool {
+        let rule = recurrenceService.parseRecurrenceString(therapy.rrule ?? "")
+        let start = therapy.startDate ?? now
+        let perDay = max(1, therapy.doses.count)
+        return recurrenceService.allowedEvents(
+            on: now, rule: rule, startDate: start,
+            dosesPerDay: perDay, calendar: calendar
+        ) > 0
+    }
+
     public func isOutOfStock(_ medicine: MedicineSnapshot) -> Bool {
         if !medicine.therapies.isEmpty {
             let totalLeft = medicine.therapies.reduce(0.0) { $0 + Double($1.leftoverUnits) }

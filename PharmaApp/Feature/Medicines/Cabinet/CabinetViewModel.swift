@@ -403,12 +403,11 @@ class CabinetViewModel: ObservableObject {
             medicineSnapshots.append(snapshot)
         }
 
-        // Use PharmaCore SectionCalculator
-        let sections = sectionCalculator.computeSections(for: medicineSnapshots, option: optionSnapshot)
+        // Use PharmaCore priority-based sorting (matches CabinetSummary priority hierarchy)
+        let sorted = sectionCalculator.prioritySortedMedicines(for: medicineSnapshots, option: optionSnapshot)
 
         // Map back to CoreData entities preserving PharmaCore's order
-        let orderedKeys = (sections.purchase + sections.oggi + sections.ok).map(\.externalKey)
-        let orderedEntries = orderedKeys.compactMap { snapshotToEntry[$0] }
+        let orderedEntries = sorted.compactMap { snapshotToEntry[$0.externalKey] }
         return prioritizeFavoriteMedicines(
             orderedEntries,
             favoriteMedicineIDs: favoriteMedicineIDs
