@@ -22,3 +22,12 @@ struct AuthUser: Codable, Equatable {
         return id
     }
 }
+
+extension AuthProvider {
+    static func fromFirebaseProviderIDs(_ providerIDs: [String]) -> AuthProvider {
+        if providerIDs.contains("apple.com") {
+            return .apple
+        }
+        return .google
+    }
+}

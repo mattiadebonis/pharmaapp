@@ -30,7 +30,7 @@ struct LoginView: View {
                         .font(.system(size: 32, weight: .bold))
                         .foregroundStyle(.primary)
 
-                    Text("Accedi per sincronizzare i tuoi dati e mantenere le terapie aggiornate.")
+                    Text("Accedi o crea il tuo account per continuare con Apple o Google.")
                         .font(.subheadline)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)

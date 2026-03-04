@@ -27,6 +27,7 @@ struct ProfileView: View {
     @State private var personPendingDeletion: Person?
     @State private var personDeleteErrorMessage: String?
     @State private var isPharmacyPickerPresented = false
+    @State private var showLogoutConfirmation = false
 
     var body: some View {
         Form {
@@ -74,10 +75,7 @@ struct ProfileView: View {
 
                         if person.is_account, auth.user != nil {
                             Button(role: .destructive) {
-                                auth.signOut()
-                                if showsDoneButton {
-                                    dismiss()
-                                }
+                                showLogoutConfirmation = true
                             } label: {
                                 Text("Esci")
                             }
@@ -159,6 +157,17 @@ struct ProfileView: View {
             NavigationStack {
                 PharmacyPickerView(selectedPharmacyName: $preferredPharmacyName)
             }
+        }
+        .confirmationDialog("Uscire dall'account?", isPresented: $showLogoutConfirmation, titleVisibility: .visible) {
+            Button("Esci", role: .destructive) {
+                auth.signOut()
+                if showsDoneButton {
+                    dismiss()
+                }
+            }
+            Button("Annulla", role: .cancel) { }
+        } message: {
+            Text("I dati locali resteranno su questo dispositivo anche dopo l'uscita.")
         }
         .onAppear {
             AccountPersonService.shared.ensureAccountPerson(in: managedObjectContext)

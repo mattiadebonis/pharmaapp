@@ -16,6 +16,9 @@ struct AuthenticationGateView: View {
                 ContentView()
             }
         }
+        .task {
+            auth.start()
+        }
     }
 }
 

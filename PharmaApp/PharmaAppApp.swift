@@ -91,7 +91,7 @@ struct PharmaAppApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            AuthenticationGateView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .environmentObject(appViewModel)
                 .environmentObject(appRouter)
@@ -120,6 +120,10 @@ struct PharmaAppApp: App {
                     }
                 }
                 .onChange(of: authViewModel.user) { user in
+                    UserIdentityProvider.shared.syncAuthenticatedIdentity(
+                        from: user,
+                        in: persistenceController.container.viewContext
+                    )
                     AccountPersonService.shared.syncAccountDisplayName(
                         from: user,
                         in: persistenceController.container.viewContext
@@ -133,6 +137,7 @@ struct PharmaAppApp: App {
                     UserIdentityProvider.shared.ensureProfile(in: context)
                     AccountPersonService.shared.ensureAccountPerson(in: context)
                     AccountPersonService.shared.migrateLegacyCodiceFiscaleIfNeeded(in: context)
+                    UserIdentityProvider.shared.syncAuthenticatedIdentity(from: authViewModel.user, in: context)
                     AccountPersonService.shared.syncAccountDisplayName(from: authViewModel.user, in: context)
                     appRouter.consumePendingRouteIfAny()
                     notificationCoordinator.start()
