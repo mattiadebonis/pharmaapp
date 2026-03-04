@@ -80,23 +80,37 @@ class CabinetViewModel: ObservableObject {
         let shouldShowPrescription: Bool
     }
 
+    struct SummaryDisplayData {
+        let summary: CabinetSummary
+        let lines: [String]
+        let inlineAction: String
+    }
+
     /// Sezioni ordinate per List (cabinet e medicinali fuori da cabinet).
     func shelfEntries(
         entries: [MedicinePackage],
         option: Option?,
-        cabinets: [Cabinet]
+        cabinets: [Cabinet],
+        favoriteMedicineIDs: Set<UUID> = []
     ) -> [ShelfEntry] {
-        shelfViewState(entries: entries, option: option, cabinets: cabinets).entries
+        shelfViewState(
+            entries: entries,
+            option: option,
+            cabinets: cabinets,
+            favoriteMedicineIDs: favoriteMedicineIDs
+        ).entries
     }
 
     func shelfViewState(
         entries: [MedicinePackage],
         option: Option?,
-        cabinets: [Cabinet]
+        cabinets: [Cabinet],
+        favoriteMedicineIDs: Set<UUID> = []
     ) -> ShelfViewState {
         let orderedEntries = orderedMedicinePackages(
             entries: entries,
-            option: option
+            option: option,
+            favoriteMedicineIDs: favoriteMedicineIDs
         )
 
         var indexMap: [NSManagedObjectID: Int] = [:]
@@ -147,7 +161,22 @@ class CabinetViewModel: ObservableObject {
         let filtered = entries.filter { $0.cabinet?.objectID == cabinet.objectID }
         return orderedMedicinePackages(
             entries: filtered,
-            option: option
+            option: option,
+            favoriteMedicineIDs: []
+        )
+    }
+
+    func sortedEntries(
+        in cabinet: Cabinet,
+        entries: [MedicinePackage],
+        option: Option?,
+        favoriteMedicineIDs: Set<UUID>
+    ) -> [MedicinePackage] {
+        let filtered = entries.filter { $0.cabinet?.objectID == cabinet.objectID }
+        return orderedMedicinePackages(
+            entries: filtered,
+            option: option,
+            favoriteMedicineIDs: favoriteMedicineIDs
         )
     }
 
@@ -258,27 +287,44 @@ class CabinetViewModel: ObservableObject {
                 || packageSummary.contains(normalizedQuery)
         }
 
-        return orderedMedicinePackages(entries: filteredEntries, option: option)
+        return orderedMedicinePackages(
+            entries: filteredEntries,
+            option: option,
+            favoriteMedicineIDs: []
+        )
     }
 
-    /// Computes summary lines for the cabinet header using PharmaCore's CabinetSummaryReadModel.
+    /// Computes summary content for the cabinet header and widgets using PharmaCore's CabinetSummaryReadModel.
+    func computeSummaryDisplayData(
+        medicines: [Medicine],
+        option: Option?,
+        pharmacy: PharmacyInfo?
+    ) -> SummaryDisplayData {
+        let input = makeSummaryInput(medicines: medicines, option: option)
+        let presentation = cabinetSummaryReadModel.buildPresentation(
+            medicines: input.medicineSnapshots,
+            option: input.optionSnapshot,
+            pharmacy: pharmacy
+        )
+        let summary = presentation.summary
+        let lines = [summary.title, summary.subtitle].filter { !$0.isEmpty }
+        return SummaryDisplayData(
+            summary: summary,
+            lines: lines,
+            inlineAction: presentation.inlineAction.text
+        )
+    }
+
     func computeSummaryLines(
         medicines: [Medicine],
         option: Option?,
         pharmacy: PharmacyInfo?
     ) -> [String] {
-        let medicineSnapshots = medicines.map { medicine in
-            snapshotBuilder.makeMedicineSnapshot(
-                medicine: medicine,
-                logs: Array(medicine.logs ?? [])
-            )
-        }
-        let optionSnapshot = snapshotBuilder.makeOptionSnapshot(option: option)
-        return cabinetSummaryReadModel.buildLines(
-            medicines: medicineSnapshots,
-            option: optionSnapshot,
+        computeSummaryDisplayData(
+            medicines: medicines,
+            option: option,
             pharmacy: pharmacy
-        )
+        ).lines
     }
 
     /// Computes the structured cabinet summary with priority and state.
@@ -287,6 +333,29 @@ class CabinetViewModel: ObservableObject {
         option: Option?,
         pharmacy: PharmacyInfo?
     ) -> CabinetSummary {
+        computeSummaryDisplayData(
+            medicines: medicines,
+            option: option,
+            pharmacy: pharmacy
+        ).summary
+    }
+
+    func computeInlineAction(
+        medicines: [Medicine],
+        option: Option?,
+        pharmacy: PharmacyInfo?
+    ) -> String {
+        computeSummaryDisplayData(
+            medicines: medicines,
+            option: option,
+            pharmacy: pharmacy
+        ).inlineAction
+    }
+
+    private func makeSummaryInput(
+        medicines: [Medicine],
+        option: Option?
+    ) -> (medicineSnapshots: [MedicineSnapshot], optionSnapshot: OptionSnapshot?) {
         let medicineSnapshots = medicines.map { medicine in
             snapshotBuilder.makeMedicineSnapshot(
                 medicine: medicine,
@@ -294,17 +363,34 @@ class CabinetViewModel: ObservableObject {
             )
         }
         let optionSnapshot = snapshotBuilder.makeOptionSnapshot(option: option)
-        return cabinetSummaryReadModel.buildSummary(
-            medicines: medicineSnapshots,
-            option: optionSnapshot,
-            pharmacy: pharmacy
-        )
+        return (medicineSnapshots, optionSnapshot)
     }
 
     // MARK: - Sorting (via PharmaCore SectionCalculator)
+    func prioritizeFavoriteMedicines(
+        _ entries: [MedicinePackage],
+        favoriteMedicineIDs: Set<UUID>
+    ) -> [MedicinePackage] {
+        guard !favoriteMedicineIDs.isEmpty else { return entries }
+
+        var pinnedEntries: [MedicinePackage] = []
+        var regularEntries: [MedicinePackage] = []
+
+        for entry in entries {
+            if favoriteMedicineIDs.contains(entry.medicine.id) {
+                pinnedEntries.append(entry)
+            } else {
+                regularEntries.append(entry)
+            }
+        }
+
+        return pinnedEntries + regularEntries
+    }
+
     private func orderedMedicinePackages(
         entries: [MedicinePackage],
-        option: Option?
+        option: Option?,
+        favoriteMedicineIDs: Set<UUID>
     ) -> [MedicinePackage] {
         // Convert entries to snapshots
         let optionSnapshot = snapshotBuilder.makeOptionSnapshot(option: option)
@@ -322,7 +408,11 @@ class CabinetViewModel: ObservableObject {
 
         // Map back to CoreData entities preserving PharmaCore's order
         let orderedKeys = (sections.purchase + sections.oggi + sections.ok).map(\.externalKey)
-        return orderedKeys.compactMap { snapshotToEntry[$0] }
+        let orderedEntries = orderedKeys.compactMap { snapshotToEntry[$0] }
+        return prioritizeFavoriteMedicines(
+            orderedEntries,
+            favoriteMedicineIDs: favoriteMedicineIDs
+        )
     }
 
     private func normalizedSearchText(_ text: String) -> String {

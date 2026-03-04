@@ -7,6 +7,7 @@ struct MedicineSwipeRow: View {
     var isSelected: Bool
     var isInSelectionMode: Bool
     var shouldShowPrescription: Bool
+    var isPinned: Bool = false
     var onTap: () -> Void
     var onLongPress: () -> Void
     var onToggleSelection: () -> Void
@@ -26,6 +27,7 @@ struct MedicineSwipeRow: View {
             medicinePackage: entry,
             subtitleMode: subtitleMode,
             snapshot: snapshot,
+            isPinned: isPinned,
             isSelected: isSelected,
             isInSelectionMode: isInSelectionMode
         )
@@ -112,11 +114,11 @@ struct MedicineSwipeRow: View {
     }
 
     private var favoritesIcon: String {
-        isFavorite ? "heart.fill" : "heart"
+        isFavorite ? "pin.fill" : "pin"
     }
 
     private var favoritesTint: Color {
-        isFavorite ? .red : .pink
+        isFavorite ? .orange : .accentColor
     }
 }
 

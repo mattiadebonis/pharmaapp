@@ -16,6 +16,7 @@ struct MedicineRowView: View {
     var medicinePackage: MedicinePackage? = nil
     var subtitleMode: MedicineSubtitleMode = .nextDose
     var snapshot: Snapshot? = nil
+    var isPinned: Bool = false
     var isSelected: Bool = false
     var isInSelectionMode: Bool = false
     enum RowSection { case purchase, tuttoOk }
@@ -503,13 +504,20 @@ struct MedicineRowView: View {
         let base = trimmed.isEmpty ? "Medicinale" : trimmed
         let name = camelCase(base)
         let dosage = primaryPackageDosage
-        return HStack(alignment: .bottom, spacing: 4) {
+        return HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(name)
                 .font(.system(size: 16, weight: .regular))
                 .foregroundColor(.primary)
                 .lineLimit(2)
+                .layoutPriority(1)
+            if isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
+            }
             if let dosage {
-                Text(" \(dosage)")
+                Text(dosage)
                     .font(.system(size: 16, weight: .regular))
                     .foregroundColor(.secondary)
                     .lineLimit(1)

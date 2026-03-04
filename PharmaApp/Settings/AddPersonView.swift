@@ -37,12 +37,16 @@ struct AddPersonView: View {
                         .foregroundStyle(.red)
                 }
             }
-            
-            Button("Salva") {
-                addPerson()
-            }
         }
         .navigationTitle("Aggiungi Persona")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Aggiungi") {
+                    addPerson()
+                }
+            }
+        }
     }
     
     private func addPerson() {

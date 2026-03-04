@@ -22,6 +22,62 @@ private final class InMemoryStockAlertStore: StockAlertStateStore {
 struct NotificationPlannerTests {
     private let calendar = Calendar(identifier: .gregorian)
 
+    @Test func therapyNotificationUsesEssentialCopyForAccountPerson() throws {
+        let context = makeContext()
+        let now = makeDate(2026, 1, 26, 7, 0)
+        let (medicine, package) = makeMedicine(context: context, name: "Aspirina")
+        let person = makePerson(context: context, name: "Mattia", surname: "Debonis", isAccount: true)
+        let therapy = makeTherapy(
+            context: context,
+            medicine: medicine,
+            package: package,
+            person: person,
+            start: makeDate(2026, 1, 26, 0, 0),
+            rrule: "RRULE:FREQ=DAILY",
+            doseTimes: [makeDate(2026, 1, 26, 8, 0)]
+        )
+
+        let planner = NotificationPlanner(
+            context: context,
+            calendar: calendar,
+            config: NotificationScheduleConfiguration(therapyHorizonDays: 1),
+            stockAlertStore: InMemoryStockAlertStore()
+        )
+
+        let items = planner.planTherapyNotifications(therapies: [therapy], now: now)
+        #expect(items.count == 1)
+        #expect(items[0].title == "Assumi Aspirina")
+        #expect(items[0].body == "08:00")
+    }
+
+    @Test func therapyNotificationMentionsPersonWhenNotAccount() throws {
+        let context = makeContext()
+        let now = makeDate(2026, 1, 26, 7, 0)
+        let (medicine, package) = makeMedicine(context: context, name: "Aspirina")
+        let person = makePerson(context: context, name: "Luca", surname: "Rossi")
+        let therapy = makeTherapy(
+            context: context,
+            medicine: medicine,
+            package: package,
+            person: person,
+            start: makeDate(2026, 1, 26, 0, 0),
+            rrule: "RRULE:FREQ=DAILY",
+            doseTimes: [makeDate(2026, 1, 26, 8, 0)]
+        )
+
+        let planner = NotificationPlanner(
+            context: context,
+            calendar: calendar,
+            config: NotificationScheduleConfiguration(therapyHorizonDays: 1),
+            stockAlertStore: InMemoryStockAlertStore()
+        )
+
+        let items = planner.planTherapyNotifications(therapies: [therapy], now: now)
+        #expect(items.count == 1)
+        #expect(items[0].title == "Luca deve assumere Aspirina")
+        #expect(items[0].body == "08:00")
+    }
+
     @Test func therapyNotificationsAreSortedAndCapped() throws {
         let context = makeContext()
         let now = makeDate(2026, 1, 26, 7, 0)
@@ -211,6 +267,96 @@ struct NotificationPlannerTests {
         #expect(second.isEmpty)
     }
 
+    @Test func stockNotificationUsesEssentialCopyForAccountPerson() throws {
+        let context = makeContext()
+        let now = makeDate(2026, 1, 26, 8, 0)
+        let (medicine, package) = makeMedicine(context: context, name: "Zyrtec")
+        let person = makePerson(context: context, name: "Mattia", surname: "Debonis", isAccount: true)
+        _ = makeTherapy(
+            context: context,
+            medicine: medicine,
+            package: package,
+            person: person,
+            start: makeDate(2026, 1, 26, 0, 0),
+            rrule: "RRULE:FREQ=DAILY",
+            doseTimes: [makeDate(2026, 1, 26, 9, 0)]
+        )
+        StockService(context: context).setUnits(3, for: package)
+
+        let planner = NotificationPlanner(
+            context: context,
+            calendar: calendar,
+            stockAlertStore: InMemoryStockAlertStore()
+        )
+
+        let items = planner.planStockNotifications(medicines: [medicine], now: now)
+        #expect(items.contains {
+            $0.origin == .immediate &&
+            $0.title == "Rifornisci Zyrtec" &&
+            $0.body == "Scorte in esaurimento"
+        })
+    }
+
+    @Test func stockNotificationMentionsPersonWhenNotAccount() throws {
+        let context = makeContext()
+        let now = makeDate(2026, 1, 26, 8, 0)
+        let (medicine, package) = makeMedicine(context: context, name: "Zyrtec")
+        let person = makePerson(context: context, name: "Luca", surname: "Rossi")
+        _ = makeTherapy(
+            context: context,
+            medicine: medicine,
+            package: package,
+            person: person,
+            start: makeDate(2026, 1, 26, 0, 0),
+            rrule: "RRULE:FREQ=DAILY",
+            doseTimes: [makeDate(2026, 1, 26, 9, 0)]
+        )
+        StockService(context: context).setUnits(3, for: package)
+
+        let planner = NotificationPlanner(
+            context: context,
+            calendar: calendar,
+            stockAlertStore: InMemoryStockAlertStore()
+        )
+
+        let items = planner.planStockNotifications(medicines: [medicine], now: now)
+        #expect(items.contains {
+            $0.origin == .immediate &&
+            $0.title == "Luca deve rifornire Zyrtec" &&
+            $0.body == "Scorte in esaurimento"
+        })
+    }
+
+    @Test func emptyStockNotificationUsesExhaustedSubtitle() throws {
+        let context = makeContext()
+        let now = makeDate(2026, 1, 26, 8, 0)
+        let (medicine, package) = makeMedicine(context: context, name: "Zyrtec")
+        let person = makePerson(context: context, name: "Mattia", surname: "Debonis", isAccount: true)
+        _ = makeTherapy(
+            context: context,
+            medicine: medicine,
+            package: package,
+            person: person,
+            start: makeDate(2026, 1, 26, 0, 0),
+            rrule: "RRULE:FREQ=DAILY",
+            doseTimes: [makeDate(2026, 1, 26, 9, 0)]
+        )
+        StockService(context: context).setUnits(0, for: package)
+
+        let planner = NotificationPlanner(
+            context: context,
+            calendar: calendar,
+            stockAlertStore: InMemoryStockAlertStore()
+        )
+
+        let items = planner.planStockNotifications(medicines: [medicine], now: now)
+        #expect(items.contains {
+            $0.origin == .immediate &&
+            $0.title == "Rifornisci Zyrtec" &&
+            $0.body == "Scorte esaurite"
+        })
+    }
+
     private func makeMedicine(context: NSManagedObjectContext, name: String) -> (Medicine, Package) {
         guard let medicineEntity = NSEntityDescription.entity(forEntityName: "Medicine", in: context),
               let packageEntity = NSEntityDescription.entity(forEntityName: "Package", in: context) else {
@@ -243,7 +389,12 @@ struct NotificationPlannerTests {
         return (medicine, package)
     }
 
-    private func makePerson(context: NSManagedObjectContext, name: String, surname: String) -> Person {
+    private func makePerson(
+        context: NSManagedObjectContext,
+        name: String,
+        surname: String,
+        isAccount: Bool = false
+    ) -> Person {
         guard let personEntity = NSEntityDescription.entity(forEntityName: "Person", in: context) else {
             fatalError("Missing Person entity in Core Data model.")
         }
@@ -251,6 +402,7 @@ struct NotificationPlannerTests {
         person.id = UUID()
         person.nome = name
         person.cognome = surname
+        person.is_account = isAccount
         return person
     }
 

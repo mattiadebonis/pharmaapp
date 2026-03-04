@@ -35,6 +35,11 @@
         <attribute name="indirizzo" optional="YES" attributeType="String"/>
         <attribute name="mail" optional="YES" attributeType="String"/>
         <attribute name="nome" optional="YES" attributeType="String"/>
+        <attribute name="segreteria_mail" optional="YES" attributeType="String"/>
+        <attribute name="segreteria_nome" optional="YES" attributeType="String"/>
+        <attribute name="segreteria_orari" optional="YES" attributeType="String"/>
+        <attribute name="segreteria_telefono" optional="YES" attributeType="String"/>
+        <attribute name="specializzazione" optional="YES" attributeType="String"/>
         <attribute name="orari" optional="YES" attributeType="String"/>
         <attribute name="telefono" optional="YES" attributeType="String"/>
         <relationship name="medicines" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Medicine" inverseName="prescribingDoctor" inverseEntity="Medicine"/>

@@ -22,9 +22,7 @@ struct ProfileView: View {
     @AppStorage("preferredPharmacyName") private var preferredPharmacyName: String = ""
 
     @State private var selectedDoctor: Doctor?
-    @State private var isDoctorDetailPresented = false
     @State private var selectedPerson: Person?
-    @State private var isPersonDetailPresented = false
     @State private var fullscreenBarcodeCodiceFiscale: String?
     @State private var personPendingDeletion: Person?
     @State private var personDeleteErrorMessage: String?
@@ -42,17 +40,12 @@ struct ProfileView: View {
             }) {
                 ForEach(persons) { person in
                     HStack(spacing: 0) {
-                        Button {
-                            selectedPerson = person
-                            isPersonDetailPresented = true
+                        NavigationLink {
+                            PersonDetailView(person: person)
                         } label: {
                             Text(personDisplayName(for: person))
-                                .font(.headline)
                                 .foregroundStyle(.primary)
                         }
-                        .buttonStyle(.plain)
-
-                        Spacer()
 
                         if let cf = person.codice_fiscale, !cf.isEmpty {
                             Button {
@@ -95,47 +88,44 @@ struct ProfileView: View {
 
             // MARK: Dottori
             Section(header: HStack {
-                Label("Dottori", systemImage: "stethoscope")
+                Label("Medici", systemImage: "stethoscope")
                 Spacer()
                 NavigationLink(destination: AddDoctorView()) {
                     Image(systemName: "plus")
                 }
             }) {
                 ForEach(doctors) { doctor in
-                    Button {
-                        selectedDoctor = doctor
-                        isDoctorDetailPresented = true
+                    NavigationLink {
+                        DoctorDetailView(doctor: doctor)
                     } label: {
                         Text(doctorDisplayName(for: doctor))
-                            .font(.headline)
                             .foregroundStyle(.primary)
                     }
-                    .buttonStyle(.plain)
                 }
             }
 
-            // MARK: Farmacie
-            Section(header: HStack {
-                Label("Farmacie", systemImage: "cross.fill")
-                Spacer()
-                Button {
-                    isPharmacyPickerPresented = true
-                } label: {
-                    Image(systemName: "plus")
-                }
-            }) {
-                if !preferredPharmacyName.isEmpty {
-                    Text(preferredPharmacyName)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                } else {
-                    Text("Nessuna farmacia selezionata")
-                        .foregroundStyle(.secondary)
-                }
-            }
+            // MARK: Farmacie (temporaneamente nascosto)
+//            Section(header: HStack {
+//                Label("Farmacie", systemImage: "cross.fill")
+//                Spacer()
+//                Button {
+//                    isPharmacyPickerPresented = true
+//                } label: {
+//                    Image(systemName: "plus")
+//                }
+//            }) {
+//                if !preferredPharmacyName.isEmpty {
+//                    Text(preferredPharmacyName)
+//                        .font(.headline)
+//                        .foregroundStyle(.primary)
+//                } else {
+//                    Text("Nessuna farmacia selezionata")
+//                        .foregroundStyle(.secondary)
+//                }
+//            }
 
-            // MARK: Messaggio ricetta
-            Section(header: Label("Messaggio ricetta", systemImage: "text.bubble")) {
+            // MARK: Template messaggio ricetta
+            Section(header: Label("Template messaggio ricetta", systemImage: "text.bubble")) {
                 NavigationLink {
                     PrescriptionMessageTemplateSettingsView()
                 } label: {
@@ -153,16 +143,6 @@ struct ProfileView: View {
                         dismiss()
                     }
                 }
-            }
-        }
-        .navigationDestination(isPresented: $isDoctorDetailPresented) {
-            if let doctor = selectedDoctor {
-                DoctorDetailView(doctor: doctor)
-            }
-        }
-        .navigationDestination(isPresented: $isPersonDetailPresented) {
-            if let person = selectedPerson {
-                PersonDetailView(person: person)
             }
         }
         .fullScreenCover(isPresented: Binding(
@@ -244,7 +224,6 @@ struct ProfileView: View {
             try PersonDeletionService.shared.delete(person, in: context)
             if selectedPerson?.objectID == person.objectID {
                 selectedPerson = nil
-                isPersonDetailPresented = false
             }
         } catch {
             context.rollback()

@@ -5,13 +5,13 @@ import WidgetKit
 /// Vista dedicata al tab "Armadietto" (ex ramo medicines di FeedView)
 struct CabinetView: View {
     private struct ShelfViewState {
-        let favoriteEntries: [CabinetViewModel.ShelfEntry]
+        let pinnedMedicineEntries: [CabinetViewModel.ShelfEntry]
         let cabinetEntries: [CabinetViewModel.ShelfEntry]
         let otherMedicineEntries: [CabinetViewModel.ShelfEntry]
         let orderedEntriesByCabinetID: [NSManagedObjectID: [MedicinePackage]]
 
         static let empty = ShelfViewState(
-            favoriteEntries: [],
+            pinnedMedicineEntries: [],
             cabinetEntries: [],
             otherMedicineEntries: [],
             orderedEntriesByCabinetID: [:]
@@ -48,6 +48,7 @@ struct CabinetView: View {
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
     @State private var missedDoseSheet: MissedDoseSheetState?
     @State private var cachedSummaryLines: [String] = ["Tutto sotto controllo!"]
+    @State private var cachedInlineAction: String = "Tutto sotto controllo"
     @State private var cachedShelfState: ShelfViewState = .empty
     @State private var rowSnapshotsByEntryID: [NSManagedObjectID: CabinetViewModel.CabinetRowSnapshot] = [:]
     @State private var syncWorkItem: DispatchWorkItem?
@@ -93,7 +94,10 @@ struct CabinetView: View {
             .onChange(of: options.count) { _ in
                 recomputeAllCachedState()
             }
-            .onReceive(favoritesStore.objectWillChange) { _ in
+            .onChange(of: favoritesStore.favoriteMedicineIDs) { _ in
+                recomputeShelfState()
+            }
+            .onChange(of: favoritesStore.favoriteCabinetIDs) { _ in
                 recomputeShelfState()
             }
             .onReceive(
@@ -129,7 +133,9 @@ struct CabinetView: View {
     }
 
     private func recomputeSummaryLines() {
-        cachedSummaryLines = computeSummaryLines()
+        let displayData = computeSummaryDisplayData()
+        cachedSummaryLines = displayData.lines
+        cachedInlineAction = displayData.inlineAction
     }
 
     private func handlePendingRoute(_ route: AppRoute?) {
@@ -152,7 +158,7 @@ struct CabinetView: View {
     private func syncSummaryToWidgetDebounced() {
         syncWorkItem?.cancel()
         let workItem = DispatchWorkItem {
-            CabinetSummarySharedStore.write(cachedSummaryLines)
+            CabinetSummarySharedStore.write(cachedSummaryLines, inlineAction: cachedInlineAction)
             WidgetCenter.shared.reloadTimelines(ofKind: "CabinetSummaryWidget")
         }
         syncWorkItem = workItem
@@ -262,15 +268,12 @@ struct CabinetView: View {
             .multilineTextAlignment(.leading)
     }
 
-    private func computeSummaryLines() -> [String] {
-        viewModel.computeSummaryLines(
+    private func computeSummaryDisplayData() -> CabinetViewModel.SummaryDisplayData {
+        // Pharmacy suggestion temporaneamente disabilitata
+        viewModel.computeSummaryDisplayData(
             medicines: uniqueMedicines,
             option: options.first,
-            pharmacy: PharmacyInfo(
-                name: locationVM.pinItem?.title,
-                isOpen: locationVM.isLikelyOpen,
-                distanceText: locationVM.distanceString
-            )
+            pharmacy: nil
         )
     }
 
@@ -296,7 +299,8 @@ struct CabinetView: View {
         let shelfState = viewModel.shelfViewState(
             entries: entries,
             option: options.first,
-            cabinets: Array(cabinets)
+            cabinets: Array(cabinets),
+            favoriteMedicineIDs: favoritesStore.favoriteMedicineIDs
         )
         cachedShelfState = shelfSections(from: shelfState)
         rowSnapshotsByEntryID = viewModel.buildRowSnapshots(entries: entries, option: options.first)
@@ -335,9 +339,9 @@ struct CabinetView: View {
             .listSectionSeparator(.hidden)
         }
 
-        if !viewState.favoriteEntries.isEmpty {
-            Section(header: sectionHeader("Preferiti")) {
-                ForEach(viewState.favoriteEntries, id: \.id) { entry in
+        if !viewState.pinnedMedicineEntries.isEmpty {
+            Section {
+                ForEach(viewState.pinnedMedicineEntries, id: \.id) { entry in
                     shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
                 }
             }
@@ -354,41 +358,33 @@ struct CabinetView: View {
         }
 
         if !viewState.otherMedicineEntries.isEmpty {
-            let showOtherMedicinesHeader = !(viewState.favoriteEntries.isEmpty && viewState.cabinetEntries.isEmpty)
-            if showOtherMedicinesHeader {
-                Section(header: sectionHeader("Altri medicinali")) {
-                    ForEach(viewState.otherMedicineEntries, id: \.id) { entry in
-                        shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
-                    }
+            Section {
+                ForEach(viewState.otherMedicineEntries, id: \.id) { entry in
+                    shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
                 }
-                .listSectionSeparator(.hidden)
-            } else {
-                Section {
-                    ForEach(viewState.otherMedicineEntries, id: \.id) { entry in
-                        shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
-                    }
-                }
-                .listSectionSeparator(.hidden)
             }
+            .listSectionSeparator(.hidden)
         }
     }
 
     private func shelfSections(from shelfState: CabinetViewModel.ShelfViewState) -> ShelfViewState {
-        var favoriteEntries: [CabinetViewModel.ShelfEntry] = []
+        var pinnedMedicineEntries: [CabinetViewModel.ShelfEntry] = []
         var cabinetEntries: [CabinetViewModel.ShelfEntry] = []
         var otherMedicineEntries: [CabinetViewModel.ShelfEntry] = []
         for entry in shelfState.entries {
-            if isFavoriteEntry(entry) {
-                favoriteEntries.append(entry)
-            } else if case .cabinet = entry.kind {
+            if case .cabinet = entry.kind {
                 cabinetEntries.append(entry)
-            } else if case .medicinePackage = entry.kind {
-                otherMedicineEntries.append(entry)
+            } else if case .medicinePackage(let medicineEntry) = entry.kind {
+                if favoritesStore.isFavorite(medicineEntry) {
+                    pinnedMedicineEntries.append(entry)
+                } else {
+                    otherMedicineEntries.append(entry)
+                }
             }
         }
         return ShelfViewState(
-            favoriteEntries: favoriteEntries,
-            cabinetEntries: cabinetEntries,
+            pinnedMedicineEntries: pinnedMedicineEntries,
+            cabinetEntries: sortFavoriteCabinetsFirst(cabinetEntries),
             otherMedicineEntries: otherMedicineEntries,
             orderedEntriesByCabinetID: shelfState.orderedEntriesByCabinetID
         )
@@ -410,13 +406,26 @@ struct CabinetView: View {
         }
     }
 
-    private func isFavoriteEntry(_ entry: CabinetViewModel.ShelfEntry) -> Bool {
-        switch entry.kind {
-        case .cabinet(let cabinet):
-            return favoritesStore.isFavorite(cabinet)
-        case .medicinePackage(let entry):
-            return favoritesStore.isFavorite(entry)
+    private func sortFavoriteCabinetsFirst(
+        _ entries: [CabinetViewModel.ShelfEntry]
+    ) -> [CabinetViewModel.ShelfEntry] {
+        var pinnedCabinets: [CabinetViewModel.ShelfEntry] = []
+        var regularCabinets: [CabinetViewModel.ShelfEntry] = []
+
+        for entry in entries {
+            guard case .cabinet(let cabinet) = entry.kind else {
+                regularCabinets.append(entry)
+                continue
+            }
+
+            if favoritesStore.isFavorite(cabinet) {
+                pinnedCabinets.append(entry)
+            } else {
+                regularCabinets.append(entry)
+            }
         }
+
+        return pinnedCabinets + regularCabinets
     }
 
     private func sectionHeader(_ title: String) -> some View {
@@ -493,6 +502,7 @@ struct CabinetView: View {
             isSelected: viewModel.selectedEntries.contains(entry),
             isInSelectionMode: viewModel.isSelecting,
             shouldShowPrescription: shouldShowRx,
+            isPinned: favoritesStore.isFavorite(entry),
             onTap: {
                 if viewModel.isSelecting {
                     viewModel.toggleSelection(for: entry)
@@ -579,10 +589,10 @@ struct CabinetView: View {
             } label: {
                 swipeLabel(
                     isFavoriteCabinet ? "Rimuovi preferiti" : "Preferito",
-                    systemImage: isFavoriteCabinet ? "heart.fill" : "heart"
+                    systemImage: isFavoriteCabinet ? "pin.fill" : "pin"
                 )
             }
-            .tint(isFavoriteCabinet ? .red : .pink)
+            .tint(isFavoriteCabinet ? .orange : .accentColor)
         }
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden, edges: .all)

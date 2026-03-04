@@ -271,7 +271,158 @@ struct CabinetSummaryReadModelTests {
         #expect(summary.title == "2 farmaci in terapia oggi necessitano di rifornimento.")
     }
 
-    // MARK: - Scenario 4: Refill within today beats next dose today
+    // MARK: - Scenario 4: Imminent dose (within 60 min)
+
+    @Test func imminentDoseShowsMinutesAway() {
+        let calendar = makeCalendar()
+        let now = makeDate(2026, 3, 1, 19, 50, calendar: calendar)
+        let startDate = makeDate(2026, 2, 28, 8, 0, calendar: calendar)
+
+        let therapy = makeTherapy(
+            startDate: startDate,
+            doseTimes: [
+                makeDate(2026, 3, 1, 8, 0, calendar: calendar),
+                makeDate(2026, 3, 1, 20, 30, calendar: calendar)
+            ],
+            leftoverUnits: 20,
+            calendar: calendar
+        )
+        let therapyId = therapy.id
+        let intakeLog = makeIntakeLog(
+            at: makeDate(2026, 3, 1, 8, 5, calendar: calendar),
+            therapyId: therapyId,
+            scheduledDueAt: makeDate(2026, 3, 1, 8, 0, calendar: calendar)
+        )
+
+        let medicine = makeMedicine(therapies: [therapy], logs: [intakeLog])
+        let readModel = makeReadModel(calendar: calendar)
+
+        let summary = readModel.buildSummary(
+            medicines: [medicine],
+            option: defaultOption,
+            pharmacy: nil,
+            now: now
+        )
+
+        #expect(summary.priority == .imminentDose)
+        #expect(summary.state == .warning)
+        #expect(summary.title == "Prossima assunzione tra 40 minuti.")
+        #expect(summary.subtitle == "È prevista alle 20:30.")
+    }
+
+    @Test func imminentDoseBeatsRefillSoon() {
+        let calendar = makeCalendar()
+        let now = makeDate(2026, 3, 1, 19, 50, calendar: calendar)
+        let startDate = makeDate(2026, 2, 28, 8, 0, calendar: calendar)
+
+        // Medicine A: pending dose in 40 min, plenty of stock
+        let therapyA = makeTherapy(
+            startDate: startDate,
+            doseTimes: [
+                makeDate(2026, 3, 1, 8, 0, calendar: calendar),
+                makeDate(2026, 3, 1, 20, 30, calendar: calendar)
+            ],
+            leftoverUnits: 20,
+            calendar: calendar
+        )
+        let therapyAId = therapyA.id
+        let intakeLogA = makeIntakeLog(
+            at: makeDate(2026, 3, 1, 8, 5, calendar: calendar),
+            therapyId: therapyAId,
+            scheduledDueAt: makeDate(2026, 3, 1, 8, 0, calendar: calendar)
+        )
+        let medicineA = makeMedicine(name: "Aspirina", therapies: [therapyA], logs: [intakeLogA])
+
+        // Medicine B: low stock (5 units, under threshold 7), no manual intake
+        let therapyB = makeTherapy(
+            startDate: startDate,
+            doseTimes: [makeDate(2026, 3, 1, 8, 0, calendar: calendar)],
+            leftoverUnits: 5,
+            manualIntake: false,
+            calendar: calendar
+        )
+        let medicineB = makeMedicine(name: "Moment", manualIntake: false, therapies: [therapyB])
+
+        let readModel = makeReadModel(calendar: calendar)
+
+        let summary = readModel.buildSummary(
+            medicines: [medicineA, medicineB],
+            option: defaultOption,
+            pharmacy: defaultPharmacy,
+            now: now
+        )
+
+        #expect(summary.priority == .imminentDose)
+        #expect(summary.state == .warning)
+        #expect(summary.title.contains("tra 40 minuti"))
+    }
+
+    @Test func refillBeforeNextDoseBeatsImminentDose() {
+        let calendar = makeCalendar()
+        let now = makeDate(2026, 3, 1, 20, 10, calendar: calendar)
+        let startDate = makeDate(2026, 2, 28, 8, 0, calendar: calendar)
+
+        // Medicine with pending dose in 20 min AND empty stock (critical refill)
+        let therapy = makeTherapy(
+            startDate: startDate,
+            doseTimes: [makeDate(2026, 3, 1, 20, 30, calendar: calendar)],
+            leftoverUnits: 0,
+            calendar: calendar
+        )
+
+        let medicine = makeMedicine(therapies: [therapy])
+        let readModel = makeReadModel(calendar: calendar)
+
+        let summary = readModel.buildSummary(
+            medicines: [medicine],
+            option: defaultOption,
+            pharmacy: defaultPharmacy,
+            now: now
+        )
+
+        // refillBeforeNextDose is critical and beats imminentDose
+        #expect(summary.priority == .refillBeforeNextDose)
+        #expect(summary.state == .critical)
+    }
+
+    @Test func doseOutside60MinWindowIsNotImminent() {
+        let calendar = makeCalendar()
+        let now = makeDate(2026, 3, 1, 14, 0, calendar: calendar)
+        let startDate = makeDate(2026, 2, 28, 8, 0, calendar: calendar)
+
+        // Dose at 20:30 — 6.5 hours away, well outside 60 min window
+        let therapy = makeTherapy(
+            startDate: startDate,
+            doseTimes: [
+                makeDate(2026, 3, 1, 8, 0, calendar: calendar),
+                makeDate(2026, 3, 1, 20, 30, calendar: calendar)
+            ],
+            leftoverUnits: 20,
+            calendar: calendar
+        )
+        let therapyId = therapy.id
+        let intakeLog = makeIntakeLog(
+            at: makeDate(2026, 3, 1, 8, 5, calendar: calendar),
+            therapyId: therapyId,
+            scheduledDueAt: makeDate(2026, 3, 1, 8, 0, calendar: calendar)
+        )
+
+        let medicine = makeMedicine(therapies: [therapy], logs: [intakeLog])
+        let readModel = makeReadModel(calendar: calendar)
+
+        let summary = readModel.buildSummary(
+            medicines: [medicine],
+            option: defaultOption,
+            pharmacy: nil,
+            now: now
+        )
+
+        // Should fall to nextDoseToday, not imminentDose
+        #expect(summary.priority == .nextDoseToday)
+        #expect(summary.state == .info)
+    }
+
+    // MARK: - Scenario 5: Refill within today beats next dose today
 
     @Test func refillWithinTodayBeatsNextDoseToday() {
         let calendar = makeCalendar()
@@ -308,11 +459,12 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .refillWithinToday)
         #expect(summary.state == .warning)
+        #expect(summary.title.contains("Per le terapie in corso"))
         #expect(summary.title.contains("rifornito entro oggi"))
         #expect(summary.subtitle.contains("farmacia più vicina"))
     }
 
-    // MARK: - Scenario 5: Next dose today (no stock issues)
+    // MARK: - Scenario 6: Next dose today (no stock issues)
 
     @Test func nextDoseTodayShowsPendingCount() {
         let calendar = makeCalendar()
@@ -348,12 +500,12 @@ struct CabinetSummaryReadModelTests {
         )
 
         #expect(summary.priority == .nextDoseToday)
-        #expect(summary.state == .warning)
+        #expect(summary.state == .info)
         #expect(summary.title.contains("2"))
         #expect(summary.subtitle.contains("16:00"))
     }
 
-    // MARK: - Scenario 6: Next dose today alone (clean subtitle, no refill clause)
+    // MARK: - Scenario 7: Next dose today alone (clean subtitle, no refill clause)
 
     @Test func nextDoseTodayAloneShowsCleanSubtitle() {
         let calendar = makeCalendar()
@@ -387,13 +539,13 @@ struct CabinetSummaryReadModelTests {
         )
 
         #expect(summary.priority == .nextDoseToday)
-        #expect(summary.state == .warning)
+        #expect(summary.state == .info)
         #expect(summary.title == "Oggi resta 1 assunzione da completare.")
         #expect(summary.subtitle == "La prossima è prevista alle 20:30.")
         #expect(!summary.subtitle.contains("rifornit"))
     }
 
-    // MARK: - Scenario 7: Refill soon
+    // MARK: - Scenario 8: Refill soon
 
     @Test func refillSoonShowsCount() {
         let calendar = makeCalendar()
@@ -420,11 +572,12 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .refillSoon)
         #expect(summary.state == .info)
+        #expect(summary.title.contains("Le terapie sono coperte"))
         #expect(summary.title.contains("rifornimento a breve"))
         #expect(summary.subtitle.contains("farmacia più vicina"))
     }
 
-    // MARK: - Scenario 8: Refill soon beats next dose today
+    // MARK: - Scenario 9: Refill soon beats next dose today
 
     @Test func refillSoonBeatsNextDoseToday() {
         let calendar = makeCalendar()
@@ -464,7 +617,127 @@ struct CabinetSummaryReadModelTests {
         #expect(summary.title.contains("rifornimento a breve"))
     }
 
-    // MARK: - Scenario 9: All under control
+    // MARK: - Inline action
+
+    @Test func inlineMissedDoseShowsTimeAndMedicine() {
+        let calendar = makeCalendar()
+        let now = makeDate(2026, 3, 1, 10, 0, calendar: calendar)
+        let startDate = makeDate(2026, 2, 28, 8, 0, calendar: calendar)
+
+        let therapy = makeTherapy(
+            startDate: startDate,
+            doseTimes: [
+                makeDate(2026, 3, 1, 8, 0, calendar: calendar),
+                makeDate(2026, 3, 1, 20, 0, calendar: calendar)
+            ],
+            leftoverUnits: 20,
+            calendar: calendar
+        )
+
+        let medicine = makeMedicine(name: "tachipirina", therapies: [therapy])
+        let readModel = makeReadModel(calendar: calendar)
+
+        let inlineAction = readModel.buildInlineAction(
+            medicines: [medicine],
+            option: defaultOption,
+            pharmacy: nil,
+            now: now
+        )
+
+        #expect(inlineAction.priority == .missedDose)
+        #expect(inlineAction.text == "08:00 dose saltata: Tachipirina")
+    }
+
+    @Test func inlineNextDoseShowsTimeAndMedicine() {
+        let calendar = makeCalendar()
+        let now = makeDate(2026, 3, 1, 14, 0, calendar: calendar)
+        let startDate = makeDate(2026, 2, 28, 8, 0, calendar: calendar)
+
+        let therapy = makeTherapy(
+            startDate: startDate,
+            doseTimes: [
+                makeDate(2026, 3, 1, 8, 0, calendar: calendar),
+                makeDate(2026, 3, 1, 16, 0, calendar: calendar)
+            ],
+            leftoverUnits: 20,
+            calendar: calendar
+        )
+        let therapyId = therapy.id
+        let intakeLog = makeIntakeLog(
+            at: makeDate(2026, 3, 1, 8, 5, calendar: calendar),
+            therapyId: therapyId,
+            scheduledDueAt: makeDate(2026, 3, 1, 8, 0, calendar: calendar)
+        )
+
+        let medicine = makeMedicine(name: "aspirina", therapies: [therapy], logs: [intakeLog])
+        let readModel = makeReadModel(calendar: calendar)
+
+        let inlineAction = readModel.buildInlineAction(
+            medicines: [medicine],
+            option: defaultOption,
+            pharmacy: nil,
+            now: now
+        )
+
+        #expect(inlineAction.priority == .nextDoseToday)
+        #expect(inlineAction.text == "16:00 prendi Aspirina")
+    }
+
+    @Test func inlineRefillBeforeNextDoseShowsMedicineAndTime() {
+        let calendar = makeCalendar()
+        let now = makeDate(2026, 3, 1, 14, 0, calendar: calendar)
+        let startDate = makeDate(2026, 2, 28, 8, 0, calendar: calendar)
+
+        let therapy = makeTherapy(
+            startDate: startDate,
+            doseTimes: [makeDate(2026, 3, 1, 20, 30, calendar: calendar)],
+            leftoverUnits: 0,
+            manualIntake: false,
+            calendar: calendar
+        )
+
+        let medicine = makeMedicine(name: "moment", manualIntake: false, therapies: [therapy])
+        let readModel = makeReadModel(calendar: calendar)
+
+        let inlineAction = readModel.buildInlineAction(
+            medicines: [medicine],
+            option: defaultOption,
+            pharmacy: defaultPharmacy,
+            now: now
+        )
+
+        #expect(inlineAction.priority == .refillBeforeNextDose)
+        #expect(inlineAction.text == "20:30 rifornisci Moment")
+    }
+
+    @Test func inlineRefillWithinTodayShowsSingleAction() {
+        let calendar = makeCalendar()
+        let now = makeDate(2026, 3, 1, 14, 0, calendar: calendar)
+        let startDate = makeDate(2026, 2, 28, 8, 0, calendar: calendar)
+
+        let therapy = makeTherapy(
+            startDate: startDate,
+            doseTimes: [makeDate(2026, 3, 1, 20, 30, calendar: calendar)],
+            leftoverUnits: 1,
+            manualIntake: false,
+            calendar: calendar
+        )
+
+        let medicine = makeMedicine(name: "moment", manualIntake: false, therapies: [therapy])
+        let readModel = makeReadModel(calendar: calendar)
+
+        let inlineAction = readModel.buildInlineAction(
+            medicines: [medicine],
+            option: defaultOption,
+            pharmacy: defaultPharmacy,
+            now: now
+        )
+
+        #expect(inlineAction.priority == .refillWithinToday)
+        #expect(inlineAction.text == "Oggi rifornisci Moment")
+    }
+
+    // MARK: - Scenario 10: All under control
 
     @Test func allUnderControlWhenEverythingIsOk() {
         let calendar = makeCalendar()

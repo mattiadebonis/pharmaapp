@@ -8,6 +8,11 @@
 import SwiftUI
 
 struct PersonDetailView: View {
+    private enum Field: Hashable {
+        case nome
+        case codiceFiscale
+    }
+
     @Environment(\.managedObjectContext) private var managedObjectContext
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var auth: AuthViewModel
@@ -19,6 +24,9 @@ struct PersonDetailView: View {
     @State private var isScannerPresented = false
     @State private var errorMessage: String?
     @State private var showDeleteConfirmation = false
+    @State private var autosaveTask: Task<Void, Never>?
+    @State private var isDeleting = false
+    @FocusState private var focusedField: Field?
 
     init(person: Person) {
         self.person = person
@@ -31,6 +39,7 @@ struct PersonDetailView: View {
         Form {
             Section(header: Text("Dettagli Persona")) {
                 TextField("Nome", text: $nome)
+                    .focused($focusedField, equals: .nome)
             }
 
             ConditionsEditorSection(conditions: $conditions)
@@ -40,6 +49,7 @@ struct PersonDetailView: View {
                     .keyboardType(.asciiCapable)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
+                    .focused($focusedField, equals: .codiceFiscale)
 
                 if scannerAvailable {
                     Button("Scansiona tessera sanitaria") {
@@ -86,12 +96,24 @@ struct PersonDetailView: View {
             }
         }
         .navigationTitle("Dettaglio Persona")
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Salva") {
-                    saveChanges()
-                }
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: nome) { _ in
+            scheduleAutosave()
+        }
+        .onChange(of: conditions) { _ in
+            scheduleAutosave()
+        }
+        .onChange(of: codiceFiscale) { _ in
+            scheduleAutosave()
+        }
+        .onChange(of: focusedField) { newValue in
+            if newValue != .codiceFiscale {
+                scheduleAutosave(immediate: true)
             }
+        }
+        .onDisappear {
+            autosaveTask?.cancel()
+            saveChanges(showValidationMessage: false)
         }
         .sheet(isPresented: $isScannerPresented) {
             if #available(iOS 16.0, *) {
@@ -119,23 +141,32 @@ struct PersonDetailView: View {
         return false
     }
 
-    private func saveChanges() {
-        let normalizedCF = CodiceFiscaleValidator.normalize(codiceFiscale)
-        if !normalizedCF.isEmpty && !CodiceFiscaleValidator.isValid(normalizedCF) {
-            errorMessage = "Il Codice Fiscale deve avere 16 caratteri alfanumerici."
-            return
-        }
+    private func saveChanges(showValidationMessage: Bool = true) {
+        guard !isDeleting, !person.isDeleted else { return }
 
-        errorMessage = nil
+        let normalizedCF = CodiceFiscaleValidator.normalize(codiceFiscale)
+        let canPersistCodiceFiscale = normalizedCF.isEmpty || CodiceFiscaleValidator.isValid(normalizedCF)
+
         person.nome = normalizedValue(from: nome)
         person.cognome = nil
         person.condizione = ConditionListFormatter.serialized(from: conditions)
-        person.codice_fiscale = normalizedCF.isEmpty ? nil : normalizedCF
+
+        if canPersistCodiceFiscale {
+            person.codice_fiscale = normalizedCF.isEmpty ? nil : normalizedCF
+            errorMessage = nil
+        } else if showValidationMessage {
+            errorMessage = "Il Codice Fiscale deve avere 16 caratteri alfanumerici."
+        } else {
+            errorMessage = nil
+        }
 
         let context = person.managedObjectContext ?? managedObjectContext
         do {
             if context.hasChanges {
                 try context.save()
+            }
+            if canPersistCodiceFiscale {
+                errorMessage = nil
             }
         } catch {
             context.rollback()
@@ -145,6 +176,8 @@ struct PersonDetailView: View {
     }
 
     private func deletePerson() {
+        isDeleting = true
+        autosaveTask?.cancel()
         let context = person.managedObjectContext ?? managedObjectContext
         do {
             try PersonDeletionService.shared.delete(person, in: context)
@@ -159,5 +192,19 @@ struct PersonDetailView: View {
     private func normalizedValue(from value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func scheduleAutosave(immediate: Bool = false) {
+        guard !isDeleting else { return }
+        autosaveTask?.cancel()
+        autosaveTask = Task {
+            if !immediate {
+                try? await Task.sleep(nanoseconds: 400_000_000)
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                saveChanges(showValidationMessage: focusedField != .codiceFiscale)
+            }
+        }
     }
 }

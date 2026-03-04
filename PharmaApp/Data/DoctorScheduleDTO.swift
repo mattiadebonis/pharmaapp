@@ -162,17 +162,35 @@ extension Doctor {
     /// Restituisce gli orari decodificati come DTO, creando una struttura vuota se non presente o non valida.
     var scheduleDTO: DoctorScheduleDTO {
         get {
-            if let decoded = DoctorScheduleDTO.decode(from: orari) {
-                return decoded
-            }
-            return DoctorScheduleDTO()
+            decodedScheduleDTO(from: orari)
         }
         set {
-            do {
-                orari = try newValue.encodedJSONString()
-            } catch {
-                print("Errore nella codifica degli orari del dottore: \(error)")
-            }
+            orari = encodedScheduleString(from: newValue, label: "dottore")
+        }
+    }
+
+    var secretaryScheduleDTO: DoctorScheduleDTO {
+        get {
+            decodedScheduleDTO(from: segreteria_orari)
+        }
+        set {
+            segreteria_orari = encodedScheduleString(from: newValue, label: "segreteria")
+        }
+    }
+
+    private func decodedScheduleDTO(from rawValue: String?) -> DoctorScheduleDTO {
+        if let decoded = DoctorScheduleDTO.decode(from: rawValue) {
+            return decoded
+        }
+        return DoctorScheduleDTO()
+    }
+
+    private func encodedScheduleString(from schedule: DoctorScheduleDTO, label: String) -> String? {
+        do {
+            return try schedule.encodedJSONString()
+        } catch {
+            print("Errore nella codifica degli orari \(label): \(error)")
+            return nil
         }
     }
 }

@@ -186,24 +186,11 @@ struct MedicineWizardView: View {
 
             Section(header: Text("Scadenza")) {
                 HStack(spacing: 8) {
-                    TextField("MM", text: Binding(
-                        get: { deadlineMonthInput },
-                        set: { deadlineMonthInput = sanitizeMonthInput($0) }
-                    ))
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.center)
-                    .frame(width: 50)
-
-                    Text("/")
-                        .foregroundStyle(.secondary)
-
-                    TextField("YYYY", text: Binding(
-                        get: { deadlineYearInput },
-                        set: { deadlineYearInput = sanitizeYearInput($0) }
-                    ))
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.center)
-                    .frame(width: 70)
+                    DeadlineMonthYearField(
+                        month: $deadlineMonthInput,
+                        year: $deadlineYearInput
+                    )
+                    .frame(width: 110)
 
                     Spacer()
                 }
@@ -377,14 +364,6 @@ struct MedicineWizardView: View {
         }
 
         medicine.updateDeadline(month: month, year: year)
-    }
-
-    private func sanitizeMonthInput(_ value: String) -> String {
-        String(value.filter { $0.isNumber }.prefix(2))
-    }
-
-    private func sanitizeYearInput(_ value: String) -> String {
-        String(value.filter { $0.isNumber }.prefix(4))
     }
 
     private func wizardPackageShortLabel(_ item: CatalogSelection) -> String {

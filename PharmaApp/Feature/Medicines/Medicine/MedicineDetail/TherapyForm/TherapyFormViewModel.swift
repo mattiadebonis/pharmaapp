@@ -218,6 +218,48 @@ class TherapyFormViewModel: ObservableObject {
         }
     }
 
+    func deleteTherapy(_ therapy: Therapy) {
+        let doseEventsRequest = DoseEventRecord.fetchRequest(for: therapy)
+        let measurementsRequest = MonitoringMeasurement.fetchRequest() as NSFetchRequest<MonitoringMeasurement>
+        measurementsRequest.predicate = NSPredicate(format: "therapy == %@", therapy)
+        let logsRequest = Log.fetchRequest() as! NSFetchRequest<Log>
+        logsRequest.predicate = NSPredicate(format: "therapy == %@", therapy)
+
+        do {
+            let doseEvents = try context.fetch(doseEventsRequest)
+            let measurements = try context.fetch(measurementsRequest)
+            let logs = try context.fetch(logsRequest)
+
+            if let doses = therapy.doses as? Set<Dose> {
+                for dose in doses {
+                    context.delete(dose)
+                }
+            }
+
+            for doseEvent in doseEvents {
+                context.delete(doseEvent)
+            }
+
+            for measurement in measurements {
+                context.delete(measurement)
+            }
+
+            for log in logs {
+                log.therapy = nil
+            }
+
+            context.delete(therapy)
+            try context.save()
+            successMessage = "Terapia eliminata!"
+            DispatchQueue.main.async {
+                self.isDataUpdated = true
+            }
+        } catch {
+            errorMessage = "Errore durante l'eliminazione: \(error.localizedDescription)"
+            print("Errore eliminazione Therapy: \(error.localizedDescription)")
+        }
+    }
+
     private func normalizedCondition(from value: String?) -> String? {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)

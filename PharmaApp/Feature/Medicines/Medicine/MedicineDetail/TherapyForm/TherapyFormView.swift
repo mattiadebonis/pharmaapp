@@ -140,6 +140,7 @@ struct TherapyFormView: View {
     @State private var doses: [DoseEntry] = [DoseEntry(time: Date(), amount: 1)]
     @State private var isShowingDurationSheet = false
     @State private var isShowingMonitoringSheet = false
+    @State private var showDeleteConfirmation = false
     
     // MARK: - Init
     init(
@@ -343,6 +344,17 @@ struct TherapyFormView: View {
                 }
                 .listRowBackground(Color(.systemGroupedBackground))
             }
+
+            if editingTherapy != nil {
+                Section {
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Label("Elimina terapia", systemImage: "trash")
+                    }
+                }
+                .listRowBackground(Color(.systemGroupedBackground))
+            }
         }
         .navigationTitle(navigationTitleText)
         .navigationBarTitleDisplayMode(.inline)
@@ -462,6 +474,14 @@ struct TherapyFormView: View {
             }
         } message: {
             Text("Inserisci il nome della condizione da associare alla terapia.")
+        }
+        .alert("Eliminare questa terapia?", isPresented: $showDeleteConfirmation) {
+            Button("Annulla", role: .cancel) { }
+            Button("Elimina", role: .destructive) {
+                deleteCurrentTherapy()
+            }
+        } message: {
+            Text("L'azione rimuove la terapia e i relativi orari.")
         }
     }
 
@@ -1318,6 +1338,22 @@ extension TherapyFormView {
         }
         if let error = therapyFormViewModel.errorMessage {
             print("Error: \(error)")
+        }
+    }
+
+    private func deleteCurrentTherapy() {
+        guard let therapyToDelete = editingTherapy else { return }
+        therapyFormViewModel.deleteTherapy(therapyToDelete)
+        guard therapyFormViewModel.errorMessage == nil else {
+            if let error = therapyFormViewModel.errorMessage {
+                print("Error: \(error)")
+            }
+            return
+        }
+        appViewModel.isSearchIndexPresented = false
+        onSave?()
+        if !isEmbedded {
+            dismiss()
         }
     }
     

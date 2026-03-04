@@ -12,6 +12,7 @@ struct CabinetDetailView: View {
     let cabinet: Cabinet
     let entries: [MedicinePackage]
     @ObservedObject var viewModel: CabinetViewModel
+    @EnvironmentObject private var favoritesStore: FavoritesStore
     @Environment(\.dismiss) private var dismiss
     
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
@@ -119,7 +120,12 @@ struct CabinetDetailView: View {
 
     private func buildRows() -> [DetailRow] {
         let valid = entries.filter { !$0.isDeleted && $0.managedObjectContext != nil }
-        return viewModel.sortedEntries(in: cabinet, entries: valid, option: options.first)
+        return viewModel.sortedEntries(
+            in: cabinet,
+            entries: valid,
+            option: options.first,
+            favoriteMedicineIDs: favoritesStore.favoriteMedicineIDs
+        )
             .map { DetailRow(entry: $0) }
     }
     
@@ -131,6 +137,7 @@ struct CabinetDetailView: View {
             isSelected: isSelected,
             isInSelectionMode: viewModel.isSelecting,
             shouldShowPrescription: shouldShowRx,
+            isPinned: favoritesStore.isFavorite(entry),
             onTap: {
                 if viewModel.isSelecting {
                     viewModel.toggleSelection(for: entry)

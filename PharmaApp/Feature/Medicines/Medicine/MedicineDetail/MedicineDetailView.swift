@@ -840,36 +840,12 @@ extension MedicineDetailView {
                 HStack(spacing: 8) {
                     Text("Scadenza")
                         .foregroundStyle(.secondary)
-                    TextField("MM", text: Binding(
-                        get: { deadlineMonthInput },
-                        set: { newValue in
-                            let sanitized = sanitizeMonthInput(newValue)
-                            if sanitized != deadlineMonthInput {
-                                deadlineMonthInput = sanitized
-                            }
-                            updateDeadlineFromInputs()
-                        }
-                    ))
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.center)
-                    .frame(width: 50)
-
-                    Text("/")
-                        .foregroundStyle(.secondary)
-
-                    TextField("YYYY", text: Binding(
-                        get: { deadlineYearInput },
-                        set: { newValue in
-                            let sanitized = sanitizeYearInput(newValue)
-                            if sanitized != deadlineYearInput {
-                                deadlineYearInput = sanitized
-                            }
-                            updateDeadlineFromInputs()
-                        }
-                    ))
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.center)
-                    .frame(width: 70)
+                    DeadlineMonthYearField(
+                        month: $deadlineMonthInput,
+                        year: $deadlineYearInput,
+                        onChange: updateDeadlineFromInputs
+                    )
+                    .frame(width: 110)
 
                     Spacer()
                 }
@@ -1010,16 +986,6 @@ extension MedicineDetailView {
             deadlineMonthInput = ""
             deadlineYearInput = ""
         }
-    }
-
-    private func sanitizeMonthInput(_ value: String) -> String {
-        let digits = value.filter { $0.isNumber }
-        return String(digits.prefix(2))
-    }
-
-    private func sanitizeYearInput(_ value: String) -> String {
-        let digits = value.filter { $0.isNumber }
-        return String(digits.prefix(4))
     }
 
     private func clearDeadline() {

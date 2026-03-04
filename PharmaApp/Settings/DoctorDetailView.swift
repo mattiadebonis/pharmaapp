@@ -15,18 +15,28 @@ struct DoctorDetailView: View {
     @State private var nome: String
     @State private var mail: String
     @State private var telefono: String
-    @State private var indirizzo: String
+    @State private var specializzazione: String
     @State private var schedule: DoctorScheduleDTO
+    @State private var segreteriaNome: String
+    @State private var segreteriaMail: String
+    @State private var segreteriaTelefono: String
+    @State private var segreteriaSchedule: DoctorScheduleDTO
     @State private var saveErrorMessage: String?
     @State private var showDeleteConfirmation = false
+    @State private var autosaveTask: Task<Void, Never>?
+    @State private var isDeleting = false
 
     init(doctor: Doctor) {
         self.doctor = doctor
         _nome = State(initialValue: Self.doctorDisplayName(for: doctor))
         _mail = State(initialValue: doctor.mail ?? "")
         _telefono = State(initialValue: doctor.telefono ?? "")
-        _indirizzo = State(initialValue: doctor.indirizzo ?? "")
+        _specializzazione = State(initialValue: doctor.specializzazione ?? "")
         _schedule = State(initialValue: doctor.scheduleDTO)
+        _segreteriaNome = State(initialValue: doctor.segreteria_nome ?? "")
+        _segreteriaMail = State(initialValue: doctor.segreteria_mail ?? "")
+        _segreteriaTelefono = State(initialValue: doctor.segreteria_telefono ?? "")
+        _segreteriaSchedule = State(initialValue: doctor.secretaryScheduleDTO)
     }
 
     var body: some View {
@@ -37,11 +47,30 @@ struct DoctorDetailView: View {
                     .keyboardType(.emailAddress)
                 TextField("Telefono", text: $telefono)
                     .keyboardType(.phonePad)
-                TextField("Indirizzo", text: $indirizzo)
+                TextField("Specializzazione", text: $specializzazione)
             }
 
-            Section(header: Text("Orari")) {
+            Section(header: Text("Orari dottore")) {
                 DoctorScheduleEditor(schedule: $schedule)
+            }
+
+            Section(header: Text("Segreteria")) {
+                NavigationLink {
+                    DoctorSecretaryEditorView(
+                        nome: $segreteriaNome,
+                        mail: $segreteriaMail,
+                        telefono: $segreteriaTelefono,
+                        schedule: $segreteriaSchedule
+                    )
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Apri pagina segreteria")
+                            .foregroundStyle(.primary)
+                        Text(secretarySummary)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Section {
@@ -57,12 +86,37 @@ struct DoctorDetailView: View {
             }
         }
         .navigationTitle("Dettaglio Dottore")
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Salva") {
-                    saveChanges()
-                }
-            }
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: nome) { _ in
+            scheduleAutosave()
+        }
+        .onChange(of: mail) { _ in
+            scheduleAutosave()
+        }
+        .onChange(of: telefono) { _ in
+            scheduleAutosave()
+        }
+        .onChange(of: specializzazione) { _ in
+            scheduleAutosave()
+        }
+        .onChange(of: schedule) { _ in
+            scheduleAutosave()
+        }
+        .onChange(of: segreteriaNome) { _ in
+            scheduleAutosave()
+        }
+        .onChange(of: segreteriaMail) { _ in
+            scheduleAutosave()
+        }
+        .onChange(of: segreteriaTelefono) { _ in
+            scheduleAutosave()
+        }
+        .onChange(of: segreteriaSchedule) { _ in
+            scheduleAutosave()
+        }
+        .onDisappear {
+            autosaveTask?.cancel()
+            saveChanges()
         }
         .alert("Errore salvataggio", isPresented: Binding(
             get: { saveErrorMessage != nil },
@@ -87,18 +141,25 @@ struct DoctorDetailView: View {
     }
 
     private func saveChanges() {
+        guard !isDeleting, !doctor.isDeleted else { return }
+
         doctor.nome = normalizedValue(from: nome)
         doctor.cognome = nil
         doctor.mail = normalizedValue(from: mail)
         doctor.telefono = normalizedValue(from: telefono)
-        doctor.indirizzo = normalizedValue(from: indirizzo)
+        doctor.specializzazione = normalizedValue(from: specializzazione)
         doctor.scheduleDTO = schedule
+        doctor.segreteria_nome = normalizedValue(from: segreteriaNome)
+        doctor.segreteria_mail = normalizedValue(from: segreteriaMail)
+        doctor.segreteria_telefono = normalizedValue(from: segreteriaTelefono)
+        doctor.secretaryScheduleDTO = segreteriaSchedule
 
         let context = doctor.managedObjectContext ?? managedObjectContext
         do {
             if context.hasChanges {
                 try context.save()
             }
+            saveErrorMessage = nil
         } catch {
             context.rollback()
             saveErrorMessage = error.localizedDescription
@@ -107,6 +168,8 @@ struct DoctorDetailView: View {
     }
 
     private func deleteDoctor() {
+        isDeleting = true
+        autosaveTask?.cancel()
         let context = doctor.managedObjectContext ?? managedObjectContext
         context.delete(doctor)
         do {
@@ -122,6 +185,27 @@ struct DoctorDetailView: View {
     private func normalizedValue(from value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var secretarySummary: String {
+        let values = [
+            normalizedValue(from: segreteriaNome),
+            normalizedValue(from: segreteriaTelefono),
+            normalizedValue(from: segreteriaMail)
+        ].compactMap { $0 }
+        return values.isEmpty ? "Nessuna segreteria configurata" : values.joined(separator: " · ")
+    }
+
+    private func scheduleAutosave() {
+        guard !isDeleting else { return }
+        autosaveTask?.cancel()
+        autosaveTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                saveChanges()
+            }
+        }
     }
 
     private static func doctorDisplayName(for doctor: Doctor) -> String {

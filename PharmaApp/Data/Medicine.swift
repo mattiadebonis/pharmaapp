@@ -470,7 +470,10 @@ extension Medicine {
 
     var deadlineLabel: String? {
         guard let info = deadlineMonthYear else { return nil }
-        return String(format: "%02d/%04d", info.month, info.year)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "it_IT")
+        let monthName = formatter.monthSymbols[info.month - 1]
+        return "Scade a \(monthName) \(info.year)"
     }
 
     var deadlineMonthStartDate: Date? {
@@ -522,13 +525,13 @@ extension Medicine {
             let months = monthsUntilDeadline(referenceDate: referenceDate, calendar: calendar) ?? 0
             let remainingLabel: String
             if months <= 0 {
-                remainingLabel = "Questo mese"
+                remainingLabel = "Scade questo mese"
             } else if months == 1 {
-                remainingLabel = "Tra 1 mese"
+                remainingLabel = "Scade tra 1 mese"
             } else {
-                remainingLabel = "Tra \(months) mesi"
+                remainingLabel = "Scade tra \(months) mesi"
             }
-            return DeadlineDisplay(label: "\(remainingLabel) · \(label)", status: .expiringSoon)
+            return DeadlineDisplay(label: remainingLabel, status: .expiringSoon)
         case .ok:
             return DeadlineDisplay(label: label, status: .ok)
         }

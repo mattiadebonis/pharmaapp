@@ -104,6 +104,30 @@ final class UserDefaultsStockAlertStateStore: StockAlertStateStore {
 }
 
 struct NotificationPlanner {
+    private enum NotificationCopySubject {
+        case account
+        case other(String)
+        case generic
+
+        var key: String {
+            switch self {
+            case .account:
+                return "account"
+            case .other(let name):
+                return "other:\(name.lowercased())"
+            case .generic:
+                return "generic"
+            }
+        }
+    }
+
+    private static let notificationTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "it_IT_POSIX")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
     private let context: NSManagedObjectContext
     private let calendar: Calendar
     private let config: NotificationScheduleConfiguration
@@ -155,11 +179,8 @@ struct NotificationPlanner {
             }
 
             let medicine = therapy.medicine
-            let title = "È ora della terapia"
-            let personLabel = personLabel(for: therapy)
-            let body = personLabel.isEmpty
-                ? "Assumi \(medicine.nome)"
-                : "Assumi \(medicine.nome) per \(personLabel)"
+            let title = therapyNotificationTitle(for: therapy)
+            let body = therapyNotificationBody(for: event.date)
             let id = "therapy-\(UUID().uuidString)"
             let userInfo = [
                 "type": NotificationPlanKind.therapy.rawValue,
@@ -204,10 +225,8 @@ struct NotificationPlanner {
 
             if currentLevel == .low || currentLevel == .empty {
                 if shouldNotifyNow(level: currentLevel, medicineId: medicine.id, now: now) {
-                    let title = currentLevel == .empty ? "Scorte finite" : "Scorte basse"
-                    let body = currentLevel == .empty
-                        ? "Scorte terminate per \(medicine.nome)"
-                        : "Le scorte di \(medicine.nome) stanno finendo"
+                    let title = stockNotificationTitle(for: medicine)
+                    let body = stockNotificationBody(for: currentLevel)
                     let kind: NotificationPlanKind = currentLevel == .empty ? .stockOut : .stockLow
                     let id = "stock-\(currentLevel.rawValue)-\(UUID().uuidString)"
                     let userInfo = [
@@ -253,8 +272,8 @@ struct NotificationPlanner {
                         NotificationPlanItem(
                             id: id,
                             date: lowDate,
-                            title: "Scorte basse",
-                            body: "Le scorte di \(medicine.nome) stanno per finire",
+                            title: stockNotificationTitle(for: medicine),
+                            body: stockNotificationBody(for: .low),
                             kind: .stockLow,
                             origin: .scheduled,
                             userInfo: userInfo,
@@ -277,8 +296,8 @@ struct NotificationPlanner {
                         NotificationPlanItem(
                             id: id,
                             date: outDate,
-                            title: "Scorte finite",
-                            body: "Le scorte di \(medicine.nome) stanno terminando",
+                            title: stockNotificationTitle(for: medicine),
+                            body: stockNotificationBody(for: .empty),
                             kind: .stockOut,
                             origin: .scheduled,
                             userInfo: userInfo,
@@ -314,11 +333,80 @@ struct NotificationPlanner {
         }
     }
 
-    private func personLabel(for therapy: Therapy) -> String {
-        let name = therapy.person.nome?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let surname = therapy.person.cognome?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let combined = "\(name) \(surname)".trimmingCharacters(in: .whitespacesAndNewlines)
-        return combined
+    private func therapyNotificationTitle(for therapy: Therapy) -> String {
+        let medicineName = medicineLabel(for: therapy.medicine)
+        switch notificationCopySubject(for: therapy.person) {
+        case .account, .generic:
+            return "Assumi \(medicineName)"
+        case .other(let name):
+            return "\(name) deve assumere \(medicineName)"
+        }
+    }
+
+    private func therapyNotificationBody(for date: Date) -> String {
+        Self.notificationTimeFormatter.string(from: date)
+    }
+
+    private func stockNotificationTitle(for medicine: Medicine) -> String {
+        let medicineName = medicineLabel(for: medicine)
+        switch notificationCopySubject(for: medicine) {
+        case .account, .generic:
+            return "Rifornisci \(medicineName)"
+        case .other(let name):
+            return "\(name) deve rifornire \(medicineName)"
+        }
+    }
+
+    private func stockNotificationBody(for level: StockAlertLevel) -> String {
+        switch level {
+        case .empty:
+            return "Scorte esaurite"
+        case .low:
+            return "Scorte in esaurimento"
+        case .none:
+            return ""
+        }
+    }
+
+    private func notificationCopySubject(for medicine: Medicine) -> NotificationCopySubject {
+        let therapies = (medicine.therapies ?? []).filter { !$0.isDeleted }
+        guard !therapies.isEmpty else { return .generic }
+
+        let distinctSubjects = Set(therapies.map { notificationCopySubject(for: $0.person).key })
+        guard distinctSubjects.count == 1, let firstTherapy = therapies.first else {
+            return .generic
+        }
+        return notificationCopySubject(for: firstTherapy.person)
+    }
+
+    private func notificationCopySubject(for person: Person?) -> NotificationCopySubject {
+        guard let person else { return .generic }
+        if person.is_account {
+            return .account
+        }
+        guard let name = concisePersonName(for: person) else {
+            return .generic
+        }
+        return .other(name)
+    }
+
+    private func concisePersonName(for person: Person) -> String? {
+        let first = trimmed(person.nome)
+        if !first.isEmpty, first.lowercased() != "account" {
+            return first
+        }
+
+        let surname = trimmed(person.cognome)
+        return surname.isEmpty ? nil : surname
+    }
+
+    private func medicineLabel(for medicine: Medicine) -> String {
+        let trimmedName = trimmed(medicine.nome)
+        return trimmedName.isEmpty ? "farmaco" : trimmedName
+    }
+
+    private func trimmed(_ value: String?) -> String {
+        value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     private func isTherapyEligibleForNotification(_ therapy: Therapy) -> Bool {

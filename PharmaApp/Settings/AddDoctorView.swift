@@ -14,8 +14,12 @@ struct AddDoctorView: View {
     @State private var nome: String = ""
     @State private var mail: String = ""
     @State private var telefono: String = ""
-    @State private var indirizzo: String = ""
+    @State private var specializzazione: String = ""
+    @State private var segreteriaNome: String = ""
+    @State private var segreteriaMail: String = ""
+    @State private var segreteriaTelefono: String = ""
     @State private var schedule = DoctorScheduleDTO()
+    @State private var segreteriaSchedule = DoctorScheduleDTO()
     
     var body: some View {
         Form {
@@ -25,29 +29,56 @@ struct AddDoctorView: View {
                     .keyboardType(.emailAddress)
                 TextField("Telefono", text: $telefono)
                     .keyboardType(.phonePad)
-                TextField("Indirizzo", text: $indirizzo)
+                TextField("Specializzazione", text: $specializzazione)
             }
             
-            Section(header: Text("Orari")) {
+            Section(header: Text("Orari dottore")) {
                 DoctorScheduleEditor(schedule: $schedule)
             }
-            
-            Button("Salva") {
-                addDoctor()
+
+            Section(header: Text("Segreteria")) {
+                NavigationLink {
+                    DoctorSecretaryEditorView(
+                        nome: $segreteriaNome,
+                        mail: $segreteriaMail,
+                        telefono: $segreteriaTelefono,
+                        schedule: $segreteriaSchedule
+                    )
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Apri pagina segreteria")
+                            .foregroundStyle(.primary)
+                        Text(secretarySummary)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .navigationTitle("Aggiungi Dottore")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Aggiungi") {
+                    addDoctor()
+                }
+            }
+        }
     }
     
     private func addDoctor() {
         let nuovoDottore = Doctor(context: managedObjectContext)
         nuovoDottore.id = UUID()
-        nuovoDottore.nome = nome
+        nuovoDottore.nome = normalizedValue(from: nome)
         nuovoDottore.cognome = nil
-        nuovoDottore.mail = mail
-        nuovoDottore.telefono = telefono
-        nuovoDottore.indirizzo = indirizzo
+        nuovoDottore.mail = normalizedValue(from: mail)
+        nuovoDottore.telefono = normalizedValue(from: telefono)
+        nuovoDottore.specializzazione = normalizedValue(from: specializzazione)
         nuovoDottore.scheduleDTO = schedule
+        nuovoDottore.segreteria_nome = normalizedValue(from: segreteriaNome)
+        nuovoDottore.segreteria_mail = normalizedValue(from: segreteriaMail)
+        nuovoDottore.segreteria_telefono = normalizedValue(from: segreteriaTelefono)
+        nuovoDottore.secretaryScheduleDTO = segreteriaSchedule
         
         do {
             try managedObjectContext.save()
@@ -55,6 +86,20 @@ struct AddDoctorView: View {
         } catch {
             print("Errore nel salvataggio del dottore: \(error.localizedDescription)")
         }
+    }
+
+    private func normalizedValue(from value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var secretarySummary: String {
+        let values = [
+            normalizedValue(from: segreteriaNome),
+            normalizedValue(from: segreteriaTelefono),
+            normalizedValue(from: segreteriaMail)
+        ].compactMap { $0 }
+        return values.isEmpty ? "Nessuna segreteria configurata" : values.joined(separator: " · ")
     }
 }
 
@@ -133,5 +178,30 @@ struct TimeSlotRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+struct DoctorSecretaryEditorView: View {
+    @Binding var nome: String
+    @Binding var mail: String
+    @Binding var telefono: String
+    @Binding var schedule: DoctorScheduleDTO
+
+    var body: some View {
+        Form {
+            Section(header: Text("Contatti segreteria")) {
+                TextField("Nome segreteria", text: $nome)
+                TextField("Email segreteria", text: $mail)
+                    .keyboardType(.emailAddress)
+                TextField("Telefono segreteria", text: $telefono)
+                    .keyboardType(.phonePad)
+            }
+
+            Section(header: Text("Orari segreteria")) {
+                DoctorScheduleEditor(schedule: $schedule)
+            }
+        }
+        .navigationTitle("Segreteria")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

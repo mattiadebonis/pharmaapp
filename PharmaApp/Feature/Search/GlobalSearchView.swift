@@ -534,6 +534,10 @@ struct GlobalSearchView: View {
             (doctor.nome ?? "").localizedCaseInsensitiveContains(trimmedQuery)
             || (doctor.cognome ?? "").localizedCaseInsensitiveContains(trimmedQuery)
             || (doctor.telefono ?? "").localizedCaseInsensitiveContains(trimmedQuery)
+            || (doctor.mail ?? "").localizedCaseInsensitiveContains(trimmedQuery)
+            || (doctor.segreteria_nome ?? "").localizedCaseInsensitiveContains(trimmedQuery)
+            || (doctor.segreteria_telefono ?? "").localizedCaseInsensitiveContains(trimmedQuery)
+            || (doctor.segreteria_mail ?? "").localizedCaseInsensitiveContains(trimmedQuery)
         }
         .sorted { lhs, rhs in
             doctorDisplayName(lhs).localizedCaseInsensitiveCompare(doctorDisplayName(rhs)) == .orderedAscending
@@ -631,8 +635,8 @@ struct GlobalSearchView: View {
                             .padding(.vertical, 8)
                             .background(
                                 Capsule(style: .continuous)
-                                    .fill(activeAction == action ? Color.accentColor : Color.white)
-                                    .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
+                                    .fill(activeAction == action ? Color.accentColor : Color(.secondarySystemGroupedBackground))
+                                    .shadow(color: Color.primary.opacity(0.08), radius: 8, x: 0, y: 2)
                             )
                         }
                         .buttonStyle(.plain)
@@ -759,7 +763,7 @@ struct GlobalSearchView: View {
                                 .padding(.vertical, 8)
                                 .background(
                                     Capsule(style: .continuous)
-                                        .fill(selectedScope == scope ? Color.accentColor : Color.secondary.opacity(0.16))
+                                        .fill(selectedScope == scope ? Color.accentColor : Color(.secondarySystemGroupedBackground))
                                 )
                         }
                         .buttonStyle(.plain)
@@ -1390,8 +1394,8 @@ struct GlobalSearchView: View {
                 .font(.system(size: 18, weight: .regular))
                 .foregroundStyle(.primary)
 
-            if let phone = doctorPhone(doctor) {
-                Text(phone)
+            if let subtitle = doctorSearchSubtitle(doctor) {
+                Text(subtitle)
                     .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(.secondary)
             }
@@ -1839,6 +1843,21 @@ struct GlobalSearchView: View {
     private func doctorPhone(_ doctor: Doctor) -> String? {
         let phone = doctor.telefono?.trimmingCharacters(in: .whitespacesAndNewlines)
         return (phone?.isEmpty == false) ? phone : nil
+    }
+
+    private func secretaryPhone(_ doctor: Doctor) -> String? {
+        let phone = doctor.segreteria_telefono?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (phone?.isEmpty == false) ? phone : nil
+    }
+
+    private func doctorSearchSubtitle(_ doctor: Doctor) -> String? {
+        if let phone = doctorPhone(doctor) {
+            return phone
+        }
+        if let phone = secretaryPhone(doctor) {
+            return "Segreteria: \(phone)"
+        }
+        return nil
     }
 
     private func doctorTodaySlotText(for doctor: Doctor) -> String? {
@@ -2462,24 +2481,11 @@ private struct CatalogStockEditorSheet: View {
 
                 Section(header: Text("Scadenza")) {
                     HStack(spacing: 8) {
-                        TextField("MM", text: Binding(
-                            get: { monthInput },
-                            set: { monthInput = sanitizeMonthInput($0) }
-                        ))
-                        .keyboardType(.numberPad)
-                        .multilineTextAlignment(.center)
-                        .frame(width: 50)
-
-                        Text("/")
-                            .foregroundStyle(.secondary)
-
-                        TextField("YYYY", text: Binding(
-                            get: { yearInput },
-                            set: { yearInput = sanitizeYearInput($0) }
-                        ))
-                        .keyboardType(.numberPad)
-                        .multilineTextAlignment(.center)
-                        .frame(width: 70)
+                        DeadlineMonthYearField(
+                            month: $monthInput,
+                            year: $yearInput
+                        )
+                        .frame(width: 110)
 
                         Spacer()
                     }
@@ -2517,13 +2523,6 @@ private struct CatalogStockEditorSheet: View {
         return String(format: "Scadenza: %02d/%04d", month, year)
     }
 
-    private func sanitizeMonthInput(_ value: String) -> String {
-        String(value.filter { $0.isNumber }.prefix(2))
-    }
-
-    private func sanitizeYearInput(_ value: String) -> String {
-        String(value.filter { $0.isNumber }.prefix(4))
-    }
 }
 
 private struct SearchFieldScannerAccessoryInstaller: UIViewControllerRepresentable {
