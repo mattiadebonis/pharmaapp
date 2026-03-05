@@ -133,6 +133,28 @@ final class StockService {
         newLog.actor_device_id = identity.deviceId
         newLog.source = "local"
 
+        var rollbackEntryMutation: (() -> Void)?
+        if type == "purchase", let package {
+            let createdEntry = createPurchasedEntry(
+                medicine: medicine,
+                package: package,
+                operationId: operationId,
+                timestamp: timestamp
+            )
+            rollbackEntryMutation = { [weak context] in
+                context?.delete(createdEntry)
+            }
+        } else if type == "purchase_undo", let reversalOfOperationId {
+            if let entry = markPurchasedEntryReversed(
+                purchaseOperationId: reversalOfOperationId,
+                undoOperationId: operationId
+            ) {
+                rollbackEntryMutation = {
+                    entry.reversed_by_operation_id = nil
+                }
+            }
+        }
+
         var delta = 0
         if let package {
             delta = applyLogDelta(type: type, package: package, contextKey: contextKey)
@@ -148,6 +170,7 @@ final class StockService {
             if delta != 0, let package {
                 _ = apply(delta: -delta, for: package, contextKey: contextKey)
             }
+            rollbackEntryMutation?()
             context.delete(newLog)
             print("Errore nel salvataggio log: \(error.localizedDescription)")
             return nil
@@ -342,6 +365,18 @@ final class StockService {
         newLog.package = package
         newLog.therapy = originalLog.therapy
 
+        var rollbackEntryMutation: (() -> Void)?
+        if reversalType == "purchase_undo", let originalOperationId = originalLog.operation_id {
+            if let entry = markPurchasedEntryReversed(
+                purchaseOperationId: originalOperationId,
+                undoOperationId: operationId
+            ) {
+                rollbackEntryMutation = {
+                    entry.reversed_by_operation_id = nil
+                }
+            }
+        }
+
         let delta = applyLogDelta(type: reversalType, package: package, contextKey: contextKey)
 
         do {
@@ -351,10 +386,63 @@ final class StockService {
             if delta != 0 {
                 apply(delta: -delta, for: package, contextKey: contextKey)
             }
+            rollbackEntryMutation?()
             context.delete(newLog)
             print("Errore nel salvataggio undo log: \(error.localizedDescription)")
             return nil
         }
+    }
+
+    @discardableResult
+    private func markPurchasedEntryReversed(
+        purchaseOperationId: UUID,
+        undoOperationId: UUID
+    ) -> MedicinePackage? {
+        let request: NSFetchRequest<MedicinePackage> = MedicinePackage.fetchRequest() as! NSFetchRequest<MedicinePackage>
+        request.fetchLimit = 1
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            NSPredicate(format: "purchase_operation_id == %@", purchaseOperationId as CVarArg),
+            NSPredicate(format: "reversed_by_operation_id == nil")
+        ])
+        guard let entry = try? context.fetch(request).first else { return nil }
+        entry.reversed_by_operation_id = undoOperationId
+        return entry
+    }
+
+    private func createPurchasedEntry(
+        medicine: Medicine,
+        package: Package,
+        operationId: UUID,
+        timestamp: Date
+    ) -> MedicinePackage {
+        let inheritedCabinet = latestActiveCabinet(for: medicine, package: package)
+        guard let entity = NSEntityDescription.entity(forEntityName: "MedicinePackage", in: context) else {
+            fatalError("Missing MedicinePackage entity description")
+        }
+        let entry = MedicinePackage(entity: entity, insertInto: context)
+        entry.id = UUID()
+        entry.created_at = timestamp
+        entry.source_id = entry.id
+        entry.visibility = "local"
+        entry.medicine = medicine
+        entry.package = package
+        entry.purchase_operation_id = operationId
+        entry.reversed_by_operation_id = nil
+        entry.cabinet = inheritedCabinet
+        medicine.addToMedicinePackages(entry)
+        return entry
+    }
+
+    private func latestActiveCabinet(for medicine: Medicine, package: Package) -> Cabinet? {
+        let request: NSFetchRequest<MedicinePackage> = MedicinePackage.fetchRequest() as! NSFetchRequest<MedicinePackage>
+        request.fetchLimit = 1
+        request.sortDescriptors = [NSSortDescriptor(key: "created_at", ascending: false)]
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            NSPredicate(format: "medicine == %@", medicine),
+            NSPredicate(format: "package == %@", package),
+            NSPredicate(format: "reversed_by_operation_id == nil")
+        ])
+        return try? context.fetch(request).first?.cabinet
     }
 
     private func makeLog() -> Log? {

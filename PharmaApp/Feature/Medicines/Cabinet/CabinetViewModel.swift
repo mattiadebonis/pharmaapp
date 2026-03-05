@@ -18,16 +18,24 @@ class CabinetViewModel: ObservableObject {
     private(set) lazy var medicineRepository: MedicineRepository = pharmaCoreFactory.makeMedicineRepository()
     private(set) lazy var optionRepository: OptionRepository = pharmaCoreFactory.makeOptionRepository()
 
-    private lazy var snapshotBuilder = CoreDataSnapshotBuilder(
-        context: PersistenceController.shared.container.viewContext
-    )
-
     init(
         actionService: MedicineActionService = MedicineActionService(),
         pharmaCoreFactory: PharmaCoreFactory = PharmaCoreFactory()
     ) {
         self.actionService = actionService
         self.pharmaCoreFactory = pharmaCoreFactory
+    }
+
+    private func snapshotBuilder(for context: NSManagedObjectContext?) -> CoreDataSnapshotBuilder {
+        CoreDataSnapshotBuilder(context: context ?? PersistenceController.shared.container.viewContext)
+    }
+
+    private func snapshotBuilder(for entries: [MedicinePackage]) -> CoreDataSnapshotBuilder {
+        snapshotBuilder(for: entries.first?.managedObjectContext)
+    }
+
+    private func snapshotBuilder(for medicines: [Medicine]) -> CoreDataSnapshotBuilder {
+        snapshotBuilder(for: medicines.first?.managedObjectContext)
     }
 
     // MARK: - Selection
@@ -181,8 +189,9 @@ class CabinetViewModel: ObservableObject {
     }
 
     func shouldShowPrescriptionAction(for entry: MedicinePackage) -> Bool {
-        let snapshot = snapshotBuilder.makeEntrySnapshot(entry: entry)
-        let optionSnapshot = snapshotBuilder.makeOptionSnapshot(option: nil)
+        let builder = snapshotBuilder(for: entry.managedObjectContext)
+        let snapshot = builder.makeEntrySnapshot(entry: entry)
+        let optionSnapshot = builder.makeOptionSnapshot(option: nil)
         return sectionCalculator.needsPrescriptionBeforePurchase(snapshot, option: optionSnapshot)
     }
 
@@ -193,12 +202,13 @@ class CabinetViewModel: ObservableObject {
     ) -> [NSManagedObjectID: CabinetRowSnapshot] {
         let recurrenceManager = RecurrenceManager.shared
         let calendar = Calendar.current
-        let optionSnapshot = snapshotBuilder.makeOptionSnapshot(option: option)
+        let builder = snapshotBuilder(for: entries)
+        let optionSnapshot = builder.makeOptionSnapshot(option: option)
 
         var snapshots: [NSManagedObjectID: CabinetRowSnapshot] = [:]
         var medicineLogCache: [NSManagedObjectID: [Log]] = [:]
 
-        for entry in entries {
+        for entry in displayableEntries(from: entries) {
             let medicine = entry.medicine
             let medicineID = medicine.objectID
 
@@ -222,7 +232,7 @@ class CabinetViewModel: ObservableObject {
             )
 
             // Use PharmaCore for stock status
-            let entrySnapshot = snapshotBuilder.makeEntrySnapshot(entry: entry)
+            let entrySnapshot = builder.makeEntrySnapshot(entry: entry)
             let stockStatus = sectionCalculator.stockStatus(for: entrySnapshot, option: optionSnapshot)
             let autonomyBelowThreshold = (stockStatus == .low || stockStatus == .critical)
 
@@ -249,7 +259,7 @@ class CabinetViewModel: ObservableObject {
                 line1Tone: autonomyBelowThreshold ? .danger : .normal,
                 line2Tone: .normal,
                 therapyLineTone: skippedDose ? .danger : .normal,
-                deadlineIndicator: deadlineIndicator(for: medicine)
+                deadlineIndicator: deadlineIndicator(for: entry)
             )
 
             // Use PharmaCore for prescription check
@@ -356,13 +366,14 @@ class CabinetViewModel: ObservableObject {
         medicines: [Medicine],
         option: Option?
     ) -> (medicineSnapshots: [MedicineSnapshot], optionSnapshot: OptionSnapshot?) {
+        let builder = snapshotBuilder(for: medicines)
         let medicineSnapshots = medicines.map { medicine in
-            snapshotBuilder.makeMedicineSnapshot(
+            builder.makeMedicineSnapshot(
                 medicine: medicine,
                 logs: Array(medicine.logs ?? [])
             )
         }
-        let optionSnapshot = snapshotBuilder.makeOptionSnapshot(option: option)
+        let optionSnapshot = builder.makeOptionSnapshot(option: option)
         return (medicineSnapshots, optionSnapshot)
     }
 
@@ -392,13 +403,16 @@ class CabinetViewModel: ObservableObject {
         option: Option?,
         favoriteMedicineIDs: Set<UUID>
     ) -> [MedicinePackage] {
+        let visibleEntries = displayableEntries(from: entries)
+        let builder = snapshotBuilder(for: visibleEntries)
+
         // Convert entries to snapshots
-        let optionSnapshot = snapshotBuilder.makeOptionSnapshot(option: option)
+        let optionSnapshot = builder.makeOptionSnapshot(option: option)
         var snapshotToEntry: [String: MedicinePackage] = [:]
         var medicineSnapshots: [MedicineSnapshot] = []
 
-        for entry in entries {
-            let snapshot = snapshotBuilder.makeEntrySnapshot(entry: entry)
+        for entry in visibleEntries {
+            let snapshot = builder.makeEntrySnapshot(entry: entry)
             snapshotToEntry[snapshot.externalKey] = entry
             medicineSnapshots.append(snapshot)
         }
@@ -445,7 +459,37 @@ class CabinetViewModel: ObservableObject {
         return parts.joined(separator: " ")
     }
 
-    private func deadlineIndicator(for medicine: Medicine) -> MedicineRowView.Snapshot.DeadlineIndicator? {
-        makeMedicineRowDeadlineIndicator(for: medicine)
+    private struct EntryGroupKey: Hashable {
+        let medicineID: NSManagedObjectID
+        let packageID: NSManagedObjectID
+        let cabinetID: NSManagedObjectID?
+    }
+
+    private func displayableEntries(from entries: [MedicinePackage]) -> [MedicinePackage] {
+        let active = entries.filter { !$0.isReversed }
+        guard !active.isEmpty else { return [] }
+
+        let grouped = Dictionary(grouping: active) { entry in
+            EntryGroupKey(
+                medicineID: entry.medicine.objectID,
+                packageID: entry.package.objectID,
+                cabinetID: entry.cabinet?.objectID
+            )
+        }
+
+        var hiddenPlaceholderIDs = Set<NSManagedObjectID>()
+        for groupEntries in grouped.values {
+            let hasPurchasedEntry = groupEntries.contains { $0.isPurchased && !$0.isReversed }
+            guard hasPurchasedEntry else { continue }
+            for entry in groupEntries where entry.isPlaceholder {
+                hiddenPlaceholderIDs.insert(entry.objectID)
+            }
+        }
+
+        return active.filter { !hiddenPlaceholderIDs.contains($0.objectID) }
+    }
+
+    private func deadlineIndicator(for entry: MedicinePackage) -> MedicineRowView.Snapshot.DeadlineIndicator? {
+        makeMedicineRowDeadlineIndicator(for: entry.medicine, medicinePackage: entry)
     }
 }

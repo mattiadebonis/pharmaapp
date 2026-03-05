@@ -1,5 +1,6 @@
 import Foundation
 import CoreData
+import CryptoKit
 import UserNotifications
 import os.signpost
 
@@ -22,6 +23,7 @@ struct NotificationScheduleRequestDescriptor: Equatable {
 
 final class NotificationScheduler {
     private let center: NotificationCenterClient
+    private let alarmScheduler: AlarmScheduling
     private let context: NSManagedObjectContext
     private let config: NotificationScheduleConfiguration
     private let planner: NotificationPlanner
@@ -31,11 +33,13 @@ final class NotificationScheduler {
 
     init(
         center: NotificationCenterClient = UNUserNotificationCenter.current(),
+        alarmScheduler: AlarmScheduling = AlarmKitScheduler(),
         context: NSManagedObjectContext,
         config: NotificationScheduleConfiguration = NotificationScheduleConfiguration(),
         stockAlertStore: StockAlertStateStore = UserDefaultsStockAlertStateStore()
     ) {
         self.center = center
+        self.alarmScheduler = alarmScheduler
         self.context = context
         self.config = config
         self.planner = NotificationPlanner(
@@ -88,9 +92,6 @@ final class NotificationScheduler {
             }
         }
 
-        let authorized = await requestAuthorizationIfNeeded()
-        guard authorized else { return }
-
         let now = Date()
         let (plan, preferences) = makePlanAndPreferences(now: now)
         let therapyItems = Array(plan.therapy.prefix(config.maxTherapyNotifications))
@@ -98,17 +99,27 @@ final class NotificationScheduler {
 
         let combined = (therapyItems + stockItems).sorted { $0.date < $1.date }
         let items = Array(combined.prefix(config.maxTotalNotifications))
+        let alarmCandidates = items.filter(Self.shouldUseAlarmKit(for:))
+        let notificationCandidates = items.filter { !Self.shouldUseAlarmKit(for: $0) }
+        let alarmDescriptors = Self.buildAlarmDescriptors(items: alarmCandidates, now: now)
+        let alarmOutcome = await alarmScheduler.schedule(descriptors: alarmDescriptors, now: now)
+        let fallbackAlarmItemIDs = alarmOutcome.fallbackItemIds
+        let fallbackAlarmItems = alarmCandidates.filter { fallbackAlarmItemIDs.contains($0.id) }
+        let notificationItems = notificationCandidates + fallbackAlarmItems
         let descriptors = Self.buildRequestDescriptors(
-            items: items,
+            items: notificationItems,
             preferences: preferences,
             now: now,
             pendingCap: config.maxTotalNotifications
         )
 
         await removePendingNotifications(withPrefixes: ["therapy-", "stock-"])
+        guard !descriptors.isEmpty else { return }
+        let authorized = await requestAuthorizationIfNeeded()
+        guard authorized else { return }
         await schedule(descriptors: descriptors, now: now)
         await ensureTherapyBackupIfNeeded(
-            therapyItems: therapyItems,
+            therapyItems: notificationItems.filter { $0.kind == .therapy },
             preferences: preferences,
             now: now
         )
@@ -188,6 +199,52 @@ final class NotificationScheduler {
                 }
                 .prefix(max(0, pendingCap))
         )
+    }
+
+    nonisolated static func buildAlarmDescriptors(
+        items: [NotificationPlanItem],
+        now: Date
+    ) -> [AlarmScheduleDescriptor] {
+        items.map { item in
+            let baseDate = item.origin == .immediate ? now.addingTimeInterval(1) : item.date
+            let seed = [
+                "alarmkit",
+                item.kind.rawValue,
+                item.userInfo["therapyId"] ?? "",
+                item.userInfo["medicineId"] ?? "",
+                item.userInfo[NotificationPlanUserInfoKey.nextDoseAt] ?? "",
+                String(Int(baseDate.timeIntervalSince1970 / 60))
+            ].joined(separator: "|")
+            return AlarmScheduleDescriptor(
+                id: deterministicUUID(seed: seed),
+                sourceItemId: item.id,
+                date: baseDate,
+                title: item.title,
+                body: item.body,
+                kind: item.kind,
+                snoozeMinutes: item.kind == .therapy ? item.snoozeMinutes : nil
+            )
+        }
+    }
+
+    nonisolated static func shouldUseAlarmKit(for item: NotificationPlanItem) -> Bool {
+        if item.kind == .therapy {
+            return item.notificationLevel == .alarm && !item.isSilenced
+        }
+        return item.userInfo[NotificationPlanUserInfoKey.nextDoseInsufficient] == "1"
+    }
+
+    nonisolated static func deterministicUUID(seed: String) -> UUID {
+        let digest = SHA256.hash(data: Data(seed.utf8))
+        var bytes = Array(digest.prefix(16))
+        bytes[6] = (bytes[6] & 0x0F) | 0x50
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
     }
 
     private func removePendingNotifications(withPrefixes prefixes: [String]) async {

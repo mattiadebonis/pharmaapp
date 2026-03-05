@@ -70,6 +70,7 @@ class TherapyFormViewModel: ObservableObject {
         medicinePackage: MedicinePackage?,
         importance: String,
         person: Person,
+        prescribingDoctor: Doctor?,
         condition: String?,
         manualIntake: Bool,
         notificationsSilenced: Bool,
@@ -89,6 +90,7 @@ class TherapyFormViewModel: ObservableObject {
         therapy.medicinePackage = medicinePackage
         therapy.importance = importance
         therapy.person = person  // associa la persona
+        therapy.prescribingDoctor = prescribingDoctor
         therapy.condizione = normalizedCondition(from: condition)
         therapy.manual_intake_registration = manualIntake
         therapy.notifications_silenced = notificationsSilenced
@@ -156,6 +158,7 @@ class TherapyFormViewModel: ObservableObject {
         medicinePackage: MedicinePackage?,
         importance: String,
         person: Person,
+        prescribingDoctor: Doctor?,
         condition: String?,
         manualIntake: Bool,
         notificationsSilenced: Bool,
@@ -169,6 +172,7 @@ class TherapyFormViewModel: ObservableObject {
             therapy.medicinePackage = medicinePackage
         }
         therapy.person = person  // aggiorna la persona
+        therapy.prescribingDoctor = prescribingDoctor
         therapy.condizione = normalizedCondition(from: condition)
         therapy.manual_intake_registration = manualIntake
         therapy.notifications_silenced = notificationsSilenced

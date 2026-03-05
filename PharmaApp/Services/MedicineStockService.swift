@@ -13,7 +13,8 @@ struct MedicineStockService {
         self.operationIdProvider = operationIdProvider
     }
 
-    func addPurchase(medicine: Medicine, package: Package) {
+    @discardableResult
+    func addPurchase(medicine: Medicine, package: Package) -> UUID? {
         let stockService = StockService(context: context)
         let token = purchaseOperationToken(medicine: medicine, package: package)
         _ = stockService.createLog(
@@ -27,10 +28,12 @@ struct MedicineStockService {
         do {
             try context.save()
             scheduleOperationClear(for: token.key)
+            return token.id
         } catch {
             context.rollback()
             print("Error saving purchase log: \(error.localizedDescription)")
             operationIdProvider.clear(token.key)
+            return nil
         }
     }
 

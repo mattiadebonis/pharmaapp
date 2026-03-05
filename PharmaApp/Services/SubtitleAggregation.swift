@@ -34,6 +34,7 @@ func makeMedicineSubtitle(
             for: entry.medicine,
             therapies: entryTherapies,
             stockUnitsFallback: stockUnits,
+            stockPackageUnitsFallback: Int(entry.package.numero),
             now: now
         )
     }

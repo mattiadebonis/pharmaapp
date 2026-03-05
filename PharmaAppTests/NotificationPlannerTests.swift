@@ -357,6 +357,38 @@ struct NotificationPlannerTests {
         })
     }
 
+    @Test func nextDoseInsufficientStockUsesDedicatedCopy() throws {
+        let context = makeContext()
+        let now = makeDate(2026, 1, 26, 8, 0)
+        let (medicine, package) = makeMedicine(context: context, name: "Zyrtec")
+        let person = makePerson(context: context, name: "Mattia", surname: "Debonis", isAccount: true)
+        _ = makeTherapy(
+            context: context,
+            medicine: medicine,
+            package: package,
+            person: person,
+            start: makeDate(2026, 1, 26, 0, 0),
+            rrule: "RRULE:FREQ=DAILY",
+            doseTimes: [makeDate(2026, 1, 26, 9, 0)],
+            doseAmount: 2
+        )
+        StockService(context: context).setUnits(1, for: package)
+
+        let planner = NotificationPlanner(
+            context: context,
+            calendar: calendar,
+            stockAlertStore: InMemoryStockAlertStore()
+        )
+
+        let items = planner.planStockNotifications(medicines: [medicine], now: now)
+        #expect(items.contains {
+            $0.origin == .immediate &&
+            $0.title == "Rifornisci Zyrtec" &&
+            $0.body == "Scorte insufficienti per la prossima dose" &&
+            $0.userInfo[NotificationPlanUserInfoKey.nextDoseInsufficient] == "1"
+        })
+    }
+
     private func makeMedicine(context: NSManagedObjectContext, name: String) -> (Medicine, Package) {
         guard let medicineEntity = NSEntityDescription.entity(forEntityName: "Medicine", in: context),
               let packageEntity = NSEntityDescription.entity(forEntityName: "Package", in: context) else {
@@ -413,7 +445,8 @@ struct NotificationPlannerTests {
         person: Person,
         start: Date,
         rrule: String,
-        doseTimes: [Date]
+        doseTimes: [Date],
+        doseAmount: Double = 1
     ) -> Therapy {
         guard let therapyEntity = NSEntityDescription.entity(forEntityName: "Therapy", in: context),
               let doseEntity = NSEntityDescription.entity(forEntityName: "Dose", in: context) else {
@@ -432,6 +465,7 @@ struct NotificationPlannerTests {
         for time in doseTimes {
             let dose = Dose(entity: doseEntity, insertInto: context)
             dose.id = UUID()
+            dose.amount = NSNumber(value: doseAmount)
             dose.time = time
             dose.therapy = therapy
             doseSet.insert(dose)

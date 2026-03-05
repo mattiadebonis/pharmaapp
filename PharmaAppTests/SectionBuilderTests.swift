@@ -181,6 +181,39 @@ final class SectionBuilderTests: XCTestCase {
         XCTAssertEqual(sections.ok.map(\.medicine.nome), ["Alpha", "Gamma", "Beta"])
     }
 
+    func testComputeSectionsForEntriesOkTieBreakUsesEntryDeadlineThenName() throws {
+        let stockService = StockService(context: context)
+
+        let betaMedicine = try TestCoreDataFactory.makeMedicine(context: context)
+        betaMedicine.nome = "Beta"
+        let betaPackage = try TestCoreDataFactory.makePackage(context: context, medicine: betaMedicine)
+        let betaEntry = try makeMedicinePackage(medicine: betaMedicine, package: betaPackage)
+        betaEntry.updateDeadline(month: 4, year: 2028)
+        stockService.setUnits(20, for: betaPackage)
+
+        let alphaMedicine = try TestCoreDataFactory.makeMedicine(context: context)
+        alphaMedicine.nome = "Alpha"
+        let alphaPackage = try TestCoreDataFactory.makePackage(context: context, medicine: alphaMedicine)
+        let alphaEntry = try makeMedicinePackage(medicine: alphaMedicine, package: alphaPackage)
+        alphaEntry.updateDeadline(month: 3, year: 2028)
+        stockService.setUnits(20, for: alphaPackage)
+
+        let gammaMedicine = try TestCoreDataFactory.makeMedicine(context: context)
+        gammaMedicine.nome = "Gamma"
+        let gammaPackage = try TestCoreDataFactory.makePackage(context: context, medicine: gammaMedicine)
+        let gammaEntry = try makeMedicinePackage(medicine: gammaMedicine, package: gammaPackage)
+        gammaEntry.updateDeadline(month: 4, year: 2028)
+        stockService.setUnits(20, for: gammaPackage)
+
+        try context.save()
+
+        let sections = computeSections(for: [betaEntry, gammaEntry, alphaEntry], option: nil)
+
+        XCTAssertEqual(sections.purchase.count, 0)
+        XCTAssertEqual(sections.oggi.count, 0)
+        XCTAssertEqual(sections.ok.map(\.medicine.nome), ["Alpha", "Beta", "Gamma"])
+    }
+
     private func makeDailyTherapy(medicine: Medicine, package: Package, hour: Int) throws -> Therapy {
         let therapy = try TestCoreDataFactory.makeTherapy(context: context, medicine: medicine)
         therapy.package = package

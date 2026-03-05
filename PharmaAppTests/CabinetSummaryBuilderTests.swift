@@ -222,7 +222,7 @@ struct CabinetSummaryBuilderTests {
     }
 
     @MainActor
-    @Test func medicineActiveTherapiesSubtitleShowsOnlyUnitsWhenNoTherapyExists() throws {
+    @Test func medicineActiveTherapiesSubtitleShowsPackagesWhenUnitsAreAboveHalfPackageWithoutTherapy() throws {
         let container = try TestCoreDataFactory.makeContainer()
         let context = container.viewContext
         let calendar = makeCalendar()
@@ -239,13 +239,13 @@ struct CabinetSummaryBuilderTests {
             now: makeDate(2026, 2, 28, 10, 0, calendar: calendar)
         )
 
-        #expect(payload.line1 == "200 unità")
+        #expect(payload.line1 == "20 confezioni")
         #expect(payload.line2.isEmpty)
         #expect(payload.therapyLines.isEmpty)
     }
 
     @MainActor
-    @Test func medicineSubtitleShowsUnitsWithoutStockPrefixWhenNoTherapyExists() throws {
+    @Test func medicineSubtitleShowsPackagesWhenUnitsAreAboveHalfPackageWithoutTherapy() throws {
         let container = try TestCoreDataFactory.makeContainer()
         let context = container.viewContext
         let calendar = makeCalendar()
@@ -260,7 +260,26 @@ struct CabinetSummaryBuilderTests {
             now: makeDate(2026, 2, 28, 10, 0, calendar: calendar)
         )
 
-        #expect(subtitle.line2 == "200 unità")
+        #expect(subtitle.line2 == "20 confezioni")
+    }
+
+    @MainActor
+    @Test func medicineSubtitleShowsExactUnitsWhenUnitsAreHalfPackageOrLessWithoutTherapy() throws {
+        let container = try TestCoreDataFactory.makeContainer()
+        let context = container.viewContext
+        let calendar = makeCalendar()
+
+        let medicine = try TestCoreDataFactory.makeMedicine(context: context)
+        let package = try TestCoreDataFactory.makePackage(context: context, medicine: medicine)
+        let stockService = StockService(context: context)
+        stockService.setUnits(5, for: package)
+
+        let subtitle = makeMedicineSubtitle(
+            medicine: medicine,
+            now: makeDate(2026, 2, 28, 10, 0, calendar: calendar)
+        )
+
+        #expect(subtitle.line2 == "5 unità")
     }
 
     @MainActor

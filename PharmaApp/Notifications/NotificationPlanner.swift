@@ -25,6 +25,11 @@ enum NotificationPlanKind: String {
     case stockOut
 }
 
+enum NotificationPlanUserInfoKey {
+    static let nextDoseInsufficient = "nextDoseInsufficient"
+    static let nextDoseAt = "nextDoseAt"
+}
+
 struct NotificationPlanItem: Equatable {
     let id: String
     let date: Date
@@ -47,6 +52,7 @@ enum StockAlertLevel: String, Codable {
     case none
     case low
     case empty
+    case nextDoseInsufficient
 }
 
 struct StockAlertState: Codable, Equatable {
@@ -127,6 +133,8 @@ struct NotificationPlanner {
         formatter.dateFormat = "HH:mm"
         return formatter
     }()
+
+    private static let stockISODateFormatter = ISO8601DateFormatter()
 
     private let context: NSManagedObjectContext
     private let calendar: Calendar
@@ -218,21 +226,41 @@ struct NotificationPlanner {
         for medicine in medicines {
             let evaluation = evaluateStock(for: medicine, recurrenceManager: recurrenceManager)
             let currentLevel = evaluation.level
+            let nextDoseCoverage = evaluateNextDoseCoverage(
+                for: medicine,
+                recurrenceManager: recurrenceManager,
+                now: now
+            )
+            let isNextDoseInsufficient = nextDoseCoverage?.isInsufficient ?? false
+            let effectiveImmediateLevel: StockAlertLevel
+            if currentLevel == .empty {
+                effectiveImmediateLevel = .empty
+            } else if isNextDoseInsufficient {
+                effectiveImmediateLevel = .nextDoseInsufficient
+            } else {
+                effectiveImmediateLevel = currentLevel
+            }
 
-            if currentLevel == .none {
+            if effectiveImmediateLevel == .none {
                 stockAlertStore.clearState(for: medicine.id)
             }
 
-            if currentLevel == .low || currentLevel == .empty {
-                if shouldNotifyNow(level: currentLevel, medicineId: medicine.id, now: now) {
+            if effectiveImmediateLevel != .none {
+                if shouldNotifyNow(level: effectiveImmediateLevel, medicineId: medicine.id, now: now) {
                     let title = stockNotificationTitle(for: medicine)
-                    let body = stockNotificationBody(for: currentLevel)
+                    let body = stockNotificationBody(for: effectiveImmediateLevel)
                     let kind: NotificationPlanKind = currentLevel == .empty ? .stockOut : .stockLow
-                    let id = "stock-\(currentLevel.rawValue)-\(UUID().uuidString)"
-                    let userInfo = [
+                    let id = "stock-\(effectiveImmediateLevel.rawValue)-\(UUID().uuidString)"
+                    var userInfo = [
                         "type": kind.rawValue,
-                        "medicineId": medicine.id.uuidString
+                        "medicineId": medicine.id.uuidString,
+                        NotificationPlanUserInfoKey.nextDoseInsufficient: isNextDoseInsufficient ? "1" : "0"
                     ]
+                    if let nextDoseCoverage {
+                        userInfo[NotificationPlanUserInfoKey.nextDoseAt] = Self.stockISODateFormatter.string(
+                            from: nextDoseCoverage.nextDoseAt
+                        )
+                    }
                     items.append(
                         NotificationPlanItem(
                             id: id,
@@ -248,10 +276,15 @@ struct NotificationPlanner {
                         )
                     )
                     stockAlertStore.setState(
-                        StockAlertState(level: currentLevel, lastNotifiedAt: now),
+                        StockAlertState(level: effectiveImmediateLevel, lastNotifiedAt: now),
                         for: medicine.id
                     )
                 }
+            }
+
+            // If the next scheduled dose cannot be covered, keep only the urgent immediate alert.
+            if isNextDoseInsufficient {
+                continue
             }
 
             guard let coverageDays = evaluation.coverageDays, coverageDays > 0 else {
@@ -363,6 +396,8 @@ struct NotificationPlanner {
             return "Scorte esaurite"
         case .low:
             return "Scorte in esaurimento"
+        case .nextDoseInsufficient:
+            return "Scorte insufficienti per la prossima dose"
         case .none:
             return ""
         }
@@ -449,7 +484,7 @@ struct NotificationPlanner {
     }
 
     private func shouldNotifyNow(level: StockAlertLevel, medicineId: UUID, now: Date) -> Bool {
-        guard level == .low || level == .empty else { return false }
+        guard level == .low || level == .empty || level == .nextDoseInsufficient else { return false }
         guard let state = stockAlertStore.state(for: medicineId) else {
             return true
         }
@@ -516,6 +551,70 @@ struct NotificationPlanner {
 
         return StockEvaluation(level: .none, coverageDays: nil, remainingUnits: nil, threshold: threshold)
     }
+
+    private func evaluateNextDoseCoverage(
+        for medicine: Medicine,
+        recurrenceManager: RecurrenceManager,
+        now: Date
+    ) -> NextDoseStockEvaluation? {
+        guard let therapies = medicine.therapies else { return nil }
+        let eligibleTherapies = therapies.filter(isTherapyEligibleForNotification)
+        guard !eligibleTherapies.isEmpty else { return nil }
+
+        var upcoming: [(therapy: Therapy, date: Date)] = []
+        for therapy in eligibleTherapies {
+            let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
+            let startDate = therapy.start_date ?? now
+            guard let next = recurrenceManager.nextOccurrence(
+                rule: rule,
+                startDate: startDate,
+                after: now,
+                doses: therapy.doses as NSSet?
+            ) else {
+                continue
+            }
+            upcoming.append((therapy: therapy, date: next))
+        }
+
+        guard let nextDoseAt = upcoming.map(\.date).min() else { return nil }
+        let nextBucket = minuteBucket(for: nextDoseAt)
+        let requiredTotalUnits = upcoming.reduce(0.0) { partial, element in
+            guard minuteBucket(for: element.date) == nextBucket else { return partial }
+            return partial + requiredUnitsForScheduledDose(for: element.therapy, scheduledAt: element.date)
+        }
+        guard requiredTotalUnits > 0 else { return nil }
+
+        let availableUnits = eligibleTherapies.reduce(0.0) { partial, therapy in
+            partial + Double(therapy.leftover())
+        }
+        return NextDoseStockEvaluation(
+            nextDoseAt: nextDoseAt,
+            requiredUnits: requiredTotalUnits,
+            availableUnits: availableUnits
+        )
+    }
+
+    private func requiredUnitsForScheduledDose(for therapy: Therapy, scheduledAt: Date) -> Double {
+        let doses = therapy.doses ?? []
+        guard !doses.isEmpty else { return 1 }
+
+        let targetHour = calendar.component(.hour, from: scheduledAt)
+        let targetMinute = calendar.component(.minute, from: scheduledAt)
+        let matching = doses.filter { dose in
+            calendar.component(.hour, from: dose.time) == targetHour &&
+            calendar.component(.minute, from: dose.time) == targetMinute
+        }
+
+        let relevant = matching.isEmpty ? Array(doses) : Array(matching)
+        let total = relevant.reduce(0.0) { partial, dose in
+            partial + dose.amountValue
+        }
+        return total > 0 ? total : 1
+    }
+
+    private func minuteBucket(for date: Date) -> Int {
+        Int(date.timeIntervalSince1970 / 60)
+    }
 }
 
 struct StockEvaluation {
@@ -523,4 +622,14 @@ struct StockEvaluation {
     let coverageDays: Double?
     let remainingUnits: Int?
     let threshold: Int
+}
+
+struct NextDoseStockEvaluation {
+    let nextDoseAt: Date
+    let requiredUnits: Double
+    let availableUnits: Double
+
+    var isInsufficient: Bool {
+        availableUnits + 0.0001 < requiredUnits
+    }
 }

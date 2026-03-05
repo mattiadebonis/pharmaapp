@@ -20,10 +20,8 @@ struct MedicineDetailView: View {
         managedObjectContext: PersistenceController.shared.container.viewContext
     )
     @State private var emailDetent: PresentationDetent = .fraction(0.55)
-    @State private var selectedDoctorID: NSManagedObjectID? = nil
     @State private var therapySheet: TherapySheetState?
     @State private var missedDoseSheet: MissedDoseSheetState?
-    @State private var showDoctorSheet = false
     @State private var deadlineMonthInput: String = ""
     @State private var deadlineYearInput: String = ""
 
@@ -109,18 +107,6 @@ struct MedicineDetailView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        if medicine.obbligo_ricetta {
-                            Button {
-                                showDoctorSheet = true
-                            } label: {
-                                Label("Medico prescrittore", systemImage: "stethoscope")
-                            }
-                        }
-                        Button {
-                            showLogsSheet = true
-                        } label: {
-                            Label("Visualizza log", systemImage: "clock.arrow.circlepath")
-                        }
                         Button {
                             let current = medicine.custom_stock_threshold
                             thresholdInput = current > 0 ? String(current) : "7"
@@ -152,25 +138,10 @@ struct MedicineDetailView: View {
                 .background(Color(.systemGroupedBackground))
         }
         .onAppear {
-            selectedDoctorID = medicine.obbligo_ricetta ? medicine.prescribingDoctor?.objectID : nil
             syncDeadlineInputs()
             guard !didHandleInitialAction else { return }
             didHandleInitialAction = true
             handleInitialAction()
-        }
-        .sheet(isPresented: Binding(
-            get: { medicine.obbligo_ricetta && showDoctorSheet },
-            set: { showDoctorSheet = $0 }
-        )) {
-            DoctorSheet(
-                selectedDoctorID: $selectedDoctorID,
-                doctors: doctors,
-                onChange: { newID in
-                    selectedDoctorID = newID
-                    medicine.prescribingDoctor = doctors.first(where: { $0.objectID == newID })
-                    saveContext()
-                }
-            )
         }
         .sheet(isPresented: Binding(
             get: { medicine.obbligo_ricetta && showEmailSheet },
@@ -251,15 +222,6 @@ struct MedicineDetailView: View {
             Button("Annulla", role: .cancel) { }
         } message: {
             Text("Inserisci il numero di giorni sotto cui ricevere l'avviso di scorte basse.")
-        }
-        .onChange(of: selectedDoctorID) { newValue in
-            if let newValue, let doc = doctors.first(where: { $0.objectID == newValue }) {
-                medicine.prescribingDoctor = doc
-                saveContext()
-            } else {
-                medicine.prescribingDoctor = nil
-                saveContext()
-            }
         }
 
     }
@@ -356,8 +318,15 @@ struct MedicineDetailView: View {
         therapies.count
     }
 
+    private var deadlineTargetEntry: MedicinePackage? {
+        if let medicinePackage {
+            return (try? context.existingObject(with: medicinePackage.objectID) as? MedicinePackage) ?? medicinePackage
+        }
+        return MedicinePackage.latestActiveEntry(for: medicine, package: package, in: context)
+    }
+
     private var deadlineSummaryText: String {
-        medicine.deadlineLabel ?? "Non impostata"
+        deadlineTargetEntry?.deadlineLabel ?? "Non impostata"
     }
     
     private var therapySummarySubtitle: String {
@@ -572,7 +541,7 @@ struct MedicineDetailView: View {
     
     private var assignedDoctor: Doctor? {
         guard medicine.obbligo_ricetta else { return nil }
-        return medicine.prescribingDoctor
+        return prescribingDoctor(for: Array(therapies))
     }
     
     private var assignedDoctorEmail: String? {
@@ -742,7 +711,7 @@ struct MedicineDetailView: View {
     private func resolvedDoctorTemplate(for medicines: [Medicine]) -> String? {
         guard let targetDoctor = messageTargetDoctor else { return nil }
         guard medicines.allSatisfy({ medicine in
-            guard let prescribingDoctor = medicine.prescribingDoctor else { return false }
+            guard let prescribingDoctor = prescribingDoctor(for: medicine) else { return false }
             return prescribingDoctor.objectID == targetDoctor.objectID
         }) else {
             return nil
@@ -771,6 +740,17 @@ struct MedicineDetailView: View {
         guard let doctor else { return "" }
         let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return first
+    }
+
+    private func prescribingDoctor(for therapies: [Therapy]) -> Doctor? {
+        let doctorsByID = Dictionary(grouping: therapies.compactMap { $0.prescribingDoctor }) { $0.objectID }
+        guard doctorsByID.count == 1 else { return nil }
+        return doctorsByID.values.first?.first
+    }
+
+    private func prescribingDoctor(for medicine: Medicine) -> Doctor? {
+        let allTherapies = Array(medicine.therapies ?? [])
+        return prescribingDoctor(for: allTherapies)
     }
     
     private func coverageDays(for med: Medicine, recurrenceManager: RecurrenceManager) -> Double? {
@@ -984,7 +964,7 @@ extension MedicineDetailView {
     }
 
     private func syncDeadlineInputs() {
-        if let info = medicine.deadlineMonthYear {
+        if let info = deadlineTargetEntry?.deadlineMonthYear {
             deadlineMonthInput = String(format: "%02d", info.month)
             deadlineYearInput = String(info.year)
         } else {
@@ -996,7 +976,8 @@ extension MedicineDetailView {
     private func clearDeadline() {
         deadlineMonthInput = ""
         deadlineYearInput = ""
-        medicine.updateDeadline(month: nil, year: nil)
+        guard let entry = deadlineTargetEntry else { return }
+        entry.updateDeadline(month: nil, year: nil)
         saveContext()
     }
 
@@ -1016,46 +997,11 @@ extension MedicineDetailView {
             return
         }
 
-        medicine.updateDeadline(month: month, year: year)
+        guard let entry = deadlineTargetEntry else { return }
+        entry.updateDeadline(month: month, year: year)
         saveContext()
     }
 
-    private struct DoctorSheet: View {
-        @Binding var selectedDoctorID: NSManagedObjectID?
-        let doctors: FetchedResults<Doctor>
-        let onChange: (NSManagedObjectID?) -> Void
-        @Environment(\.dismiss) private var dismiss
-        
-        var body: some View {
-            NavigationStack {
-                Form {
-                    Section {
-                        Picker("Medico", selection: $selectedDoctorID) {
-                            Text("Nessuno").tag(NSManagedObjectID?.none)
-                            ForEach(doctors, id: \.objectID) { doc in
-                                Text(doctorFullName(doc)).tag(Optional(doc.objectID))
-                            }
-                        }
-                        .onChange(of: selectedDoctorID, perform: onChange)
-                    }
-                }
-                .navigationTitle("Medico")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Chiudi") { dismiss() }
-                    }
-                }
-            }
-            .presentationDetents([.fraction(0.3), .medium])
-        }
-        
-        private func doctorFullName(_ doctor: Doctor) -> String {
-            let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            return first.isEmpty ? "Medico" : first
-        }
-    }
-    
 }
 // MARK: - UI helpers
 extension MedicineDetailView {

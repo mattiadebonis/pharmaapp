@@ -133,6 +133,7 @@ struct PharmaAppApp: App {
                     DataManager.shared.performOneTimeBootstrapIfNeeded()
                     DataManager.shared.migrateManualIntakeDefaultIfNeeded()
                     DataManager.shared.migrateTherapyManualIntakeScopeIfNeeded()
+                    DataManager.shared.migrateDeadlineToEntryIfNeeded()
                     UserIdentityProvider.shared.ensureProfile(in: context)
                     AccountPersonService.shared.ensureAccountPerson(in: context)
                     AccountPersonService.shared.migrateLegacyCodiceFiscaleIfNeeded(in: context)

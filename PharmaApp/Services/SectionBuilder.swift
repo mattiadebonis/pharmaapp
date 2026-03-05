@@ -208,7 +208,8 @@ func computeSections(for entries: [MedicinePackage], option: Option?) -> (purcha
     let rec = RecurrenceManager.shared
     let now = Date()
     let cal = Calendar.current
-    let stockService = StockService(context: PersistenceController.shared.container.viewContext)
+    let fallbackContext = entries.first?.managedObjectContext ?? PersistenceController.shared.container.viewContext
+    let stockService = StockService(context: fallbackContext)
     var metricsByID: [NSManagedObjectID: EntryMetrics] = [:]
 
     func therapies(for entry: MedicinePackage) -> [Therapy] {
@@ -296,7 +297,7 @@ func computeSections(for entries: [MedicinePackage], option: Option?) -> (purcha
             remainingUnits: remainingUnits,
             nextOccurrence: nextOccurrence,
             occursToday: occursToday,
-            deadlineDate: Date.distantFuture,
+            deadlineDate: entry.deadlineMonthStartDate ?? Date.distantFuture,
             nameKey: entry.medicine.nome
         )
     }
@@ -339,6 +340,9 @@ func computeSections(for entries: [MedicinePackage], option: Option?) -> (purcha
             let r1 = left.remainingUnits ?? Int.max
             let r2 = right.remainingUnits ?? Int.max
             if r1 == r2 {
+                if left.deadlineDate != right.deadlineDate {
+                    return left.deadlineDate < right.deadlineDate
+                }
                 return left.nameKey.localizedCaseInsensitiveCompare(right.nameKey) == .orderedAscending
             }
             return r1 < r2
@@ -352,6 +356,12 @@ func computeSections(for entries: [MedicinePackage], option: Option?) -> (purcha
         let s1 = left.stockStatus
         let s2 = right.stockStatus
         if s1 != s2 { return (s1 == .critical) && (s2 != .critical) }
+        let r1 = left.remainingUnits ?? Int.max
+        let r2 = right.remainingUnits ?? Int.max
+        if r1 != r2 { return r1 < r2 }
+        if left.deadlineDate != right.deadlineDate {
+            return left.deadlineDate < right.deadlineDate
+        }
         return left.nameKey.localizedCaseInsensitiveCompare(right.nameKey) == .orderedAscending
     }
 
@@ -361,6 +371,9 @@ func computeSections(for entries: [MedicinePackage], option: Option?) -> (purcha
         let r1 = left.remainingUnits ?? Int.max
         let r2 = right.remainingUnits ?? Int.max
         if r1 == r2 {
+            if left.deadlineDate != right.deadlineDate {
+                return left.deadlineDate < right.deadlineDate
+            }
             return left.nameKey.localizedCaseInsensitiveCompare(right.nameKey) == .orderedAscending
         }
         return r1 < r2

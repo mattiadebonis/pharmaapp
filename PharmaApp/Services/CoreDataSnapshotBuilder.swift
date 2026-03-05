@@ -52,8 +52,8 @@ struct CoreDataSnapshotBuilder {
             makeTherapySnapshot(therapy: therapy)
         }
         let logEntries = logs.compactMap { logEntry(from: $0) }
-        let deadlineMonth = medicine.deadline_month > 0 ? Int(medicine.deadline_month) : nil
-        let deadlineYear = medicine.deadline_year > 0 ? Int(medicine.deadline_year) : nil
+        let deadlineMonth = medicine.deadlineMonthYear?.month
+        let deadlineYear = medicine.deadlineMonthYear?.year
         let stockUnits = stockService.unitsReadOnly(for: medicine)
         return MedicineSnapshot(
             id: MedicineId(medicine.id),
@@ -112,8 +112,8 @@ struct CoreDataSnapshotBuilder {
 
         let therapySnapshots = entryTherapies.map { makeTherapySnapshot(therapy: $0) }
         let logEntries = (medicine.logs ?? []).compactMap { logEntry(from: $0) }
-        let deadlineMonth = medicine.deadline_month > 0 ? Int(medicine.deadline_month) : nil
-        let deadlineYear = medicine.deadline_year > 0 ? Int(medicine.deadline_year) : nil
+        let deadlineMonth = entry.deadline_month > 0 ? Int(entry.deadline_month) : nil
+        let deadlineYear = entry.deadline_year > 0 ? Int(entry.deadline_year) : nil
 
         // Stock for this specific package (not whole medicine)
         let packageStock: Int?

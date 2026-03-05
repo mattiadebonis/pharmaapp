@@ -529,6 +529,7 @@
 				INFOPLIST_KEY_CFBundleURLTypes_1_CFBundleURLName = google;
 				INFOPLIST_KEY_CFBundleURLTypes_1_CFBundleURLSchemes_0 = "$(GOOGLE_REVERSED_CLIENT_ID)";
 				INFOPLIST_KEY_GIDClientID = "$(GOOGLE_CLIENT_ID)";
+				INFOPLIST_KEY_NSAlarmKitUsageDescription = "Usiamo AlarmKit per avvisi critici di terapia e scorte insufficienti per la prossima dose.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Necessario per scansionare etichette di medicinali";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Usiamo la posizione solo per mostrarti farmacie aperte vicine quando hai rifornimenti da fare, senza tracciamento continuo.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Usiamo la tua posizione per suggerirti la farmacia più vicina quando le scorte sono basse.";
@@ -590,6 +591,7 @@
 				INFOPLIST_KEY_CFBundleURLTypes_1_CFBundleURLName = google;
 				INFOPLIST_KEY_CFBundleURLTypes_1_CFBundleURLSchemes_0 = "$(GOOGLE_REVERSED_CLIENT_ID)";
 				INFOPLIST_KEY_GIDClientID = "$(GOOGLE_CLIENT_ID)";
+				INFOPLIST_KEY_NSAlarmKitUsageDescription = "Usiamo AlarmKit per avvisi critici di terapia e scorte insufficienti per la prossima dose.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Necessario per scansionare etichette di medicinali";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Usiamo la posizione solo per mostrarti farmacie aperte vicine quando hai rifornimenti da fare, senza tracciamento continuo.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Usiamo la tua posizione per suggerirti la farmacia più vicina quando le scorte sono basse.";

@@ -122,7 +122,10 @@ struct CatalogSelectionResolver {
     }
 
     private func existingEntry(for medicine: Medicine, package: Package) -> MedicinePackage? {
-        medicine.medicinePackages?.first(where: { $0.package.objectID == package.objectID })
+        if let latest = MedicinePackage.latestActiveEntry(for: medicine, package: package, in: context) {
+            return latest
+        }
+        return medicine.medicinePackages?.first(where: { $0.package.objectID == package.objectID })
     }
 
     private func packageMatches(_ package: Package, selection: CatalogSelection) -> Bool {

@@ -243,7 +243,7 @@ struct MedicineWizardView: View {
     private func openStockStep(for item: CatalogSelection) {
         if let existing = existingContext(for: item) {
             baselineUnits = StockService(context: context).units(for: existing.package)
-            syncDeadlineInputs(from: existing.medicine)
+            syncDeadlineInputs(from: existing.medicine, package: existing.package)
         } else {
             baselineUnits = 0
             deadlineMonthInput = ""
@@ -254,12 +254,35 @@ struct MedicineWizardView: View {
     }
 
     private func saveStockStep(_ item: CatalogSelection) {
+        let parsedDeadline = parseDeadlineInputs()
+        guard parsedDeadline.isValid else {
+            errorMessage = "Scadenza non valida. Usa formato MM/YYYY."
+            return
+        }
+
         do {
             let resolved = try resolveOrCreateContext(for: item)
-            applyDeadlineInputs(to: resolved.medicine)
             try saveIfNeeded()
 
-            stockService.addPurchase(medicine: resolved.medicine, package: resolved.package)
+            guard let purchaseOperationId = stockService.addPurchase(
+                medicine: resolved.medicine,
+                package: resolved.package
+            ) else {
+                errorMessage = "Non sono riuscito a registrare l'acquisto."
+                return
+            }
+
+            guard let purchasedEntry = MedicinePackage.fetchByPurchaseOperationId(
+                purchaseOperationId,
+                in: context
+            ) else {
+                errorMessage = "Non sono riuscito ad associare la confezione acquistata."
+                return
+            }
+
+            purchasedEntry.updateDeadline(month: parsedDeadline.month, year: parsedDeadline.year)
+            try saveIfNeeded()
+
             stockService.setStockUnits(medicine: resolved.medicine, package: resolved.package, targetUnits: stockUnits)
 
             complete(message: "Confezione aggiunta e scorte aggiornate.")
@@ -311,7 +334,7 @@ struct MedicineWizardView: View {
         guard let item = prefill else { return }
         if let existing = existingContext(for: item) {
             baselineUnits = StockService(context: context).units(for: existing.package)
-            syncDeadlineInputs(from: existing.medicine)
+            syncDeadlineInputs(from: existing.medicine, package: existing.package)
         } else {
             baselineUnits = 0
             deadlineMonthInput = ""
@@ -337,8 +360,9 @@ struct MedicineWizardView: View {
         }
     }
 
-    private func syncDeadlineInputs(from medicine: Medicine) {
-        if let info = medicine.deadlineMonthYear {
+    private func syncDeadlineInputs(from medicine: Medicine, package: Package) {
+        if let entry = MedicinePackage.latestActiveEntry(for: medicine, package: package, in: context),
+           let info = entry.deadlineMonthYear {
             deadlineMonthInput = String(format: "%02d", info.month)
             deadlineYearInput = String(info.year)
         } else {
@@ -347,23 +371,22 @@ struct MedicineWizardView: View {
         }
     }
 
-    private func applyDeadlineInputs(to medicine: Medicine) {
+    private func parseDeadlineInputs() -> (isValid: Bool, month: Int?, year: Int?) {
         let monthText = deadlineMonthInput.trimmingCharacters(in: .whitespacesAndNewlines)
         let yearText = deadlineYearInput.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if monthText.isEmpty && yearText.isEmpty {
-            medicine.updateDeadline(month: nil, year: nil)
-            return
+            return (true, nil, nil)
         }
 
         guard let month = Int(monthText),
               let year = Int(yearText),
               (1...12).contains(month),
               (2000...2100).contains(year) else {
-            return
+            return (false, nil, nil)
         }
 
-        medicine.updateDeadline(month: month, year: year)
+        return (true, month, year)
     }
 
     private func wizardPackageShortLabel(_ item: CatalogSelection) -> String {

@@ -65,9 +65,59 @@ final class DataManagerOptionsBootstrapTests: XCTestCase {
         XCTAssertEqual(options.first?.prescription_message_template, customTemplate)
     }
 
+    func testMigrateDeadlineToEntryCopiesLegacyDeadlineToAllEntriesWithoutDeadline() throws {
+        let manager = DataManager(context: context)
+        let medicine = try TestCoreDataFactory.makeMedicine(context: context)
+        medicine.deadline_month = 4
+        medicine.deadline_year = 2029
+        let package = try TestCoreDataFactory.makePackage(context: context, medicine: medicine)
+        let entryOne = try TestCoreDataFactory.makeMedicinePackage(context: context, medicine: medicine, package: package)
+        let entryTwo = try TestCoreDataFactory.makeMedicinePackage(context: context, medicine: medicine, package: package)
+        entryTwo.updateDeadline(month: 6, year: 2030)
+        try context.save()
+
+        let defaults = makeEphemeralUserDefaults()
+        manager.migrateDeadlineToEntryIfNeeded(userDefaults: defaults)
+
+        XCTAssertEqual(entryOne.deadlineMonthYear?.month, 4)
+        XCTAssertEqual(entryOne.deadlineMonthYear?.year, 2029)
+        XCTAssertEqual(entryTwo.deadlineMonthYear?.month, 6)
+        XCTAssertEqual(entryTwo.deadlineMonthYear?.year, 2030)
+    }
+
+    func testMigrateDeadlineToEntryIsIdempotent() throws {
+        let manager = DataManager(context: context)
+        let medicine = try TestCoreDataFactory.makeMedicine(context: context)
+        medicine.deadline_month = 9
+        medicine.deadline_year = 2031
+        let package = try TestCoreDataFactory.makePackage(context: context, medicine: medicine)
+        let entry = try TestCoreDataFactory.makeMedicinePackage(context: context, medicine: medicine, package: package)
+        try context.save()
+
+        let defaults = makeEphemeralUserDefaults()
+        manager.migrateDeadlineToEntryIfNeeded(userDefaults: defaults)
+        XCTAssertEqual(entry.deadlineMonthYear?.month, 9)
+        XCTAssertEqual(entry.deadlineMonthYear?.year, 2031)
+
+        medicine.deadline_month = 11
+        medicine.deadline_year = 2032
+        try context.save()
+        manager.migrateDeadlineToEntryIfNeeded(userDefaults: defaults)
+
+        XCTAssertEqual(entry.deadlineMonthYear?.month, 9)
+        XCTAssertEqual(entry.deadlineMonthYear?.year, 2031)
+    }
+
     private func fetchOptions() throws -> [Option] {
         let request: NSFetchRequest<Option> = Option.fetchRequest()
         return try context.fetch(request)
+    }
+
+    private func makeEphemeralUserDefaults() -> UserDefaults {
+        let suiteName = "DataManagerOptionsBootstrapTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+        defaults.removePersistentDomain(forName: suiteName)
+        return defaults
     }
 
     @discardableResult

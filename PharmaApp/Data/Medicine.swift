@@ -60,7 +60,6 @@ public class Medicine: NSManagedObject, Identifiable {
     @NSManaged public var safety_max_per_day: Int32
     @NSManaged public var safety_min_interval_hours: Int32
     @NSManaged public var in_cabinet: Bool
-    @NSManaged public var prescribingDoctor: Doctor?
     @NSManaged public var therapies: Set<Therapy>?
     @NSManaged public var packages: Set<Package>
     @NSManaged public var stocks: Set<Stock>?
@@ -461,8 +460,11 @@ extension Medicine {
     }
 
     var deadlineMonthYear: (month: Int, year: Int)? {
-        guard let month = normalizedDeadlineMonth,
-              let year = normalizedDeadlineYear else {
+        if let entryDeadline = nearestEntryDeadlineMonthYear() {
+            return entryDeadline
+        }
+        guard let month = normalizedLegacyDeadlineMonth,
+              let year = normalizedLegacyDeadlineYear else {
             return nil
         }
         return (month, year)
@@ -638,17 +640,44 @@ extension Medicine {
         // Se non esistono acquisti dopo l'ultima ricetta, restituisce true
         return purchaseLogsAfterPrescription.isEmpty
     }
+
+    private func nearestEntryDeadlineMonthYear(calendar: Calendar = .current) -> (month: Int, year: Int)? {
+        let entries = medicinePackages ?? []
+        var best: (month: Int, year: Int, date: Date)?
+
+        for entry in entries where !entry.isReversed {
+            guard let info = entry.deadlineMonthYear else { continue }
+            var comps = DateComponents()
+            comps.calendar = calendar
+            comps.timeZone = calendar.timeZone
+            comps.year = info.year
+            comps.month = info.month
+            comps.day = 1
+            guard let date = calendar.date(from: comps) else { continue }
+
+            if let current = best {
+                if date < current.date {
+                    best = (info.month, info.year, date)
+                }
+            } else {
+                best = (info.month, info.year, date)
+            }
+        }
+
+        guard let best else { return nil }
+        return (best.month, best.year)
+    }
 }
 
 private extension Medicine {
     static let deadlineYearRange = 2000...2100
 
-    var normalizedDeadlineMonth: Int? {
+    var normalizedLegacyDeadlineMonth: Int? {
         let month = Int(deadline_month)
         return (1...12).contains(month) ? month : nil
     }
 
-    var normalizedDeadlineYear: Int? {
+    var normalizedLegacyDeadlineYear: Int? {
         let year = Int(deadline_year)
         return Self.deadlineYearRange.contains(year) ? year : nil
     }

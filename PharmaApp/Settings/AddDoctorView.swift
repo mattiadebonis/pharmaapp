@@ -25,25 +25,22 @@ struct AddDoctorView: View {
         Form {
             Section(header: Text("Dettagli Dottore")) {
                 TextField("Nome e cognome", text: $nome)
-                TextField("Email", text: $mail)
-                    .keyboardType(.emailAddress)
-                TextField("Telefono", text: $telefono)
-                    .keyboardType(.phonePad)
-                TextField("Specializzazione", text: $specializzazione)
             }
 
-            Section(header: Text("Orari reperibilità")) {
+            Section(header: Text("Contatti e disponibilità")) {
                 NavigationLink {
-                    DoctorSchedulePageView(
-                        title: "Orari reperibilità",
-                        sectionTitle: "Orari reperibilità",
+                    DoctorProfessionalInfoPageView(
+                        title: "Contatti e disponibilità",
+                        email: $mail,
+                        telefono: $telefono,
+                        specializzazione: $specializzazione,
                         schedule: $schedule
                     )
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Apri pagina orari reperibilità")
+                        Text("Apri pagina contatti e disponibilità")
                             .foregroundStyle(.primary)
-                        Text(scheduleSummary(schedule))
+                        Text(professionalInfoSummary)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -119,6 +116,17 @@ struct AddDoctorView: View {
     private func scheduleSummary(_ schedule: DoctorScheduleDTO) -> String {
         let configuredDays = schedule.days.filter { $0.mode != .closed }.count
         return configuredDays == 0 ? "Nessun orario configurato" : "\(configuredDays) giorni configurati"
+    }
+
+    private var professionalInfoSummary: String {
+        let values = [
+            normalizedValue(from: mail),
+            normalizedValue(from: telefono),
+            normalizedValue(from: specializzazione)
+        ].compactMap { $0 }
+
+        let contacts = values.isEmpty ? "Contatti non configurati" : values.joined(separator: " · ")
+        return "\(contacts) · \(scheduleSummary(schedule))"
     }
 }
 
@@ -233,6 +241,32 @@ struct DoctorSchedulePageView: View {
     var body: some View {
         Form {
             Section(header: Text(sectionTitle)) {
+                DoctorScheduleEditor(schedule: $schedule)
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct DoctorProfessionalInfoPageView: View {
+    let title: String
+    @Binding var email: String
+    @Binding var telefono: String
+    @Binding var specializzazione: String
+    @Binding var schedule: DoctorScheduleDTO
+
+    var body: some View {
+        Form {
+            Section(header: Text("Contatti professionali")) {
+                TextField("Email", text: $email)
+                    .keyboardType(.emailAddress)
+                TextField("Telefono", text: $telefono)
+                    .keyboardType(.phonePad)
+                TextField("Specializzazione", text: $specializzazione)
+            }
+
+            Section(header: Text("Orari studio e reperibilità")) {
                 DoctorScheduleEditor(schedule: $schedule)
             }
         }

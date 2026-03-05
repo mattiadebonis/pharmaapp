@@ -1555,7 +1555,7 @@ struct GlobalSearchView: View {
         }
 
         let currentUnits = StockService(context: managedObjectContext).units(for: resolved.package)
-        let (month, year) = deadlineInputs(for: resolved.medicine)
+        let (month, year) = deadlineInputs(for: resolved.medicine, package: resolved.package)
         let defaultTarget = currentUnits + max(1, selection.units)
         catalogStockEditorState = CatalogStockEditorState(
             context: resolved,
@@ -1614,7 +1614,14 @@ struct GlobalSearchView: View {
     }
 
     private func existingCatalogEntry(for medicine: Medicine, package: Package) -> MedicinePackage? {
-        medicine.medicinePackages?.first(where: { $0.package.objectID == package.objectID })
+        if let latest = MedicinePackage.latestActiveEntry(
+            for: medicine,
+            package: package,
+            in: managedObjectContext
+        ) {
+            return latest
+        }
+        return medicine.medicinePackages?.first(where: { $0.package.objectID == package.objectID })
     }
 
     private func packageMatchesCatalogSelection(_ package: Package, selection: CatalogSelection) -> Bool {
@@ -1679,7 +1686,8 @@ struct GlobalSearchView: View {
         monthInput: String,
         yearInput: String
     ) -> Bool {
-        guard applyDeadline(monthInput: monthInput, yearInput: yearInput, to: resolved.medicine) else {
+        let parsedDeadline = parseDeadlineInputs(monthInput: monthInput, yearInput: yearInput)
+        guard parsedDeadline.isValid else {
             inlineFeedback = CommandFeedback(
                 kind: .error,
                 message: "Scadenza non valida. Usa formato MM/YYYY."
@@ -1698,7 +1706,40 @@ struct GlobalSearchView: View {
             return false
         }
 
-        stockService.addPurchase(medicine: resolved.medicine, package: resolved.package)
+        guard let purchaseOperationId = stockService.addPurchase(
+            medicine: resolved.medicine,
+            package: resolved.package
+        ) else {
+            inlineFeedback = CommandFeedback(
+                kind: .error,
+                message: "Non sono riuscito a registrare l'acquisto."
+            )
+            return false
+        }
+
+        guard let purchasedEntry = MedicinePackage.fetchByPurchaseOperationId(
+            purchaseOperationId,
+            in: managedObjectContext
+        ) else {
+            inlineFeedback = CommandFeedback(
+                kind: .error,
+                message: "Non sono riuscito ad associare la confezione acquistata."
+            )
+            return false
+        }
+
+        purchasedEntry.updateDeadline(month: parsedDeadline.month, year: parsedDeadline.year)
+        do {
+            try saveManagedContextIfNeeded()
+        } catch {
+            managedObjectContext.rollback()
+            inlineFeedback = CommandFeedback(
+                kind: .error,
+                message: "Non sono riuscito a salvare la scadenza."
+            )
+            return false
+        }
+
         stockService.setStockUnits(
             medicine: resolved.medicine,
             package: resolved.package,
@@ -1713,28 +1754,30 @@ struct GlobalSearchView: View {
         return true
     }
 
-    private func applyDeadline(monthInput: String, yearInput: String, to medicine: Medicine) -> Bool {
+    private func parseDeadlineInputs(
+        monthInput: String,
+        yearInput: String
+    ) -> (isValid: Bool, month: Int?, year: Int?) {
         let monthText = monthInput.trimmingCharacters(in: .whitespacesAndNewlines)
         let yearText = yearInput.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if monthText.isEmpty && yearText.isEmpty {
-            medicine.updateDeadline(month: nil, year: nil)
-            return true
+            return (true, nil, nil)
         }
 
         guard let month = Int(monthText),
               let year = Int(yearText),
               (1...12).contains(month),
               (2000...2100).contains(year) else {
-            return false
+            return (false, nil, nil)
         }
 
-        medicine.updateDeadline(month: month, year: year)
-        return true
+        return (true, month, year)
     }
 
-    private func deadlineInputs(for medicine: Medicine) -> (month: String, year: String) {
-        if let info = medicine.deadlineMonthYear {
+    private func deadlineInputs(for medicine: Medicine, package: Package) -> (month: String, year: String) {
+        if let entry = MedicinePackage.latestActiveEntry(for: medicine, package: package, in: managedObjectContext),
+           let info = entry.deadlineMonthYear {
             return (String(format: "%02d", info.month), String(info.year))
         }
         return ("", "")

@@ -36,6 +36,7 @@ public class Therapy: NSManagedObject, Identifiable {
     @NSManaged public var snooze_minutes: Int32
     @NSManaged public var clinicalRules: Data?
     @NSManaged public var medicinePackage: MedicinePackage?
+    @NSManaged public var prescribingDoctor: Doctor?
 
     // Aggiunta relazione: ogni Therapy appartiene a una Person
     @NSManaged public var person: Person

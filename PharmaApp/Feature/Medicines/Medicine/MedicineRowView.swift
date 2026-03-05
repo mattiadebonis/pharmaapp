@@ -490,7 +490,12 @@ struct MedicineRowView: View {
     }
 
     private var deadlineIndicator: (symbol: String, color: Color, label: String)? {
-        deadlineIndicator(from: makeMedicineRowDeadlineIndicator(for: medicine))
+        deadlineIndicator(
+            from: makeMedicineRowDeadlineIndicator(
+                for: medicine,
+                medicinePackage: medicinePackage
+            )
+        )
     }
 
     private func color(for tone: Snapshot.Tone) -> Color {
@@ -906,10 +911,18 @@ struct MedicineRowView: View {
 
 func makeMedicineRowDeadlineIndicator(
     for medicine: Medicine,
+    medicinePackage: MedicinePackage? = nil,
     referenceDate: Date = Date(),
     calendar: Calendar = .current
 ) -> MedicineRowView.Snapshot.DeadlineIndicator? {
-    guard let display = medicine.deadlineDisplay(referenceDate: referenceDate, calendar: calendar) else {
+    let display: Medicine.DeadlineDisplay?
+    if let medicinePackage {
+        display = medicinePackage.deadlineDisplay(referenceDate: referenceDate, calendar: calendar)
+    } else {
+        display = medicine.deadlineDisplay(referenceDate: referenceDate, calendar: calendar)
+    }
+
+    guard let display else {
         return nil
     }
 

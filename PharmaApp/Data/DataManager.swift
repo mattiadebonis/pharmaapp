@@ -324,6 +324,7 @@ class DataManager {
 
     private let manualIntakeMigrationKey = "pharmaapp.migration.manualIntakeDefaultTrue.v1"
     private let therapyManualIntakeScopeMigrationKey = "pharmaapp.migration.therapyManualIntakeScope.v1"
+    private let deadlineToEntryMigrationKey = "pharmaapp.migration.deadline_to_entry.v1"
 
     func migrateManualIntakeDefaultIfNeeded(userDefaults: UserDefaults = .standard) {
         guard !userDefaults.bool(forKey: manualIntakeMigrationKey) else { return }
@@ -352,6 +353,32 @@ class DataManager {
             try? context.save()
         }
         userDefaults.set(true, forKey: therapyManualIntakeScopeMigrationKey)
+    }
+
+    func migrateDeadlineToEntryIfNeeded(userDefaults: UserDefaults = .standard) {
+        guard !userDefaults.bool(forKey: deadlineToEntryMigrationKey) else { return }
+        let request: NSFetchRequest<Medicine> = Medicine.fetchRequest() as! NSFetchRequest<Medicine>
+
+        do {
+            let medicines = try context.fetch(request)
+            for medicine in medicines {
+                let month = Int(medicine.deadline_month)
+                let year = Int(medicine.deadline_year)
+                guard (1...12).contains(month), (2000...2100).contains(year) else { continue }
+
+                let entries = medicine.medicinePackages ?? []
+                for entry in entries where entry.deadlineMonthYear == nil {
+                    entry.updateDeadline(month: month, year: year)
+                }
+            }
+
+            if context.hasChanges {
+                try context.save()
+            }
+            userDefaults.set(true, forKey: deadlineToEntryMigrationKey)
+        } catch {
+            print("Deadline migration failed: \(error.localizedDescription)")
+        }
     }
 
     private func requiresPrescription(from packages: [[String: Any]]) -> Bool {

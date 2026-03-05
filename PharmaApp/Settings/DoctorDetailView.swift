@@ -43,25 +43,22 @@ struct DoctorDetailView: View {
         Form {
             Section(header: Text("Dettagli Dottore")) {
                 TextField("Nome e cognome", text: $nome)
-                TextField("Email", text: $mail)
-                    .keyboardType(.emailAddress)
-                TextField("Telefono", text: $telefono)
-                    .keyboardType(.phonePad)
-                TextField("Specializzazione", text: $specializzazione)
             }
 
-            Section(header: Text("Orari reperibilità")) {
+            Section(header: Text("Contatti e disponibilità")) {
                 NavigationLink {
-                    DoctorSchedulePageView(
-                        title: "Orari reperibilità",
-                        sectionTitle: "Orari reperibilità",
+                    DoctorProfessionalInfoPageView(
+                        title: "Contatti e disponibilità",
+                        email: $mail,
+                        telefono: $telefono,
+                        specializzazione: $specializzazione,
                         schedule: $schedule
                     )
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Apri pagina orari reperibilità")
+                        Text("Apri pagina contatti e disponibilità")
                             .foregroundStyle(.primary)
-                        Text(scheduleSummary)
+                        Text(professionalInfoSummary)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -227,6 +224,17 @@ struct DoctorDetailView: View {
     private var scheduleSummary: String {
         let configuredDays = schedule.days.filter { $0.mode != .closed }.count
         return configuredDays == 0 ? "Nessun orario configurato" : "\(configuredDays) giorni configurati"
+    }
+
+    private var professionalInfoSummary: String {
+        let values = [
+            normalizedValue(from: mail),
+            normalizedValue(from: telefono),
+            normalizedValue(from: specializzazione)
+        ].compactMap { $0 }
+
+        let contacts = values.isEmpty ? "Contatti non configurati" : values.joined(separator: " · ")
+        return "\(contacts) · \(scheduleSummary)"
     }
 
     private var prescriptionTemplateStatus: String {

@@ -17,6 +17,7 @@ struct MedicineSummaryBuilder {
         for medicine: Medicine,
         therapies providedTherapies: Set<Therapy>? = nil,
         stockUnitsFallback: Int? = nil,
+        stockPackageUnitsFallback: Int? = nil,
         now: Date = Date()
     ) -> MedicineAggregateSubtitle {
         let therapies = providedTherapies ?? (medicine.therapies as? Set<Therapy> ?? [])
@@ -82,8 +83,22 @@ struct MedicineSummaryBuilder {
             }
         } else if therapies.isEmpty, let remainingUnits = stockUnitsFallback ?? medicine.remainingUnitsWithoutTherapy() {
             let clamped = max(0, remainingUnits)
-            let unitsText = formatCount(clamped, singular: "unità", plural: "unità")
-            line2 = unitsText
+            let packageUnits = preferredPackageUnits(
+                for: medicine,
+                explicitPackageUnits: stockPackageUnitsFallback
+            )
+            if shouldDisplayStockInPackages(
+                remainingUnits: clamped,
+                packageUnits: packageUnits
+            ) {
+                let packageCount = packageCountFromUnits(
+                    clamped,
+                    packageUnits: packageUnits
+                )
+                line2 = formatCount(packageCount, singular: "confezione", plural: "confezioni")
+            } else {
+                line2 = formatCount(clamped, singular: "unità", plural: "unità")
+            }
         } else {
             line2 = "—"
         }
@@ -175,6 +190,25 @@ struct MedicineSummaryBuilder {
             cursor = next
         }
         return max(1, count)
+    }
+
+    private func preferredPackageUnits(for medicine: Medicine, explicitPackageUnits: Int?) -> Int? {
+        if let explicitPackageUnits, explicitPackageUnits > 0 {
+            return explicitPackageUnits
+        }
+
+        let candidates = medicine.packages.map { Int($0.numero) }.filter { $0 > 0 }
+        return candidates.max()
+    }
+
+    private func shouldDisplayStockInPackages(remainingUnits: Int, packageUnits: Int?) -> Bool {
+        guard let packageUnits, packageUnits > 0 else { return false }
+        return Double(remainingUnits) > (Double(packageUnits) / 2.0)
+    }
+
+    private func packageCountFromUnits(_ units: Int, packageUnits: Int?) -> Int {
+        guard units > 0, let packageUnits, packageUnits > 0 else { return 0 }
+        return Int(ceil(Double(units) / Double(packageUnits)))
     }
 }
 

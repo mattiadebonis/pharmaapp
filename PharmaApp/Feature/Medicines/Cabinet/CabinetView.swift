@@ -21,6 +21,16 @@ struct CabinetView: View {
     private enum Layout {
         static let horizontalInset: CGFloat = 28
         static let summaryTrailingInset: CGFloat = 40
+        static let emptyStateImageHeight: CGFloat = 320
+        static let emptyStateImageScale: CGFloat = 2
+        static let emptyStateImageHorizontalOffset: CGFloat = 12
+        static let emptyStateImageTopPadding: CGFloat = -60
+        static let emptyStateImageBottomPadding: CGFloat = 24
+        static let emptyStateOverlayLeadingPadding: CGFloat = 10
+        static let emptyStateOverlayTopPadding: CGFloat = 52
+        static let emptyStateOverlayTextMaxWidth: CGFloat = 320
+        static let emptyStateBottomTextTopPadding: CGFloat = 12
+        static let emptyStateBottomTextHorizontalInset: CGFloat = 14
     }
 
     @EnvironmentObject private var appVM: AppViewModel
@@ -260,6 +270,7 @@ struct CabinetView: View {
             .padding(.top, 16)
             .scrollContentBackground(.hidden)
             .background(Color.white)
+            .scrollDisabled(isShelfEmpty(cachedShelfState))
             .scrollIndicators(.hidden)
     }
 
@@ -344,6 +355,22 @@ struct CabinetView: View {
             .listSectionSeparator(.hidden)
         }
 
+        if isShelfEmpty(viewState) {
+            Section {
+                emptyCabinetContent
+                    .listRowInsets(
+                        EdgeInsets(
+                            top: 12,
+                            leading: 0,
+                            bottom: 10,
+                            trailing: 0
+                        )
+                    )
+                    .listRowBackground(Color.white)
+            }
+            .listSectionSeparator(.hidden)
+        }
+
         if !viewState.pinnedMedicineEntries.isEmpty {
             Section {
                 ForEach(viewState.pinnedMedicineEntries, id: \.id) { entry in
@@ -370,6 +397,49 @@ struct CabinetView: View {
             }
             .listSectionSeparator(.hidden)
         }
+    }
+
+    private func isShelfEmpty(_ viewState: ShelfViewState) -> Bool {
+        viewState.pinnedMedicineEntries.isEmpty
+            && viewState.cabinetEntries.isEmpty
+            && viewState.otherMedicineEntries.isEmpty
+    }
+
+    private var emptyCabinetContent: some View {
+        VStack(spacing: 18) {
+            ZStack(alignment: .topLeading) {
+                Image("empty_cabinet")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: Layout.emptyStateImageHeight)
+                    .scaleEffect(Layout.emptyStateImageScale)
+                    .offset(x: Layout.emptyStateImageHorizontalOffset)
+                    .padding(.top, Layout.emptyStateImageTopPadding)
+                    .padding(.bottom, Layout.emptyStateImageBottomPadding)
+                    .clipped()
+                    .accessibilityHidden(true)
+
+                Text("Aggiungi i medicinali\nche vuoi tenere\nsotto controllo")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: Layout.emptyStateOverlayTextMaxWidth, alignment: .leading)
+                    .padding(.leading, Layout.emptyStateOverlayLeadingPadding)
+                    .padding(.top, Layout.emptyStateOverlayTopPadding)
+            }
+
+            Text("Potrai vedere le scorte, sapere quando stanno per finire e registrare acquisti e assunzioni facilmente.")
+            .font(.title2)
+            .foregroundColor(.secondary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, Layout.emptyStateBottomTextTopPadding)
+            .padding(.horizontal, Layout.emptyStateBottomTextHorizontalInset)
+        }
+        .padding(.horizontal, Layout.horizontalInset)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .background(Color.white)
     }
 
     private func shelfSections(from shelfState: CabinetViewModel.ShelfViewState) -> ShelfViewState {

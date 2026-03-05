@@ -67,11 +67,13 @@ struct TherapyFormView: View {
         entity: Person.entity(),
         sortDescriptors: [NSSortDescriptor(key: "nome", ascending: true)]
     ) private var persons: FetchedResults<Person>
+    @FetchRequest(fetchRequest: Doctor.extractDoctors()) private var doctors: FetchedResults<Doctor>
     @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
     
     // Nuovo state per la persona selezionata
     @State private var selectedPerson: Person?
     @State private var selectedCondition: String = ""
+    @State private var selectedDoctorID: NSManagedObjectID?
     @State private var isAddingCondition = false
     @State private var newConditionText: String = ""
 
@@ -301,6 +303,19 @@ struct TherapyFormView: View {
             }
             .listRowBackground(Color(.systemGroupedBackground))
 
+            if medicine.obbligo_ricetta {
+                Section(header: Text("Prescrizione")) {
+                    Picker("Medico prescrittore", selection: $selectedDoctorID) {
+                        Text("Nessuno").tag(NSManagedObjectID?.none)
+                        ForEach(doctors, id: \.objectID) { doctor in
+                            Text(doctorDisplayName(doctor))
+                                .tag(Optional(doctor.objectID))
+                        }
+                    }
+                }
+                .listRowBackground(Color(.systemGroupedBackground))
+            }
+
             Section(
                 header: Text("Automazioni terapia"),
                 footer: Text("Queste impostazioni valgono solo per questa terapia.")
@@ -395,6 +410,9 @@ struct TherapyFormView: View {
                         selectedCondition = defaultCondition(for: selectedPerson)
                     }
                 }
+            }
+            if medicine.obbligo_ricetta, selectedDoctorID == nil {
+                selectedDoctorID = defaultPrescribingDoctorID
             }
             updateRecurrenceInputIfNeeded(force: true)
         }
@@ -539,6 +557,33 @@ struct TherapyFormView: View {
         )
     }
 
+    private var selectedDoctor: Doctor? {
+        guard let selectedDoctorID else { return nil }
+        return doctors.first(where: { $0.objectID == selectedDoctorID })
+    }
+
+    private var defaultPrescribingDoctorID: NSManagedObjectID? {
+        if let current = editingTherapy?.prescribingDoctor?.objectID {
+            return current
+        }
+
+        let candidateTherapies: [Therapy] = {
+            if let entry = medicinePackage {
+                if let entryTherapies = entry.therapies, !entryTherapies.isEmpty {
+                    return Array(entryTherapies)
+                }
+                let all = medicine.therapies ?? []
+                return all.filter { $0.medicinePackage == entry || $0.package == entry.package }
+            }
+            let all = medicine.therapies ?? []
+            return all.filter { $0.package == package }
+        }()
+
+        let doctorsByID = Dictionary(grouping: candidateTherapies.compactMap { $0.prescribingDoctor }) { $0.objectID }
+        guard doctorsByID.count == 1 else { return nil }
+        return doctorsByID.keys.first
+    }
+
     private var selectedConditionValue: String? {
         normalizedCondition(selectedCondition)
     }
@@ -573,6 +618,11 @@ struct TherapyFormView: View {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func doctorDisplayName(_ doctor: Doctor) -> String {
+        let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return first.isEmpty ? "Medico" : first
     }
 
     private var monitoringStatusText: String {
@@ -1263,6 +1313,7 @@ extension TherapyFormView {
         let effectiveInterval = isCycle ? 1 : interval
         let cycleOn = isCycle ? cycleOnDays : nil
         let cycleOff = isCycle ? cycleOffDays : nil
+        let effectivePrescribingDoctor = selectedDoctor
 
         // Persona associata: in modifica usa quella della therapy; altrimenti usa selezione/first/crea
         let effectivePerson: Person = {
@@ -1294,6 +1345,7 @@ extension TherapyFormView {
                 medicinePackage: effectiveMedicinePackage,
                 importance: effectiveImportance,
                 person: effectivePerson,
+                prescribingDoctor: effectivePrescribingDoctor,
                 condition: selectedConditionValue,
                 manualIntake: !automaticIntakeEnabled,
                 notificationsSilenced: notificationsSilenced,
@@ -1318,6 +1370,7 @@ extension TherapyFormView {
                 medicinePackage: effectiveMedicinePackage,
                 importance: "standard",
                 person: effectivePerson,
+                prescribingDoctor: effectivePrescribingDoctor,
                 condition: selectedConditionValue,
                 manualIntake: !automaticIntakeEnabled,
                 notificationsSilenced: notificationsSilenced,
@@ -1370,6 +1423,7 @@ extension TherapyFormView {
     
     private func populateFromTherapy(_ therapy: Therapy) {
         selectedPerson = therapy.person
+        selectedDoctorID = therapy.prescribingDoctor?.objectID
         selectedCondition = normalizedCondition(therapy.condizione) ?? defaultCondition(for: therapy.person)
         automaticIntakeEnabled = therapy.automaticIntakeEnabled
         notificationsSilenced = therapy.notifications_silenced
