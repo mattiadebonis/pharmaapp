@@ -520,6 +520,8 @@
 				DEVELOPMENT_TEAM = P8V8X3MUBK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				GOOGLE_CLIENT_ID = REPLACE_WITH_FIREBASE_CLIENT_ID;
+				GOOGLE_REVERSED_CLIENT_ID = REPLACE_WITH_FIREBASE_REVERSED_CLIENT_ID;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = pharmaapp;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = pharmaapp;
@@ -546,8 +548,6 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				GOOGLE_CLIENT_ID = REPLACE_WITH_FIREBASE_CLIENT_ID;
-				GOOGLE_REVERSED_CLIENT_ID = REPLACE_WITH_FIREBASE_REVERSED_CLIENT_ID;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
@@ -581,6 +581,8 @@
 				DEVELOPMENT_TEAM = P8V8X3MUBK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				GOOGLE_CLIENT_ID = REPLACE_WITH_FIREBASE_CLIENT_ID;
+				GOOGLE_REVERSED_CLIENT_ID = REPLACE_WITH_FIREBASE_REVERSED_CLIENT_ID;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = pharmaapp;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = pharmaapp;
@@ -607,8 +609,6 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				GOOGLE_CLIENT_ID = REPLACE_WITH_FIREBASE_CLIENT_ID;
-				GOOGLE_REVERSED_CLIENT_ID = REPLACE_WITH_FIREBASE_REVERSED_CLIENT_ID;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.6;

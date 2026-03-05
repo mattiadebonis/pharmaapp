@@ -203,8 +203,9 @@ public struct SectionCalculator {
     // MARK: - Priority-based ordering
 
     /// Returns medicines sorted by the same priority hierarchy used in CabinetSummary:
-    /// missedDose > refillBeforeNextDose > imminentDose > refillWithinToday > refillSoon > nextDoseToday > allUnderControl.
-    /// Within the same priority tier, sorted by earliest dose time, remaining units, deadline, name.
+    /// missedDose > imminentDose > refillBeforeNextDose > refillWithinToday > refillSoon > nextDoseToday > allUnderControl.
+    /// If two medicines are scheduled on the same day, they are ordered by intake time first.
+    /// Otherwise, ties are resolved by remaining units, deadline, name.
     public func prioritySortedMedicines(
         for medicines: [MedicineSnapshot],
         option: OptionSnapshot?
@@ -233,21 +234,21 @@ public struct SectionCalculator {
             let status = stockStatus(for: medicine, option: option)
             let isLow = (status == .critical || status == .low)
 
-            // 2. Refill before next dose (critical, requires therapy)
-            if hasTherapy, isLow {
-                let autonomy = therapyAutonomyDays(for: medicine)
-                if autonomy == 0, !therapyStockCoversNextDose(for: medicine) {
-                    return .refillBeforeNextDose
-                }
-            }
-
-            // 3. Imminent dose (requires therapy)
+            // 2. Imminent dose (requires therapy)
             if hasTherapy {
                 if let pending = nextFutureDoseTime(for: medicine, now: now) {
                     let seconds = pending.timeIntervalSince(now)
                     if seconds > 0, seconds <= windowSeconds {
                         return .imminentDose
                     }
+                }
+            }
+
+            // 3. Refill before next dose (critical, requires therapy)
+            if hasTherapy, isLow {
+                let autonomy = therapyAutonomyDays(for: medicine)
+                if autonomy == 0, !therapyStockCoversNextDose(for: medicine) {
+                    return .refillBeforeNextDose
                 }
             }
 
@@ -292,13 +293,27 @@ public struct SectionCalculator {
             return medicine.stockUnitsWithoutTherapy ?? Int.max
         }
 
+        func isConcreteDoseDate(_ date: Date) -> Bool {
+            date != Date.distantFuture
+        }
+
+        func isSameIntakeDay(_ lhs: Date, _ rhs: Date) -> Bool {
+            guard isConcreteDoseDate(lhs), isConcreteDoseDate(rhs) else { return false }
+            return calendar.isDate(lhs, inSameDayAs: rhs)
+        }
+
         return medicines.sorted { m1, m2 in
+            let d1 = earliestDoseTime(for: m1)
+            let d2 = earliestDoseTime(for: m2)
+
+            if isSameIntakeDay(d1, d2), d1 != d2 {
+                return d1 < d2
+            }
+
             let p1 = medicinePriority(for: m1)
             let p2 = medicinePriority(for: m2)
             if p1 != p2 { return p1 < p2 }
 
-            let d1 = earliestDoseTime(for: m1)
-            let d2 = earliestDoseTime(for: m2)
             if d1 != d2 { return d1 < d2 }
 
             let r1 = remainingUnits(for: m1)

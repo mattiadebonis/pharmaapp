@@ -10,235 +10,16 @@ import CoreData
 import MapKit
 import CoreLocation
 import CoreImage
+
 struct ProfileView: View {
-    @Environment(\.managedObjectContext) private var managedObjectContext
-    @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var auth: AuthViewModel
     var showsDoneButton: Bool = true
 
-    @FetchRequest(fetchRequest: Doctor.extractDoctors()) private var doctors: FetchedResults<Doctor>
-    @FetchRequest(fetchRequest: Person.extractPersons()) private var persons: FetchedResults<Person>
-
-    @AppStorage("preferredPharmacyName") private var preferredPharmacyName: String = ""
-
-    @State private var selectedDoctor: Doctor?
-    @State private var selectedPerson: Person?
-    @State private var fullscreenBarcodeCodiceFiscale: String?
-    @State private var personPendingDeletion: Person?
-    @State private var personDeleteErrorMessage: String?
-    @State private var isPharmacyPickerPresented = false
-    @State private var showLogoutConfirmation = false
-
     var body: some View {
-        Form {
-            // MARK: Persone
-            Section(header: HStack {
-                Label("Persone", systemImage: "person.2.fill")
-                Spacer()
-                NavigationLink(destination: AddPersonView()) {
-                    Image(systemName: "plus")
-                }
-            }) {
-                ForEach(persons) { person in
-                    HStack(spacing: 0) {
-                        NavigationLink {
-                            PersonDetailView(person: person)
-                        } label: {
-                            Text(personDisplayName(for: person))
-                                .foregroundStyle(.primary)
-                        }
-
-                        if let cf = person.codice_fiscale, !cf.isEmpty {
-                            Button {
-                                fullscreenBarcodeCodiceFiscale = cf
-                            } label: {
-                                VStack(spacing: 2) {
-                                    Image(systemName: "creditcard.fill")
-                                        .font(.system(size: 22))
-                                        .foregroundStyle(.blue)
-                                    Text("Tessera sanitaria")
-                                        .font(.system(size: 8, weight: .medium))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        if !person.is_account {
-                            Button(role: .destructive) {
-                                personPendingDeletion = person
-                            } label: {
-                                Text("Elimina")
-                            }
-                        }
-
-                        if person.is_account, auth.user != nil {
-                            Button(role: .destructive) {
-                                showLogoutConfirmation = true
-                            } label: {
-                                Text("Esci")
-                            }
-                        }
-                    }
-                }
-            }
-
-            // MARK: Dottori
-            Section(header: HStack {
-                Label("Medici", systemImage: "stethoscope")
-                Spacer()
-                NavigationLink(destination: AddDoctorView()) {
-                    Image(systemName: "plus")
-                }
-            }) {
-                ForEach(doctors) { doctor in
-                    NavigationLink {
-                        DoctorDetailView(doctor: doctor)
-                    } label: {
-                        Text(doctorDisplayName(for: doctor))
-                            .foregroundStyle(.primary)
-                    }
-                }
-            }
-
-            // MARK: Farmacie (temporaneamente nascosto)
-//            Section(header: HStack {
-//                Label("Farmacie", systemImage: "cross.fill")
-//                Spacer()
-//                Button {
-//                    isPharmacyPickerPresented = true
-//                } label: {
-//                    Image(systemName: "plus")
-//                }
-//            }) {
-//                if !preferredPharmacyName.isEmpty {
-//                    Text(preferredPharmacyName)
-//                        .font(.headline)
-//                        .foregroundStyle(.primary)
-//                } else {
-//                    Text("Nessuna farmacia selezionata")
-//                        .foregroundStyle(.secondary)
-//                }
-//            }
-
-            // MARK: Template messaggio ricetta
-            Section(header: Label("Template messaggio ricetta", systemImage: "text.bubble")) {
-                NavigationLink {
-                    PrescriptionMessageTemplateSettingsView()
-                } label: {
-                    Text("Personalizza il testo del messaggio per richiedere una ricetta")
-                }
-            }
-
-        }
-        .navigationTitle("Profilo")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if showsDoneButton {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Fine") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-        .fullScreenCover(isPresented: Binding(
-            get: { fullscreenBarcodeCodiceFiscale != nil },
-            set: { if !$0 { fullscreenBarcodeCodiceFiscale = nil } }
-        )) {
-            if let cf = fullscreenBarcodeCodiceFiscale {
-                FullscreenBarcodeView(codiceFiscale: cf) {
-                    fullscreenBarcodeCodiceFiscale = nil
-                }
-            }
-        }
-        .sheet(isPresented: $isPharmacyPickerPresented) {
-            NavigationStack {
-                PharmacyPickerView(selectedPharmacyName: $preferredPharmacyName)
-            }
-        }
-        .confirmationDialog("Uscire dall'account?", isPresented: $showLogoutConfirmation, titleVisibility: .visible) {
-            Button("Esci", role: .destructive) {
-                auth.signOut()
-                if showsDoneButton {
-                    dismiss()
-                }
-            }
-            Button("Annulla", role: .cancel) { }
-        } message: {
-            Text("I dati locali resteranno su questo dispositivo anche dopo l'uscita.")
-        }
-        .onAppear {
-            AccountPersonService.shared.ensureAccountPerson(in: managedObjectContext)
-            AccountPersonService.shared.syncAccountDisplayName(from: auth.user, in: managedObjectContext)
-        }
-        .onChange(of: auth.user) { user in
-            AccountPersonService.shared.syncAccountDisplayName(from: user, in: managedObjectContext)
-        }
-        .alert(
-            "Eliminare questa persona?",
-            isPresented: Binding(
-                get: { personPendingDeletion != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        personPendingDeletion = nil
-                    }
-                }
-            )
-        ) {
-            Button("Elimina", role: .destructive) {
-                if let person = personPendingDeletion {
-                    deletePerson(person)
-                }
-                personPendingDeletion = nil
-            }
-            Button("Annulla", role: .cancel) {
-                personPendingDeletion = nil
-            }
-        } message: {
-            Text("Le terapie associate verranno assegnate all'account.")
-        }
-        .alert("Errore", isPresented: Binding(
-            get: { personDeleteErrorMessage != nil },
-            set: { isPresented in
-                if !isPresented {
-                    personDeleteErrorMessage = nil
-                }
-            }
-        )) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(personDeleteErrorMessage ?? "Errore sconosciuto.")
-        }
-    }
-
-    private func personDisplayName(for person: Person) -> String {
-        let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let full = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
-        return full.isEmpty ? "Persona" : full
-    }
-
-    private func doctorDisplayName(for doctor: Doctor) -> String {
-        let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let full = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
-        return full.isEmpty ? "Dottore" : full
-    }
-
-    private func deletePerson(_ person: Person) {
-        let context = person.managedObjectContext ?? managedObjectContext
-        do {
-            try PersonDeletionService.shared.delete(person, in: context)
-            if selectedPerson?.objectID == person.objectID {
-                selectedPerson = nil
-            }
-        } catch {
-            context.rollback()
-            personDeleteErrorMessage = error.localizedDescription
-            print("Errore nell'eliminazione della persona: \(error.localizedDescription)")
-        }
+        DataManagementView(
+            navigationTitleText: "Profilo",
+            showsBackupLink: true,
+            showsDoneButton: showsDoneButton
+        )
     }
 }
 
@@ -807,12 +588,12 @@ struct FullscreenBarcodeView: View {
         }
         .task {
             barcodeImage = await Task.detached(priority: .userInitiated) {
-                generateBarcode(from: codiceFiscale)
+                FullscreenBarcodeView.generateBarcode(from: codiceFiscale)
             }.value
         }
     }
 
-    private func generateBarcode(from string: String) -> UIImage? {
+    nonisolated private static func generateBarcode(from string: String) -> UIImage? {
         guard let data = string.data(using: .ascii),
               let filter = CIFilter(name: "CICode128BarcodeGenerator") else { return nil }
         filter.setValue(data, forKey: "inputMessage")
@@ -847,12 +628,12 @@ struct CodiceFiscaleBarcodeView: View {
         .task(id: codiceFiscale) {
             guard barcodeImage == nil else { return }
             barcodeImage = await Task.detached(priority: .userInitiated) {
-                generateBarcode(from: codiceFiscale)
+                CodiceFiscaleBarcodeView.generateBarcode(from: codiceFiscale)
             }.value
         }
     }
 
-    private func generateBarcode(from string: String) -> UIImage? {
+    nonisolated private static func generateBarcode(from string: String) -> UIImage? {
         guard let data = string.data(using: .ascii),
               let filter = CIFilter(name: "CICode128BarcodeGenerator") else { return nil }
         filter.setValue(data, forKey: "inputMessage")
@@ -869,7 +650,7 @@ struct CodiceFiscaleBarcodeView: View {
     NavigationStack {
         ProfileView()
     }
-    .environmentObject(AppViewModel())
     .environmentObject(AuthViewModel())
+    .environmentObject(BackupCoordinator())
     .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
 }

@@ -39,8 +39,10 @@ struct CabinetDetailView: View {
         .listSectionSpacingIfAvailable(4)
         .listRowSpacing(8)
         .scrollContentBackground(.hidden)
+        .background(Color.white)
         .navigationTitle(cabinet.displayName)
         .navigationBarTitleDisplayMode(.large)
+        .toolbarBackground(.automatic, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

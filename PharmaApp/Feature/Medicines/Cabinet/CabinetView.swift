@@ -47,8 +47,8 @@ struct CabinetView: View {
     @State private var selectedEntry: MedicinePackage?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
     @State private var missedDoseSheet: MissedDoseSheetState?
-    @State private var cachedSummaryLines: [String] = ["Tutto sotto controllo!"]
-    @State private var cachedInlineAction: String = "Tutto sotto controllo"
+    @State private var cachedSummaryLines: [String] = ["Per ora non ci sono azioni da fare."]
+    @State private var cachedInlineAction: String = "Per ora nessuna azione"
     @State private var cachedShelfState: ShelfViewState = .empty
     @State private var rowSnapshotsByEntryID: [NSManagedObjectID: CabinetViewModel.CabinetRowSnapshot] = [:]
     @State private var syncWorkItem: DispatchWorkItem?
@@ -68,6 +68,7 @@ struct CabinetView: View {
             }
             .navigationTitle("Armadietto")
             .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(.automatic, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -256,8 +257,9 @@ struct CabinetView: View {
             .listSectionSpacingIfAvailable(4)
             .listRowSpacing(18)
             .listStyle(.plain)
-            .padding(.top, 18)
+            .padding(.top, 16)
             .scrollContentBackground(.hidden)
+            .background(Color.white)
             .scrollIndicators(.hidden)
     }
 
@@ -308,11 +310,13 @@ struct CabinetView: View {
 
     @ViewBuilder
     private func standardCabinetSections(viewState: ShelfViewState) -> some View {
+        // Summary temporaneamente nascosto su richiesta.
+        /*
         Section {
             summaryTextView
                 .listRowInsets(
                     EdgeInsets(
-                        top: 14,
+                        top: 40,
                         leading: Layout.horizontalInset,
                         bottom: 40,
                         trailing: Layout.summaryTrailingInset
@@ -322,6 +326,7 @@ struct CabinetView: View {
                 .listRowSeparator(.hidden)
         }
         .listSectionSeparator(.hidden)
+        */
 
         if appVM.suggestNearestPharmacies {
             Section {

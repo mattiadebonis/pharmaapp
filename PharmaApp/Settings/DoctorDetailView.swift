@@ -87,6 +87,20 @@ struct DoctorDetailView: View {
                 }
             }
 
+            Section(header: Text("Richieste ricetta")) {
+                NavigationLink {
+                    PrescriptionMessageTemplateSettingsView(doctor: doctor)
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Personalizza il messaggio di richiesta di medicinali")
+                            .foregroundStyle(.primary)
+                        Text(prescriptionTemplateStatus)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             Section {
                 Button(role: .destructive) {
                     showDeleteConfirmation = true
@@ -213,6 +227,15 @@ struct DoctorDetailView: View {
     private var scheduleSummary: String {
         let configuredDays = schedule.days.filter { $0.mode != .closed }.count
         return configuredDays == 0 ? "Nessun orario configurato" : "\(configuredDays) giorni configurati"
+    }
+
+    private var prescriptionTemplateStatus: String {
+        let template = PrescriptionMessageTemplateRenderer.resolvedTemplate(
+            customTemplate: doctor.prescription_message_template
+        )
+        return template == PrescriptionMessageTemplateRenderer.defaultTemplate
+            ? "Template predefinito"
+            : "Template personalizzato"
     }
 
     private func scheduleAutosave() {

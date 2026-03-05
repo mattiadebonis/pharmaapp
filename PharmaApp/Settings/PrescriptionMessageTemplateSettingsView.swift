@@ -1,24 +1,23 @@
 import SwiftUI
-import CoreData
 
 struct PrescriptionMessageTemplateSettingsView: View {
     @Environment(\.managedObjectContext) private var managedObjectContext
     @Environment(\.dismiss) private var dismiss
-    @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
+
+    @ObservedObject var doctor: Doctor
 
     @State private var templateText = ""
     @State private var didLoadTemplate = false
     @State private var showValidationAlert = false
     @State private var saveErrorMessage: String?
 
-    private let previewDoctorName = "Dott.ssa Rossi"
     private let previewMedicineNames = ["Tachipirina", "Augmentin"]
 
     var body: some View {
         Form {
             Section(
                 header: Text("Testo del messaggio"),
-                footer: Text("Inserisci entrambi i campi automatici per completare il messaggio in modo corretto.")
+                footer: Text("Si applica solo ai farmaci che hanno questo medico come prescrittore. Negli altri casi viene usato il template predefinito.")
             ) {
                 TextEditor(text: $templateText)
                     .frame(minHeight: 180)
@@ -59,7 +58,7 @@ struct PrescriptionMessageTemplateSettingsView: View {
                 }
             }
         }
-        .navigationTitle("Messaggio per la ricetta")
+        .navigationTitle("Messaggio richiesta medicinali")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -99,6 +98,11 @@ struct PrescriptionMessageTemplateSettingsView: View {
 
     private var isTemplateValid: Bool {
         PrescriptionMessageTemplateRenderer.isValidTemplate(trimmedTemplate)
+    }
+
+    private var previewDoctorName: String {
+        let trimmed = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Dott.ssa Rossi" : trimmed
     }
 
     private var previewMessage: String {
@@ -144,7 +148,7 @@ struct PrescriptionMessageTemplateSettingsView: View {
     private func loadTemplateIfNeeded() {
         guard !didLoadTemplate else { return }
         templateText = PrescriptionMessageTemplateRenderer.resolvedTemplate(
-            customTemplate: options.first?.prescription_message_template
+            customTemplate: doctor.prescription_message_template
         )
         didLoadTemplate = true
     }
@@ -155,8 +159,12 @@ struct PrescriptionMessageTemplateSettingsView: View {
             return
         }
 
-        let option = ensureOption()
-        option.prescription_message_template = trimmedTemplate
+        let normalizedTemplate = PrescriptionMessageTemplateRenderer.resolvedTemplate(
+            customTemplate: trimmedTemplate
+        )
+        doctor.prescription_message_template = normalizedTemplate == PrescriptionMessageTemplateRenderer.defaultTemplate
+            ? nil
+            : normalizedTemplate
 
         do {
             try managedObjectContext.save()
@@ -166,29 +174,16 @@ struct PrescriptionMessageTemplateSettingsView: View {
             saveErrorMessage = error.localizedDescription
         }
     }
-
-    private func ensureOption() -> Option {
-        if let existing = options.first {
-            return existing
-        }
-
-        guard let optionEntity = NSEntityDescription.entity(forEntityName: "Option", in: managedObjectContext) else {
-            fatalError("Entity Option non trovata nel modello Core Data.")
-        }
-        let newOption = Option(entity: optionEntity, insertInto: managedObjectContext)
-        newOption.id = UUID()
-        newOption.manual_intake_registration = false
-        newOption.day_threeshold_stocks_alarm = 7
-        newOption.therapy_notification_level = TherapyNotificationPreferences.defaultLevel.rawValue
-        newOption.therapy_snooze_minutes = Int32(TherapyNotificationPreferences.defaultSnoozeMinutes)
-        newOption.prescription_message_template = PrescriptionMessageTemplateRenderer.defaultTemplate
-        return newOption
-    }
 }
 
 #Preview {
-    NavigationStack {
-        PrescriptionMessageTemplateSettingsView()
+    let context = PersistenceController.shared.container.viewContext
+    let doctor = Doctor(context: context)
+    doctor.id = UUID()
+    doctor.nome = "Dott.ssa Rossi"
+
+    return NavigationStack {
+        PrescriptionMessageTemplateSettingsView(doctor: doctor)
     }
-    .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
+    .environment(\.managedObjectContext, context)
 }

@@ -19,6 +19,7 @@ public class Doctor: NSManagedObject, Identifiable {
     @NSManaged public var indirizzo: String?
     @NSManaged public var specializzazione: String?
     @NSManaged public var orari: String?
+    @NSManaged public var prescription_message_template: String?
     @NSManaged public var segreteria_nome: String?
     @NSManaged public var segreteria_mail: String?
     @NSManaged public var segreteria_telefono: String?

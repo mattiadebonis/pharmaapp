@@ -16,8 +16,8 @@ public struct PharmacyInfo {
 
 public enum CabinetSummaryPriority: Int, Comparable {
     case missedDose = 1
-    case refillBeforeNextDose = 2
-    case imminentDose = 3
+    case imminentDose = 2
+    case refillBeforeNextDose = 3
     case refillWithinToday = 4
     case refillSoon = 5
     case nextDoseToday = 6
@@ -106,7 +106,6 @@ struct AggregatedAnalysis {
     let refillWithinTodayCandidate: RefillActionCandidate?
     let refillSoonCount: Int
     let refillSoonCandidate: RefillActionCandidate?
-    let hasAnyStockIssue: Bool
     let imminentDoseTime: Date?
     let imminentDoseMinutesAway: Int?
 }
@@ -116,10 +115,16 @@ struct AggregatedAnalysis {
 public struct CabinetSummaryReadModel {
     private let recurrenceService: RecurrencePort
     private let calendar: Calendar
+    private let settings: CabinetSummarySettings
 
-    public init(recurrenceService: RecurrencePort, calendar: Calendar = .current) {
+    public init(
+        recurrenceService: RecurrencePort,
+        calendar: Calendar = .current,
+        settings: CabinetSummarySettings = CabinetSummarySettings()
+    ) {
         self.recurrenceService = recurrenceService
         self.calendar = calendar
+        self.settings = settings
     }
 
     // MARK: - Public API
@@ -141,9 +146,8 @@ public struct CabinetSummaryReadModel {
         let analyses = medicines.map { analyzeMedicine($0, option: option, doseSchedule: doseSchedule, now: now) }
         let aggregated = aggregate(analyses, now: now)
 
-        let presenter = CabinetSummaryPresenter(calendar: calendar)
-        let summary = presenter.resolveSummary(from: aggregated, pharmacy: pharmacy)
-        let inlineAction = presenter.resolveInlineAction(from: aggregated)
+        let summary = buildCabinetSummary(from: aggregated, pharmacy: pharmacy)
+        let inlineAction = buildCabinetInlineAction(from: aggregated)
         return CabinetSummaryPresentation(summary: summary, inlineAction: inlineAction)
     }
 
@@ -178,6 +182,21 @@ public struct CabinetSummaryReadModel {
             now: now
         ).summary
         return [summary.title, summary.subtitle].filter { !$0.isEmpty }
+    }
+
+    // MARK: - Builder / Presenter bridge
+
+    private func buildCabinetSummary(
+        from aggregated: AggregatedAnalysis,
+        pharmacy: PharmacyInfo?
+    ) -> CabinetSummary {
+        let presenter = CabinetSummaryPresenter(calendar: calendar, settings: settings)
+        return presenter.resolveSummary(from: aggregated, pharmacy: pharmacy)
+    }
+
+    private func buildCabinetInlineAction(from aggregated: AggregatedAnalysis) -> CabinetInlineAction {
+        let presenter = CabinetSummaryPresenter(calendar: calendar, settings: settings)
+        return presenter.resolveInlineAction(from: aggregated)
     }
 
     // MARK: - Per-Medicine Analysis
@@ -249,8 +268,6 @@ public struct CabinetSummaryReadModel {
         var refillWithinTodayCandidate: RefillActionCandidate?
         var refillSoon = 0
         var refillSoonCandidate: RefillActionCandidate?
-        var anyStockIssue = false
-
         for a in analyses {
             totalMissed += a.missedDoseTimes.count
             if let first = a.missedDoseTimes.first {
@@ -281,9 +298,10 @@ public struct CabinetSummaryReadModel {
             }
 
             if a.isLowStock {
-                anyStockIssue = true
+                // Refill severity is based on therapy coverage risk (not raw stock count).
+                guard a.nextScheduledDoseTime != nil, a.autonomyDays != nil else { continue }
 
-                if a.autonomyDays == 0, a.nextScheduledDoseTime != nil, !a.stockCoversNextDose {
+                if a.autonomyDays == 0, !a.stockCoversNextDose {
                     refillBeforeNext += 1
                     refillBeforeNextCandidate = preferredRefillBeforeNextCandidate(
                         current: refillBeforeNextCandidate,
@@ -318,7 +336,7 @@ public struct CabinetSummaryReadModel {
         }
 
         // Compute imminent dose
-        let windowSeconds = Double(CabinetSummaryPresenter.imminentDoseWindowMinutes) * 60
+        let windowSeconds = Double(settings.imminentDoseWindowMinutes) * 60
         var imminentTime: Date?
         var imminentMinutes: Int?
         if let upcoming = nextUpcoming {
@@ -343,7 +361,6 @@ public struct CabinetSummaryReadModel {
             refillWithinTodayCandidate: refillWithinTodayCandidate,
             refillSoonCount: refillSoon,
             refillSoonCandidate: refillSoonCandidate,
-            hasAnyStockIssue: anyStockIssue,
             imminentDoseTime: imminentTime,
             imminentDoseMinutesAway: imminentMinutes
         )

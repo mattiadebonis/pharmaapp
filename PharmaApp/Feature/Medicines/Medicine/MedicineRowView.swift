@@ -431,7 +431,7 @@ struct MedicineRowView: View {
     }
 
     private func therapyLineText(_ line: TherapyLine, color: Color) -> Text {
-        let baseText: Text
+        var baseText: Text
         if let prefix = line.prefix, !prefix.isEmpty {
             baseText =
                 Text(prefix).font(subtitleFont).foregroundColor(color)
@@ -441,6 +441,17 @@ struct MedicineRowView: View {
                 + Text(line.description).font(subtitleFont).foregroundColor(color)
         } else {
             baseText = Text(line.description).font(subtitleFont).foregroundColor(color)
+        }
+
+        if let personDetails = line.personDetails, !personDetails.isEmpty {
+            baseText =
+                baseText
+                + Text(verbatim: "\u{00A0}")
+                + Text(Image(systemName: "person"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(color)
+                + Text(" ").font(subtitleFont).foregroundColor(color)
+                + Text(personDetails).font(subtitleFont).foregroundColor(color)
         }
 
         return line.statusIcons.reduce(baseText) { partial, icon in
@@ -458,6 +469,9 @@ struct MedicineRowView: View {
             components.append(prefix)
         }
         components.append(line.description)
+        if let personDetails = line.personDetails, !personDetails.isEmpty {
+            components.append("Persona \(personDetails)")
+        }
         components.append(contentsOf: line.statusIcons.map(\.accessibilityLabel))
         return components.joined(separator: ", ")
     }

@@ -593,17 +593,18 @@ struct MedicineDetailView: View {
         return CommunicationService.normalizeInternationalPhone(raw)
     }
 
-    private var assignedDoctorName: String? {
-        guard medicine.obbligo_ricetta else { return nil }
-        return doctorFullName(assignedDoctor)
-    }
-    
     private var doctorWithEmail: Doctor? {
         guard medicine.obbligo_ricetta else { return nil }
-        if let doctor = assignedDoctor, let email = doctor.mail?.trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty {
-            return doctor
+        if let assignedDoctor {
+            let email = assignedDoctor.mail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return email.isEmpty ? nil : assignedDoctor
         }
         return doctors.first(where: { !($0.mail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+    }
+
+    private var messageTargetDoctor: Doctor? {
+        guard medicine.obbligo_ricetta else { return nil }
+        return assignedDoctor ?? doctorWithEmail
     }
     
     private var doctorEmail: String? {
@@ -613,13 +614,8 @@ struct MedicineDetailView: View {
 
     private var doctorPhoneInternational: String? {
         guard medicine.obbligo_ricetta else { return nil }
-        if let assigned = assignedDoctorPhoneInternational {
-            return assigned
-        }
-        if let raw = doctorWithEmail?.telefono?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !raw.isEmpty,
-           let normalized = CommunicationService.normalizeInternationalPhone(raw) {
-            return normalized
+        if assignedDoctor != nil {
+            return assignedDoctorPhoneInternational
         }
         if let raw = doctors.first(where: { !($0.telefono ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })?
             .telefono?
@@ -632,10 +628,7 @@ struct MedicineDetailView: View {
     
     private var doctorDisplayName: String {
         guard medicine.obbligo_ricetta else { return "Dottore" }
-        if let assignedName = assignedDoctorName, !assignedName.isEmpty {
-            return assignedName
-        }
-        let first = doctorWithEmail?.nome?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let first = doctorFullName(messageTargetDoctor).trimmingCharacters(in: .whitespacesAndNewlines)
         return first.isEmpty ? "Dottore" : first
     }
     
@@ -738,11 +731,23 @@ struct MedicineDetailView: View {
     
     private func emailBody(for meds: [Medicine]) -> String {
         let medicineNames = meds.map(\.nome)
+        let customTemplate = resolvedDoctorTemplate(for: meds)
         return PrescriptionMessageTemplateRenderer.render(
-            template: currentOption?.prescription_message_template,
+            template: customTemplate,
             doctorName: doctorDisplayName,
             medicineNames: medicineNames
         )
+    }
+
+    private func resolvedDoctorTemplate(for medicines: [Medicine]) -> String? {
+        guard let targetDoctor = messageTargetDoctor else { return nil }
+        guard medicines.allSatisfy({ medicine in
+            guard let prescribingDoctor = medicine.prescribingDoctor else { return false }
+            return prescribingDoctor.objectID == targetDoctor.objectID
+        }) else {
+            return nil
+        }
+        return targetDoctor.prescription_message_template
     }
     
     private func sendEmailBody(for meds: [Medicine]) {

@@ -83,11 +83,13 @@ struct PharmaAppApp: App {
     @StateObject private var appRouter = AppRouter()
     @StateObject var authViewModel = AuthViewModel()
     @StateObject private var favoritesStore = FavoritesStore()
+    @StateObject private var backupCoordinator = BackupCoordinator(
+        persistenceController: PersistenceController.shared
+    )
     @StateObject private var notificationCoordinator = NotificationCoordinator(
         context: PersistenceController.shared.container.viewContext,
         policy: PerformancePolicy.current()
     )
-    private let refillLiveActivityCoordinator = RefillLiveActivityCoordinator.shared
 
     var body: some Scene {
         WindowGroup {
@@ -97,6 +99,7 @@ struct PharmaAppApp: App {
                 .environmentObject(appRouter)
                 .environmentObject(authViewModel)
                 .environmentObject(favoritesStore)
+                .environmentObject(backupCoordinator)
                 .onOpenURL { url in
                     Task { @MainActor in
                         if url.scheme == "pharmaapp" {
@@ -120,14 +123,10 @@ struct PharmaAppApp: App {
                     }
                 }
                 .onChange(of: authViewModel.user) { user in
-                    UserIdentityProvider.shared.syncAuthenticatedIdentity(
-                        from: user,
-                        in: persistenceController.container.viewContext
-                    )
-                    AccountPersonService.shared.syncAccountDisplayName(
-                        from: user,
-                        in: persistenceController.container.viewContext
-                    )
+                    syncIdentity(from: user)
+                }
+                .onChange(of: backupCoordinator.restoreRevision) { _ in
+                    handleRestoreCompletion()
                 }
                 .task {
                     let context = persistenceController.container.viewContext
@@ -137,12 +136,32 @@ struct PharmaAppApp: App {
                     UserIdentityProvider.shared.ensureProfile(in: context)
                     AccountPersonService.shared.ensureAccountPerson(in: context)
                     AccountPersonService.shared.migrateLegacyCodiceFiscaleIfNeeded(in: context)
-                    UserIdentityProvider.shared.syncAuthenticatedIdentity(from: authViewModel.user, in: context)
-                    AccountPersonService.shared.syncAccountDisplayName(from: authViewModel.user, in: context)
+                    syncIdentity(from: authViewModel.user)
                     appRouter.consumePendingRouteIfAny()
+                    backupCoordinator.start()
                     notificationCoordinator.start()
-                    refillLiveActivityCoordinator.start()
                 }
+        }
+    }
+
+    private func syncIdentity(from user: AuthUser?) {
+        let context = persistenceController.container.viewContext
+        backupCoordinator.setAuthenticatedUserID(user?.id)
+        UserIdentityProvider.shared.syncAuthenticatedIdentity(from: user, in: context)
+        AccountPersonService.shared.syncAccountDisplayName(from: user, in: context)
+    }
+
+    private func handleRestoreCompletion() {
+        let context = persistenceController.container.viewContext
+        DataManager.shared.initializePharmaciesDataIfNeeded()
+        DataManager.shared.initializeOptionsIfEmpty()
+        UserIdentityProvider.shared.ensureProfile(in: context, authUser: authViewModel.user)
+        AccountPersonService.shared.ensureAccountPerson(in: context)
+        UserIdentityProvider.shared.syncAuthenticatedIdentity(from: authViewModel.user, in: context)
+        AccountPersonService.shared.syncAccountDisplayName(from: authViewModel.user, in: context)
+        notificationCoordinator.refreshAfterStoreChange()
+        Task { @MainActor in
+            _ = await CriticalDoseLiveActivityCoordinator.shared.refresh(reason: "backup-restore", now: nil)
         }
     }
 }

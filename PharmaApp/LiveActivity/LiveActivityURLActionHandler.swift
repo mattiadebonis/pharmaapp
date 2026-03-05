@@ -16,28 +16,23 @@ final class LiveActivityURLActionHandler {
     private enum Action: String {
         case markTaken = "mark-taken"
         case remindLater = "remind-later"
-        case openPurchaseList = "open-purchase-list"
         case openHealthCard = "open-health-card"
-        case dismissRefill = "dismiss-refill"
     }
 
     private let actionPerformer: CriticalDoseActionPerforming
     private let liveActivityRefresher: CriticalDoseLiveActivityRefreshing
     private let routeStore: PendingAppRouteStoring
-    private let refillDismissHandler: RefillLiveActivityDismissHandling
     private let config: CriticalDoseLiveActivityConfig
 
     init(
         actionPerformer: CriticalDoseActionPerforming? = nil,
         liveActivityRefresher: CriticalDoseLiveActivityRefreshing? = nil,
         routeStore: PendingAppRouteStoring = PendingAppRouteStore(),
-        refillDismissHandler: RefillLiveActivityDismissHandling? = nil,
         config: CriticalDoseLiveActivityConfig = .default
     ) {
         self.actionPerformer = actionPerformer ?? CriticalDoseActionService.shared
         self.liveActivityRefresher = liveActivityRefresher ?? CriticalDoseLiveActivityCoordinator.shared
         self.routeStore = routeStore
-        self.refillDismissHandler = refillDismissHandler ?? RefillLiveActivityCoordinator.shared
         self.config = config
     }
 
@@ -70,12 +65,8 @@ final class LiveActivityURLActionHandler {
             guard let state = makeState(from: queryValues) else { return true }
             _ = await actionPerformer.remindLater(contentState: state, now: now)
             _ = await liveActivityRefresher.refresh(reason: "url-\(action.rawValue)", now: nil)
-        case .openPurchaseList:
-            routeStore.save(route: .pharmacy)
         case .openHealthCard:
             routeStore.save(route: .codiceFiscaleFullscreen)
-        case .dismissRefill:
-            await refillDismissHandler.dismissCurrentActivity(reason: "url-dismiss-refill")
         }
 
         return true

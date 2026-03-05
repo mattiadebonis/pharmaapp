@@ -35,6 +35,7 @@
         <attribute name="indirizzo" optional="YES" attributeType="String"/>
         <attribute name="mail" optional="YES" attributeType="String"/>
         <attribute name="nome" optional="YES" attributeType="String"/>
+        <attribute name="prescription_message_template" optional="YES" attributeType="String"/>
         <attribute name="segreteria_mail" optional="YES" attributeType="String"/>
         <attribute name="segreteria_nome" optional="YES" attributeType="String"/>
         <attribute name="segreteria_orari" optional="YES" attributeType="String"/>

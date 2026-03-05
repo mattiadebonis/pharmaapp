@@ -12,6 +12,20 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.pharmapp-1987</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudDocuments</string>
+	</array>
+	<key>com.apple.developer.ubiquity-container-identifiers</key>
+	<array>
+		<string>iCloud.pharmapp-1987</string>
+	</array>
+	<key>com.apple.developer.ubiquity-kvstore-identifier</key>
+	<string>$(TeamIdentifierPrefix)pharmapp-1987</string>
 	<key>com.apple.security.files.user-selected.read-only</key>
 	<true/>
 </dict>

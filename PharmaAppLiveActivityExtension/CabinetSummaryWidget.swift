@@ -11,8 +11,8 @@ struct CabinetSummaryProvider: TimelineProvider {
     func placeholder(in context: Context) -> CabinetSummaryEntry {
         CabinetSummaryEntry(
             date: .now,
-            lines: ["Tutto sotto controllo"],
-            inlineText: "Tutto sotto controllo"
+            lines: ["Per ora non ci sono azioni da fare."],
+            inlineText: "Per ora nessuna azione"
         )
     }
 
@@ -50,11 +50,11 @@ struct CabinetSummaryProvider: TimelineProvider {
 
     private func resolvedLines() -> [String] {
         let lines = readSharedLines()
-        return lines.isEmpty ? ["Tutto sotto controllo"] : lines
+        return lines.isEmpty ? ["Per ora non ci sono azioni da fare."] : lines
     }
 
     private func resolvedInlineText(lines: [String]) -> String {
-        let fallback = lines.first ?? "Tutto sotto controllo"
+        let fallback = lines.first ?? "Per ora non ci sono azioni da fare."
         let inline = readInlineText()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return inline.isEmpty ? fallback : inline
     }

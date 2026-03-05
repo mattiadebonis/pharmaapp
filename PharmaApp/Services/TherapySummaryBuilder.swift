@@ -21,8 +21,23 @@ enum TherapyLineStatusIcon: String, Hashable {
 struct TherapyLine: Hashable {
     let prefix: String?
     let description: String
+    let personDetails: String?
     var hasOverdueDose: Bool = false
     var statusIcons: [TherapyLineStatusIcon] = []
+
+    init(
+        prefix: String?,
+        description: String,
+        personDetails: String? = nil,
+        hasOverdueDose: Bool = false,
+        statusIcons: [TherapyLineStatusIcon] = []
+    ) {
+        self.prefix = prefix
+        self.description = description
+        self.personDetails = personDetails
+        self.hasOverdueDose = hasOverdueDose
+        self.statusIcons = statusIcons
+    }
 }
 
 struct TherapySummaryBuilder {
@@ -46,15 +61,16 @@ struct TherapySummaryBuilder {
 
     /// Summary style matching the Therapy list in MedicineDetailView.
     func summary(for therapy: Therapy) -> String {
-        descriptionText(for: therapy, includeTimes: true, includeCondition: false)
+        descriptionText(for: therapy, includeTimes: true, includePerson: true, includeCondition: false)
     }
 
     func line(for therapy: Therapy, now: Date = Date()) -> TherapyLine {
-        let description = descriptionText(for: therapy, includeTimes: false, includeCondition: true)
+        let description = descriptionText(for: therapy, includeTimes: false, includePerson: false, includeCondition: false)
         let prefix = timePrefix(for: therapy, now: now)
         return TherapyLine(
             prefix: prefix,
             description: description,
+            personDetails: personAndConditionText(for: therapy),
             statusIcons: statusIcons(for: therapy)
         )
     }
@@ -73,7 +89,7 @@ struct TherapySummaryBuilder {
         return icons
     }
 
-    private func descriptionText(for therapy: Therapy, includeTimes: Bool, includeCondition: Bool) -> String {
+    private func descriptionText(for therapy: Therapy, includeTimes: Bool, includePerson: Bool, includeCondition: Bool) -> String {
         let personName = personDisplayName(for: therapy.person)
         let dose = doseDisplayText(for: therapy)
         let frequency = frequencySummaryText(for: therapy)
@@ -81,13 +97,23 @@ struct TherapySummaryBuilder {
         if includeTimes, let timesText = timesDescriptionText(for: therapy) {
             sentence += " \(timesText)"
         }
-        if hasMultiplePersons, let personName, !personName.isEmpty {
+        if includePerson, hasMultiplePersons, let personName, !personName.isEmpty {
             sentence += " per \(personName)"
         }
         if includeCondition, let conditionText = treatmentConditionText(for: therapy) {
             sentence += " per il trattamento \(conditionText)"
         }
         return sentence.prefix(1).uppercased() + sentence.dropFirst()
+    }
+
+    private func personAndConditionText(for therapy: Therapy) -> String? {
+        let personName = personDisplayName(for: therapy.person)
+        let condition = normalizedCondition(from: therapy.condizione)
+        let parts = [personName, condition]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: ", ")
     }
 
     private func personDisplayName(for person: Person?) -> String? {

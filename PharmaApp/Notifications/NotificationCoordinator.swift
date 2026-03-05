@@ -174,6 +174,10 @@ final class NotificationCoordinator: ObservableObject {
         }
     }
 
+    func refreshAfterStoreChange(reason: String = "backup-restore") {
+        scheduleRefresh(reason: reason, debounceNanoseconds: 100_000_000)
+    }
+
     private func handleContextChange(_ notification: Notification) {
         guard hasRelevantChanges(notification) else { return }
         let debounce: UInt64 = policy == .foregroundInteractive ? 1_800_000_000 : 500_000_000

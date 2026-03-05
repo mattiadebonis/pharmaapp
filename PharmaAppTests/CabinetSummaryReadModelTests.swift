@@ -57,10 +57,14 @@ struct CabinetSummaryReadModelTests {
         return calendar.date(from: components) ?? Date()
     }
 
-    private func makeReadModel(calendar: Calendar) -> CabinetSummaryReadModel {
+    private func makeReadModel(
+        calendar: Calendar,
+        settings: CabinetSummarySettings = CabinetSummarySettings()
+    ) -> CabinetSummaryReadModel {
         CabinetSummaryReadModel(
             recurrenceService: StubRecurrenceService(),
-            calendar: calendar
+            calendar: calendar,
+            settings: settings
         )
     }
 
@@ -169,14 +173,14 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .missedDose)
         #expect(summary.state == .critical)
-        #expect(summary.title == "Una terapia di oggi richiede attenzione.")
+        #expect(summary.title == "C’è una terapia di oggi che richiede attenzione.")
         #expect(summary.subtitle.contains("08:00"))
         #expect(!summary.subtitle.contains("farmacia"))
     }
 
     // MARK: - Scenario 2: Missed dose + stock issue
 
-    @Test func missedDoseWithStockIssueShowsPharmacy() {
+    @Test func missedDoseWithStockIssueKeepsCalmSubtitle() {
         let calendar = makeCalendar()
         let now = makeDate(2026, 3, 1, 10, 0, calendar: calendar)
         let startDate = makeDate(2026, 2, 28, 8, 0, calendar: calendar)
@@ -200,7 +204,7 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .missedDose)
         #expect(summary.subtitle.contains("08:30"))
-        #expect(summary.subtitle.contains("farmacia vicina a 4 min"))
+        #expect(!summary.subtitle.contains("farmacia"))
     }
 
     // MARK: - Scenario 3: Refill needed before next dose
@@ -230,12 +234,12 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .refillBeforeNextDose)
         #expect(summary.state == .critical)
-        #expect(summary.title == "Serve un rifornimento prima della prossima assunzione.")
+        #expect(summary.title == "Serve un rifornimento prima della prossima terapia.")
         #expect(summary.subtitle.contains("20:30"))
-        #expect(summary.subtitle.contains("farmacia vicina a 4 min"))
+        #expect(summary.subtitle.contains("farmacia più vicina"))
     }
 
-    @Test func refillBeforeNextDosePluralizesForMultipleMedicines() {
+    @Test func refillBeforeNextDoseUsesSingleFocusedCopy() {
         let calendar = makeCalendar()
         let now = makeDate(2026, 3, 1, 14, 0, calendar: calendar)
         let startDate = makeDate(2026, 2, 28, 8, 0, calendar: calendar)
@@ -268,7 +272,7 @@ struct CabinetSummaryReadModelTests {
         )
 
         #expect(summary.priority == .refillBeforeNextDose)
-        #expect(summary.title == "2 farmaci in terapia oggi necessitano di rifornimento.")
+        #expect(summary.title == "Serve un rifornimento prima della prossima terapia.")
     }
 
     // MARK: - Scenario 4: Imminent dose (within 60 min)
@@ -306,8 +310,8 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .imminentDose)
         #expect(summary.state == .warning)
-        #expect(summary.title == "Prossima assunzione tra 40 minuti.")
-        #expect(summary.subtitle == "È prevista alle 20:30.")
+        #expect(summary.title == "Tra 40 minuti è il momento di una terapia.")
+        #expect(summary.subtitle == "L’assunzione è alle 20:30.")
     }
 
     @Test func imminentDoseBeatsRefillSoon() {
@@ -354,10 +358,10 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .imminentDose)
         #expect(summary.state == .warning)
-        #expect(summary.title.contains("tra 40 minuti"))
+        #expect(summary.title == "Tra 40 minuti è il momento di una terapia.")
     }
 
-    @Test func refillBeforeNextDoseBeatsImminentDose() {
+    @Test func imminentDoseBeatsRefillBeforeNextDose() {
         let calendar = makeCalendar()
         let now = makeDate(2026, 3, 1, 20, 10, calendar: calendar)
         let startDate = makeDate(2026, 2, 28, 8, 0, calendar: calendar)
@@ -380,9 +384,8 @@ struct CabinetSummaryReadModelTests {
             now: now
         )
 
-        // refillBeforeNextDose is critical and beats imminentDose
-        #expect(summary.priority == .refillBeforeNextDose)
-        #expect(summary.state == .critical)
+        #expect(summary.priority == .imminentDose)
+        #expect(summary.state == .warning)
     }
 
     @Test func doseOutside60MinWindowIsNotImminent() {
@@ -422,6 +425,44 @@ struct CabinetSummaryReadModelTests {
         #expect(summary.state == .info)
     }
 
+    @Test func imminentDoseWindowCanBeConfigured() {
+        let calendar = makeCalendar()
+        let now = makeDate(2026, 3, 1, 19, 50, calendar: calendar)
+        let startDate = makeDate(2026, 2, 28, 8, 0, calendar: calendar)
+
+        let therapy = makeTherapy(
+            startDate: startDate,
+            doseTimes: [
+                makeDate(2026, 3, 1, 8, 0, calendar: calendar),
+                makeDate(2026, 3, 1, 20, 30, calendar: calendar)
+            ],
+            leftoverUnits: 20,
+            calendar: calendar
+        )
+        let therapyId = therapy.id
+        let intakeLog = makeIntakeLog(
+            at: makeDate(2026, 3, 1, 8, 5, calendar: calendar),
+            therapyId: therapyId,
+            scheduledDueAt: makeDate(2026, 3, 1, 8, 0, calendar: calendar)
+        )
+
+        let medicine = makeMedicine(therapies: [therapy], logs: [intakeLog])
+        let readModel = makeReadModel(
+            calendar: calendar,
+            settings: CabinetSummarySettings(imminentDoseWindowMinutes: 30)
+        )
+
+        let summary = readModel.buildSummary(
+            medicines: [medicine],
+            option: defaultOption,
+            pharmacy: nil,
+            now: now
+        )
+
+        #expect(summary.priority == .nextDoseToday)
+        #expect(summary.title == "Oggi c’è ancora una terapia da completare.")
+    }
+
     // MARK: - Scenario 5: Refill within today beats next dose today
 
     @Test func refillWithinTodayBeatsNextDoseToday() {
@@ -459,8 +500,8 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .refillWithinToday)
         #expect(summary.state == .warning)
-        #expect(summary.title.contains("Per le terapie in corso"))
-        #expect(summary.title.contains("rifornito entro oggi"))
+        #expect(summary.title == "Oggi conviene organizzare un rifornimento.")
+        #expect(summary.subtitle.contains("1 farmaco va rifornito entro oggi."))
         #expect(summary.subtitle.contains("farmacia più vicina"))
     }
 
@@ -540,8 +581,8 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .nextDoseToday)
         #expect(summary.state == .info)
-        #expect(summary.title == "Oggi resta 1 assunzione da completare.")
-        #expect(summary.subtitle == "La prossima è prevista alle 20:30.")
+        #expect(summary.title == "Oggi c’è ancora una terapia da completare.")
+        #expect(summary.subtitle == "La prossima assunzione è alle 20:30.")
         #expect(!summary.subtitle.contains("rifornit"))
     }
 
@@ -572,8 +613,8 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .refillSoon)
         #expect(summary.state == .info)
-        #expect(summary.title.contains("Le terapie sono coperte"))
-        #expect(summary.title.contains("rifornimento a breve"))
+        #expect(summary.title == "A breve sarà utile fare un rifornimento.")
+        #expect(summary.subtitle.contains("1 farmaco richiede rifornimento."))
         #expect(summary.subtitle.contains("farmacia più vicina"))
     }
 
@@ -614,7 +655,7 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .refillSoon)
         #expect(summary.state == .info)
-        #expect(summary.title.contains("rifornimento a breve"))
+        #expect(summary.title == "A breve sarà utile fare un rifornimento.")
     }
 
     // MARK: - Inline action
@@ -764,7 +805,7 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .allUnderControl)
         #expect(summary.state == .ok)
-        #expect(summary.title == "Tutto sotto controllo.")
+        #expect(summary.title == "Per ora non ci sono azioni da fare.")
     }
 
     // MARK: - Backward compatibility
@@ -782,7 +823,7 @@ struct CabinetSummaryReadModelTests {
         )
 
         #expect(lines.count == 2)
-        #expect(lines[0] == "Tutto sotto controllo.")
+        #expect(lines[0] == "Per ora non ci sono azioni da fare.")
         #expect(lines[1] == "Le terapie sono coperte e le scorte sono adeguate.")
     }
 
@@ -799,7 +840,7 @@ struct CabinetSummaryReadModelTests {
         )
 
         #expect(summary.priority == .allUnderControl)
-        #expect(summary.title == "Tutto sotto controllo.")
+        #expect(summary.title == "Per ora non ci sono azioni da fare.")
     }
 
     // MARK: - Medicine names never in summary
@@ -867,6 +908,7 @@ struct CabinetSummaryReadModelTests {
         )
 
         #expect(summary.priority == .missedDose)
+        #expect(summary.title == "Ci sono 2 terapie di oggi che richiedono attenzione.")
         #expect(summary.subtitle.contains("08:00"))
         #expect(!summary.subtitle.contains("12:00"))
     }

@@ -2,78 +2,79 @@ import Foundation
 
 // MARK: - Centralized Copy
 
+public struct CabinetSummarySettings {
+    public static let defaultImminentDoseWindowMinutes = 60
+
+    public let imminentDoseWindowMinutes: Int
+
+    public init(imminentDoseWindowMinutes: Int = CabinetSummarySettings.defaultImminentDoseWindowMinutes) {
+        self.imminentDoseWindowMinutes = max(1, imminentDoseWindowMinutes)
+    }
+}
+
 enum CabinetSummaryCopy {
 
     // MARK: Missed dose
 
-    static let missedDoseTitle = "Una terapia di oggi richiede attenzione."
+    static let missedDoseSingularTitle = "C’è una terapia di oggi che richiede attenzione."
+    static func missedDosePluralTitle(count: Int) -> String {
+        "Ci sono \(count) terapie di oggi che richiedono attenzione."
+    }
 
     static func missedDoseSubtitle(time: String) -> String {
-        "La prima assunzione non completata era prevista alle \(time)."
-    }
-    static func missedDoseSubtitleWithPharmacy(time: String, distance: String) -> String {
-        "La prima assunzione non completata era prevista alle \(time); farmacia vicina a \(distance)."
+        "La prima assunzione non completata era alle \(time)."
     }
 
     // MARK: Imminent dose
 
-    static func imminentDoseTitle(minutes: Int) -> String {
-        "Prossima assunzione tra \(minutes) minuti."
+    static let imminentDoseTitle = "Tra poco è il momento di una terapia."
+    static func imminentDoseCountdownTitle(minutes: Int) -> String {
+        "Tra \(minutes) minuti è il momento di una terapia."
     }
     static func imminentDoseSubtitle(time: String) -> String {
-        "È prevista alle \(time)."
+        "L’assunzione è alle \(time)."
     }
 
     // MARK: Refill before next dose
 
-    static let refillBeforeNextDoseTitle = "Serve un rifornimento prima della prossima assunzione."
-    static func refillBeforeNextDoseTimePart(time: String) -> String {
-        "La prossima è prevista alle \(time)"
+    static let refillBeforeNextDoseTitle = "Serve un rifornimento prima della prossima terapia."
+    static func refillBeforeNextDoseSubtitle(time: String) -> String {
+        "La prossima assunzione è alle \(time)."
     }
-    static let refillBeforeNextDoseTimePartFallback = "La prossima assunzione è imminente"
-    static func refillBeforeNextDoseSubtitle(timePart: String, distancePart: String) -> String {
-        "\(timePart)\(distancePart)."
-    }
-    static func refillBeforeNextDosePluralTitle(count: Int) -> String {
-        "\(count) farmaci in terapia oggi necessitano di rifornimento."
-    }
+    static let refillBeforeNextDoseSubtitleFallback = "La prossima assunzione è prevista a breve."
 
     // MARK: Refill within today
 
-    static func refillWithinTodayTitle(count: Int) -> String {
+    static let refillWithinTodayTitle = "Oggi conviene organizzare un rifornimento."
+    static func refillWithinTodaySubtitle(count: Int) -> String {
         count == 1
-            ? "Per le terapie in corso, 1 farmaco va rifornito entro oggi."
-            : "Per le terapie in corso, \(count) farmaci vanno riforniti entro oggi."
+            ? "1 farmaco va rifornito entro oggi."
+            : "\(count) farmaci vanno riforniti entro oggi."
     }
 
     // MARK: Refill soon
 
-    static func refillSoonTitle(count: Int) -> String {
+    static let refillSoonTitle = "A breve sarà utile fare un rifornimento."
+    static func refillSoonSubtitle(count: Int) -> String {
         count == 1
-            ? "Le terapie sono coperte, ma 1 farmaco richiede rifornimento a breve."
-            : "Le terapie sono coperte, ma \(count) farmaci richiedono rifornimento a breve."
+            ? "1 farmaco richiede rifornimento."
+            : "\(count) farmaci richiedono rifornimento."
     }
 
     // MARK: Next dose today
 
-    static func nextDoseTodayTitle(count: Int) -> String {
-        count == 1
-            ? "Oggi resta 1 assunzione da completare."
-            : "Oggi restano \(count) assunzioni da completare."
+    static let nextDoseTodaySingularTitle = "Oggi c’è ancora una terapia da completare."
+    static func nextDoseTodayPluralTitle(count: Int) -> String {
+        "Oggi restano \(count) terapie da completare."
     }
     static func nextDoseTodaySubtitle(time: String) -> String {
-        "La prossima è prevista alle \(time)."
+        "La prossima assunzione è alle \(time)."
     }
-
-    // MARK: Pharmacy
-
-    static func pharmacyNearby(distance: String) -> String {
-        "La farmacia più vicina è a \(distance)."
-    }
+    static let nextDoseTodaySubtitleFallback = "Le terapie di oggi sono monitorate."
 
     // MARK: All under control
 
-    static let allUnderControlTitle = "Tutto sotto controllo."
+    static let allUnderControlTitle = "Per ora non ci sono azioni da fare."
     static let allUnderControlSubtitle = "Le terapie sono coperte e le scorte sono adeguate."
 
     // MARK: Inline actions
@@ -96,19 +97,24 @@ enum CabinetSummaryCopy {
     static func inlineNextDoseFallback(medicine: String) -> String {
         "Prendi \(medicine)"
     }
-    static let inlineAllUnderControl = "Tutto sotto controllo"
+    static let inlineAllUnderControl = "Per ora nessuna azione"
 }
 
 // MARK: - CabinetSummaryPresenter
 
 struct CabinetSummaryPresenter {
 
-    static let imminentDoseWindowMinutes = 60
+    static let imminentDoseWindowMinutes = CabinetSummarySettings.defaultImminentDoseWindowMinutes
 
     private let calendar: Calendar
+    private let settings: CabinetSummarySettings
 
-    init(calendar: Calendar = .current) {
+    init(
+        calendar: Calendar = .current,
+        settings: CabinetSummarySettings = CabinetSummarySettings()
+    ) {
         self.calendar = calendar
+        self.settings = settings
     }
 
     // MARK: - Summary Resolution
@@ -118,67 +124,57 @@ struct CabinetSummaryPresenter {
         // 1. Missed dose
         if a.totalMissedDoseCount > 0, let missedTime = a.earliestMissedDoseTime {
             let time = formatTime(missedTime)
-            let subtitle: String
-            if a.hasAnyStockIssue, let distance = pharmacyDistanceText(from: pharmacy) {
-                subtitle = CabinetSummaryCopy.missedDoseSubtitleWithPharmacy(time: time, distance: distance)
-            } else {
-                subtitle = CabinetSummaryCopy.missedDoseSubtitle(time: time)
-            }
+            let title = a.totalMissedDoseCount == 1
+                ? CabinetSummaryCopy.missedDoseSingularTitle
+                : CabinetSummaryCopy.missedDosePluralTitle(count: a.totalMissedDoseCount)
             return CabinetSummary(
-                title: CabinetSummaryCopy.missedDoseTitle,
-                subtitle: subtitle,
+                title: title,
+                subtitle: CabinetSummaryCopy.missedDoseSubtitle(time: time),
                 state: .critical,
                 priority: .missedDose
             )
         }
 
-        // 2. Refill before next dose (critical)
-        if a.refillBeforeNextDoseCount > 0 {
-            let n = a.refillBeforeNextDoseCount
-            if n == 1 {
-                let distancePart = pharmacyDistanceText(from: pharmacy).map { "; farmacia vicina a \($0)" } ?? ""
-                let timePart: String
-                if let nextTime = a.nextScheduledDoseTime {
-                    timePart = CabinetSummaryCopy.refillBeforeNextDoseTimePart(time: formatTime(nextTime))
-                } else {
-                    timePart = CabinetSummaryCopy.refillBeforeNextDoseTimePartFallback
-                }
-                return CabinetSummary(
-                    title: CabinetSummaryCopy.refillBeforeNextDoseTitle,
-                    subtitle: CabinetSummaryCopy.refillBeforeNextDoseSubtitle(timePart: timePart, distancePart: distancePart),
-                    state: .critical,
-                    priority: .refillBeforeNextDose
-                )
+        // 2. Imminent dose (within configured window)
+        if let imminentTime = a.imminentDoseTime,
+           a.imminentDoseMinutesAway.map({ $0 <= settings.imminentDoseWindowMinutes }) ?? true {
+            let title: String
+            if let minutesAway = a.imminentDoseMinutesAway {
+                title = CabinetSummaryCopy.imminentDoseCountdownTitle(minutes: minutesAway)
             } else {
-                let pharmacySubtitle = pharmacyDistanceText(from: pharmacy)
-                    .map { CabinetSummaryCopy.pharmacyNearby(distance: $0) } ?? ""
-                return CabinetSummary(
-                    title: CabinetSummaryCopy.refillBeforeNextDosePluralTitle(count: n),
-                    subtitle: pharmacySubtitle,
-                    state: .critical,
-                    priority: .refillBeforeNextDose
-                )
+                title = CabinetSummaryCopy.imminentDoseTitle
             }
-        }
-
-        // 3. Imminent dose (within 60 min)
-        if let imminentTime = a.imminentDoseTime, let minutesAway = a.imminentDoseMinutesAway {
             return CabinetSummary(
-                title: CabinetSummaryCopy.imminentDoseTitle(minutes: minutesAway),
+                title: title,
                 subtitle: CabinetSummaryCopy.imminentDoseSubtitle(time: formatTime(imminentTime)),
                 state: .warning,
                 priority: .imminentDose
             )
         }
 
+        // 3. Refill before next dose (critical)
+        if a.refillBeforeNextDoseCount > 0 {
+            let subtitle: String
+            if let nextTime = a.refillBeforeNextDoseCandidate?.nextDoseTime {
+                subtitle = CabinetSummaryCopy.refillBeforeNextDoseSubtitle(time: formatTime(nextTime))
+            } else {
+                subtitle = CabinetSummaryCopy.refillBeforeNextDoseSubtitleFallback
+            }
+            return CabinetSummary(
+                title: CabinetSummaryCopy.refillBeforeNextDoseTitle,
+                subtitle: appendPharmacySuggestion(to: subtitle, pharmacy: pharmacy),
+                state: .critical,
+                priority: .refillBeforeNextDose
+            )
+        }
+
         // 4. Refill within today
         if a.refillWithinTodayCount > 0 {
             let n = a.refillWithinTodayCount
-            let subtitle = pharmacyDistanceText(from: pharmacy)
-                .map { CabinetSummaryCopy.pharmacyNearby(distance: $0) } ?? ""
+            let subtitle = CabinetSummaryCopy.refillWithinTodaySubtitle(count: n)
             return CabinetSummary(
-                title: CabinetSummaryCopy.refillWithinTodayTitle(count: n),
-                subtitle: subtitle,
+                title: CabinetSummaryCopy.refillWithinTodayTitle,
+                subtitle: appendPharmacySuggestion(to: subtitle, pharmacy: pharmacy),
                 state: .warning,
                 priority: .refillWithinToday
             )
@@ -187,11 +183,10 @@ struct CabinetSummaryPresenter {
         // 5. Refill soon
         if a.refillSoonCount > 0 {
             let n = a.refillSoonCount
-            let subtitle = pharmacyDistanceText(from: pharmacy)
-                .map { CabinetSummaryCopy.pharmacyNearby(distance: $0) } ?? ""
+            let subtitle = CabinetSummaryCopy.refillSoonSubtitle(count: n)
             return CabinetSummary(
-                title: CabinetSummaryCopy.refillSoonTitle(count: n),
-                subtitle: subtitle,
+                title: CabinetSummaryCopy.refillSoonTitle,
+                subtitle: appendPharmacySuggestion(to: subtitle, pharmacy: pharmacy),
                 state: .info,
                 priority: .refillSoon
             )
@@ -200,12 +195,14 @@ struct CabinetSummaryPresenter {
         // 6. Next dose today
         if a.totalPendingDoseCount > 0 {
             let n = a.totalPendingDoseCount
-            var subtitle = ""
-            if let nextTime = a.nextUpcomingDoseTime {
-                subtitle = CabinetSummaryCopy.nextDoseTodaySubtitle(time: formatTime(nextTime))
-            }
+            let title = n == 1
+                ? CabinetSummaryCopy.nextDoseTodaySingularTitle
+                : CabinetSummaryCopy.nextDoseTodayPluralTitle(count: n)
+            let subtitle = a.nextUpcomingDoseTime
+                .map { CabinetSummaryCopy.nextDoseTodaySubtitle(time: formatTime($0)) }
+                ?? CabinetSummaryCopy.nextDoseTodaySubtitleFallback
             return CabinetSummary(
-                title: CabinetSummaryCopy.nextDoseTodayTitle(count: n),
+                title: title,
                 subtitle: subtitle,
                 state: .info,
                 priority: .nextDoseToday
@@ -229,6 +226,16 @@ struct CabinetSummaryPresenter {
             )
         }
 
+        if a.imminentDoseTime != nil, let candidate = a.nextDoseCandidate {
+            return CabinetInlineAction(
+                text: CabinetSummaryCopy.inlineNextDose(
+                    time: formatTime(candidate.time),
+                    medicine: candidate.medicineName
+                ),
+                priority: .imminentDose
+            )
+        }
+
         if let candidate = a.refillBeforeNextDoseCandidate {
             let text: String
             if let time = candidate.nextDoseTime {
@@ -240,17 +247,6 @@ struct CabinetSummaryPresenter {
                 text = CabinetSummaryCopy.inlineRefill(medicine: candidate.medicineName)
             }
             return CabinetInlineAction(text: text, priority: .refillBeforeNextDose)
-        }
-
-        // Imminent dose uses same inline format as next dose
-        if a.imminentDoseTime != nil, let candidate = a.nextDoseCandidate {
-            return CabinetInlineAction(
-                text: CabinetSummaryCopy.inlineNextDose(
-                    time: formatTime(candidate.time),
-                    medicine: candidate.medicineName
-                ),
-                priority: .imminentDose
-            )
         }
 
         if let candidate = a.refillWithinTodayCandidate {
@@ -290,10 +286,16 @@ struct CabinetSummaryPresenter {
         return formatter.string(from: date)
     }
 
-    private func pharmacyDistanceText(from pharmacy: PharmacyInfo?) -> String? {
+    private func appendPharmacySuggestion(to subtitle: String, pharmacy: PharmacyInfo?) -> String {
+        guard let suggestion = pharmacySuggestion(from: pharmacy) else { return subtitle }
+        return "\(subtitle) \(suggestion)"
+    }
+
+    private func pharmacySuggestion(from pharmacy: PharmacyInfo?) -> String? {
         guard let text = pharmacy?.distanceText?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !text.isEmpty else { return nil }
-        return text.replacingOccurrences(of: " · ", with: " o ")
+        let normalized = text.replacingOccurrences(of: " · ", with: " o ")
+        return "La farmacia più vicina è a \(normalized)."
     }
 }

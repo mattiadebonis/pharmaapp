@@ -96,12 +96,21 @@ struct MedicineSwipeRow: View {
     }
 
     private func swipeLabel(_ text: String, systemImage: String) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             Image(systemName: systemImage)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 20, weight: .bold))
+                .frame(width: 34, height: 34)
+                .background(
+                    Circle()
+                        .fill(Color.white.opacity(0.22))
+                )
             Text(text)
                 .font(.system(size: 12, weight: .semibold))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.9)
         }
+        .frame(width: 72)
         .foregroundStyle(.white)
     }
 

@@ -84,6 +84,7 @@ final class AuthViewModel: ObservableObject {
             }
         case .failure(let error):
             guard !Self.isCancellation(error) else { return }
+            recordAuthError(error, context: "apple.authorization")
             errorMessage = localizedMessage(for: error)
         }
     }
@@ -149,6 +150,7 @@ final class AuthViewModel: ObservableObject {
         } catch {
             pendingProfileFallback = nil
             guard !Self.isCancellation(error) else { return }
+            recordAuthError(error, context: "google.signIn")
             errorMessage = localizedMessage(for: error)
         }
     }
@@ -194,6 +196,7 @@ final class AuthViewModel: ObservableObject {
         } catch {
             pendingProfileFallback = nil
             guard !Self.isCancellation(error) else { return }
+            recordAuthError(error, context: "apple.firebaseSignIn")
             errorMessage = localizedMessage(for: error)
         }
     }
@@ -299,6 +302,23 @@ final class AuthViewModel: ObservableObject {
             return googleError.errorDescription
         }
 
+        if let appleError = error as? ASAuthorizationError {
+            switch appleError.code {
+            case .failed:
+                return "Apple non ha completato l'accesso. Verifica che Sign in with Apple sia attivo per l'app e riprova."
+            case .invalidResponse:
+                return "Apple ha restituito una risposta non valida. Riprova."
+            case .notHandled:
+                return "Il login Apple non e' stato gestito dal sistema. Controlla capability e provisioning."
+            case .unknown:
+                return "Errore sconosciuto durante il login con Apple."
+            case .canceled:
+                return nil
+            @unknown default:
+                return appleError.localizedDescription
+            }
+        }
+
         let nsError = error as NSError
         if nsError.domain == AuthErrorDomain,
            let code = AuthErrorCode(rawValue: nsError.code) {
@@ -307,8 +327,22 @@ final class AuthViewModel: ObservableObject {
                 return "Esiste già un account con un provider diverso. Accedi con il provider usato in precedenza."
             case .credentialAlreadyInUse:
                 return "Queste credenziali risultano già collegate a un altro account."
+            case .internalError:
+                return firebaseInternalErrorMessage(from: nsError)
+            case .operationNotAllowed:
+                return "Login con Apple non abilitato in Firebase Authentication."
+            case .invalidCredential:
+                return "Credenziali Apple non valide oppure configurazione Apple/Firebase incompleta."
             case .missingOrInvalidNonce:
                 return "Nonce Apple non valido. Riprova."
+            case .appNotAuthorized:
+                return "L'app non è autorizzata alla configurazione Firebase corrente."
+            case .invalidAPIKey:
+                return "Configurazione Firebase non valida. Controlla GoogleService-Info.plist."
+            case .networkError:
+                return "Errore di rete durante l'accesso. Riprova."
+            case .keychainError:
+                return "Impossibile completare l'accesso su questo dispositivo. Controlla account Apple e portachiavi."
             case .webContextCancelled:
                 return nil
             default:
@@ -317,6 +351,64 @@ final class AuthViewModel: ObservableObject {
         }
 
         return nsError.localizedDescription
+    }
+
+    private func firebaseInternalErrorMessage(from error: NSError) -> String {
+        let backendMessage = firebaseBackendMessage(from: error)
+        if let backendMessage {
+            let normalizedBackendMessage = backendMessage.uppercased()
+            if normalizedBackendMessage.contains("CONFIGURATION_NOT_FOUND") ||
+                normalizedBackendMessage.contains("CONFIGURATION NOT FOUND") {
+                return "Il provider Apple non risulta configurato nel progetto Firebase corrente. Controlla Sign-in method > Apple nel progetto pharmapp-1987 e verifica Service ID, Team ID, Key ID, private key e Return URL."
+            }
+            return "Firebase Auth ha restituito un errore interno: \(backendMessage). Verifica la configurazione del provider Apple in Firebase Console e Apple Developer."
+        }
+
+        if let underlyingError = deepestUnderlyingError(from: error),
+           underlyingError.localizedDescription != error.localizedDescription {
+            return "Firebase Auth ha restituito un errore interno: \(underlyingError.localizedDescription)"
+        }
+
+        return "Firebase Auth ha restituito un errore interno. Di solito indica una configurazione Apple/Firebase incompleta o non coerente."
+    }
+
+    private func firebaseBackendMessage(from error: NSError) -> String? {
+        let responseKey = "FIRAuthErrorUserInfoDeserializedResponseKey"
+
+        if let directResponse = error.userInfo[responseKey] as? [String: AnyHashable],
+           let message = Self.normalizedValue(from: directResponse["message"] as? String) {
+            return message
+        }
+
+        var currentError = error.userInfo[NSUnderlyingErrorKey] as? NSError
+        while let unwrappedError = currentError {
+            if let response = unwrappedError.userInfo[responseKey] as? [String: AnyHashable],
+               let message = Self.normalizedValue(from: response["message"] as? String) {
+                return message
+            }
+            currentError = unwrappedError.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+
+        return nil
+    }
+
+    private func deepestUnderlyingError(from error: NSError) -> NSError? {
+        var currentError: NSError? = error
+        var deepestError: NSError?
+
+        while let nextError = currentError?.userInfo[NSUnderlyingErrorKey] as? NSError {
+            deepestError = nextError
+            currentError = nextError
+        }
+
+        return deepestError
+    }
+
+    private func recordAuthError(_ error: Error, context: String) {
+        let nsError = error as NSError
+        print(
+            "[Auth][\(context)] domain=\(nsError.domain) code=\(nsError.code) description=\(nsError.localizedDescription) userInfo=\(nsError.userInfo)"
+        )
     }
 
     private static func isCancellation(_ error: Error) -> Bool {

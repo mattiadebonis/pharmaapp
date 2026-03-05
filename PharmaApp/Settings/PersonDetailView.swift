@@ -17,6 +17,7 @@ struct PersonDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var auth: AuthViewModel
     @ObservedObject var person: Person
+    private let showsLogoutAction: Bool
 
     @State private var nome: String
     @State private var conditions: [String]
@@ -29,8 +30,9 @@ struct PersonDetailView: View {
     @State private var isDeleting = false
     @FocusState private var focusedField: Field?
 
-    init(person: Person) {
+    init(person: Person, showsLogoutAction: Bool = true) {
         self.person = person
+        self.showsLogoutAction = showsLogoutAction
         _nome = State(initialValue: person.nome ?? "")
         _conditions = State(initialValue: ConditionListFormatter.parsed(from: person.condizione))
         _codiceFiscale = State(initialValue: person.codice_fiscale ?? "")
@@ -63,6 +65,14 @@ struct PersonDetailView: View {
                 }
             }
 
+            if person.is_account {
+                Section(header: Text("Account")) {
+                    LabeledContent("Provider", value: providerText)
+                    LabeledContent("Nome", value: accountDisplayName)
+                    LabeledContent("Stato", value: accountStatusText)
+                }
+            }
+
             if let errorMessage {
                 Section {
                     Text(errorMessage)
@@ -71,7 +81,7 @@ struct PersonDetailView: View {
                 }
             }
 
-            if person.is_account, auth.user != nil {
+            if person.is_account, auth.user != nil, showsLogoutAction {
                 Section {
                     Button(role: .destructive) {
                         showLogoutConfirmation = true
@@ -148,6 +158,27 @@ struct PersonDetailView: View {
             return CodiceFiscaleScannerView.isAvailable
         }
         return false
+    }
+
+    private var accountDisplayName: String {
+        let fallbackName = normalizedValue(from: nome) ?? normalizedValue(from: person.nome ?? "") ?? "Account"
+        guard let authUser = auth.user else { return fallbackName }
+        return normalizedValue(from: authUser.displayName ?? "") ?? fallbackName
+    }
+
+    private var accountStatusText: String {
+        auth.user == nil ? "Non connesso" : "Connesso"
+    }
+
+    private var providerText: String {
+        switch auth.user?.provider {
+        case .apple:
+            return "Apple"
+        case .google:
+            return "Google"
+        case .none:
+            return "Locale"
+        }
     }
 
     private func saveChanges(showValidationMessage: Bool = true) {
