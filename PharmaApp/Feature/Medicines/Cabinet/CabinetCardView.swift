@@ -109,10 +109,13 @@ struct CabinetCardView: View {
     }
 
     private func therapies(for entry: MedicinePackage) -> [Therapy] {
-        if let set = entry.therapies, !set.isEmpty {
-            return Array(set)
+        let linked = (entry.therapies ?? []).filter {
+            $0.medicine.objectID == entry.medicine.objectID
+                && $0.package.objectID == entry.package.objectID
         }
-        let all = entry.medicine.therapies as? Set<Therapy> ?? []
-        return all.filter { $0.package == entry.package }
+        let fallback = (entry.medicine.therapies ?? []).filter {
+            $0.package.objectID == entry.package.objectID
+        }
+        return Array(Set(linked).union(fallback))
     }
 }

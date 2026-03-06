@@ -214,11 +214,14 @@ private func stockDays(for medicine: Medicine, therapies: Set<Therapy>, recurren
 }
 
 private func therapies(for entry: MedicinePackage) -> Set<Therapy> {
-    if let set = entry.therapies, !set.isEmpty {
-        return set
+    let linked = (entry.therapies ?? []).filter {
+        $0.medicine.objectID == entry.medicine.objectID
+            && $0.package.objectID == entry.package.objectID
     }
-    let all = entry.medicine.therapies ?? []
-    return Set(all.filter { $0.package == entry.package })
+    let fallback = (entry.medicine.therapies ?? []).filter {
+        $0.package.objectID == entry.package.objectID
+    }
+    return Set(linked).union(fallback)
 }
 
 private func stockDays(for entry: MedicinePackage, therapies: Set<Therapy>, recurrenceManager: RecurrenceManager) -> Int? {

@@ -288,7 +288,7 @@ struct CatalogAddMedicineView: View {
                 Button {
                     handleBuy(selection)
                 } label: {
-                    Text("Confezione acquistata (\(catalogPackageShortLabel(selection)))")
+                    Text("Confezione acquistata (\(max(1, selection.units)))")
                         .font(.caption.weight(.semibold))
                         .frame(maxWidth: .infinity)
                 }

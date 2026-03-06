@@ -48,11 +48,14 @@ struct MedicineRowView: View {
         guard let entry = medicinePackage else {
             return medicine.therapies ?? []
         }
-        if let entryTherapies = entry.therapies, !entryTherapies.isEmpty {
-            return entryTherapies
+        let linked = (entry.therapies ?? []).filter {
+            $0.medicine.objectID == medicine.objectID
+                && $0.package.objectID == entry.package.objectID
         }
-        let all = medicine.therapies ?? []
-        return Set(all.filter { $0.package == entry.package })
+        let fallback = (medicine.therapies ?? []).filter {
+            $0.package.objectID == entry.package.objectID
+        }
+        return Set(linked).union(fallback)
     }
     private var totalDoseCount: Int {
         guard !therapies.isEmpty else { return 0 }

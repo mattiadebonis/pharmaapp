@@ -61,16 +61,16 @@ struct TherapySummaryBuilder {
 
     /// Summary style matching the Therapy list in MedicineDetailView.
     func summary(for therapy: Therapy) -> String {
-        descriptionText(for: therapy, includeTimes: true, includePerson: true, includeCondition: false)
+        descriptionText(for: therapy, includeTimes: true, includePerson: true)
     }
 
     func line(for therapy: Therapy, now: Date = Date()) -> TherapyLine {
-        let description = descriptionText(for: therapy, includeTimes: false, includePerson: false, includeCondition: false)
+        let description = descriptionText(for: therapy, includeTimes: false, includePerson: false)
         let prefix = timePrefix(for: therapy, now: now)
         return TherapyLine(
             prefix: prefix,
             description: description,
-            personDetails: personAndConditionText(for: therapy),
+            personDetails: personDisplayName(for: therapy.person),
             statusIcons: statusIcons(for: therapy)
         )
     }
@@ -89,7 +89,7 @@ struct TherapySummaryBuilder {
         return icons
     }
 
-    private func descriptionText(for therapy: Therapy, includeTimes: Bool, includePerson: Bool, includeCondition: Bool) -> String {
+    private func descriptionText(for therapy: Therapy, includeTimes: Bool, includePerson: Bool) -> String {
         let personName = personDisplayName(for: therapy.person)
         let dose = doseDisplayText(for: therapy)
         let frequency = frequencySummaryText(for: therapy)
@@ -100,20 +100,7 @@ struct TherapySummaryBuilder {
         if includePerson, hasMultiplePersons, let personName, !personName.isEmpty {
             sentence += " per \(personName)"
         }
-        if includeCondition, let conditionText = treatmentConditionText(for: therapy) {
-            sentence += " per il trattamento \(conditionText)"
-        }
         return sentence.prefix(1).uppercased() + sentence.dropFirst()
-    }
-
-    private func personAndConditionText(for therapy: Therapy) -> String? {
-        let personName = personDisplayName(for: therapy.person)
-        let condition = normalizedCondition(from: therapy.condizione)
-        let parts = [personName, condition]
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        guard !parts.isEmpty else { return nil }
-        return parts.joined(separator: ", ")
     }
 
     private func personDisplayName(for person: Person?) -> String? {
@@ -122,54 +109,6 @@ struct TherapySummaryBuilder {
         return first.isEmpty ? nil : first
     }
 
-    private func treatmentConditionText(for therapy: Therapy) -> String? {
-        guard let condition = normalizedCondition(from: therapy.condizione) else { return nil }
-        let lower = condition.lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
-        let alreadyQualifiedPrefixes = [
-            "di ",
-            "del ",
-            "della ",
-            "dell'",
-            "dello ",
-            "dei ",
-            "degli ",
-            "delle "
-        ]
-        if alreadyQualifiedPrefixes.contains(where: { lower.hasPrefix($0) }) {
-            return condition
-        }
-        if lower.hasPrefix("gn")
-            || lower.hasPrefix("pn")
-            || lower.hasPrefix("ps")
-            || lower.hasPrefix("x")
-            || lower.hasPrefix("y")
-            || lower.hasPrefix("z")
-            || startsWithImpureS(lower) {
-            return "dello \(condition)"
-        }
-        if let first = lower.first, "aeiou".contains(first) {
-            return "dell'\(condition)"
-        }
-        if lower.hasSuffix("a") {
-            return "della \(condition)"
-        }
-        return "del \(condition)"
-    }
-
-    private func startsWithImpureS(_ lower: String) -> Bool {
-        guard lower.hasPrefix("s") else { return false }
-        guard let second = lower.dropFirst().first else { return false }
-        return !"aeiou".contains(second)
-    }
-
-    private func normalizedCondition(from value: String?) -> String? {
-        guard let value else { return nil }
-        let candidates = value
-            .components(separatedBy: CharacterSet(charactersIn: "\n,;"))
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        return candidates.first
-    }
 
     private func doseDisplayText(for therapy: Therapy) -> String {
         let unit = doseUnit(for: therapy)

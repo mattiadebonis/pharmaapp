@@ -20,7 +20,6 @@ struct PersonDetailView: View {
     private let showsLogoutAction: Bool
 
     @State private var nome: String
-    @State private var conditions: [String]
     @State private var codiceFiscale: String
     @State private var isScannerPresented = false
     @State private var errorMessage: String?
@@ -34,7 +33,6 @@ struct PersonDetailView: View {
         self.person = person
         self.showsLogoutAction = showsLogoutAction
         _nome = State(initialValue: person.nome ?? "")
-        _conditions = State(initialValue: ConditionListFormatter.parsed(from: person.condizione))
         _codiceFiscale = State(initialValue: person.codice_fiscale ?? "")
     }
 
@@ -44,8 +42,6 @@ struct PersonDetailView: View {
                 TextField("Nome", text: $nome)
                     .focused($focusedField, equals: .nome)
             }
-
-            ConditionsEditorSection(conditions: $conditions)
 
             Section(header: Text("Codice fiscale")) {
                 TextField("Codice fiscale (opzionale)", text: $codiceFiscale)
@@ -108,9 +104,6 @@ struct PersonDetailView: View {
         .navigationTitle("Dettaglio Persona")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: nome) { _ in
-            scheduleAutosave()
-        }
-        .onChange(of: conditions) { _ in
             scheduleAutosave()
         }
         .onChange(of: codiceFiscale) { _ in
@@ -189,7 +182,7 @@ struct PersonDetailView: View {
 
         person.nome = normalizedValue(from: nome)
         person.cognome = nil
-        person.condizione = ConditionListFormatter.serialized(from: conditions)
+        person.condizione = nil
 
         if canPersistCodiceFiscale {
             person.codice_fiscale = normalizedCF.isEmpty ? nil : normalizedCF

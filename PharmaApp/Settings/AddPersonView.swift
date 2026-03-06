@@ -11,7 +11,6 @@ struct AddPersonView: View {
     @Environment(\.dismiss) var dismiss
     
     @State private var nome: String = ""
-    @State private var conditions: [String] = []
     @State private var codiceFiscale: String = ""
     @State private var errorMessage: String?
     
@@ -20,8 +19,6 @@ struct AddPersonView: View {
             Section(header: Text("Dettagli Persona")) {
                 TextField("Nome", text: $nome)
             }
-
-            ConditionsEditorSection(conditions: $conditions)
 
             Section(header: Text("Codice fiscale")) {
                 TextField("Codice fiscale (opzionale)", text: $codiceFiscale)
@@ -60,7 +57,7 @@ struct AddPersonView: View {
         nuovaPersona.id = UUID()
         nuovaPersona.nome = nome
         nuovaPersona.cognome = nil
-        nuovaPersona.condizione = ConditionListFormatter.serialized(from: conditions)
+        nuovaPersona.condizione = nil
         nuovaPersona.is_account = false
         nuovaPersona.codice_fiscale = normalizedCF.isEmpty ? nil : normalizedCF
         

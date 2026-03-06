@@ -23,12 +23,15 @@ final class CoreDataMedicinePackageRepository: MedicinePackageRepository {
 
     private func makeSnapshot(from entry: MedicinePackage) -> MedicinePackageSnapshot {
         let therapyIds: [TherapyId] = {
-            if let therapies = entry.therapies, !therapies.isEmpty {
-                return therapies.map { TherapyId($0.id) }
+            let linked = (entry.therapies ?? []).filter {
+                $0.medicine.objectID == entry.medicine.objectID
+                    && $0.package.objectID == entry.package.objectID
             }
-            let all = entry.medicine.therapies ?? []
-            return all.filter { $0.package.objectID == entry.package.objectID }
-                .map { TherapyId($0.id) }
+            let fallback = (entry.medicine.therapies ?? []).filter {
+                $0.package.objectID == entry.package.objectID
+            }
+            let merged = Set(linked).union(fallback)
+            return merged.map { TherapyId($0.id) }
         }()
 
         return MedicinePackageSnapshot(

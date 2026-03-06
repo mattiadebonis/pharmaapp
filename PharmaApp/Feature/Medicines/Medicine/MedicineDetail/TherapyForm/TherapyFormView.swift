@@ -72,10 +72,7 @@ struct TherapyFormView: View {
     
     // Nuovo state per la persona selezionata
     @State private var selectedPerson: Person?
-    @State private var selectedCondition: String = ""
     @State private var selectedDoctorID: NSManagedObjectID?
-    @State private var isAddingCondition = false
-    @State private var newConditionText: String = ""
 
     // MARK: - Modello
     var medicine: Medicine
@@ -274,32 +271,6 @@ struct TherapyFormView: View {
                     }
                 }
                 .accessibilityIdentifier("PersonPicker")
-
-                if !conditionPickerOptions.isEmpty {
-                    Picker("Condizione", selection: $selectedCondition) {
-                        Text("Nessuna")
-                            .tag("")
-                        ForEach(conditionPickerOptions, id: \.self) { condition in
-                            Text(condition)
-                                .tag(condition)
-                        }
-                    }
-                    Button {
-                        newConditionText = ""
-                        isAddingCondition = true
-                    } label: {
-                        Label("Aggiungi condizione", systemImage: "plus.circle")
-                            .font(.system(size: 15))
-                    }
-                } else {
-                    Button {
-                        newConditionText = ""
-                        isAddingCondition = true
-                    } label: {
-                        Label("Aggiungi condizione", systemImage: "plus.circle")
-                            .font(.system(size: 15))
-                    }
-                }
             }
             .listRowBackground(Color(.systemGroupedBackground))
 
@@ -396,10 +367,12 @@ struct TherapyFormView: View {
                     let all = medicine.therapies as? Set<Therapy> ?? []
                     let candidates: [Therapy] = {
                         if let entry = medicinePackage {
-                            if let entryTherapies = entry.therapies, !entryTherapies.isEmpty {
-                                return Array(entryTherapies)
+                            let linked = (entry.therapies ?? []).filter {
+                                $0.medicine.objectID == medicine.objectID
+                                    && $0.package.objectID == entry.package.objectID
                             }
-                            return all.filter { $0.medicinePackage == entry || $0.package == entry.package }
+                            let fallback = all.filter { $0.package.objectID == entry.package.objectID }
+                            return Array(Set(linked).union(fallback))
                         }
                         return all.filter { $0.package == package }
                     }()
@@ -407,7 +380,6 @@ struct TherapyFormView: View {
                         populateFromTherapy(only)
                     } else {
                         selectedPerson = persons.first
-                        selectedCondition = defaultCondition(for: selectedPerson)
                     }
                 }
             }
@@ -473,26 +445,6 @@ struct TherapyFormView: View {
                 TaperStepEditorView(steps: $taperSteps)
             }
         }
-        .alert("Nuova condizione", isPresented: $isAddingCondition) {
-            TextField("Nome condizione", text: $newConditionText)
-            Button("Annulla", role: .cancel) { }
-            Button("Aggiungi") {
-                let trimmed = newConditionText.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { return }
-                if let person = selectedPerson {
-                    let existing = ConditionListFormatter.parsed(from: person.condizione)
-                    if !existing.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) {
-                        var updated = existing
-                        updated.append(trimmed)
-                        person.condizione = ConditionListFormatter.serialized(from: updated)
-                        try? context.save()
-                    }
-                }
-                selectedCondition = trimmed
-            }
-        } message: {
-            Text("Inserisci il nome della condizione da associare alla terapia.")
-        }
         .alert("Eliminare questa terapia?", isPresented: $showDeleteConfirmation) {
             Button("Annulla", role: .cancel) { }
             Button("Elimina", role: .destructive) {
@@ -552,7 +504,6 @@ struct TherapyFormView: View {
             get: { selectedPerson },
             set: { newValue in
                 selectedPerson = newValue
-                selectedCondition = defaultCondition(for: newValue)
             }
         )
     }
@@ -569,11 +520,14 @@ struct TherapyFormView: View {
 
         let candidateTherapies: [Therapy] = {
             if let entry = medicinePackage {
-                if let entryTherapies = entry.therapies, !entryTherapies.isEmpty {
-                    return Array(entryTherapies)
+                let linked = (entry.therapies ?? []).filter {
+                    $0.medicine.objectID == medicine.objectID
+                        && $0.package.objectID == entry.package.objectID
                 }
-                let all = medicine.therapies ?? []
-                return all.filter { $0.medicinePackage == entry || $0.package == entry.package }
+                let fallback = (medicine.therapies ?? []).filter {
+                    $0.package.objectID == entry.package.objectID
+                }
+                return Array(Set(linked).union(fallback))
             }
             let all = medicine.therapies ?? []
             return all.filter { $0.package == package }
@@ -582,42 +536,6 @@ struct TherapyFormView: View {
         let doctorsByID = Dictionary(grouping: candidateTherapies.compactMap { $0.prescribingDoctor }) { $0.objectID }
         guard doctorsByID.count == 1 else { return nil }
         return doctorsByID.keys.first
-    }
-
-    private var selectedConditionValue: String? {
-        normalizedCondition(selectedCondition)
-    }
-
-    private var conditionPickerOptions: [String] {
-        var options = parseConditionOptions(from: selectedPerson?.condizione)
-        if let selectedConditionValue,
-           !options.contains(where: { $0.caseInsensitiveCompare(selectedConditionValue) == .orderedSame }) {
-            options.insert(selectedConditionValue, at: 0)
-        }
-        return options
-    }
-
-    private func defaultCondition(for person: Person?) -> String {
-        parseConditionOptions(from: person?.condizione).first ?? ""
-    }
-
-    private func parseConditionOptions(from rawValue: String?) -> [String] {
-        guard let rawValue = normalizedCondition(rawValue) else { return [] }
-        let chunks = rawValue.components(separatedBy: CharacterSet(charactersIn: ",;\n"))
-        var output: [String] = []
-        for chunk in chunks {
-            guard let normalized = normalizedCondition(chunk) else { continue }
-            if !output.contains(where: { $0.caseInsensitiveCompare(normalized) == .orderedSame }) {
-                output.append(normalized)
-            }
-        }
-        return output
-    }
-
-    private func normalizedCondition(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func doctorDisplayName(_ doctor: Doctor) -> String {
@@ -952,11 +870,7 @@ struct TherapyFormView: View {
     private var therapyDescriptionSummaryText: String {
         var parts: [String] = []
         if let personName = selectedPersonName, !personName.isEmpty {
-            if let selectedConditionValue {
-                parts.append("Per \(personName) (\(selectedConditionValue))")
-            } else {
-                parts.append("Per \(personName)")
-            }
+            parts.append("Per \(personName)")
         }
         parts.append(doseSummaryText)
         parts.append(frequencySummaryText)
@@ -1126,7 +1040,6 @@ struct TherapyFormView: View {
 
         if let person = parsed.person {
             selectedPerson = person
-            selectedCondition = defaultCondition(for: person)
         }
 
         var parsedDoseAmount: Double?
@@ -1324,7 +1237,7 @@ extension TherapyFormView {
             newPerson.id = UUID()
             newPerson.nome = ""
             newPerson.cognome = nil
-            newPerson.condizione = selectedConditionValue
+            newPerson.condizione = nil
             return newPerson
         }()
 
@@ -1346,7 +1259,6 @@ extension TherapyFormView {
                 importance: effectiveImportance,
                 person: effectivePerson,
                 prescribingDoctor: effectivePrescribingDoctor,
-                condition: selectedConditionValue,
                 manualIntake: !automaticIntakeEnabled,
                 notificationsSilenced: notificationsSilenced,
                 notificationLevel: isPharmacoCritical ? .alarm : .normal,
@@ -1371,7 +1283,6 @@ extension TherapyFormView {
                 importance: "standard",
                 person: effectivePerson,
                 prescribingDoctor: effectivePrescribingDoctor,
-                condition: selectedConditionValue,
                 manualIntake: !automaticIntakeEnabled,
                 notificationsSilenced: notificationsSilenced,
                 notificationLevel: isPharmacoCritical ? .alarm : .normal,
@@ -1424,7 +1335,6 @@ extension TherapyFormView {
     private func populateFromTherapy(_ therapy: Therapy) {
         selectedPerson = therapy.person
         selectedDoctorID = therapy.prescribingDoctor?.objectID
-        selectedCondition = normalizedCondition(therapy.condizione) ?? defaultCondition(for: therapy.person)
         automaticIntakeEnabled = therapy.automaticIntakeEnabled
         notificationsSilenced = therapy.notifications_silenced
         isPharmacoCritical = therapy.isPharmacoCritical

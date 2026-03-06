@@ -75,14 +75,12 @@ struct GlobalSearchView: View {
         case lowStock
         case today
         case person(NSManagedObjectID)
-        case condition(String)
 
         var id: String {
             switch self {
             case .lowStock: return "lowStock"
             case .today: return "today"
             case .person(let oid): return "person-\(oid)"
-            case .condition(let c): return "condition-\(c)"
             }
         }
     }
@@ -295,21 +293,6 @@ struct GlobalSearchView: View {
         .sorted { $0.nextDose < $1.nextDose }
     }
 
-    private var allConditions: [String] {
-        var seen = Set<String>()
-        var result: [String] = []
-        for person in persons {
-            for condition in ConditionListFormatter.parsed(from: person.condizione) {
-                let key = condition.lowercased()
-                if !seen.contains(key) {
-                    seen.insert(key)
-                    result.append(condition)
-                }
-            }
-        }
-        return result
-    }
-
     private func medicinesForPerson(_ person: Person) -> [Medicine] {
         guard let therapySet = person.therapies else { return [] }
         var seen = Set<NSManagedObjectID>()
@@ -319,35 +302,6 @@ struct GlobalSearchView: View {
             if !seen.contains(medicine.objectID) {
                 seen.insert(medicine.objectID)
                 result.append(medicine)
-            }
-        }
-        return result.sorted { $0.nome.localizedCaseInsensitiveCompare($1.nome) == .orderedAscending }
-    }
-
-    private func medicinesForCondition(_ condition: String) -> [Medicine] {
-        let key = condition.lowercased()
-        var seen = Set<NSManagedObjectID>()
-        var result: [Medicine] = []
-        for therapy in therapies {
-            let conditions = ConditionListFormatter.parsed(from: therapy.condizione)
-            if conditions.contains(where: { $0.lowercased() == key }) {
-                let medicine = therapy.medicine
-                if !seen.contains(medicine.objectID) {
-                    seen.insert(medicine.objectID)
-                    result.append(medicine)
-                }
-            }
-        }
-        // Also check person conditions
-        for person in persons {
-            let personConditions = ConditionListFormatter.parsed(from: person.condizione)
-            if personConditions.contains(where: { $0.lowercased() == key }) {
-                for medicine in medicinesForPerson(person) {
-                    if !seen.contains(medicine.objectID) {
-                        seen.insert(medicine.objectID)
-                        result.append(medicine)
-                    }
-                }
             }
         }
         return result.sorted { $0.nome.localizedCaseInsensitiveCompare($1.nome) == .orderedAscending }
@@ -368,11 +322,6 @@ struct GlobalSearchView: View {
                 }
             }
         }
-        for condition in allConditions {
-            if !medicinesForCondition(condition).isEmpty {
-                actions.append(.condition(condition))
-            }
-        }
         return actions
     }
 
@@ -385,7 +334,6 @@ struct GlobalSearchView: View {
                 return personDisplayName(for: person)
             }
             return "Persona"
-        case .condition(let c): return c
         }
     }
 
@@ -394,7 +342,6 @@ struct GlobalSearchView: View {
         case .lowStock: return lowStockOrExpiringMedicines.count
         case .today: return todayDoseEntries.count
         case .person(let oid): return personMedicinesForObjectID(oid).count
-        case .condition(let c): return medicinesForCondition(c).count
         }
     }
 
@@ -1092,25 +1039,6 @@ struct GlobalSearchView: View {
                 }
             } header: {
                 sectionHeader(quickActionTitle(action))
-            }
-
-        case .condition(let condition):
-            let conditionMedicines = medicinesForCondition(condition)
-            Section {
-                if conditionMedicines.isEmpty {
-                    emptyLine("Nessun farmaco per questa condizione")
-                } else {
-                    ForEach(conditionMedicines) { medicine in
-                        Button {
-                            openMedicine(medicine)
-                        } label: {
-                            fullMedicineRow(for: medicine)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            } header: {
-                sectionHeader(condition)
             }
         }
     }

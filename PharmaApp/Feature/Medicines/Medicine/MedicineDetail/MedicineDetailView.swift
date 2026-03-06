@@ -79,7 +79,10 @@ struct MedicineDetailView: View {
         self.initialAction = initialAction
         let predicate: NSPredicate
         if let medicinePackage {
-            predicate = NSPredicate(format: "medicinePackage == %@", medicinePackage)
+            predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+                NSPredicate(format: "medicine == %@", medicinePackage.medicine),
+                NSPredicate(format: "package == %@", medicinePackage.package)
+            ])
         } else {
             predicate = NSPredicate(format: "medicine == %@", medicine)
         }
@@ -366,6 +369,10 @@ struct MedicineDetailView: View {
         stockUnitsForSelectedPackage == 1 ? "1 unità" : "\(stockUnitsForSelectedPackage) unità"
     }
 
+    private var canMarkTakenForSelectedPackage: Bool {
+        stockUnitsForSelectedPackage > 0
+    }
+
     private var stockPackagesForSelectedPackage: Int {
         let units = stockUnitsForSelectedPackage
         guard units > 0 else { return 0 }
@@ -394,16 +401,6 @@ struct MedicineDetailView: View {
         }
         let days = Int(coverage.rounded(.down))
         return days == 1 ? "stima ~1 giorno" : "stima ~\(days) giorni"
-    }
-
-    private var packageShortLabel: String {
-        let numero = Int(package.numero)
-        let tipo = package.tipologia.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if numero > 0 {
-            let unitLabel = tipo.isEmpty ? "unità" : tipo
-            return "\(numero) \(unitLabel)"
-        }
-        return tipo.isEmpty ? "confezione" : tipo
     }
 
     private var lastPurchaseInfoText: String? {
@@ -861,11 +858,12 @@ extension MedicineDetailView {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(CapsuleActionButtonStyle(fill: .green, textColor: .white))
+            .disabled(!canMarkTakenForSelectedPackage)
 
             Button {
                 stockService.addPurchase(medicine: medicine, package: package)
             } label: {
-                Label("Confezione acquistata (\(packageShortLabel))", systemImage: "cart.fill")
+                Label("Confezione acquistata (\(packageUnitSize))", systemImage: "cart.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(CapsuleActionButtonStyle(fill: .blue, textColor: .white))
@@ -923,6 +921,8 @@ extension MedicineDetailView {
     }
 
     private func beginMarkTaken() {
+        guard canMarkTakenForSelectedPackage else { return }
+
         let token = intakeOperationToken()
         if let candidate = actionService.missedDoseCandidate(for: medicine, package: package) {
             missedDoseSheet = MissedDoseSheetState(

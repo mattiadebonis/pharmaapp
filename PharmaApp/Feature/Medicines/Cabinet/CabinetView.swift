@@ -321,8 +321,6 @@ struct CabinetView: View {
 
     @ViewBuilder
     private func standardCabinetSections(viewState: ShelfViewState) -> some View {
-        // Summary temporaneamente nascosto su richiesta.
-        /*
         Section {
             summaryTextView
                 .listRowInsets(
@@ -337,7 +335,6 @@ struct CabinetView: View {
                 .listRowSeparator(.hidden)
         }
         .listSectionSeparator(.hidden)
-        */
 
         if appVM.suggestNearestPharmacies {
             Section {
@@ -621,6 +618,8 @@ struct CabinetView: View {
     }
 
     private func beginMarkTaken(for entry: MedicinePackage) {
+        guard hasSufficientStockForIntake(entry) else { return }
+
         let token = operationToken(for: .intake, entry: entry)
         if let candidate = viewModel.actionService.missedDoseCandidate(for: entry) {
             missedDoseSheet = MissedDoseSheetState(
@@ -633,6 +632,11 @@ struct CabinetView: View {
 
         let log = viewModel.actionService.markAsTaken(for: entry, operationId: token.id)
         handleOperationResult(log, key: token.key)
+    }
+
+    private func hasSufficientStockForIntake(_ entry: MedicinePackage) -> Bool {
+        guard let context = entry.managedObjectContext ?? entry.package.managedObjectContext else { return false }
+        return StockService(context: context).unitsReadOnly(for: entry.package) > 0
     }
 
     private func cabinetRow(for cabinet: Cabinet, entries: [MedicinePackage]) -> some View {

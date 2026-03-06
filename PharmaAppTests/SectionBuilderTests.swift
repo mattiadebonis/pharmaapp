@@ -214,6 +214,63 @@ final class SectionBuilderTests: XCTestCase {
         XCTAssertEqual(sections.ok.map(\.medicine.nome), ["Alpha", "Beta", "Gamma"])
     }
 
+    func testComputeSectionsForEntriesIgnoresForeignTherapiesLinkedToEntry() throws {
+        let stockService = StockService(context: context)
+
+        let alphaMedicine = try TestCoreDataFactory.makeMedicine(context: context)
+        alphaMedicine.nome = "Alpha"
+        let alphaPackage = try TestCoreDataFactory.makePackage(context: context, medicine: alphaMedicine)
+        _ = try makeMedicinePackage(medicine: alphaMedicine, package: alphaPackage)
+        stockService.setUnits(20, for: alphaPackage)
+
+        let betaMedicine = try TestCoreDataFactory.makeMedicine(context: context)
+        betaMedicine.nome = "Beta"
+        let betaPackage = try TestCoreDataFactory.makePackage(context: context, medicine: betaMedicine)
+        let betaEntry = try makeMedicinePackage(medicine: betaMedicine, package: betaPackage)
+        stockService.setUnits(20, for: betaPackage)
+
+        let foreignTherapy = try makeDailyTherapy(medicine: alphaMedicine, package: alphaPackage, hour: 9)
+        foreignTherapy.medicinePackage = betaEntry
+
+        try context.save()
+
+        let sections = computeSections(for: [betaEntry], option: nil)
+
+        XCTAssertTrue(sections.oggi.isEmpty)
+        XCTAssertEqual(sections.ok.map(\.medicine.nome), ["Beta"])
+    }
+
+    func testComputeSectionsForEntriesUsesMedicinePackageFallbackWhenEntryLinksAreCorrupted() throws {
+        let stockService = StockService(context: context)
+
+        let alphaMedicine = try TestCoreDataFactory.makeMedicine(context: context)
+        alphaMedicine.nome = "Alpha"
+        let alphaPackage = try TestCoreDataFactory.makePackage(context: context, medicine: alphaMedicine)
+        _ = try makeMedicinePackage(medicine: alphaMedicine, package: alphaPackage)
+        stockService.setUnits(20, for: alphaPackage)
+
+        let betaMedicine = try TestCoreDataFactory.makeMedicine(context: context)
+        betaMedicine.nome = "Beta"
+        let betaPackage = try TestCoreDataFactory.makePackage(context: context, medicine: betaMedicine)
+        let betaEntry = try makeMedicinePackage(medicine: betaMedicine, package: betaPackage)
+        stockService.setUnits(20, for: betaPackage)
+
+        let foreignTherapy = try makeDailyTherapy(medicine: alphaMedicine, package: alphaPackage, hour: 9)
+        foreignTherapy.start_date = Calendar.current.date(byAdding: .day, value: 1, to: Date())
+        foreignTherapy.medicinePackage = betaEntry
+
+        let legacyTherapy = try makeDailyTherapy(medicine: betaMedicine, package: betaPackage, hour: 10)
+        legacyTherapy.medicinePackage = nil
+        legacyTherapy.start_date = Calendar.current.date(byAdding: .day, value: -1, to: Date())
+
+        try context.save()
+
+        let sections = computeSections(for: [betaEntry], option: nil)
+
+        XCTAssertEqual(sections.oggi.map(\.medicine.nome), ["Beta"])
+        XCTAssertTrue(sections.ok.isEmpty)
+    }
+
     private func makeDailyTherapy(medicine: Medicine, package: Package, hour: Int) throws -> Therapy {
         let therapy = try TestCoreDataFactory.makeTherapy(context: context, medicine: medicine)
         therapy.package = package

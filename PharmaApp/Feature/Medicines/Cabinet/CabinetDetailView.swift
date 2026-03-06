@@ -174,6 +174,8 @@ struct CabinetDetailView: View {
     }
 
     private func beginMarkTaken(for entry: MedicinePackage) {
+        guard hasSufficientStockForIntake(entry) else { return }
+
         let token = operationToken(for: .intake, entry: entry)
         if let candidate = viewModel.actionService.missedDoseCandidate(for: entry) {
             missedDoseSheet = MissedDoseSheetState(
@@ -186,6 +188,11 @@ struct CabinetDetailView: View {
 
         let log = viewModel.actionService.markAsTaken(for: entry, operationId: token.id)
         handleOperationResult(log, key: token.key)
+    }
+
+    private func hasSufficientStockForIntake(_ entry: MedicinePackage) -> Bool {
+        guard let context = entry.managedObjectContext ?? entry.package.managedObjectContext else { return false }
+        return StockService(context: context).unitsReadOnly(for: entry.package) > 0
     }
     
     private func shouldShowPrescriptionAction(for entry: MedicinePackage) -> Bool {

@@ -157,7 +157,7 @@ struct MedicineWizardView: View {
                 Button {
                     openStockStep(for: item)
                 } label: {
-                    Label("Confezione acquistata (\(wizardPackageShortLabel(item)))", systemImage: "shippingbox.fill")
+                    Label("Confezione acquistata (\(max(1, item.units)))", systemImage: "shippingbox.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(CapsuleActionButtonStyle(fill: .green, textColor: .white))
@@ -387,15 +387,6 @@ struct MedicineWizardView: View {
         }
 
         return (true, month, year)
-    }
-
-    private func wizardPackageShortLabel(_ item: CatalogSelection) -> String {
-        let tipo = item.tipologia.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if item.units > 0 {
-            let unitLabel = tipo.isEmpty ? "unità" : tipo
-            return "\(item.units) \(unitLabel)"
-        }
-        return tipo.isEmpty ? "confezione" : tipo
     }
 
     private func packageSummary(for item: CatalogSelection) -> String {

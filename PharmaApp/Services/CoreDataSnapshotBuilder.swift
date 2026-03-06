@@ -102,13 +102,14 @@ struct CoreDataSnapshotBuilder {
         let package = entry.package
 
         // Resolve therapies for this entry
-        let entryTherapies: [Therapy]
-        if let set = entry.therapies, !set.isEmpty {
-            entryTherapies = Array(set)
-        } else {
-            let all = medicine.therapies ?? []
-            entryTherapies = all.filter { $0.package == package }
+        let linked = (entry.therapies ?? []).filter {
+            $0.medicine.objectID == medicine.objectID
+                && $0.package.objectID == package.objectID
         }
+        let fallback = (medicine.therapies ?? []).filter {
+            $0.package.objectID == package.objectID
+        }
+        let entryTherapies = Array(Set(linked).union(fallback))
 
         let therapySnapshots = entryTherapies.map { makeTherapySnapshot(therapy: $0) }
         let logEntries = (medicine.logs ?? []).compactMap { logEntry(from: $0) }

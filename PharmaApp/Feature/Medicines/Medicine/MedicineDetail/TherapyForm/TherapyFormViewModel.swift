@@ -71,7 +71,6 @@ class TherapyFormViewModel: ObservableObject {
         importance: String,
         person: Person,
         prescribingDoctor: Doctor?,
-        condition: String?,
         manualIntake: Bool,
         notificationsSilenced: Bool,
         notificationLevel: TherapyNotificationLevel = .normal,
@@ -91,7 +90,7 @@ class TherapyFormViewModel: ObservableObject {
         therapy.importance = importance
         therapy.person = person  // associa la persona
         therapy.prescribingDoctor = prescribingDoctor
-        therapy.condizione = normalizedCondition(from: condition)
+        therapy.condizione = nil
         therapy.manual_intake_registration = manualIntake
         therapy.notifications_silenced = notificationsSilenced
         therapy.notification_level = notificationLevel.rawValue
@@ -159,7 +158,6 @@ class TherapyFormViewModel: ObservableObject {
         importance: String,
         person: Person,
         prescribingDoctor: Doctor?,
-        condition: String?,
         manualIntake: Bool,
         notificationsSilenced: Bool,
         notificationLevel: TherapyNotificationLevel = .normal,
@@ -173,7 +171,7 @@ class TherapyFormViewModel: ObservableObject {
         }
         therapy.person = person  // aggiorna la persona
         therapy.prescribingDoctor = prescribingDoctor
-        therapy.condizione = normalizedCondition(from: condition)
+        therapy.condizione = nil
         therapy.manual_intake_registration = manualIntake
         therapy.notifications_silenced = notificationsSilenced
         therapy.notification_level = notificationLevel.rawValue
@@ -262,11 +260,5 @@ class TherapyFormViewModel: ObservableObject {
             errorMessage = "Errore durante l'eliminazione: \(error.localizedDescription)"
             print("Errore eliminazione Therapy: \(error.localizedDescription)")
         }
-    }
-
-    private func normalizedCondition(from value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }

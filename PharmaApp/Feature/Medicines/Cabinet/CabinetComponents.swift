@@ -19,6 +19,10 @@ struct MedicineSwipeRow: View {
     var subtitleMode: MedicineSubtitleMode = .nextDose
     var snapshot: MedicineRowView.Snapshot? = nil
     private var medicine: Medicine { entry.medicine }
+    private var hasSufficientStockForIntake: Bool {
+        guard let context = entry.managedObjectContext ?? entry.package.managedObjectContext else { return false }
+        return StockService(context: context).unitsReadOnly(for: entry.package) > 0
+    }
     @EnvironmentObject private var favoritesStore: FavoritesStore
 
     var body: some View {
@@ -51,6 +55,7 @@ struct MedicineSwipeRow: View {
                 swipeLabel("Assunto", systemImage: "checkmark.circle.fill")
             }
             .tint(.green)
+            .disabled(!hasSufficientStockForIntake)
 
             Button {
                 onMarkPurchased()

@@ -170,10 +170,7 @@ final class MedicineActionService {
 
     func missedDoseCandidate(for entry: MedicinePackage, now: Date = Date()) -> MissedDoseCandidate? {
         let entry = context.object(with: entry.objectID) as! MedicinePackage
-        if let set = entry.therapies, !set.isEmpty {
-            return doseScheduleService.missedDoseCandidate(for: Array(set), now: now)
-        }
-        let therapies = Array(entry.medicine.therapies ?? []).filter { $0.package.objectID == entry.package.objectID }
+        let therapies = therapies(for: entry)
         return doseScheduleService.missedDoseCandidate(for: therapies, now: now)
     }
 
@@ -330,11 +327,14 @@ final class MedicineActionService {
     }
 
     private func therapies(for entry: MedicinePackage) -> [Therapy] {
-        if let set = entry.therapies, !set.isEmpty {
-            return Array(set)
+        let linked = (entry.therapies ?? []).filter {
+            $0.medicine.objectID == entry.medicine.objectID
+                && $0.package.objectID == entry.package.objectID
         }
-        let all = entry.medicine.therapies ?? []
-        return all.filter { $0.package == entry.package }
+        let fallback = (entry.medicine.therapies ?? []).filter {
+            $0.package.objectID == entry.package.objectID
+        }
+        return Array(Set(linked).union(fallback))
     }
 
     private func resolveTherapyCandidate(for medicine: Medicine, now: Date) -> Therapy? {
