@@ -74,7 +74,7 @@ struct MedicineSwipeRow: View {
         }
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
             Button {
-                favoritesStore.toggleFavorite(entry)
+                favoritesStore.toggleFavoriteMedicine(id: entry.medicine.id)
             } label: {
                 swipeLabel(
                     favoritesLabel,
@@ -119,7 +119,7 @@ struct MedicineSwipeRow: View {
     }
 
     private var isFavorite: Bool {
-        favoritesStore.isFavorite(entry)
+        favoritesStore.isFavoriteMedicine(id: entry.medicine.id)
     }
 
     private var favoritesLabel: String {

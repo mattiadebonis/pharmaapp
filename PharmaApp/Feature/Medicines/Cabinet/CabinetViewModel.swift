@@ -21,15 +21,21 @@ class CabinetViewModel: ObservableObject {
         self.pharmaCoreFactory = pharmaCoreFactory
     }
 
-    private func snapshotBuilder(for entries: [MedicinePackage]) -> CoreDataSnapshotBuilder {
-        CoreDataSnapshotBuilder(
-            context: entries.first?.managedObjectContext ?? PersistenceController.shared.container.viewContext
-        )
+    private func snapshotBuilder(for entries: [MedicinePackage]) -> CoreDataSnapshotBuilder? {
+        guard let context = entries.first?.managedObjectContext else { return nil }
+        return CoreDataSnapshotBuilder(context: context)
     }
 
-    private func snapshotBuilder(for medicines: [Medicine]) -> CoreDataSnapshotBuilder {
-        CoreDataSnapshotBuilder(
-            context: medicines.first?.managedObjectContext ?? PersistenceController.shared.container.viewContext
+    private func snapshotBuilder(for medicines: [Medicine]) -> CoreDataSnapshotBuilder? {
+        guard let context = medicines.first?.managedObjectContext else { return nil }
+        return CoreDataSnapshotBuilder(context: context)
+    }
+
+    private func makeOptionSnapshot(option: Option?) -> OptionSnapshot? {
+        guard let option else { return nil }
+        return OptionSnapshot(
+            manualIntakeRegistration: option.manual_intake_registration,
+            dayThresholdStocksAlarm: Int(option.day_threeshold_stocks_alarm)
         )
     }
 
@@ -184,11 +190,10 @@ class CabinetViewModel: ObservableObject {
     }
 
     func shouldShowPrescriptionAction(for entry: MedicinePackage) -> Bool {
-        let builder = CoreDataSnapshotBuilder(
-            context: entry.managedObjectContext ?? PersistenceController.shared.container.viewContext
-        )
+        guard let context = entry.managedObjectContext else { return false }
+        let builder = CoreDataSnapshotBuilder(context: context)
         let snapshot = builder.makeEntrySnapshot(entry: entry)
-        let optionSnapshot = builder.makeOptionSnapshot(option: nil)
+        let optionSnapshot = makeOptionSnapshot(option: nil)
         return sectionCalculator.needsPrescriptionBeforePurchase(snapshot, option: optionSnapshot)
     }
 
@@ -197,10 +202,11 @@ class CabinetViewModel: ObservableObject {
         option: Option?,
         now: Date = Date()
     ) -> [String: CabinetRowSnapshot] {
+        guard !entries.isEmpty else { return [:] }
         let recurrenceManager = RecurrenceManager.shared
         let calendar = Calendar.current
-        let builder = snapshotBuilder(for: entries)
-        let optionSnapshot = builder.makeOptionSnapshot(option: option)
+        guard let builder = snapshotBuilder(for: entries) else { return [:] }
+        let optionSnapshot = makeOptionSnapshot(option: option)
 
         var snapshots: [String: CabinetRowSnapshot] = [:]
         var medicineLogCache: [String: [Log]] = [:]
@@ -363,14 +369,16 @@ class CabinetViewModel: ObservableObject {
         medicines: [Medicine],
         option: Option?
     ) -> (medicineSnapshots: [MedicineSnapshot], optionSnapshot: OptionSnapshot?) {
-        let builder = snapshotBuilder(for: medicines)
+        let optionSnapshot = makeOptionSnapshot(option: option)
+        guard !medicines.isEmpty, let builder = snapshotBuilder(for: medicines) else {
+            return ([], optionSnapshot)
+        }
         let medicineSnapshots = medicines.map { medicine in
             builder.makeMedicineSnapshot(
                 medicine: medicine,
                 logs: Array(medicine.logs ?? [])
             )
         }
-        let optionSnapshot = builder.makeOptionSnapshot(option: option)
         return (medicineSnapshots, optionSnapshot)
     }
 
@@ -401,10 +409,19 @@ class CabinetViewModel: ObservableObject {
         favoriteMedicineIDs: Set<UUID>
     ) -> [MedicinePackage] {
         let visibleEntries = displayableEntries(from: entries)
-        let builder = snapshotBuilder(for: visibleEntries)
+        guard !visibleEntries.isEmpty else { return [] }
+        guard let builder = snapshotBuilder(for: visibleEntries) else {
+            let fallback = visibleEntries.sorted {
+                $0.medicine.nome.localizedCaseInsensitiveCompare($1.medicine.nome) == .orderedAscending
+            }
+            return prioritizeFavoriteMedicines(
+                fallback,
+                favoriteMedicineIDs: favoriteMedicineIDs
+            )
+        }
 
         // Convert entries to snapshots
-        let optionSnapshot = builder.makeOptionSnapshot(option: option)
+        let optionSnapshot = makeOptionSnapshot(option: option)
         var snapshotToEntry: [String: MedicinePackage] = [:]
         var medicineSnapshots: [MedicineSnapshot] = []
 

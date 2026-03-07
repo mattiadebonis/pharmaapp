@@ -442,7 +442,7 @@ struct CabinetView: View {
             if case .cabinet = entry.kind {
                 cabinetEntries.append(entry)
             } else if case .medicinePackage(let medicineEntry) = entry.kind {
-                if favoritesStore.isFavorite(medicineEntry) {
+                if favoritesStore.isFavoriteMedicine(id: medicineEntry.medicine.id) {
                     pinnedMedicineEntries.append(entry)
                 } else {
                     otherMedicineEntries.append(entry)
@@ -485,7 +485,7 @@ struct CabinetView: View {
                 continue
             }
 
-            if favoritesStore.isFavorite(cabinet) {
+            if favoritesStore.isFavoriteCabinet(id: cabinet.id) {
                 pinnedCabinets.append(entry)
             } else {
                 regularCabinets.append(entry)
@@ -566,7 +566,7 @@ struct CabinetView: View {
             isSelected: viewModel.selectedEntryIDs.contains(entry.id),
             isInSelectionMode: viewModel.isSelecting,
             shouldShowPrescription: shouldShowRx,
-            isPinned: favoritesStore.isFavorite(entry),
+            isPinned: favoritesStore.isFavoriteMedicine(id: entry.medicine.id),
             onTap: {
                 if viewModel.isSelecting {
                     viewModel.toggleSelection(for: entry.id)
@@ -654,7 +654,7 @@ struct CabinetView: View {
     }
 
     private func cabinetRow(for cabinet: Cabinet, entries: [MedicinePackage]) -> some View {
-        let isFavoriteCabinet = favoritesStore.isFavorite(cabinet)
+        let isFavoriteCabinet = favoritesStore.isFavoriteCabinet(id: cabinet.id)
         let cabinetKey = cabinet.id.uuidString
         return Button {
             activeCabinetID = cabinetKey
@@ -679,7 +679,7 @@ struct CabinetView: View {
         )
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
             Button {
-                favoritesStore.toggleFavorite(cabinet)
+                favoritesStore.toggleFavoriteCabinet(id: cabinet.id)
             } label: {
                 swipeLabel(
                     isFavoriteCabinet ? "Rimuovi preferiti" : "Preferito",

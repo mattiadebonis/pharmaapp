@@ -250,26 +250,8 @@ private struct SupabaseSearchGateway: SearchGateway {
 }
 @MainActor
 private struct SupabaseAdherenceGateway: AdherenceGateway {
-    func fetchTherapies() throws -> [Therapy] {
-        throw SupabaseProviderError.notImplemented
-    }
-
-    func fetchIntakeLogs() throws -> [Log] {
-        throw SupabaseProviderError.notImplemented
-    }
-
-    func fetchMedicines() throws -> [Medicine] {
-        throw SupabaseProviderError.notImplemented
-    }
-
-    func fetchPurchaseLogs(since cutoff: Date) throws -> [Log] {
-        let _ = cutoff
-        throw SupabaseProviderError.notImplemented
-    }
-
-    func fetchMonitoringMeasurements(from start: Date, to endExclusive: Date) throws -> [MonitoringMeasurement] {
-        let _ = start
-        let _ = endExclusive
+    func fetchSnapshot(now: Date) throws -> AdherenceDataSnapshot {
+        let _ = now
         throw SupabaseProviderError.notImplemented
     }
 }
@@ -296,6 +278,10 @@ private struct SupabaseSettingsGateway: SettingsGateway {
     }
 
     func therapyNotificationPreferences() throws -> TherapyNotificationSettings {
+        throw SupabaseProviderError.notImplemented
+    }
+
+    func prescriptionCodiceFiscaleEntriesForLowStock() throws -> [PrescriptionCFEntry] {
         throw SupabaseProviderError.notImplemented
     }
 

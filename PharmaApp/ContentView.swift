@@ -1,9 +1,8 @@
 import SwiftUI
-import CoreData
 
 struct ContentView: View {
-    @Environment(\.managedObjectContext) private var moc
     @EnvironmentObject private var appRouter: AppRouter
+    @EnvironmentObject private var appDataStore: AppDataStore
     @State private var isGlobalCodiceFiscalePresented = false
     @State private var globalCodiceFiscaleEntries: [PrescriptionCFEntry] = []
 
@@ -35,7 +34,11 @@ struct ContentView: View {
         case .profile:
             appRouter.markRouteHandled(route)
         case .codiceFiscaleFullscreen:
-            globalCodiceFiscaleEntries = PrescriptionCodiceFiscaleResolver().entriesForRxAndLowStock(in: moc)
+            do {
+                globalCodiceFiscaleEntries = try appDataStore.provider.settings.prescriptionCodiceFiscaleEntriesForLowStock()
+            } catch {
+                globalCodiceFiscaleEntries = []
+            }
             isGlobalCodiceFiscalePresented = true
             appRouter.markRouteHandled(route)
         case .pharmacy:
@@ -112,5 +115,12 @@ struct ContentView: View {
     ContentView()
         .environmentObject(AppViewModel())
         .environmentObject(AppRouter())
-        .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
+        .environmentObject(
+            AppDataStore(
+                provider: CoreDataAppDataProvider(
+                    authGateway: FirebaseAuthGatewayAdapter(),
+                    backupGateway: ICloudBackupGatewayAdapter(coordinator: BackupCoordinator())
+                )
+            )
+        )
 }

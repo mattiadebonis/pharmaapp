@@ -166,7 +166,7 @@ struct CabinetDetailView: View {
             isSelected: isSelected,
             isInSelectionMode: viewModel.isSelecting,
             shouldShowPrescription: shouldShowRx,
-            isPinned: favoritesStore.isFavorite(entry),
+            isPinned: favoritesStore.isFavoriteMedicine(id: entry.medicine.id),
             onTap: {
                 if viewModel.isSelecting {
                     viewModel.toggleSelection(for: entry.id)

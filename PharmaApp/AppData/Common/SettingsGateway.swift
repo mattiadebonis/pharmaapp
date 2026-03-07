@@ -69,6 +69,7 @@ protocol SettingsGateway {
     func doctor(id: UUID) throws -> SettingsDoctorRecord?
 
     func therapyNotificationPreferences() throws -> TherapyNotificationSettings
+    func prescriptionCodiceFiscaleEntriesForLowStock() throws -> [PrescriptionCFEntry]
 
     @discardableResult
     func savePerson(_ input: PersonWriteInput) throws -> UUID

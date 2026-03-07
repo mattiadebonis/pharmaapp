@@ -2,18 +2,11 @@ import Foundation
 import CoreData
 
 struct PrescriptionCFEntry: Identifiable {
-    let person: Person
+    let personDisplayName: String
     let codiceFiscale: String
     let medicineNames: [String]
 
     var id: String { codiceFiscale }
-
-    var personDisplayName: String {
-        let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let full = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
-        return full.isEmpty ? "Persona" : full
-    }
 }
 
 @MainActor
@@ -29,7 +22,7 @@ struct PrescriptionCodiceFiscaleResolver {
         let recurrenceManager = RecurrenceManager(context: context)
 
         struct Bucket {
-            let person: Person
+            let personDisplayName: String
             let codiceFiscale: String
             var medicineNames: Set<String>
         }
@@ -45,13 +38,14 @@ struct PrescriptionCodiceFiscaleResolver {
             for therapy in therapies {
                 let person = therapy.person
                 guard let codice = normalizedCodiceFiscale(person.codice_fiscale) else { continue }
+                let personDisplayName = normalizedPersonDisplayName(person)
 
                 if var existing = buckets[codice] {
                     existing.medicineNames.insert(medicineName)
                     buckets[codice] = existing
                 } else {
                     buckets[codice] = Bucket(
-                        person: person,
+                        personDisplayName: personDisplayName,
                         codiceFiscale: codice,
                         medicineNames: [medicineName]
                     )
@@ -62,7 +56,7 @@ struct PrescriptionCodiceFiscaleResolver {
         return buckets.values
             .map { bucket in
                 PrescriptionCFEntry(
-                    person: bucket.person,
+                    personDisplayName: bucket.personDisplayName,
                     codiceFiscale: bucket.codiceFiscale,
                     medicineNames: bucket.medicineNames.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
                 )
@@ -98,6 +92,13 @@ struct PrescriptionCodiceFiscaleResolver {
         let threshold = Double(medicine.stockThreshold(option: option))
         let coverageDays = totalLeft / dailyUsage
         return coverageDays < threshold
+    }
+
+    private func normalizedPersonDisplayName(_ person: Person) -> String {
+        let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let full = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+        return full.isEmpty ? "Persona" : full
     }
 
     private func normalizedMedicineName(_ raw: String) -> String {

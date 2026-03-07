@@ -751,37 +751,46 @@ private final class CoreDataAdherenceGateway: AdherenceGateway {
         self.context = context
     }
 
-    func fetchTherapies() throws -> [Therapy] {
-        try context.fetch(Therapy.extractTherapies())
-    }
+    func fetchSnapshot(now: Date) throws -> AdherenceDataSnapshot {
+        let therapies = try context.fetch(Therapy.extractTherapies())
+        let medicines = try context.fetch(Medicine.extractMedicines())
 
-    func fetchIntakeLogs() throws -> [Log] {
-        let request = Log.extractLogs()
-        request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: true)]
-        request.predicate = NSPredicate(format: "type == 'intake' OR type == 'intake_undo'")
-        return try context.fetch(request)
-    }
+        let intakeRequest = Log.extractLogs()
+        intakeRequest.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: true)]
+        intakeRequest.predicate = NSPredicate(format: "type == 'intake' OR type == 'intake_undo'")
+        let intakeLogs = try context.fetch(intakeRequest)
 
-    func fetchMedicines() throws -> [Medicine] {
-        try context.fetch(Medicine.extractMedicines())
-    }
+        let purchaseCutoff = Calendar.current.date(byAdding: .day, value: -30, to: now) ?? .distantPast
+        let purchaseRequest = Log.extractPurchaseLogs()
+        purchaseRequest.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: true)]
+        purchaseRequest.predicate = NSPredicate(format: "type == 'purchase' AND timestamp >= %@", purchaseCutoff as NSDate)
+        let purchaseLogs = try context.fetch(purchaseRequest)
 
-    func fetchPurchaseLogs(since cutoff: Date) throws -> [Log] {
-        let request = Log.extractPurchaseLogs()
-        request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: true)]
-        request.predicate = NSPredicate(format: "type == 'purchase' AND timestamp >= %@", cutoff as NSDate)
-        return try context.fetch(request)
-    }
+        let endExclusive = Calendar.current.date(
+            byAdding: .day,
+            value: 1,
+            to: Calendar.current.startOfDay(for: now)
+        ) ?? now
+        let earliestCandidates = therapies.compactMap(\.start_date) + intakeLogs.map(\.timestamp)
+        let fallbackStart = Calendar.current.date(byAdding: .month, value: -6, to: now) ?? .distantPast
+        let measurementStart = earliestCandidates.min() ?? fallbackStart
 
-    func fetchMonitoringMeasurements(from start: Date, to endExclusive: Date) throws -> [MonitoringMeasurement] {
-        let request = MonitoringMeasurement.fetchRequest()
-        request.sortDescriptors = [NSSortDescriptor(key: "measured_at", ascending: true)]
-        request.predicate = NSPredicate(
+        let measurementRequest = MonitoringMeasurement.fetchRequest()
+        measurementRequest.sortDescriptors = [NSSortDescriptor(key: "measured_at", ascending: true)]
+        measurementRequest.predicate = NSPredicate(
             format: "measured_at >= %@ AND measured_at < %@",
-            start as NSDate,
+            measurementStart as NSDate,
             endExclusive as NSDate
         )
-        return try context.fetch(request)
+        let monitoringMeasurements = try context.fetch(measurementRequest)
+
+        return AdherenceDataSnapshot(
+            therapies: therapies,
+            intakeLogs: intakeLogs,
+            medicines: medicines,
+            purchaseLogs: purchaseLogs,
+            monitoringMeasurements: monitoringMeasurements
+        )
     }
 }
 
@@ -854,6 +863,10 @@ private final class CoreDataSettingsGateway: SettingsGateway {
                 rawValue: Int(option?.therapy_snooze_minutes ?? 0)
             )
         )
+    }
+
+    func prescriptionCodiceFiscaleEntriesForLowStock() throws -> [PrescriptionCFEntry] {
+        PrescriptionCodiceFiscaleResolver().entriesForRxAndLowStock(in: context)
     }
 
     @discardableResult

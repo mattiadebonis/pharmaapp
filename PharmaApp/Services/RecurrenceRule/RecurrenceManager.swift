@@ -6,13 +6,11 @@
 //
 
 import Foundation
-import CoreData
 
 struct RecurrenceManager {
 
-    static let shared = RecurrenceManager(context: PersistenceController.shared.container.viewContext)
-
-    let context: NSManagedObjectContext?
+    static let shared = RecurrenceManager()
+    let contextObject: Any?
     private static let recurrenceCacheQueue = DispatchQueue(label: "RecurrenceManager.parse.cache.queue", attributes: .concurrent)
     private static var recurrenceCache: [String: RecurrenceRule] = [:]
     private static let utcFormatterLock = NSLock()
@@ -22,6 +20,14 @@ struct RecurrenceManager {
         formatter.timeZone = TimeZone(identifier: "UTC")
         return formatter
     }()
+
+    init(contextObject: Any? = nil) {
+        self.contextObject = contextObject
+    }
+
+    init(context: Any?) {
+        self.init(contextObject: context)
+    }
 
     func buildRecurrenceString(from rule: RecurrenceRule) -> String {
         var lines: [String] = []

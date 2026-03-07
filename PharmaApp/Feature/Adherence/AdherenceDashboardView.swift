@@ -850,25 +850,12 @@ struct AdherenceDashboardView: View {
 
     private func reloadDataAndMetrics() {
         do {
-            therapies = try appDataStore.provider.adherence.fetchTherapies()
-            logs = try appDataStore.provider.adherence.fetchIntakeLogs()
-            medicines = try appDataStore.provider.adherence.fetchMedicines()
-
-            let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? .distantPast
-            purchaseLogs = try appDataStore.provider.adherence.fetchPurchaseLogs(since: cutoff)
-
-            let endExclusive = Calendar.current.date(
-                byAdding: .day,
-                value: 1,
-                to: Calendar.current.startOfDay(for: Date())
-            ) ?? Date()
-            let earliestCandidates = therapies.compactMap(\.start_date) + logs.map(\.timestamp)
-            let fallbackStart = Calendar.current.date(byAdding: .month, value: -6, to: Date()) ?? .distantPast
-            let measurementStart = earliestCandidates.min() ?? fallbackStart
-            monitoringMeasurements = try appDataStore.provider.adherence.fetchMonitoringMeasurements(
-                from: measurementStart,
-                to: endExclusive
-            )
+            let snapshot = try appDataStore.provider.adherence.fetchSnapshot(now: Date())
+            therapies = snapshot.therapies
+            logs = snapshot.intakeLogs
+            medicines = snapshot.medicines
+            purchaseLogs = snapshot.purchaseLogs
+            monitoringMeasurements = snapshot.monitoringMeasurements
             loadErrorMessage = nil
         } catch {
             therapies = []

@@ -50,7 +50,7 @@ struct TherapySummaryBuilder {
     }()
     init(recurrenceManager: RecurrenceManager) {
         self.recurrenceManager = recurrenceManager
-        if let context = recurrenceManager.context {
+        if let context = recurrenceManager.contextObject as? NSManagedObjectContext {
             let request = Person.extractPersons(includeAccount: true)
             let count = (try? context.count(for: request)) ?? 1
             self.hasMultiplePersons = count > 1

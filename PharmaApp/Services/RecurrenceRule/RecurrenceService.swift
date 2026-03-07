@@ -1,5 +1,4 @@
 import Foundation
-import CoreData
 
 protocol RecurrenceServiceProtocol {
     func parseRecurrence(_ rrule: String) -> RecurrenceRule
@@ -11,7 +10,7 @@ protocol RecurrenceServiceProtocol {
 final class RecurrenceService: RecurrenceServiceProtocol {
     private let manager: RecurrenceManager
 
-    init(context: NSManagedObjectContext = PersistenceController.shared.container.viewContext) {
+    init(context: Any? = nil) {
         self.manager = RecurrenceManager(context: context)
     }
 

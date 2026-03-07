@@ -28,9 +28,8 @@ final class AdherenceDashboardViewModel: ObservableObject {
 
     init(calendar: Calendar = .current) {
         self.calendar = calendar
-        let defaultContext = PersistenceController.shared.container.viewContext
-        self.recurrenceManager = RecurrenceManager(context: defaultContext)
-        self.doseEventGenerator = DoseEventGenerator(context: defaultContext, calendar: calendar)
+        self.recurrenceManager = .shared
+        self.doseEventGenerator = DoseEventGenerator(calendar: calendar)
     }
 
     func reload(

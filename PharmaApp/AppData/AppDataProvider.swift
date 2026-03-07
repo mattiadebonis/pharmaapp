@@ -180,11 +180,15 @@ protocol SearchGateway {
 }
 @MainActor
 protocol AdherenceGateway {
-    func fetchTherapies() throws -> [Therapy]
-    func fetchIntakeLogs() throws -> [Log]
-    func fetchMedicines() throws -> [Medicine]
-    func fetchPurchaseLogs(since cutoff: Date) throws -> [Log]
-    func fetchMonitoringMeasurements(from start: Date, to endExclusive: Date) throws -> [MonitoringMeasurement]
+    func fetchSnapshot(now: Date) throws -> AdherenceDataSnapshot
+}
+
+struct AdherenceDataSnapshot {
+    let therapies: [Therapy]
+    let intakeLogs: [Log]
+    let medicines: [Medicine]
+    let purchaseLogs: [Log]
+    let monitoringMeasurements: [MonitoringMeasurement]
 }
 protocol PeopleGateway {}
 @MainActor
