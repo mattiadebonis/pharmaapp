@@ -1,16 +1,15 @@
 import SwiftUI
-import CoreData
 import Charts
 
 struct AdherenceDashboardView: View {
-    @FetchRequest(fetchRequest: Therapy.extractTherapies())
-    private var therapies: FetchedResults<Therapy>
-
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(key: "timestamp", ascending: true)],
-        predicate: NSPredicate(format: "type == 'intake' OR type == 'intake_undo'")
-    )
-    private var logs: FetchedResults<Log>
+    @EnvironmentObject private var appDataStore: AppDataStore
+    @State private var therapies: [Therapy] = []
+    @State private var logs: [Log] = []
+    @State private var medicines: [Medicine] = []
+    @State private var purchaseLogs: [Log] = []
+    @State private var monitoringMeasurements: [MonitoringMeasurement] = []
+    @State private var loadErrorMessage: String?
+    @State private var hasStartedObservation = false
 
     @StateObject private var viewModel = AdherenceDashboardViewModel()
     @State private var selectedRange: StatisticsRange = .days
@@ -21,6 +20,11 @@ struct AdherenceDashboardView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 56) {
                 header
+                if let loadErrorMessage {
+                    Text(loadErrorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
                 rangePicker
                 overallTrendSection
                 // ADERENZA
@@ -35,15 +39,14 @@ struct AdherenceDashboardView: View {
         }
         .background(Color.white)
         .toolbar(.hidden, for: .navigationBar)
-        .onAppear(perform: reload)
-        .onChange(of: therapies.count) { _ in reload() }
-        .onChange(of: logs.count) { _ in reload() }
+        .onAppear(perform: reloadDataAndMetrics)
         .onChange(of: selectedRange) { _ in reload() }
-        .onReceive(NotificationCenter.default.publisher(
-            for: .NSManagedObjectContextObjectsDidChange,
-            object: PersistenceController.shared.container.viewContext
-        )) { _ in
-            reload()
+        .task {
+            guard !hasStartedObservation else { return }
+            hasStartedObservation = true
+            for await _ in appDataStore.provider.observe(scopes: [.medicines, .therapies, .logs, .stocks]) {
+                reloadDataAndMetrics()
+            }
         }
     }
 
@@ -835,7 +838,47 @@ struct AdherenceDashboardView: View {
     }
 
     private func reload() {
-        viewModel.reload(therapies: Array(therapies), logs: Array(logs), range: selectedRange)
+        viewModel.reload(
+            therapies: therapies,
+            logs: logs,
+            medicines: medicines,
+            purchaseLogs: purchaseLogs,
+            monitoringMeasurements: monitoringMeasurements,
+            range: selectedRange
+        )
+    }
+
+    private func reloadDataAndMetrics() {
+        do {
+            therapies = try appDataStore.provider.adherence.fetchTherapies()
+            logs = try appDataStore.provider.adherence.fetchIntakeLogs()
+            medicines = try appDataStore.provider.adherence.fetchMedicines()
+
+            let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? .distantPast
+            purchaseLogs = try appDataStore.provider.adherence.fetchPurchaseLogs(since: cutoff)
+
+            let endExclusive = Calendar.current.date(
+                byAdding: .day,
+                value: 1,
+                to: Calendar.current.startOfDay(for: Date())
+            ) ?? Date()
+            let earliestCandidates = therapies.compactMap(\.start_date) + logs.map(\.timestamp)
+            let fallbackStart = Calendar.current.date(byAdding: .month, value: -6, to: Date()) ?? .distantPast
+            let measurementStart = earliestCandidates.min() ?? fallbackStart
+            monitoringMeasurements = try appDataStore.provider.adherence.fetchMonitoringMeasurements(
+                from: measurementStart,
+                to: endExclusive
+            )
+            loadErrorMessage = nil
+        } catch {
+            therapies = []
+            logs = []
+            medicines = []
+            purchaseLogs = []
+            monitoringMeasurements = []
+            loadErrorMessage = error.localizedDescription
+        }
+        reload()
     }
 
     private func summaryRingKPI(title: String, value: Double, color: Color) -> some View {

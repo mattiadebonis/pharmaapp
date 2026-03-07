@@ -30,5 +30,12 @@ struct OptionsView: View {
     NavigationStack {
         OptionsView()
     }
-    .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
+    .environmentObject(
+        AppDataStore(
+            provider: CoreDataAppDataProvider(
+                authGateway: FirebaseAuthGatewayAdapter(),
+                backupGateway: ICloudBackupGatewayAdapter(coordinator: BackupCoordinator())
+            )
+        )
+    )
 }

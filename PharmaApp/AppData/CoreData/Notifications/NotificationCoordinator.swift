@@ -38,7 +38,6 @@ enum PerformancePolicy: String {
 
 @MainActor
 final class NotificationCoordinator: ObservableObject {
-    private let context: NSManagedObjectContext
     private let policy: PerformancePolicy
     private let scheduler: NotificationScheduler?
     private let autoIntakeProcessor: AutoIntakeProcessor?
@@ -54,33 +53,29 @@ final class NotificationCoordinator: ObservableObject {
     private var observers: [NSObjectProtocol] = []
 
     init(
-        context: NSManagedObjectContext,
         policy: PerformancePolicy = .foregroundInteractive,
         scheduler: NotificationScheduler? = nil,
         autoIntakeProcessor: AutoIntakeProcessor? = nil,
-        liveActivityCoordinator: CriticalDoseLiveActivityCoordinator?,
+        liveActivityCoordinator: CriticalDoseLiveActivityCoordinator? = nil,
         container: NSPersistentContainer = PersistenceController.shared.container
     ) {
-        self.context = context
         self.policy = policy
         self.scheduler = scheduler
         self.autoIntakeProcessor = autoIntakeProcessor
         if let liveActivityCoordinator {
             self.liveActivityCoordinator = liveActivityCoordinator
         } else {
-            self.liveActivityCoordinator = CriticalDoseLiveActivityCoordinator(context: context)
+            self.liveActivityCoordinator = CriticalDoseLiveActivityCoordinator(context: container.viewContext)
         }
         self.container = container
     }
 
     convenience init(
-        context: NSManagedObjectContext,
         policy: PerformancePolicy = .foregroundInteractive,
         scheduler: NotificationScheduler? = nil,
         autoIntakeProcessor: AutoIntakeProcessor? = nil
     ) {
         self.init(
-            context: context,
             policy: policy,
             scheduler: scheduler,
             autoIntakeProcessor: autoIntakeProcessor,
@@ -92,18 +87,6 @@ final class NotificationCoordinator: ObservableObject {
     func start() {
         guard !didStart else { return }
         didStart = true
-
-        observers.append(
-            NotificationCenter.default.addObserver(
-                forName: .NSManagedObjectContextObjectsDidChange,
-                object: context,
-                queue: nil
-            ) { [weak self] notification in
-                Task { @MainActor in
-                    self?.handleContextChange(notification)
-                }
-            }
-        )
 
         observers.append(
             NotificationCenter.default.addObserver(
@@ -176,12 +159,6 @@ final class NotificationCoordinator: ObservableObject {
 
     func refreshAfterStoreChange(reason: String = "backup-restore") {
         scheduleRefresh(reason: reason, debounceNanoseconds: 100_000_000)
-    }
-
-    private func handleContextChange(_ notification: Notification) {
-        guard hasRelevantChanges(notification) else { return }
-        let debounce: UInt64 = policy == .foregroundInteractive ? 1_800_000_000 : 500_000_000
-        scheduleRefresh(reason: "core-data", debounceNanoseconds: debounce)
     }
 
     private func scheduleRefresh(reason: String, debounceNanoseconds: UInt64? = nil) {
@@ -309,31 +286,6 @@ final class NotificationCoordinator: ObservableObject {
             return reason == "startup"
                 || reason == "background"
                 || reason == "auto-intake"
-        }
-    }
-
-    private func hasRelevantChanges(_ notification: Notification) -> Bool {
-        let keys: [String] = [
-            NSInsertedObjectsKey,
-            NSUpdatedObjectsKey,
-            NSDeletedObjectsKey
-        ]
-
-        for key in keys {
-            guard let objects = notification.userInfo?[key] as? Set<NSManagedObject> else { continue }
-            if objects.contains(where: { isRelevant($0) }) {
-                return true
-            }
-        }
-        return false
-    }
-
-    private func isRelevant(_ object: NSManagedObject) -> Bool {
-        switch object {
-        case is Therapy, is Dose, is Stock, is Log, is Medicine, is MedicinePackage, is Package, is Option:
-            return true
-        default:
-            return false
         }
     }
 

@@ -1,5 +1,4 @@
 import SwiftUI
-import CoreData
 
 /// Riga con swipe action per i medicinali nell'armadietto.
 struct MedicineSwipeRow: View {
@@ -19,9 +18,9 @@ struct MedicineSwipeRow: View {
     var subtitleMode: MedicineSubtitleMode = .nextDose
     var snapshot: MedicineRowView.Snapshot? = nil
     private var medicine: Medicine { entry.medicine }
+    @EnvironmentObject private var appDataStore: AppDataStore
     private var hasSufficientStockForIntake: Bool {
-        guard let context = entry.managedObjectContext ?? entry.package.managedObjectContext else { return false }
-        return StockService(context: context).unitsReadOnly(for: entry.package) > 0
+        appDataStore.provider.medicines.hasSufficientStockForIntake(entryId: entry.id)
     }
     @EnvironmentObject private var favoritesStore: FavoritesStore
 
@@ -166,7 +165,7 @@ struct MoveToCabinetSheet: View {
                             }
                         }
                     }
-                    ForEach(Array(cabinets.enumerated()), id: \.element.objectID) { _, cabinet in
+                    ForEach(Array(cabinets.enumerated()), id: \.element.id) { _, cabinet in
                         Button {
                             onSelect(cabinet)
                             dismiss()
@@ -174,7 +173,7 @@ struct MoveToCabinetSheet: View {
                             HStack {
                                 Text(cabinet.displayName)
                                 Spacer()
-                                if entry.cabinet?.objectID == cabinet.objectID {
+                                if entry.cabinet?.id == cabinet.id {
                                     Image(systemName: "checkmark")
                                         .foregroundStyle(Color.accentColor)
                                 }

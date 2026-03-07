@@ -22,14 +22,20 @@ struct MedicineIntentEntity: AppEntity, Identifiable {
 
 struct MedicineIntentQuery: EntityStringQuery {
     func entities(for identifiers: [MedicineIntentEntity.ID]) async throws -> [MedicineIntentEntity] {
-        SiriIntentFacade.shared.medicines(withIDs: identifiers)
+        await MainActor.run {
+            IntentsGatewayBridge.gateway.medicines(withIDs: identifiers)
+        }
     }
 
     func entities(matching string: String) async throws -> [MedicineIntentEntity] {
-        SiriIntentFacade.shared.medicines(matching: string)
+        await MainActor.run {
+            IntentsGatewayBridge.gateway.medicines(matching: string, limit: 20)
+        }
     }
 
     func suggestedEntities() async throws -> [MedicineIntentEntity] {
-        SiriIntentFacade.shared.suggestedMedicines()
+        await MainActor.run {
+            IntentsGatewayBridge.gateway.suggestedMedicines(limit: 50)
+        }
     }
 }

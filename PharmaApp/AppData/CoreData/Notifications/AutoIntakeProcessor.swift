@@ -44,7 +44,7 @@ final class AutoIntakeProcessor {
             let events = generator.generateEvents(therapies: therapies, from: start, to: now)
             guard !events.isEmpty else { return 0 }
 
-            let lookup = Dictionary(therapies.map { ($0.objectID, $0) }, uniquingKeysWith: { first, _ in first })
+            let lookup = Dictionary(therapies.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             var intakeBucketsByTherapy = buildIntakeMinuteIndex(therapies: therapies)
             let toleranceMinutes = max(1, Int(ceil(config.logToleranceSeconds / 60)))
             let stockService = StockService(context: context)
@@ -77,7 +77,7 @@ final class AutoIntakeProcessor {
                 if log != nil {
                     createdCount += 1
                     let minuteBucket = Self.minuteBucket(for: event.date)
-                    intakeBucketsByTherapy[therapy.objectID, default: []].insert(minuteBucket)
+                    intakeBucketsByTherapy[therapy.id, default: []].insert(minuteBucket)
                 }
 
                 processedCount += 1
@@ -134,9 +134,9 @@ final class AutoIntakeProcessor {
         therapy.manual_intake_registration
     }
 
-    private func buildIntakeMinuteIndex(therapies: [Therapy]) -> [NSManagedObjectID: Set<Int>] {
-        var index: [NSManagedObjectID: Set<Int>] = [:]
-        let therapiesByMedicine = Dictionary(grouping: therapies, by: { $0.medicine.objectID })
+    private func buildIntakeMinuteIndex(therapies: [Therapy]) -> [UUID: Set<Int>] {
+        var index: [UUID: Set<Int>] = [:]
+        let therapiesByMedicine = Dictionary(grouping: therapies, by: { $0.medicine.id })
 
         for group in therapiesByMedicine.values {
             guard let firstTherapy = group.first else { continue }
@@ -144,22 +144,22 @@ final class AutoIntakeProcessor {
             guard !intakeLogs.isEmpty else { continue }
 
             let singleTherapy = group.count == 1 ? group[0] : nil
-            let groupByObjectID = Dictionary(group.map { ($0.objectID, $0) }, uniquingKeysWith: { lhs, _ in lhs })
+            let groupByID = Dictionary(group.map { ($0.id, $0) }, uniquingKeysWith: { lhs, _ in lhs })
 
             for log in intakeLogs {
                 let minuteBucket = Self.minuteBucket(for: log.timestamp)
                 if let logTherapy = log.therapy {
-                    index[logTherapy.objectID, default: []].insert(minuteBucket)
+                    index[logTherapy.id, default: []].insert(minuteBucket)
                     continue
                 }
 
                 if let singleTherapy {
-                    index[singleTherapy.objectID, default: []].insert(minuteBucket)
+                    index[singleTherapy.id, default: []].insert(minuteBucket)
                     continue
                 }
 
-                for therapy in groupByObjectID.values where log.package == therapy.package {
-                    index[therapy.objectID, default: []].insert(minuteBucket)
+                for therapy in groupByID.values where log.package == therapy.package {
+                    index[therapy.id, default: []].insert(minuteBucket)
                 }
             }
         }
@@ -170,10 +170,10 @@ final class AutoIntakeProcessor {
     private func hasMatchingIntakeLog(
         for eventDate: Date,
         therapy: Therapy,
-        intakeBucketsByTherapy: [NSManagedObjectID: Set<Int>],
+        intakeBucketsByTherapy: [UUID: Set<Int>],
         toleranceMinutes: Int
     ) -> Bool {
-        guard let buckets = intakeBucketsByTherapy[therapy.objectID], !buckets.isEmpty else { return false }
+        guard let buckets = intakeBucketsByTherapy[therapy.id], !buckets.isEmpty else { return false }
         let center = Self.minuteBucket(for: eventDate)
         let lower = center - toleranceMinutes
         let upper = center + toleranceMinutes

@@ -1,17 +1,33 @@
 import SwiftUI
 
 struct PrescriptionMessageTemplateSettingsView: View {
-    @Environment(\.managedObjectContext) private var managedObjectContext
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appDataStore: AppDataStore
 
-    @ObservedObject var doctor: Doctor
+    let doctorId: UUID
+    let doctorDisplayName: String
+    let onSavedTemplate: (String?) -> Void
 
-    @State private var templateText = ""
+    @State private var templateText: String
     @State private var didLoadTemplate = false
     @State private var showValidationAlert = false
     @State private var saveErrorMessage: String?
 
     private let previewMedicineNames = ["Tachipirina", "Augmentin"]
+
+    init(
+        doctorId: UUID,
+        doctorDisplayName: String,
+        initialTemplate: String?,
+        onSavedTemplate: @escaping (String?) -> Void = { _ in }
+    ) {
+        self.doctorId = doctorId
+        self.doctorDisplayName = doctorDisplayName
+        self.onSavedTemplate = onSavedTemplate
+        _templateText = State(
+            initialValue: PrescriptionMessageTemplateRenderer.resolvedTemplate(customTemplate: initialTemplate)
+        )
+    }
 
     var body: some View {
         Form {
@@ -101,7 +117,7 @@ struct PrescriptionMessageTemplateSettingsView: View {
     }
 
     private var previewDoctorName: String {
-        let trimmed = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = doctorDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Dott.ssa Rossi" : trimmed
     }
 
@@ -147,9 +163,15 @@ struct PrescriptionMessageTemplateSettingsView: View {
 
     private func loadTemplateIfNeeded() {
         guard !didLoadTemplate else { return }
-        templateText = PrescriptionMessageTemplateRenderer.resolvedTemplate(
-            customTemplate: doctor.prescription_message_template
-        )
+        do {
+            if let doctor = try appDataStore.provider.settings.doctor(id: doctorId) {
+                templateText = PrescriptionMessageTemplateRenderer.resolvedTemplate(
+                    customTemplate: doctor.prescriptionMessageTemplate
+                )
+            }
+        } catch {
+            saveErrorMessage = error.localizedDescription
+        }
         didLoadTemplate = true
     }
 
@@ -159,31 +181,37 @@ struct PrescriptionMessageTemplateSettingsView: View {
             return
         }
 
-        let normalizedTemplate = PrescriptionMessageTemplateRenderer.resolvedTemplate(
-            customTemplate: trimmedTemplate
-        )
-        doctor.prescription_message_template = normalizedTemplate == PrescriptionMessageTemplateRenderer.defaultTemplate
-            ? nil
-            : normalizedTemplate
-
         do {
-            try managedObjectContext.save()
+            try appDataStore.provider.settings.savePrescriptionMessageTemplate(
+                doctorId: doctorId,
+                template: trimmedTemplate
+            )
+            let resolvedTemplate = PrescriptionMessageTemplateRenderer.resolvedTemplate(customTemplate: trimmedTemplate)
+            let customTemplate = resolvedTemplate == PrescriptionMessageTemplateRenderer.defaultTemplate
+                ? nil
+                : resolvedTemplate
+            onSavedTemplate(customTemplate)
             dismiss()
         } catch {
-            managedObjectContext.rollback()
             saveErrorMessage = error.localizedDescription
         }
     }
 }
 
 #Preview {
-    let context = PersistenceController.shared.container.viewContext
-    let doctor = Doctor(context: context)
-    doctor.id = UUID()
-    doctor.nome = "Dott.ssa Rossi"
-
     return NavigationStack {
-        PrescriptionMessageTemplateSettingsView(doctor: doctor)
+        PrescriptionMessageTemplateSettingsView(
+            doctorId: UUID(),
+            doctorDisplayName: "Dott.ssa Rossi",
+            initialTemplate: nil
+        )
     }
-    .environment(\.managedObjectContext, context)
+    .environmentObject(
+        AppDataStore(
+            provider: CoreDataAppDataProvider(
+                authGateway: FirebaseAuthGatewayAdapter(),
+                backupGateway: ICloudBackupGatewayAdapter(coordinator: BackupCoordinator())
+            )
+        )
+    )
 }

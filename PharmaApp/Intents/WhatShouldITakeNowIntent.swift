@@ -7,7 +7,10 @@ struct WhatShouldITakeNowIntent: AppIntent {
     static var openAppWhenRun = false
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        guard let next = SiriIntentFacade.shared.nextDoseNow() else {
+        let next = await MainActor.run {
+            IntentsGatewayBridge.gateway.nextDoseNow(now: Date())
+        }
+        guard let next else {
             return .result(dialog: SiriIntentSupport.dialog("Non ci sono assunzioni pianificate in questo momento."))
         }
 

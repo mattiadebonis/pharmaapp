@@ -1,5 +1,4 @@
 import SwiftUI
-import CoreData
 import UIKit
 import MessageUI
 
@@ -13,9 +12,9 @@ enum MedicineDetailInitialAction: Equatable {
 
 struct MedicineDetailView: View {
 
-    @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @EnvironmentObject private var appDataStore: AppDataStore
     @StateObject private var actionsViewModel = MedicineRowViewModel(
         managedObjectContext: PersistenceController.shared.container.viewContext
     )
@@ -24,25 +23,17 @@ struct MedicineDetailView: View {
     @State private var missedDoseSheet: MissedDoseSheetState?
     @State private var deadlineMonthInput: String = ""
     @State private var deadlineYearInput: String = ""
-
-    private var stockService: MedicineStockService {
-        MedicineStockService(context: context)
-    }
-
-    private var actionService: MedicineActionService {
-        MedicineActionService(context: context)
-    }
     
     @ObservedObject var medicine: Medicine
     let package: Package
     let medicinePackage: MedicinePackage?
     let initialAction: MedicineDetailInitialAction
-    
-    @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
-    @FetchRequest private var therapies: FetchedResults<Therapy>
-    @FetchRequest private var intakeLogs: FetchedResults<Log>
-    @FetchRequest(fetchRequest: Doctor.extractDoctors()) private var doctors: FetchedResults<Doctor>
-    @FetchRequest(fetchRequest: Medicine.extractMedicines()) private var allMedicines: FetchedResults<Medicine>
+
+    @State private var options: [Option] = []
+    @State private var therapies: [Therapy] = []
+    @State private var intakeLogs: [Log] = []
+    @State private var doctors: [Doctor] = []
+    @State private var allMedicines: [Medicine] = []
     
     private let recurrenceManager = RecurrenceManager.shared
     @State private var showEmailSheet = false
@@ -50,22 +41,14 @@ struct MedicineDetailView: View {
     @State private var showThresholdAlert = false
     @State private var thresholdInput: String = ""
     @State private var didHandleInitialAction = false
+    @State private var hasStartedObservation = false
 
-    
     private let stockDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "it_IT")
         formatter.dateFormat = "d MMM"
         return formatter
     }()
-    
-    private func saveContext() {
-        do {
-            try context.save()
-        } catch {
-            print("Errore salvataggio: \(error)")
-        }
-    }
     
     init(
         medicine: Medicine,
@@ -77,21 +60,6 @@ struct MedicineDetailView: View {
         self.package = package
         self.medicinePackage = medicinePackage
         self.initialAction = initialAction
-        let predicate: NSPredicate
-        if let medicinePackage {
-            predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
-                NSPredicate(format: "medicine == %@", medicinePackage.medicine),
-                NSPredicate(format: "package == %@", medicinePackage.package)
-            ])
-        } else {
-            predicate = NSPredicate(format: "medicine == %@", medicine)
-        }
-        _therapies = FetchRequest(
-            entity: Therapy.entity(),
-            sortDescriptors: [NSSortDescriptor(keyPath: \Therapy.start_date, ascending: true)],
-            predicate: predicate
-        )
-        _intakeLogs = FetchRequest(fetchRequest: Log.extractIntakeLogsFiltered(medicine: medicine))
     }
     
     var body: some View {
@@ -141,10 +109,21 @@ struct MedicineDetailView: View {
                 .background(Color(.systemGroupedBackground))
         }
         .onAppear {
-            syncDeadlineInputs()
             guard !didHandleInitialAction else { return }
             didHandleInitialAction = true
             handleInitialAction()
+        }
+        .task {
+            guard !hasStartedObservation else { return }
+            hasStartedObservation = true
+            reloadFetchedState()
+            syncDeadlineInputs()
+            for await _ in appDataStore.provider.observe(
+                scopes: [.medicines, .therapies, .logs, .stocks, .doctors, .options]
+            ) {
+                reloadFetchedState()
+                syncDeadlineInputs()
+            }
         }
         .sheet(isPresented: Binding(
             get: { medicine.obbligo_ricetta && showEmailSheet },
@@ -190,7 +169,6 @@ struct MedicineDetailView: View {
             TherapyFormView(
                 medicine: medicine,
                 package: package,
-                context: context,
                 medicinePackage: medicinePackage,
                 editingTherapy: state.therapy
             )
@@ -198,14 +176,14 @@ struct MedicineDetailView: View {
         }
         .sheet(item: $missedDoseSheet) { state in
             MissedDoseIntakeSheet(candidate: state.candidate) { takenAt, nextAction in
-                let log = actionService.recordMissedDoseIntake(
+                let didRecord = appDataStore.provider.medicines.recordMissedDoseIntake(
                     candidate: state.candidate,
                     takenAt: takenAt,
                     nextAction: nextAction,
                     operationId: state.operationId
                 )
                 if let key = state.operationKey {
-                    handleOperationResult(log, key: key)
+                    handleOperationResult(didRecord, key: key)
                 }
             }
         }
@@ -214,19 +192,44 @@ struct MedicineDetailView: View {
                 .keyboardType(.numberPad)
             Button("Salva") {
                 if let parsed = Int(thresholdInput), parsed >= 1 {
-                    medicine.custom_stock_threshold = Int32(min(parsed, 60))
-                    saveContext()
+                    try? appDataStore.provider.medicines.setCustomStockThreshold(
+                        medicine: medicine,
+                        threshold: Int32(min(parsed, 60))
+                    )
                 }
             }
             Button("Ripristina default (7 gg)") {
-                medicine.custom_stock_threshold = 0
-                saveContext()
+                try? appDataStore.provider.medicines.setCustomStockThreshold(
+                    medicine: medicine,
+                    threshold: 0
+                )
             }
             Button("Annulla", role: .cancel) { }
         } message: {
             Text("Inserisci il numero di giorni sotto cui ricevere l'avviso di scorte basse.")
         }
 
+    }
+
+    private func reloadFetchedState() {
+        do {
+            let snapshot = try appDataStore.provider.medicines.fetchMedicineDetailSnapshot(
+                medicine: medicine,
+                package: package,
+                medicinePackage: medicinePackage
+            )
+            options = snapshot.options
+            doctors = snapshot.doctors
+            allMedicines = snapshot.allMedicines
+            therapies = snapshot.therapies
+            intakeLogs = snapshot.intakeLogs
+        } catch {
+            options = []
+            doctors = []
+            allMedicines = []
+            therapies = []
+            intakeLogs = []
+        }
     }
     
     private func openTherapyForm(for therapy: Therapy?) {
@@ -259,7 +262,7 @@ struct MedicineDetailView: View {
         let therapy: Therapy?
 
         static func edit(_ therapy: Therapy) -> TherapySheetState {
-            TherapySheetState(id: therapy.objectID, therapy: therapy)
+            TherapySheetState(id: therapy.id, therapy: therapy)
         }
 
         static func create() -> TherapySheetState {
@@ -323,9 +326,11 @@ struct MedicineDetailView: View {
 
     private var deadlineTargetEntry: MedicinePackage? {
         if let medicinePackage {
-            return (try? context.existingObject(with: medicinePackage.objectID) as? MedicinePackage) ?? medicinePackage
+            if !medicinePackage.isDeleted, medicinePackage.managedObjectContext != nil {
+                return medicinePackage
+            }
         }
-        return MedicinePackage.latestActiveEntry(for: medicine, package: package, in: context)
+        return MedicinePackage.latestActiveEntry(for: medicine, package: package, in: resolvedContext)
     }
 
     private var deadlineSummaryText: String {
@@ -360,9 +365,7 @@ struct MedicineDetailView: View {
     }
 
     private var stockUnitsForSelectedPackage: Int {
-        guard let context = medicine.managedObjectContext ?? package.managedObjectContext else { return 0 }
-        let stockService = StockService(context: context)
-        return max(0, stockService.units(for: package))
+        max(0, appDataStore.provider.medicines.units(for: package))
     }
 
     private var stockUnitsText: String {
@@ -384,7 +387,7 @@ struct MedicineDetailView: View {
     }
 
     private var estimatedCoverageDaysForSelectedPackage: Double? {
-        let relevant = therapies.filter { $0.package.objectID == package.objectID }
+        let relevant = therapies.filter { $0.package.id == package.id }
         guard !relevant.isEmpty else { return nil }
         var totalDaily: Double = 0
         for therapy in relevant {
@@ -406,7 +409,7 @@ struct MedicineDetailView: View {
     private var lastPurchaseInfoText: String? {
         let allLogs = medicine.logs ?? []
         let purchaseLogs = allLogs
-            .filter { $0.type == "purchase" && $0.package?.objectID == package.objectID }
+            .filter { $0.type == "purchase" && $0.package?.id == package.id }
             .sorted { $0.timestamp > $1.timestamp }
         guard !purchaseLogs.isEmpty else { return nil }
 
@@ -529,7 +532,7 @@ struct MedicineDetailView: View {
                 total + Int(therapy.leftover())
             }
         }
-        return StockService(context: context).units(for: package)
+        return appDataStore.provider.medicines.units(for: package)
     }
     
     private var leftoverColor: Color {
@@ -601,7 +604,7 @@ struct MedicineDetailView: View {
     private var suggestionMedicines: [Medicine] {
         let rec = recurrenceManager
         let filtered = allMedicines.filter { med in
-            med.objectID != medicine.objectID && shouldIncludeInSuggestions(med)
+            med.id != medicine.id && shouldIncludeInSuggestions(med)
         }
         let scored = filtered.map { med -> (Medicine, Double) in
             let coverage = coverageDays(for: med, recurrenceManager: rec) ?? Double.greatestFiniteMagnitude
@@ -625,34 +628,13 @@ struct MedicineDetailView: View {
         if action.label == "Richiedi ricetta", medicine.obbligo_ricetta {
             showEmailSheet = true
         } else {
-            stockService.addPurchase(medicine: medicine, package: package)
+            _ = appDataStore.provider.medicines.addPurchase(medicine: medicine, package: package)
         }
     }
     
     private func deletePackage() {
-        let relatedTherapies = (package.therapies ?? []).filter { $0.medicine == medicine }
-        let relatedEntries = (package.medicinePackages ?? []).filter { $0.medicine == medicine }
-
-        let currentUnits = StockService(context: context).units(for: package)
-        if currentUnits > 0 {
-            stockService.setStockUnits(medicine: medicine, package: package, targetUnits: 0)
-        }
-
-        for therapy in relatedTherapies {
-            if let doses = therapy.doses as? Set<Dose> {
-                for dose in doses {
-                    context.delete(dose)
-                }
-            }
-            context.delete(therapy)
-        }
-
-        for entry in relatedEntries {
-            context.delete(entry)
-        }
-
         do {
-            try context.save()
+            try appDataStore.provider.medicines.deletePackage(medicine: medicine, package: package)
             dismiss()
         } catch {
             print("Errore eliminazione confezione: \(error.localizedDescription)")
@@ -660,35 +642,8 @@ struct MedicineDetailView: View {
     }
     
     private func deleteMedicine() {
-        // Core Data has required relationships (e.g., Log.medicine, Therapy.medicine, Package.medicine),
-        // so we must delete dependents first to avoid validation errors.
-        let relatedLogs = (medicine.logs as? Set<Log>) ?? []
-        let relatedTherapies = (medicine.therapies as? Set<Therapy>) ?? []
-        let relatedPackages = medicine.packages
-        let relatedEntries = medicine.medicinePackages ?? []
-
-        for log in relatedLogs {
-            context.delete(log)
-        }
-        for therapy in relatedTherapies {
-            if let doses = therapy.doses as? Set<Dose> {
-                for dose in doses {
-                    context.delete(dose)
-                }
-            }
-            context.delete(therapy)
-        }
-        for package in relatedPackages {
-            context.delete(package)
-        }
-
-        for entry in relatedEntries {
-            context.delete(entry)
-        }
-
-        context.delete(medicine)
         do {
-            try context.save()
+            try appDataStore.provider.medicines.deleteMedicine(medicine)
             dismiss()
         } catch {
             print("Errore eliminazione medicina: \(error.localizedDescription)")
@@ -709,7 +664,8 @@ struct MedicineDetailView: View {
         guard let targetDoctor = messageTargetDoctor else { return nil }
         guard medicines.allSatisfy({ medicine in
             guard let prescribingDoctor = prescribingDoctor(for: medicine) else { return false }
-            return prescribingDoctor.objectID == targetDoctor.objectID
+            guard let prescribingDoctorId = prescribingDoctor.id, let targetDoctorId = targetDoctor.id else { return false }
+            return prescribingDoctorId == targetDoctorId
         }) else {
             return nil
         }
@@ -740,7 +696,10 @@ struct MedicineDetailView: View {
     }
 
     private func prescribingDoctor(for therapies: [Therapy]) -> Doctor? {
-        let doctorsByID = Dictionary(grouping: therapies.compactMap { $0.prescribingDoctor }) { $0.objectID }
+        let doctorsByID = Dictionary(grouping: therapies.compactMap { therapy -> Doctor? in
+            guard let doctor = therapy.prescribingDoctor, doctor.id != nil else { return nil }
+            return doctor
+        }) { $0.id! }
         guard doctorsByID.count == 1 else { return nil }
         return doctorsByID.values.first?.first
     }
@@ -794,7 +753,7 @@ extension MedicineDetailView {
             Stepper(
                 value: Binding(
                     get: { stockUnitsForSelectedPackage },
-                    set: { stockService.setStockUnits(medicine: medicine, package: package, targetUnits: $0) }
+                    set: { appDataStore.provider.medicines.setStockUnits(medicine: medicine, package: package, targetUnits: $0) }
                 ),
                 in: 0...9999
             ) {
@@ -861,7 +820,7 @@ extension MedicineDetailView {
             .disabled(!canMarkTakenForSelectedPackage)
 
             Button {
-                stockService.addPurchase(medicine: medicine, package: package)
+                _ = appDataStore.provider.medicines.addPurchase(medicine: medicine, package: package)
             } label: {
                 Label("Confezione acquistata (\(packageUnitSize))", systemImage: "cart.fill")
                     .frame(maxWidth: .infinity)
@@ -880,7 +839,7 @@ extension MedicineDetailView {
                         .font(.footnote)
                 }
             } else {
-                ForEach(therapies, id: \.objectID) { therapy in
+                ForEach(therapies, id: \.id) { therapy in
                     Button {
                         openTherapyForm(for: therapy)
                     } label: {
@@ -976,9 +935,13 @@ extension MedicineDetailView {
     private func clearDeadline() {
         deadlineMonthInput = ""
         deadlineYearInput = ""
-        guard let entry = deadlineTargetEntry else { return }
-        entry.updateDeadline(month: nil, year: nil)
-        saveContext()
+        try? appDataStore.provider.medicines.updateDeadline(
+            medicine: medicine,
+            package: package,
+            preferredEntry: deadlineTargetEntry,
+            month: nil,
+            year: nil
+        )
     }
 
     private func updateDeadlineFromInputs() {
@@ -997,9 +960,13 @@ extension MedicineDetailView {
             return
         }
 
-        guard let entry = deadlineTargetEntry else { return }
-        entry.updateDeadline(month: month, year: year)
-        saveContext()
+        try? appDataStore.provider.medicines.updateDeadline(
+            medicine: medicine,
+            package: package,
+            preferredEntry: deadlineTargetEntry,
+            month: month,
+            year: year
+        )
     }
 
 }
@@ -1017,7 +984,7 @@ private struct EmailRequestSheet: View {
     let onCopy: ([Medicine]) -> Void
     let onSend: ([Medicine]) -> Void
     
-    @State private var selectedMedicines: Set<NSManagedObjectID>
+    @State private var selectedMedicines: Set<UUID>
     @State private var mailComposeData: MailComposeData?
     @State private var showMailFallbackAlert = false
     @Environment(\.dismiss) private var dismiss
@@ -1039,7 +1006,7 @@ private struct EmailRequestSheet: View {
         self.emailBuilder = emailBuilder
         self.onCopy = onCopy
         self.onSend = onSend
-        _selectedMedicines = State(initialValue: [primaryMedicine.objectID])
+        _selectedMedicines = State(initialValue: [primaryMedicine.id])
     }
     
     var body: some View {
@@ -1105,11 +1072,11 @@ private struct EmailRequestSheet: View {
                         .foregroundStyle(.secondary)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
-                            ForEach(availableMedicines, id: \.objectID) { med in
+                            ForEach(availableMedicines, id: \.id) { med in
                                 Button {
                                     toggleSelection(for: med)
                                 } label: {
-                                    let isSelected = selectedMedicines.contains(med.objectID)
+                                    let isSelected = selectedMedicines.contains(med.id)
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(med.nome)
                                             .font(.subheadline.weight(.semibold))
@@ -1233,14 +1200,14 @@ private struct EmailRequestSheet: View {
     }
     
     private var selectedList: [Medicine] {
-        availableMedicines.filter { selectedMedicines.contains($0.objectID) }
+        availableMedicines.filter { selectedMedicines.contains($0.id) }
     }
     
     private var availableMedicines: [Medicine] {
         var result: [Medicine] = []
         result.append(primaryMedicine)
         for med in baseMedicines {
-            if med.objectID != primaryMedicine.objectID {
+            if med.id != primaryMedicine.id {
                 result.append(med)
             }
         }
@@ -1248,7 +1215,7 @@ private struct EmailRequestSheet: View {
     }
     
     private func toggleSelection(for med: Medicine) {
-        let id = med.objectID
+        let id = med.id
         if selectedMedicines.contains(id) {
             if selectedMedicines.count > 1 {
                 selectedMedicines.remove(id)
@@ -1307,19 +1274,10 @@ private struct EmailRequestSheet: View {
 
 // MARK: - Logs modal
 struct MedicineLogsView: View {
-    @Environment(\.managedObjectContext) private var context
+    @EnvironmentObject private var appDataStore: AppDataStore
     let medicine: Medicine
-    
-    @FetchRequest var logs: FetchedResults<Log>
-    
-    init(medicine: Medicine) {
-        self.medicine = medicine
-        _logs = FetchRequest(
-            entity: Log.entity(),
-            sortDescriptors: [NSSortDescriptor(keyPath: \Log.timestamp, ascending: false)],
-            predicate: NSPredicate(format: "medicine == %@", medicine)
-        )
-    }
+    @State private var logs: [Log] = []
+    @State private var hasStartedObservation = false
     
     var body: some View {
         List {
@@ -1327,7 +1285,7 @@ struct MedicineLogsView: View {
                 Text("Nessun log disponibile.")
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(logs, id: \.objectID) { log in
+                ForEach(logs, id: \.id) { log in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(log.type ?? "Evento")
                             .font(.headline)
@@ -1345,6 +1303,14 @@ struct MedicineLogsView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .task {
+            guard !hasStartedObservation else { return }
+            hasStartedObservation = true
+            loadLogs()
+            for await _ in appDataStore.provider.observe(scopes: [.logs, .medicines]) {
+                loadLogs()
+            }
+        }
     }
     
     private func packageSummary(_ pkg: Package) -> String {
@@ -1356,6 +1322,10 @@ struct MedicineLogsView: View {
         df.dateStyle = .medium
         df.timeStyle = .short
         return df
+    }
+
+    private func loadLogs() {
+        logs = (try? appDataStore.provider.medicines.loadLogs(medicine: medicine)) ?? []
     }
 }
 

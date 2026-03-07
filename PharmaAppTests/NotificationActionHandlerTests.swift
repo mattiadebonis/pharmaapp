@@ -1,5 +1,4 @@
 import Foundation
-import CoreData
 import UserNotifications
 import Testing
 @testable import PharmaApp
@@ -37,12 +36,8 @@ private final class ActionHandlerNotificationCenterClient: NotificationCenterCli
 @MainActor
 struct NotificationActionHandlerTests {
     @Test func stopRemovesWholeAlarmSeries() async throws {
-        let container = try TestCoreDataFactory.makeContainer()
-        let context = container.viewContext
-        try insertOption(into: context, snoozeMinutes: 10)
-
         let center = ActionHandlerNotificationCenterClient()
-        let handler = NotificationActionHandler(center: center, context: context)
+        let handler = NotificationActionHandler(center: center)
 
         let seriesId = UUID().uuidString
         let requestIdentifier = TherapyNotificationPreferences.alarmIdentifier(seriesId: seriesId, index: 0)
@@ -62,12 +57,8 @@ struct NotificationActionHandlerTests {
     }
 
     @Test func snoozeRemovesOldSeriesAndSchedulesNewSeries() async throws {
-        let container = try TestCoreDataFactory.makeContainer()
-        let context = container.viewContext
-        try insertOption(into: context, snoozeMinutes: 15)
-
         let center = ActionHandlerNotificationCenterClient()
-        let handler = NotificationActionHandler(center: center, context: context)
+        let handler = NotificationActionHandler(center: center)
 
         let now = Date(timeIntervalSince1970: 1_739_000_000)
         let oldSeriesId = UUID().uuidString
@@ -124,18 +115,5 @@ struct NotificationActionHandlerTests {
             TherapyAlarmNotificationConstants.alarmSeriesIdKey: seriesId
         ]
         return content
-    }
-
-    private func insertOption(into context: NSManagedObjectContext, snoozeMinutes: Int) throws {
-        guard let entity = NSEntityDescription.entity(forEntityName: "Option", in: context) else {
-            throw NSError(domain: "NotificationActionHandlerTests", code: 1)
-        }
-        let option = Option(entity: entity, insertInto: context)
-        option.id = UUID()
-        option.manual_intake_registration = false
-        option.day_threeshold_stocks_alarm = 7
-        option.therapy_notification_level = TherapyNotificationLevel.alarm.rawValue
-        option.therapy_snooze_minutes = Int32(snoozeMinutes)
-        try context.save()
     }
 }

@@ -13,10 +13,11 @@ struct PersonDetailView: View {
         case codiceFiscale
     }
 
-    @Environment(\.managedObjectContext) private var managedObjectContext
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appDataStore: AppDataStore
     @EnvironmentObject private var auth: AuthViewModel
-    @ObservedObject var person: Person
+    private let personId: UUID
+    private let isAccount: Bool
     private let showsLogoutAction: Bool
 
     @State private var nome: String
@@ -27,13 +28,15 @@ struct PersonDetailView: View {
     @State private var showLogoutConfirmation = false
     @State private var autosaveTask: Task<Void, Never>?
     @State private var isDeleting = false
+    @State private var didLoadFromStore = false
     @FocusState private var focusedField: Field?
 
-    init(person: Person, showsLogoutAction: Bool = true) {
-        self.person = person
+    init(person: SettingsPersonRecord, showsLogoutAction: Bool = true) {
+        self.personId = person.id
+        self.isAccount = person.isAccount
         self.showsLogoutAction = showsLogoutAction
-        _nome = State(initialValue: person.nome ?? "")
-        _codiceFiscale = State(initialValue: person.codice_fiscale ?? "")
+        _nome = State(initialValue: person.name ?? "")
+        _codiceFiscale = State(initialValue: person.codiceFiscale ?? "")
     }
 
     var body: some View {
@@ -61,7 +64,7 @@ struct PersonDetailView: View {
                 }
             }
 
-            if person.is_account {
+            if isAccount {
                 Section(header: Text("Account")) {
                     LabeledContent("Provider", value: providerText)
                     LabeledContent("Nome", value: accountDisplayName)
@@ -77,7 +80,7 @@ struct PersonDetailView: View {
                 }
             }
 
-            if person.is_account, auth.user != nil, showsLogoutAction {
+            if isAccount, auth.user != nil, showsLogoutAction {
                 Section {
                     Button(role: .destructive) {
                         showLogoutConfirmation = true
@@ -87,7 +90,7 @@ struct PersonDetailView: View {
                 }
             }
 
-            if !person.is_account {
+            if !isAccount {
                 Section {
                     Button(role: .destructive) {
                         showDeleteConfirmation = true
@@ -117,6 +120,11 @@ struct PersonDetailView: View {
         .onDisappear {
             autosaveTask?.cancel()
             saveChanges(showValidationMessage: false)
+        }
+        .onAppear {
+            guard !didLoadFromStore else { return }
+            didLoadFromStore = true
+            reloadPersonFromStore()
         }
         .sheet(isPresented: $isScannerPresented) {
             if #available(iOS 16.0, *) {
@@ -154,7 +162,7 @@ struct PersonDetailView: View {
     }
 
     private var accountDisplayName: String {
-        let fallbackName = normalizedValue(from: nome) ?? normalizedValue(from: person.nome ?? "") ?? "Account"
+        let fallbackName = normalizedValue(from: nome) ?? "Account"
         guard let authUser = auth.user else { return fallbackName }
         return normalizedValue(from: authUser.displayName ?? "") ?? fallbackName
     }
@@ -175,48 +183,40 @@ struct PersonDetailView: View {
     }
 
     private func saveChanges(showValidationMessage: Bool = true) {
-        guard !isDeleting, !person.isDeleted else { return }
+        guard !isDeleting else { return }
 
         let normalizedCF = CodiceFiscaleValidator.normalize(codiceFiscale)
         let canPersistCodiceFiscale = normalizedCF.isEmpty || CodiceFiscaleValidator.isValid(normalizedCF)
 
-        person.nome = normalizedValue(from: nome)
-        person.cognome = nil
-        person.condizione = nil
-
         if canPersistCodiceFiscale {
-            person.codice_fiscale = normalizedCF.isEmpty ? nil : normalizedCF
-            errorMessage = nil
+            do {
+                _ = try appDataStore.provider.settings.savePerson(
+                    PersonWriteInput(
+                        id: personId,
+                        name: normalizedValue(from: nome),
+                        codiceFiscale: normalizedCF.isEmpty ? nil : normalizedCF,
+                        isAccount: isAccount
+                    )
+                )
+                errorMessage = nil
+            } catch {
+                errorMessage = error.localizedDescription
+                print("Errore nel salvataggio della persona: \(error.localizedDescription)")
+            }
         } else if showValidationMessage {
             errorMessage = "Il Codice Fiscale deve avere 16 caratteri alfanumerici."
         } else {
             errorMessage = nil
-        }
-
-        let context = person.managedObjectContext ?? managedObjectContext
-        do {
-            if context.hasChanges {
-                try context.save()
-            }
-            if canPersistCodiceFiscale {
-                errorMessage = nil
-            }
-        } catch {
-            context.rollback()
-            errorMessage = error.localizedDescription
-            print("Errore nel salvataggio della persona: \(error.localizedDescription)")
         }
     }
 
     private func deletePerson() {
         isDeleting = true
         autosaveTask?.cancel()
-        let context = person.managedObjectContext ?? managedObjectContext
         do {
-            try PersonDeletionService.shared.delete(person, in: context)
+            try appDataStore.provider.settings.deletePerson(id: personId)
             dismiss()
         } catch {
-            context.rollback()
             errorMessage = error.localizedDescription
             print("Errore nell'eliminazione della persona: \(error.localizedDescription)")
         }
@@ -238,6 +238,18 @@ struct PersonDetailView: View {
             await MainActor.run {
                 saveChanges(showValidationMessage: focusedField != .codiceFiscale)
             }
+        }
+    }
+
+    private func reloadPersonFromStore() {
+        guard !isDeleting else { return }
+        do {
+            guard let person = try appDataStore.provider.settings.person(id: personId) else { return }
+            nome = person.name ?? ""
+            codiceFiscale = person.codiceFiscale ?? ""
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }

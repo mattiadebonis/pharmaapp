@@ -103,9 +103,9 @@ func makeDrawerSubtitle(drawer: Cabinet, now: Date = Date()) -> DrawerAggregateS
     let recurrenceManager = RecurrenceManager(context: context)
 
     var uniqueTherapies: [Therapy] = []
-    var therapyIds = Set<NSManagedObjectID>()
+    var therapyIds = Set<UUID>()
     for entry in entries {
-        for therapy in therapies(for: entry) where therapyIds.insert(therapy.objectID).inserted {
+        for therapy in therapies(for: entry) where therapyIds.insert(therapy.id).inserted {
             uniqueTherapies.append(therapy)
         }
     }
@@ -215,11 +215,11 @@ private func stockDays(for medicine: Medicine, therapies: Set<Therapy>, recurren
 
 private func therapies(for entry: MedicinePackage) -> Set<Therapy> {
     let linked = (entry.therapies ?? []).filter {
-        $0.medicine.objectID == entry.medicine.objectID
-            && $0.package.objectID == entry.package.objectID
+        $0.medicine.id == entry.medicine.id
+            && $0.package.id == entry.package.id
     }
     let fallback = (entry.medicine.therapies ?? []).filter {
-        $0.package.objectID == entry.package.objectID
+        $0.package.id == entry.package.id
     }
     return Set(linked).union(fallback)
 }

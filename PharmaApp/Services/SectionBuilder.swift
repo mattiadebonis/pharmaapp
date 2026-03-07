@@ -23,7 +23,7 @@ func computeSections(for medicines: [Medicine], option: Option?) -> (purchase: [
     let cal = Calendar.current
     let fallbackContext = medicines.first?.managedObjectContext ?? PersistenceController.shared.container.viewContext
     let stockService = StockService(context: fallbackContext)
-    var metricsByID: [NSManagedObjectID: EntryMetrics] = [:]
+    var metricsByID: [UUID: EntryMetrics] = [:]
 
     for medicine in medicines {
         let therapies = Array(medicine.therapies ?? [])
@@ -107,7 +107,7 @@ func computeSections(for medicines: [Medicine], option: Option?) -> (purchase: [
             }
         }
 
-        metricsByID[medicine.objectID] = EntryMetrics(
+        metricsByID[medicine.id] = EntryMetrics(
             stockStatus: stockStatus,
             remainingUnits: remainingUnits,
             nextOccurrence: nextOccurrence,
@@ -118,7 +118,7 @@ func computeSections(for medicines: [Medicine], option: Option?) -> (purchase: [
     }
 
     func metrics(for medicine: Medicine) -> EntryMetrics {
-        metricsByID[medicine.objectID]
+        metricsByID[medicine.id]
             ?? EntryMetrics(
                 stockStatus: .unknown,
                 remainingUnits: nil,
@@ -210,15 +210,15 @@ func computeSections(for entries: [MedicinePackage], option: Option?) -> (purcha
     let cal = Calendar.current
     let fallbackContext = entries.first?.managedObjectContext ?? PersistenceController.shared.container.viewContext
     let stockService = StockService(context: fallbackContext)
-    var metricsByID: [NSManagedObjectID: EntryMetrics] = [:]
+    var metricsByID: [UUID: EntryMetrics] = [:]
 
     func therapies(for entry: MedicinePackage) -> [Therapy] {
         let linked = (entry.therapies ?? []).filter {
-            $0.medicine.objectID == entry.medicine.objectID
-                && $0.package.objectID == entry.package.objectID
+            $0.medicine.id == entry.medicine.id
+                && $0.package.id == entry.package.id
         }
         let fallback = (entry.medicine.therapies ?? []).filter {
-            $0.package.objectID == entry.package.objectID
+            $0.package.id == entry.package.id
         }
         return Array(Set(linked).union(fallback))
     }
@@ -295,7 +295,7 @@ func computeSections(for entries: [MedicinePackage], option: Option?) -> (purcha
             }
         }
 
-        metricsByID[entry.objectID] = EntryMetrics(
+        metricsByID[entry.id] = EntryMetrics(
             stockStatus: stockStatus,
             remainingUnits: remainingUnits,
             nextOccurrence: nextOccurrence,
@@ -306,7 +306,7 @@ func computeSections(for entries: [MedicinePackage], option: Option?) -> (purcha
     }
 
     func metrics(for entry: MedicinePackage) -> EntryMetrics {
-        metricsByID[entry.objectID]
+        metricsByID[entry.id]
             ?? EntryMetrics(
                 stockStatus: .unknown,
                 remainingUnits: nil,

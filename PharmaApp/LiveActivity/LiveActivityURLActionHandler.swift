@@ -21,18 +21,15 @@ final class LiveActivityURLActionHandler {
 
     private let actionPerformer: CriticalDoseActionPerforming
     private let liveActivityRefresher: CriticalDoseLiveActivityRefreshing
-    private let routeStore: PendingAppRouteStoring
     private let config: CriticalDoseLiveActivityConfig
 
     init(
         actionPerformer: CriticalDoseActionPerforming? = nil,
         liveActivityRefresher: CriticalDoseLiveActivityRefreshing? = nil,
-        routeStore: PendingAppRouteStoring = PendingAppRouteStore(),
         config: CriticalDoseLiveActivityConfig = .default
     ) {
-        self.actionPerformer = actionPerformer ?? CriticalDoseActionService.shared
-        self.liveActivityRefresher = liveActivityRefresher ?? CriticalDoseLiveActivityCoordinator.shared
-        self.routeStore = routeStore
+        self.actionPerformer = actionPerformer ?? GatewayCriticalDoseActionPerformer()
+        self.liveActivityRefresher = liveActivityRefresher ?? GatewayCriticalDoseLiveActivityRefresher()
         self.config = config
     }
 
@@ -66,7 +63,7 @@ final class LiveActivityURLActionHandler {
             _ = await actionPerformer.remindLater(contentState: state, now: now)
             _ = await liveActivityRefresher.refresh(reason: "url-\(action.rawValue)", now: nil)
         case .openHealthCard:
-            routeStore.save(route: .codiceFiscaleFullscreen)
+            IntentsGatewayBridge.gateway.queueRoute(.codiceFiscaleFullscreen)
         }
 
         return true

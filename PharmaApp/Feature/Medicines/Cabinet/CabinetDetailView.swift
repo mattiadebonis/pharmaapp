@@ -1,22 +1,22 @@
 import SwiftUI
-import CoreData
 
 /// Dettaglio di un cabinet con elenco dei medicinali contenuti.
 struct CabinetDetailView: View {
     private struct DetailRow: Identifiable {
         let entry: MedicinePackage
 
-        var id: NSManagedObjectID { entry.objectID }
+        var id: UUID { entry.id }
     }
 
     let cabinet: Cabinet
     let entries: [MedicinePackage]
     @ObservedObject var viewModel: CabinetViewModel
+    @EnvironmentObject private var appDataStore: AppDataStore
     @EnvironmentObject private var favoritesStore: FavoritesStore
     @Environment(\.dismiss) private var dismiss
     
-    @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
-    @FetchRequest(fetchRequest: Cabinet.extractCabinets()) private var cabinets: FetchedResults<Cabinet>
+    @State private var options: [Option] = []
+    @State private var cabinets: [Cabinet] = []
     
     @State private var selectedEntry: MedicinePackage?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
@@ -24,6 +24,7 @@ struct CabinetDetailView: View {
     @State private var entryToMove: MedicinePackage?
     @State private var isDeleteDialogPresented = false
     @State private var isMoveCabinetSheetPresented = false
+    @State private var hasStartedObservation = false
     
     var body: some View {
         let rows = buildRows()
@@ -77,10 +78,16 @@ struct CabinetDetailView: View {
         .sheet(item: $entryToMove) { entry in
             MoveToCabinetSheet(
                 entry: entry,
-                cabinets: Array(cabinets),
+                cabinets: cabinets,
                 onSelect: { cabinet in
-                    entry.cabinet = cabinet
-                    saveContext()
+                    do {
+                        try appDataStore.provider.medicines.moveEntry(
+                            entryId: entry.id,
+                            toCabinet: cabinet?.id
+                        )
+                    } catch {
+                        // Keep behavior unchanged: ignore persistence errors in move flow.
+                    }
                 }
             )
             .presentationDetents([PresentationDetent.medium, PresentationDetent.large])
@@ -117,6 +124,16 @@ struct CabinetDetailView: View {
             Button("Annulla", role: .cancel) { }
         } message: {
             Text("Cosa vuoi fare con i medicinali di questo armadietto?")
+        }
+        .task {
+            guard !hasStartedObservation else { return }
+            hasStartedObservation = true
+            reloadFetchedState()
+            for await _ in appDataStore.provider.observe(
+                scopes: [.medicines, .therapies, .logs, .stocks, .cabinets, .options]
+            ) {
+                reloadFetchedState()
+            }
         }
     }
 
@@ -191,8 +208,7 @@ struct CabinetDetailView: View {
     }
 
     private func hasSufficientStockForIntake(_ entry: MedicinePackage) -> Bool {
-        guard let context = entry.managedObjectContext ?? entry.package.managedObjectContext else { return false }
-        return StockService(context: context).unitsReadOnly(for: entry.package) > 0
+        appDataStore.provider.medicines.hasSufficientStockForIntake(entryId: entry.id)
     }
     
     private func shouldShowPrescriptionAction(for entry: MedicinePackage) -> Bool {
@@ -220,31 +236,31 @@ struct CabinetDetailView: View {
         }
     }
     
-    private func saveContext() {
-        do {
-            try PersistenceController.shared.container.viewContext.save()
-        } catch {
-            print("Errore salvataggio: \(error)")
-        }
-    }
-
     private var moveTargets: [Cabinet] {
-        cabinets.filter { $0.objectID != cabinet.objectID }
+        cabinets.filter { $0.id != cabinet.id }
     }
 
     private func deleteCabinet(movingMedicinesTo target: Cabinet?) {
         isMoveCabinetSheetPresented = false
-        let context = cabinet.managedObjectContext ?? PersistenceController.shared.container.viewContext
-        let entriesToUpdate = Array(cabinet.medicinePackages ?? [])
-        for entry in entriesToUpdate {
-            entry.cabinet = target
-        }
-        context.delete(cabinet)
         do {
-            try context.save()
+            try appDataStore.provider.medicines.deleteCabinet(
+                cabinetId: cabinet.id,
+                moveToCabinetId: target?.id
+            )
             dismiss()
         } catch {
             print("Errore eliminazione armadietto: \(error)")
+        }
+    }
+
+    private func reloadFetchedState() {
+        do {
+            let snapshot = try appDataStore.provider.medicines.fetchCabinetSnapshot()
+            options = snapshot.options
+            cabinets = snapshot.cabinets
+        } catch {
+            options = []
+            cabinets = []
         }
     }
 }
@@ -272,7 +288,7 @@ private struct MoveCabinetSelectionSheet: View {
                             }
                         }
                     }
-                    ForEach(cabinets, id: \.objectID) { cabinet in
+                    ForEach(cabinets, id: \.id) { cabinet in
                         Button {
                             onSelect(cabinet)
                             dismiss()

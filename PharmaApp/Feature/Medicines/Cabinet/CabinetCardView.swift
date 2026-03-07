@@ -91,7 +91,7 @@ struct CabinetCardView: View {
     }
 
     private var therapyCount: Int {
-        let unique = Set(therapiesInCabinet.map(\.objectID))
+        let unique = Set(therapiesInCabinet.map(\.id))
         return unique.count
     }
     
@@ -110,11 +110,11 @@ struct CabinetCardView: View {
 
     private func therapies(for entry: MedicinePackage) -> [Therapy] {
         let linked = (entry.therapies ?? []).filter {
-            $0.medicine.objectID == entry.medicine.objectID
-                && $0.package.objectID == entry.package.objectID
+            $0.medicine.id == entry.medicine.id
+                && $0.package.id == entry.package.id
         }
         let fallback = (entry.medicine.therapies ?? []).filter {
-            $0.package.objectID == entry.package.objectID
+            $0.package.id == entry.package.id
         }
         return Array(Set(linked).union(fallback))
     }

@@ -5,8 +5,8 @@ struct LiveActivityMarkTakenIntent: AppIntent {
     static var title: LocalizedStringResource = "Assunto"
     static var description = IntentDescription("Segna come assunta la dose principale della Live Activity È quasi ora.")
     static var openAppWhenRun = false
-    @MainActor static var actionPerformer: CriticalDoseActionPerforming = CriticalDoseActionService.shared
-    @MainActor static var liveActivityRefresher: CriticalDoseLiveActivityRefreshing = CriticalDoseLiveActivityCoordinator.shared
+    @MainActor static var actionPerformer: CriticalDoseActionPerforming = GatewayCriticalDoseActionPerformer()
+    @MainActor static var liveActivityRefresher: CriticalDoseLiveActivityRefreshing = GatewayCriticalDoseLiveActivityRefresher()
 
     @Parameter(title: "Terapia")
     var therapyId: String

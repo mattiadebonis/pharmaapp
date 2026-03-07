@@ -7,7 +7,9 @@ struct ShowCodiceFiscaleIntent: AppIntent {
     static var openAppWhenRun = true
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        SiriIntentFacade.shared.queueRoute(.codiceFiscaleFullscreen)
+        await MainActor.run {
+            IntentsGatewayBridge.gateway.queueRoute(.codiceFiscaleFullscreen)
+        }
         return .result(dialog: SiriIntentSupport.dialog("Ti apro i codici fiscali associati alle ricette in corso."))
     }
 }

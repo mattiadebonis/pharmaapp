@@ -1,5 +1,4 @@
 import Foundation
-import CoreData
 
 final class AdherenceDashboardViewModel: ObservableObject {
     @Published private(set) var adherencePercentage: Double = 0
@@ -26,19 +25,22 @@ final class AdherenceDashboardViewModel: ObservableObject {
     private let calendar: Calendar
     private let recurrenceManager: RecurrenceManager
     private let doseEventGenerator: DoseEventGenerator
-    private let context: NSManagedObjectContext
 
-    init(
-        calendar: Calendar = .current,
-        context: NSManagedObjectContext = PersistenceController.shared.container.viewContext
-    ) {
+    init(calendar: Calendar = .current) {
         self.calendar = calendar
-        self.context = context
-        self.recurrenceManager = RecurrenceManager(context: context)
-        self.doseEventGenerator = DoseEventGenerator(context: context, calendar: calendar)
+        let defaultContext = PersistenceController.shared.container.viewContext
+        self.recurrenceManager = RecurrenceManager(context: defaultContext)
+        self.doseEventGenerator = DoseEventGenerator(context: defaultContext, calendar: calendar)
     }
 
-    func reload(therapies: [Therapy], logs: [Log], range: StatisticsRange) {
+    func reload(
+        therapies: [Therapy],
+        logs: [Log],
+        medicines: [Medicine],
+        purchaseLogs: [Log],
+        monitoringMeasurements: [MonitoringMeasurement],
+        range: StatisticsRange
+    ) {
         let endDay = calendar.startOfDay(for: Date())
         let earliestTherapyDate = therapies.compactMap { $0.start_date }.min()
         let earliestLogDate = logs.filter { $0.type == "intake" }.map { $0.timestamp }.min()
@@ -56,13 +58,13 @@ final class AdherenceDashboardViewModel: ObservableObject {
             dayAdherence = []
             overallTrend = []
             therapyTimeStats = []
-            let coverage = computeStockCoverage()
+            let coverage = computeStockCoverage(medicines: medicines)
             stockCoverageDays = coverage.days
             stockCoverageMedicineName = coverage.medicineName
             stockThreshold = coverage.threshold
             stockSummary = coverage.summary
             medicineCoverages = coverage.coverages
-            let earlyRefill = computeEarlyRefillCount()
+            let earlyRefill = computeEarlyRefillCount(purchaseLogs: purchaseLogs)
             earlyRefillCount = earlyRefill.early
             earlyRefillTotal = earlyRefill.total
             earlyRefillRatio = earlyRefill.total > 0 ? Double(earlyRefill.early) / Double(earlyRefill.total) : 0
@@ -99,7 +101,7 @@ final class AdherenceDashboardViewModel: ObservableObject {
         therapyTimeStats = computeTherapyTimeStats(effectiveLogs: effectiveLogs, therapies: therapies)
 
         // Stock coverage
-        let coverage = computeStockCoverage()
+        let coverage = computeStockCoverage(medicines: medicines)
         stockCoverageDays = coverage.days
         stockCoverageMedicineName = coverage.medicineName
         stockThreshold = coverage.threshold
@@ -107,7 +109,7 @@ final class AdherenceDashboardViewModel: ObservableObject {
         medicineCoverages = coverage.coverages
 
         // Early refill count
-        let earlyRefill = computeEarlyRefillCount()
+        let earlyRefill = computeEarlyRefillCount(purchaseLogs: purchaseLogs)
         earlyRefillCount = earlyRefill.early
         earlyRefillTotal = earlyRefill.total
         earlyRefillRatio = earlyRefill.total > 0 ? Double(earlyRefill.early) / Double(earlyRefill.total) : 0
@@ -121,7 +123,8 @@ final class AdherenceDashboardViewModel: ObservableObject {
         therapyMonitoringCorrelation = computeTherapyMonitoringCorrelation(
             therapies: therapies,
             startDay: rangeStartDay,
-            endDay: endDay
+            endDay: endDay,
+            monitoringMeasurements: monitoringMeasurements
         )
     }
 
@@ -197,13 +200,13 @@ final class AdherenceDashboardViewModel: ObservableObject {
 
         struct DayMedicineKey: Hashable {
             let day: Date
-            let medicineId: NSManagedObjectID
+            let medicineId: String
         }
 
         var eventsByKey: [DayMedicineKey: [DoseEvent]] = [:]
         for event in events {
             let day = calendar.startOfDay(for: event.date)
-            let key = DayMedicineKey(day: day, medicineId: event.medicineId)
+            let key = DayMedicineKey(day: day, medicineId: medicineKey(event.medicineId))
             eventsByKey[key, default: []].append(event)
         }
 
@@ -214,7 +217,7 @@ final class AdherenceDashboardViewModel: ObservableObject {
 
         for log in intakeLogs {
             let day = calendar.startOfDay(for: log.timestamp)
-            let key = DayMedicineKey(day: day, medicineId: log.medicine.objectID)
+            let key = DayMedicineKey(day: day, medicineId: medicineKey(log.medicine))
 
             guard let candidates = eventsByKey[key], !candidates.isEmpty else { continue }
 
@@ -282,13 +285,13 @@ final class AdherenceDashboardViewModel: ObservableObject {
 
         struct DayMedicineKey: Hashable {
             let day: Date
-            let medicineId: NSManagedObjectID
+            let medicineId: String
         }
 
         var eventsByKey: [DayMedicineKey: [DoseEvent]] = [:]
         for event in events {
             let day = calendar.startOfDay(for: event.date)
-            let key = DayMedicineKey(day: day, medicineId: event.medicineId)
+            let key = DayMedicineKey(day: day, medicineId: medicineKey(event.medicineId))
             eventsByKey[key, default: []].append(event)
         }
 
@@ -299,7 +302,7 @@ final class AdherenceDashboardViewModel: ObservableObject {
 
         for log in intakeLogs {
             let day = calendar.startOfDay(for: log.timestamp)
-            let key = DayMedicineKey(day: day, medicineId: log.medicine.objectID)
+            let key = DayMedicineKey(day: day, medicineId: medicineKey(log.medicine))
             guard let candidates = eventsByKey[key], !candidates.isEmpty else { continue }
 
             var used = usedIndices[key] ?? []
@@ -341,13 +344,13 @@ final class AdherenceDashboardViewModel: ObservableObject {
 
         struct DayMedicineKey: Hashable {
             let day: Date
-            let medicineId: NSManagedObjectID
+            let medicineId: String
         }
 
         var eventsByKey: [DayMedicineKey: [DoseEvent]] = [:]
         for event in events {
             let day = calendar.startOfDay(for: event.date)
-            let key = DayMedicineKey(day: day, medicineId: event.medicineId)
+            let key = DayMedicineKey(day: day, medicineId: medicineKey(event.medicineId))
             eventsByKey[key, default: []].append(event)
         }
 
@@ -360,7 +363,7 @@ final class AdherenceDashboardViewModel: ObservableObject {
 
         for log in intakeLogs {
             let day = calendar.startOfDay(for: log.timestamp)
-            let key = DayMedicineKey(day: day, medicineId: log.medicine.objectID)
+            let key = DayMedicineKey(day: day, medicineId: medicineKey(log.medicine))
             guard let candidates = eventsByKey[key], !candidates.isEmpty else { continue }
 
             var used = usedIndices[key] ?? []
@@ -424,17 +427,17 @@ final class AdherenceDashboardViewModel: ObservableObject {
     // MARK: - Therapy Time Stats
 
     private func computeTherapyTimeStats(effectiveLogs: [Log], therapies: [Therapy]) -> [TherapyTimeStat] {
-        var logsByMed: [NSManagedObjectID: [Double]] = [:]
+        var logsByMed: [UUID: [Double]] = [:]
         for log in effectiveLogs {
             let c = calendar.dateComponents([.hour, .minute], from: log.timestamp)
             let minutes = Double((c.hour ?? 0) * 60 + (c.minute ?? 0))
-            logsByMed[log.medicine.objectID, default: []].append(minutes)
+            logsByMed[log.medicine.id, default: []].append(minutes)
         }
 
         var stats: [TherapyTimeStat] = []
-        var seen = Set<NSManagedObjectID>()
+        var seen = Set<UUID>()
         for therapy in therapies {
-            let medID = therapy.medicine.objectID
+            let medID = therapy.medicine.id
             guard seen.insert(medID).inserted else { continue }
             guard let times = logsByMed[medID], times.count >= 2 else { continue }
             let avg = times.reduce(0, +) / Double(times.count)
@@ -452,15 +455,7 @@ final class AdherenceDashboardViewModel: ObservableObject {
 
     // MARK: - Stock Coverage
 
-    private func computeStockCoverage() -> (days: Int, medicineName: String, threshold: Int, summary: StockSummary, coverages: [MedicineCoverage]) {
-        let request = Medicine.extractMedicines()
-        let medicines: [Medicine]
-        do {
-            medicines = try context.fetch(request)
-        } catch {
-            return (0, "", 7, .empty, [])
-        }
-
+    private func computeStockCoverage(medicines: [Medicine]) -> (days: Int, medicineName: String, threshold: Int, summary: StockSummary, coverages: [MedicineCoverage]) {
         var minCoverage = Int.max
         var minMedicineName = ""
         var minThreshold = 7
@@ -516,18 +511,15 @@ final class AdherenceDashboardViewModel: ObservableObject {
 
     // MARK: - Early Refill Count
 
-    private func computeEarlyRefillCount() -> (early: Int, total: Int) {
-        guard let cutoff = calendar.date(byAdding: .day, value: -30, to: Date()) else { return (0, 0) }
-        guard let request = Log.fetchRequest() as? NSFetchRequest<Log> else { return (0, 0) }
-        request.predicate = NSPredicate(format: "type == 'purchase' AND timestamp >= %@", cutoff as NSDate)
-        guard let purchases = try? context.fetch(request), !purchases.isEmpty else { return (0, 0) }
+    private func computeEarlyRefillCount(purchaseLogs: [Log]) -> (early: Int, total: Int) {
+        guard !purchaseLogs.isEmpty else { return (0, 0) }
 
-        var countedMeds = Set<NSManagedObjectID>()
+        var countedMeds = Set<UUID>()
         var earlyCount = 0
         var totalCount = 0
 
-        for log in purchases {
-            let medID = log.medicine.objectID
+        for log in purchaseLogs {
+            let medID = log.medicine.id
             guard countedMeds.insert(medID).inserted else { continue }
             guard let therapies = log.medicine.therapies, !therapies.isEmpty else { continue }
 
@@ -579,25 +571,23 @@ final class AdherenceDashboardViewModel: ObservableObject {
     private func computeTherapyMonitoringCorrelation(
         therapies: [Therapy],
         startDay: Date,
-        endDay: Date
+        endDay: Date,
+        monitoringMeasurements: [MonitoringMeasurement]
     ) -> TherapyMonitoringCorrelation? {
-        let monitoredTherapyIDs = Set(therapies.compactMap { therapy -> NSManagedObjectID? in
+        let monitoredTherapyIDs = Set(therapies.compactMap { therapy -> UUID? in
             guard let monitoring = therapy.clinicalRulesValue?.monitoring else { return nil }
-            return monitoring.isEmpty ? nil : therapy.objectID
+            return monitoring.isEmpty ? nil : therapy.id
         })
 
         let rangeStart = startDay
         guard let rangeEndExclusive = calendar.date(byAdding: .day, value: 1, to: endDay) else { return nil }
 
-        let request: NSFetchRequest<MonitoringMeasurement> = MonitoringMeasurement.fetchRequest()
-        request.sortDescriptors = [NSSortDescriptor(key: "measured_at", ascending: true)]
-        request.predicate = NSPredicate(
-            format: "measured_at >= %@ AND measured_at < %@",
-            rangeStart as NSDate,
-            rangeEndExclusive as NSDate
-        )
-
-        guard let fetched = try? context.fetch(request), !fetched.isEmpty else { return nil }
+        let fetched = monitoringMeasurements
+            .filter { measurement in
+                measurement.measured_at >= rangeStart && measurement.measured_at < rangeEndExclusive
+            }
+            .sorted { $0.measured_at < $1.measured_at }
+        guard !fetched.isEmpty else { return nil }
 
         struct MeasurementWithTherapy {
             let measurement: MonitoringMeasurement
@@ -610,11 +600,11 @@ final class AdherenceDashboardViewModel: ObservableObject {
                 return MeasurementWithTherapy(measurement: measurement, therapy: linkedTherapy)
             }
 
-            guard let medicineId = measurement.medicine?.objectID else { return nil }
-            let candidates = therapies.filter { $0.medicine.objectID == medicineId }
+            guard let medicineId = measurement.medicine?.id else { return nil }
+            let candidates = therapies.filter { $0.medicine.id == medicineId }
             guard !candidates.isEmpty else { return nil }
 
-            if let monitored = candidates.first(where: { monitoredTherapyIDs.contains($0.objectID) }) {
+            if let monitored = candidates.first(where: { monitoredTherapyIDs.contains($0.id) }) {
                 return MeasurementWithTherapy(measurement: measurement, therapy: monitored)
             }
             if candidates.count == 1, let only = candidates.first {
@@ -628,15 +618,15 @@ final class AdherenceDashboardViewModel: ObservableObject {
 
         // Prefer therapies explicitly configured with monitoring rules, fallback to any linked measurements.
         let preferred = cleaned.filter {
-            monitoredTherapyIDs.contains($0.therapy.objectID)
+            monitoredTherapyIDs.contains($0.therapy.id)
         }
         let filtered = preferred.isEmpty ? cleaned : preferred
 
-        let byTherapy = Dictionary(grouping: filtered) { $0.therapy.objectID }
+        let byTherapy = Dictionary(grouping: filtered) { $0.therapy.id }
         guard let selectedID = byTherapy.max(by: { $0.value.count < $1.value.count })?.key,
               let selectedEntries = byTherapy[selectedID] else { return nil }
         let therapyMeasurements = selectedEntries.map(\.measurement)
-        guard let selectedTherapy = therapies.first(where: { $0.objectID == selectedID }) ?? selectedEntries.first?.therapy else {
+        guard let selectedTherapy = therapies.first(where: { $0.id == selectedID }) ?? selectedEntries.first?.therapy else {
             return nil
         }
 
@@ -839,7 +829,7 @@ final class AdherenceDashboardViewModel: ObservableObject {
     ) -> Int {
         let medId = therapy.medicine.id
         guard let logs = logsByMedicineDay[medId]?[day], !logs.isEmpty else { return 0 }
-        let assigned = logs.filter { $0.therapy?.objectID == therapy.objectID }.count
+        let assigned = logs.filter { $0.therapy?.id == therapy.id }.count
         if assigned > 0 { return assigned }
 
         let unassigned = logs.filter { $0.therapy == nil }
@@ -847,7 +837,7 @@ final class AdherenceDashboardViewModel: ObservableObject {
 
         let therapyCount = therapiesByMedicineId[medId]?.count ?? 0
         if therapyCount <= 1 { return unassigned.count }
-        return unassigned.filter { $0.package?.objectID == therapy.package.objectID }.count
+        return unassigned.filter { $0.package?.id == therapy.package.id }.count
     }
 
     private func buildLogsIndex(
@@ -870,5 +860,13 @@ final class AdherenceDashboardViewModel: ObservableObject {
             }
         }
         return index
+    }
+
+    private func medicineKey(_ medicine: Medicine) -> String {
+        medicine.id.uuidString
+    }
+
+    private func medicineKey(_ medicineId: UUID) -> String {
+        medicineId.uuidString
     }
 }

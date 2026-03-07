@@ -8,9 +8,9 @@
 import SwiftUI
 
 struct DoctorDetailView: View {
-    @Environment(\.managedObjectContext) private var managedObjectContext
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject var doctor: Doctor
+    @EnvironmentObject private var appDataStore: AppDataStore
+    private let doctorId: UUID
 
     @State private var nome: String
     @State private var mail: String
@@ -25,18 +25,21 @@ struct DoctorDetailView: View {
     @State private var showDeleteConfirmation = false
     @State private var autosaveTask: Task<Void, Never>?
     @State private var isDeleting = false
+    @State private var prescriptionMessageTemplate: String?
+    @State private var didLoadFromStore = false
 
-    init(doctor: Doctor) {
-        self.doctor = doctor
-        _nome = State(initialValue: Self.doctorDisplayName(for: doctor))
-        _mail = State(initialValue: doctor.mail ?? "")
-        _telefono = State(initialValue: doctor.telefono ?? "")
-        _specializzazione = State(initialValue: doctor.specializzazione ?? "")
-        _schedule = State(initialValue: doctor.scheduleDTO)
-        _segreteriaNome = State(initialValue: doctor.segreteria_nome ?? "")
-        _segreteriaMail = State(initialValue: doctor.segreteria_mail ?? "")
-        _segreteriaTelefono = State(initialValue: doctor.segreteria_telefono ?? "")
-        _segreteriaSchedule = State(initialValue: doctor.secretaryScheduleDTO)
+    init(doctor: SettingsDoctorRecord) {
+        self.doctorId = doctor.id
+        _nome = State(initialValue: doctor.name ?? "")
+        _mail = State(initialValue: doctor.email ?? "")
+        _telefono = State(initialValue: doctor.phone ?? "")
+        _specializzazione = State(initialValue: doctor.specialization ?? "")
+        _schedule = State(initialValue: doctor.schedule)
+        _segreteriaNome = State(initialValue: doctor.secretaryName ?? "")
+        _segreteriaMail = State(initialValue: doctor.secretaryEmail ?? "")
+        _segreteriaTelefono = State(initialValue: doctor.secretaryPhone ?? "")
+        _segreteriaSchedule = State(initialValue: doctor.secretarySchedule)
+        _prescriptionMessageTemplate = State(initialValue: doctor.prescriptionMessageTemplate)
     }
 
     var body: some View {
@@ -86,7 +89,13 @@ struct DoctorDetailView: View {
 
             Section(header: Text("Richieste ricetta")) {
                 NavigationLink {
-                    PrescriptionMessageTemplateSettingsView(doctor: doctor)
+                    PrescriptionMessageTemplateSettingsView(
+                        doctorId: doctorId,
+                        doctorDisplayName: normalizedValue(from: nome) ?? "Dottore",
+                        initialTemplate: prescriptionMessageTemplate
+                    ) { updatedTemplate in
+                        prescriptionMessageTemplate = updatedTemplate
+                    }
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Personalizza il messaggio di richiesta di medicinali")
@@ -143,6 +152,11 @@ struct DoctorDetailView: View {
             autosaveTask?.cancel()
             saveChanges()
         }
+        .onAppear {
+            guard !didLoadFromStore else { return }
+            didLoadFromStore = true
+            reloadDoctorFromStore()
+        }
         .alert("Errore salvataggio", isPresented: Binding(
             get: { saveErrorMessage != nil },
             set: { isPresented in
@@ -166,27 +180,24 @@ struct DoctorDetailView: View {
     }
 
     private func saveChanges() {
-        guard !isDeleting, !doctor.isDeleted else { return }
-
-        doctor.nome = normalizedValue(from: nome)
-        doctor.cognome = nil
-        doctor.mail = normalizedValue(from: mail)
-        doctor.telefono = normalizedValue(from: telefono)
-        doctor.specializzazione = normalizedValue(from: specializzazione)
-        doctor.scheduleDTO = schedule
-        doctor.segreteria_nome = normalizedValue(from: segreteriaNome)
-        doctor.segreteria_mail = normalizedValue(from: segreteriaMail)
-        doctor.segreteria_telefono = normalizedValue(from: segreteriaTelefono)
-        doctor.secretaryScheduleDTO = segreteriaSchedule
-
-        let context = doctor.managedObjectContext ?? managedObjectContext
+        guard !isDeleting else { return }
         do {
-            if context.hasChanges {
-                try context.save()
-            }
+            _ = try appDataStore.provider.settings.saveDoctor(
+                DoctorWriteInput(
+                    id: doctorId,
+                    name: normalizedValue(from: nome),
+                    email: normalizedValue(from: mail),
+                    phone: normalizedValue(from: telefono),
+                    specialization: normalizedValue(from: specializzazione),
+                    schedule: schedule,
+                    secretaryName: normalizedValue(from: segreteriaNome),
+                    secretaryEmail: normalizedValue(from: segreteriaMail),
+                    secretaryPhone: normalizedValue(from: segreteriaTelefono),
+                    secretarySchedule: segreteriaSchedule
+                )
+            )
             saveErrorMessage = nil
         } catch {
-            context.rollback()
             saveErrorMessage = error.localizedDescription
             print("Errore nel salvataggio del dottore: \(error.localizedDescription)")
         }
@@ -195,13 +206,10 @@ struct DoctorDetailView: View {
     private func deleteDoctor() {
         isDeleting = true
         autosaveTask?.cancel()
-        let context = doctor.managedObjectContext ?? managedObjectContext
-        context.delete(doctor)
         do {
-            try context.save()
+            try appDataStore.provider.settings.deleteDoctor(id: doctorId)
             dismiss()
         } catch {
-            context.rollback()
             saveErrorMessage = error.localizedDescription
             print("Errore nell'eliminazione del dottore: \(error.localizedDescription)")
         }
@@ -239,7 +247,7 @@ struct DoctorDetailView: View {
 
     private var prescriptionTemplateStatus: String {
         let template = PrescriptionMessageTemplateRenderer.resolvedTemplate(
-            customTemplate: doctor.prescription_message_template
+            customTemplate: prescriptionMessageTemplate
         )
         return template == PrescriptionMessageTemplateRenderer.defaultTemplate
             ? "Template predefinito"
@@ -258,10 +266,23 @@ struct DoctorDetailView: View {
         }
     }
 
-    private static func doctorDisplayName(for doctor: Doctor) -> String {
-        let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let full = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
-        return full
+    private func reloadDoctorFromStore() {
+        guard !isDeleting else { return }
+        do {
+            guard let doctor = try appDataStore.provider.settings.doctor(id: doctorId) else { return }
+            nome = doctor.name ?? ""
+            mail = doctor.email ?? ""
+            telefono = doctor.phone ?? ""
+            specializzazione = doctor.specialization ?? ""
+            schedule = doctor.schedule
+            segreteriaNome = doctor.secretaryName ?? ""
+            segreteriaMail = doctor.secretaryEmail ?? ""
+            segreteriaTelefono = doctor.secretaryPhone ?? ""
+            segreteriaSchedule = doctor.secretarySchedule
+            prescriptionMessageTemplate = doctor.prescriptionMessageTemplate
+            saveErrorMessage = nil
+        } catch {
+            saveErrorMessage = error.localizedDescription
+        }
     }
 }

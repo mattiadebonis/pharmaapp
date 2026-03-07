@@ -10,6 +10,7 @@ final class AuthViewModelTests: XCTestCase {
         let viewModel = makeViewModel(firebaseClient: firebaseClient)
 
         viewModel.start()
+        await waitForAuthListenerRegistration(in: firebaseClient)
         firebaseClient.emit(user: AuthUser(id: "firebase-user", provider: .google, email: "test@example.com", fullName: "Mario Rossi", imageURL: nil))
         await settleAsyncState()
 
@@ -23,6 +24,7 @@ final class AuthViewModelTests: XCTestCase {
         let viewModel = makeViewModel(firebaseClient: firebaseClient)
 
         viewModel.start()
+        await waitForAuthListenerRegistration(in: firebaseClient)
         firebaseClient.emit(user: nil)
         await settleAsyncState()
 
@@ -53,12 +55,14 @@ final class AuthViewModelTests: XCTestCase {
         }
         let viewModel = makeViewModel(firebaseClient: firebaseClient, googleClient: googleClient)
         viewModel.start()
+        await waitForAuthListenerRegistration(in: firebaseClient)
         firebaseClient.emit(user: nil)
 
         await viewModel.performGoogleSignIn(
             clientID: "client-id",
             presentingViewController: UIViewController()
         )
+        await settleAsyncState()
 
         XCTAssertEqual(viewModel.state, .authenticated)
         XCTAssertEqual(viewModel.user?.id, "firebase-google")
@@ -127,18 +131,29 @@ final class AuthViewModelTests: XCTestCase {
         googleClient: MockGoogleSignInClient = MockGoogleSignInClient(),
         legacyStore: LegacyAuthStoreProtocol = StubLegacyAuthStore(user: nil)
     ) -> AuthViewModel {
-        AuthViewModel(
+        let authGateway = FirebaseAuthGatewayAdapter(
             firebaseAuthClient: firebaseClient,
+            isFirebaseConfiguredProvider: { true }
+        )
+        return AuthViewModel(
+            authGateway: authGateway,
             googleSignInClient: googleClient,
             legacyAuthStore: legacyStore,
-            presentingViewControllerProvider: { UIViewController() },
-            isFirebaseConfigured: { true }
+            presentingViewControllerProvider: { UIViewController() }
         )
     }
 
     private func settleAsyncState() async {
         await Task.yield()
         await Task.yield()
+        try? await Task.sleep(nanoseconds: 150_000_000)
+    }
+
+    private func waitForAuthListenerRegistration(in client: MockFirebaseAuthClient) async {
+        for _ in 0..<30 {
+            if client.listener != nil { return }
+            await Task.yield()
+        }
     }
 }
 

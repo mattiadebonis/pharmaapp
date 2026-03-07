@@ -1,5 +1,4 @@
 import SwiftUI
-import CoreData
 
 struct MedicineWizardView: View {
     enum QuickAction {
@@ -14,23 +13,15 @@ struct MedicineWizardView: View {
         case stock
     }
 
-    private struct CreatedContext: Identifiable {
-        let id = UUID()
-        let medicine: Medicine
-        let package: Package
-        let entry: MedicinePackage
-    }
-
-    @Environment(\.managedObjectContext) private var context
+    @EnvironmentObject private var appDataStore: AppDataStore
     @Environment(\.dismiss) private var dismiss
-    @FetchRequest(fetchRequest: Medicine.extractMedicines()) private var medicines: FetchedResults<Medicine>
 
     private let prefill: CatalogSelection?
     private let initialQuickAction: QuickAction
     private let onFinish: ((String) -> Void)?
 
     @State private var screen: Screen = .actions
-    @State private var therapyContext: CreatedContext?
+    @State private var therapyContext: SearchCatalogResolvedContext?
     @State private var stockUnits: Int = 0
     @State private var baselineUnits: Int = 0
     @State private var deadlineMonthInput: String = ""
@@ -38,13 +29,7 @@ struct MedicineWizardView: View {
     @State private var errorMessage: String?
     @State private var didApplyInitialQuickAction = false
 
-    private var stockService: MedicineStockService {
-        MedicineStockService(context: context)
-    }
-
-    private var catalogResolver: CatalogSelectionResolver {
-        CatalogSelectionResolver(context: context)
-    }
+    private let repository = CatalogSelectionRepository()
 
     init(
         prefill: CatalogSelection? = nil,
@@ -78,7 +63,7 @@ struct MedicineWizardView: View {
                 TherapyFormView(
                     medicine: target.medicine,
                     package: target.package,
-                    context: context,
+                    context: target.entry.managedObjectContext ?? PersistenceController.shared.container.viewContext,
                     medicinePackage: target.entry,
                     onSave: {
                         complete(message: "Terapia aggiunta e farmaco inserito nell'armadietto.")
@@ -232,8 +217,7 @@ struct MedicineWizardView: View {
 
     private func addMedicineToCabinet(_ item: CatalogSelection) {
         do {
-            _ = try resolveOrCreateContext(for: item)
-            try saveIfNeeded()
+            try appDataStore.provider.search.addCatalogSelectionToCabinet(item)
             complete(message: "Aggiunto all'armadietto.")
         } catch {
             errorMessage = "Non sono riuscito ad aggiungere il farmaco all'armadietto."
@@ -242,8 +226,8 @@ struct MedicineWizardView: View {
 
     private func openStockStep(for item: CatalogSelection) {
         if let existing = existingContext(for: item) {
-            baselineUnits = StockService(context: context).units(for: existing.package)
-            syncDeadlineInputs(from: existing.medicine, package: existing.package)
+            baselineUnits = appDataStore.provider.medicines.units(for: existing.package)
+            syncDeadlineInputs(from: existing.entry)
         } else {
             baselineUnits = 0
             deadlineMonthInput = ""
@@ -261,30 +245,13 @@ struct MedicineWizardView: View {
         }
 
         do {
-            let resolved = try resolveOrCreateContext(for: item)
-            try saveIfNeeded()
-
-            guard let purchaseOperationId = stockService.addPurchase(
-                medicine: resolved.medicine,
-                package: resolved.package
-            ) else {
-                errorMessage = "Non sono riuscito a registrare l'acquisto."
-                return
-            }
-
-            guard let purchasedEntry = MedicinePackage.fetchByPurchaseOperationId(
-                purchaseOperationId,
-                in: context
-            ) else {
-                errorMessage = "Non sono riuscito ad associare la confezione acquistata."
-                return
-            }
-
-            purchasedEntry.updateDeadline(month: parsedDeadline.month, year: parsedDeadline.year)
-            try saveIfNeeded()
-
-            stockService.setStockUnits(medicine: resolved.medicine, package: resolved.package, targetUnits: stockUnits)
-
+            let preparation = try appDataStore.provider.search.prepareCatalogPackageEditor(item)
+            try appDataStore.provider.search.applyCatalogStockEditor(
+                preparation.context,
+                targetUnits: stockUnits,
+                deadlineMonth: parsedDeadline.month,
+                deadlineYear: parsedDeadline.year
+            )
             complete(message: "Confezione aggiunta e scorte aggiornate.")
         } catch {
             errorMessage = "Non sono riuscito ad aggiornare le scorte."
@@ -293,36 +260,39 @@ struct MedicineWizardView: View {
 
     private func openTherapyForm(for item: CatalogSelection) {
         do {
-            let resolved = try resolveOrCreateContext(for: item)
-            try saveIfNeeded()
-            therapyContext = resolved
+            therapyContext = try appDataStore.provider.search.prepareCatalogTherapy(item)
         } catch {
             errorMessage = "Non sono riuscito ad aprire il form terapia."
         }
     }
 
-    private func resolveOrCreateContext(for item: CatalogSelection) throws -> CreatedContext {
-        let resolved = catalogResolver.resolveOrCreateContext(for: item)
-        return CreatedContext(
-            medicine: resolved.medicine,
-            package: resolved.package,
-            entry: resolved.entry
-        )
-    }
+    private func existingContext(for item: CatalogSelection) -> SearchCatalogResolvedContext? {
+        guard let snapshot = try? appDataStore.provider.search.fetchSnapshot() else { return nil }
+        guard let medicine = existingMedicine(for: item, medicines: snapshot.medicines) else { return nil }
+        guard let package = existingPackage(for: item, medicine: medicine) ?? medicine.packages.first else { return nil }
 
-    private func existingContext(for item: CatalogSelection) -> CreatedContext? {
-        guard let existing = catalogResolver.existingContext(for: item) else { return nil }
-        return CreatedContext(
-            medicine: existing.medicine,
-            package: existing.package,
-            entry: existing.entry
-        )
-    }
-
-    private func saveIfNeeded() throws {
-        if context.hasChanges {
-            try context.save()
+        let matchingEntries = snapshot.medicineEntries.filter {
+            !$0.isDeleted
+                && $0.medicine.id == medicine.id
+                && $0.package.id == package.id
         }
+
+        let entry = matchingEntries.max {
+            let lhsDate = $0.created_at ?? .distantPast
+            let rhsDate = $1.created_at ?? .distantPast
+            if lhsDate == rhsDate {
+                return $0.id.uuidString < $1.id.uuidString
+            }
+            return lhsDate < rhsDate
+        } ?? medicine.medicinePackages?.first(where: { $0.package.id == package.id })
+
+        guard let entry else { return nil }
+        return SearchCatalogResolvedContext(
+            selection: item,
+            medicine: medicine,
+            package: package,
+            entry: entry
+        )
     }
 
     private func complete(message: String) {
@@ -333,8 +303,8 @@ struct MedicineWizardView: View {
     private func prepareDefaultStockInputs() {
         guard let item = prefill else { return }
         if let existing = existingContext(for: item) {
-            baselineUnits = StockService(context: context).units(for: existing.package)
-            syncDeadlineInputs(from: existing.medicine, package: existing.package)
+            baselineUnits = appDataStore.provider.medicines.units(for: existing.package)
+            syncDeadlineInputs(from: existing.entry)
         } else {
             baselineUnits = 0
             deadlineMonthInput = ""
@@ -360,15 +330,39 @@ struct MedicineWizardView: View {
         }
     }
 
-    private func syncDeadlineInputs(from medicine: Medicine, package: Package) {
-        if let entry = MedicinePackage.latestActiveEntry(for: medicine, package: package, in: context),
-           let info = entry.deadlineMonthYear {
+    private func syncDeadlineInputs(from entry: MedicinePackage) {
+        if let info = entry.deadlineMonthYear {
             deadlineMonthInput = String(format: "%02d", info.month)
             deadlineYearInput = String(info.year)
         } else {
             deadlineMonthInput = ""
             deadlineYearInput = ""
         }
+    }
+
+    private func existingMedicine(for selection: CatalogSelection, medicines: [Medicine]) -> Medicine? {
+        let identity = repository.identityKey(for: selection)
+        if let exact = medicines.first(where: {
+            repository.identityKey(name: $0.nome, principle: $0.principio_attivo) == identity
+        }) {
+            return exact
+        }
+
+        let normalizedName = repository.normalizeText(selection.name)
+        return medicines.first(where: { repository.normalizeText($0.nome) == normalizedName })
+    }
+
+    private func existingPackage(for selection: CatalogSelection, medicine: Medicine) -> Package? {
+        medicine.packages.first(where: { packageMatches($0, selection: selection) })
+    }
+
+    private func packageMatches(_ package: Package, selection: CatalogSelection) -> Bool {
+        let sameUnits = Int(package.numero) == max(1, selection.units)
+        let sameType = repository.normalizeText(package.tipologia) == repository.normalizeText(selection.tipologia)
+        let sameValue = package.valore == selection.valore
+        let sameUnit = repository.normalizeText(package.unita) == repository.normalizeText(selection.unita)
+        let sameVolume = repository.normalizeText(package.volume) == repository.normalizeText(selection.volume)
+        return sameUnits && sameType && sameValue && sameUnit && sameVolume
     }
 
     private func parseDeadlineInputs() -> (isValid: Bool, month: Int?, year: Int?) {

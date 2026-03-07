@@ -2,20 +2,30 @@ import SwiftUI
 
 struct BackupRestoreListView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var backupCoordinator: BackupCoordinator
+    @EnvironmentObject private var appDataStore: AppDataStore
 
     @State private var snapshotPendingRestore: BackupSnapshotDescriptor?
+    @State private var backupState = BackupGatewayState(
+        status: .idle,
+        cloudAvailability: .unavailable,
+        snapshots: [],
+        lastSuccessfulBackupAt: nil,
+        lastErrorMessage: nil,
+        backupEnabled: false,
+        restoreRevision: 0
+    )
+    @State private var didStartObservation = false
 
     var body: some View {
         List {
-            if backupCoordinator.snapshots.isEmpty {
+            if backupState.snapshots.isEmpty {
                 Section {
                     Text("Nessun backup disponibile su iCloud.")
                         .foregroundStyle(.secondary)
                 }
             } else {
                 Section("Backup disponibili") {
-                    ForEach(backupCoordinator.snapshots) { snapshot in
+                    ForEach(backupState.snapshots) { snapshot in
                         Button {
                             snapshotPendingRestore = snapshot
                         } label: {
@@ -27,7 +37,7 @@ struct BackupRestoreListView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        .disabled(backupCoordinator.status.isBusy)
+                        .disabled(backupState.status.isBusy)
                     }
                 }
             }
@@ -62,10 +72,11 @@ struct BackupRestoreListView: View {
         ) { snapshot in
             Button("Ripristina", role: .destructive) {
                 Task {
-                    let didRestore = await backupCoordinator.restore(snapshot)
+                    let didRestore = await appDataStore.provider.backup.restore(snapshotId: snapshot.id)
                     if didRestore {
                         dismiss()
                     }
+                    refreshState()
                 }
             }
             Button("Annulla", role: .cancel) {
@@ -73,6 +84,16 @@ struct BackupRestoreListView: View {
             }
         } message: { snapshot in
             Text("Backup del \(dateFormatter.string(from: snapshot.createdAt)).")
+        }
+        .onAppear {
+            refreshState()
+            appDataStore.provider.backup.refreshSnapshots()
+            refreshState()
+        }
+        .task {
+            guard !didStartObservation else { return }
+            didStartObservation = true
+            await observeBackupState()
         }
     }
 
@@ -87,11 +108,28 @@ struct BackupRestoreListView: View {
         formatter.timeStyle = .short
         return formatter
     }
+
+    private func refreshState() {
+        backupState = appDataStore.provider.backup.state
+    }
+
+    private func observeBackupState() async {
+        for await state in appDataStore.provider.backup.observeState() {
+            backupState = state
+        }
+    }
 }
 
 #Preview {
     NavigationStack {
         BackupRestoreListView()
     }
-    .environmentObject(BackupCoordinator())
+    .environmentObject(
+        AppDataStore(
+            provider: CoreDataAppDataProvider(
+                authGateway: FirebaseAuthGatewayAdapter(),
+                backupGateway: ICloudBackupGatewayAdapter(coordinator: BackupCoordinator())
+            )
+        )
+    )
 }

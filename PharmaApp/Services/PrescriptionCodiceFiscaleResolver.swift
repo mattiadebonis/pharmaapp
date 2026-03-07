@@ -6,7 +6,7 @@ struct PrescriptionCFEntry: Identifiable {
     let codiceFiscale: String
     let medicineNames: [String]
 
-    var id: NSManagedObjectID { person.objectID }
+    var id: String { codiceFiscale }
 
     var personDisplayName: String {
         let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -34,7 +34,7 @@ struct PrescriptionCodiceFiscaleResolver {
             var medicineNames: Set<String>
         }
 
-        var buckets: [NSManagedObjectID: Bucket] = [:]
+        var buckets: [String: Bucket] = [:]
 
         for medicine in medicines {
             guard medicine.obbligo_ricetta else { continue }
@@ -46,11 +46,11 @@ struct PrescriptionCodiceFiscaleResolver {
                 let person = therapy.person
                 guard let codice = normalizedCodiceFiscale(person.codice_fiscale) else { continue }
 
-                if var existing = buckets[person.objectID] {
+                if var existing = buckets[codice] {
                     existing.medicineNames.insert(medicineName)
-                    buckets[person.objectID] = existing
+                    buckets[codice] = existing
                 } else {
-                    buckets[person.objectID] = Bucket(
+                    buckets[codice] = Bucket(
                         person: person,
                         codiceFiscale: codice,
                         medicineNames: [medicineName]

@@ -1,16 +1,16 @@
 import SwiftUI
-import CoreData
 
 struct DataManagementView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.managedObjectContext) private var managedObjectContext
+    @EnvironmentObject private var appDataStore: AppDataStore
     @EnvironmentObject private var auth: AuthViewModel
 
-    @FetchRequest private var doctors: FetchedResults<Doctor>
-    @FetchRequest private var persons: FetchedResults<Person>
+    @State private var doctors: [SettingsDoctorRecord] = []
+    @State private var persons: [SettingsPersonRecord] = []
 
-    @State private var personPendingDeletion: Person?
+    @State private var personPendingDeletion: SettingsPersonRecord?
     @State private var personDeleteErrorMessage: String?
+    @State private var didStartObservation = false
 
     private let navigationTitleText: String
     private let showsBackupLink: Bool
@@ -24,15 +24,6 @@ struct DataManagementView: View {
         self.navigationTitleText = navigationTitleText
         self.showsBackupLink = showsBackupLink
         self.showsDoneButton = showsDoneButton
-
-        let peopleRequest = Person.extractPersons(includeAccount: true)
-        peopleRequest.sortDescriptors = [
-            NSSortDescriptor(key: "is_account", ascending: false),
-            NSSortDescriptor(key: "nome", ascending: true)
-        ]
-
-        _persons = FetchRequest(fetchRequest: peopleRequest)
-        _doctors = FetchRequest(fetchRequest: Doctor.extractDoctors())
     }
 
     var body: some View {
@@ -51,7 +42,7 @@ struct DataManagementView: View {
                         personLabel(for: person)
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        if !person.is_account {
+                        if !person.isAccount {
                             Button(role: .destructive) {
                                 personPendingDeletion = person
                             } label: {
@@ -101,11 +92,15 @@ struct DataManagementView: View {
             }
         }
         .onAppear {
-            AccountPersonService.shared.ensureAccountPerson(in: managedObjectContext)
-            AccountPersonService.shared.syncAccountDisplayName(from: auth.user, in: managedObjectContext)
+            reloadFetchedState()
         }
-        .onChange(of: auth.user) { user in
-            AccountPersonService.shared.syncAccountDisplayName(from: user, in: managedObjectContext)
+        .onChange(of: auth.user) { _ in
+            reloadFetchedState()
+        }
+        .task {
+            guard !didStartObservation else { return }
+            didStartObservation = true
+            await observeDataChanges()
         }
         .alert(
             "Eliminare questa persona?",
@@ -144,20 +139,18 @@ struct DataManagementView: View {
         }
     }
 
-    private func personDisplayName(for person: Person) -> String {
-        let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let full = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+    private func personDisplayName(for person: SettingsPersonRecord) -> String {
+        let full = (person.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return full.isEmpty ? "Persona" : full
     }
 
     @ViewBuilder
-    private func personLabel(for person: Person) -> some View {
+    private func personLabel(for person: SettingsPersonRecord) -> some View {
         HStack(spacing: 8) {
             Text(personDisplayName(for: person))
                 .foregroundStyle(.primary)
 
-            if person.is_account {
+            if person.isAccount {
                 Text("Account")
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 8)
@@ -169,21 +162,34 @@ struct DataManagementView: View {
         }
     }
 
-    private func doctorDisplayName(for doctor: Doctor) -> String {
-        let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let full = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+    private func doctorDisplayName(for doctor: SettingsDoctorRecord) -> String {
+        let full = (doctor.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return full.isEmpty ? "Dottore" : full
     }
 
-    private func deletePerson(_ person: Person) {
-        let context = person.managedObjectContext ?? managedObjectContext
+    private func deletePerson(_ person: SettingsPersonRecord) {
         do {
-            try PersonDeletionService.shared.delete(person, in: context)
+            try appDataStore.provider.settings.deletePerson(id: person.id)
+            reloadFetchedState()
         } catch {
-            context.rollback()
             personDeleteErrorMessage = error.localizedDescription
             print("Errore nell'eliminazione della persona: \(error.localizedDescription)")
+        }
+    }
+
+    private func reloadFetchedState() {
+        do {
+            persons = try appDataStore.provider.settings.listPersons(includeAccount: true)
+            doctors = try appDataStore.provider.settings.listDoctors()
+            personDeleteErrorMessage = nil
+        } catch {
+            personDeleteErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func observeDataChanges() async {
+        for await _ in appDataStore.provider.observe(scopes: [.people, .doctors]) {
+            reloadFetchedState()
         }
     }
 }
@@ -193,5 +199,12 @@ struct DataManagementView: View {
         DataManagementView()
     }
     .environmentObject(AuthViewModel())
-    .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
+    .environmentObject(
+        AppDataStore(
+            provider: CoreDataAppDataProvider(
+                authGateway: FirebaseAuthGatewayAdapter(),
+                backupGateway: ICloudBackupGatewayAdapter(coordinator: BackupCoordinator())
+            )
+        )
+    )
 }

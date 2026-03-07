@@ -1,12 +1,16 @@
 import SwiftUI
-import CoreData
 
 struct TherapySettingsSectionsView: View {
-    @Environment(\.managedObjectContext) private var managedObjectContext
-    @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
+    @EnvironmentObject private var appDataStore: AppDataStore
+    @State private var preferences = TherapyNotificationSettings(
+        level: TherapyNotificationPreferences.defaultLevel,
+        snoozeMinutes: TherapyNotificationPreferences.defaultSnoozeMinutes
+    )
+    @State private var saveErrorMessage: String?
+    @State private var hasLoaded = false
 
     var body: some View {
-        if let option = options.first {
+        Group {
             Section(
                 header: Text("Notifiche terapia"),
                 footer: Text("In modalità Tipo sveglia puoi interrompere o rimandare dal lock screen.")
@@ -14,38 +18,25 @@ struct TherapySettingsSectionsView: View {
                 Picker(
                     "Livello notifiche",
                     selection: Binding<TherapyNotificationLevel>(
-                        get: {
-                            TherapyNotificationPreferences.normalizedLevel(
-                                rawValue: option.therapy_notification_level
-                            )
-                        },
+                        get: { preferences.level },
                         set: { newLevel in
-                            option.therapy_notification_level = newLevel.rawValue
-                            saveContext()
+                            persistPreferences(level: newLevel, snoozeMinutes: preferences.snoozeMinutes)
                         }
                     )
                 ) {
                     Text("Normale").tag(TherapyNotificationLevel.normal)
                     Text("Tipo sveglia").tag(TherapyNotificationLevel.alarm)
                 }
+
                 .pickerStyle(.segmented)
 
-                if TherapyNotificationPreferences.normalizedLevel(
-                    rawValue: option.therapy_notification_level
-                ) == .alarm {
+                if preferences.level == .alarm {
                     Picker(
                         "Durata rimando",
                         selection: Binding<Int>(
-                            get: {
-                                TherapyNotificationPreferences.normalizedSnoozeMinutes(
-                                    rawValue: Int(option.therapy_snooze_minutes)
-                                )
-                            },
+                            get: { preferences.snoozeMinutes },
                             set: { newMinutes in
-                                option.therapy_snooze_minutes = Int32(
-                                    TherapyNotificationPreferences.normalizedSnoozeMinutes(rawValue: newMinutes)
-                                )
-                                saveContext()
+                                persistPreferences(level: preferences.level, snoozeMinutes: newMinutes)
                             }
                         )
                     ) {
@@ -55,20 +46,49 @@ struct TherapySettingsSectionsView: View {
                     }
                 }
             }
-        } else {
-            Section {
-                Text("Opzioni non disponibili.")
-                    .foregroundStyle(.secondary)
+
+            if let saveErrorMessage {
+                Section {
+                    Text(saveErrorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .task {
+            guard !hasLoaded else { return }
+            hasLoaded = true
+            reloadPreferences()
+        }
+        .task {
+            for await _ in appDataStore.provider.observe(scopes: [.options]) {
+                reloadPreferences()
             }
         }
     }
 
-    private func saveContext() {
+    private func persistPreferences(level: TherapyNotificationLevel, snoozeMinutes: Int) {
+        let normalizedSnooze = TherapyNotificationPreferences.normalizedSnoozeMinutes(rawValue: snoozeMinutes)
+        let normalized = TherapyNotificationSettings(level: level, snoozeMinutes: normalizedSnooze)
+        preferences = normalized
+
         do {
-            try managedObjectContext.save()
+            try appDataStore.provider.settings.saveTherapyNotificationPreferences(
+                level: normalized.level,
+                snoozeMinutes: normalized.snoozeMinutes
+            )
+            saveErrorMessage = nil
         } catch {
-            print("Errore nel salvataggio: \(error.localizedDescription)")
+            saveErrorMessage = error.localizedDescription
         }
     }
 
+    private func reloadPreferences() {
+        do {
+            preferences = try appDataStore.provider.settings.therapyNotificationPreferences()
+            saveErrorMessage = nil
+        } catch {
+            saveErrorMessage = error.localizedDescription
+        }
+    }
 }

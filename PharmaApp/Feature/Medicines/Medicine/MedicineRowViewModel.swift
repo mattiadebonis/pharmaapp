@@ -241,7 +241,7 @@ class MedicineRowViewModel: ObservableObject {
         )
 
         do {
-            try managedObjectContext.save()
+            try CoreDataWriteCommand.saveIfNeeded(managedObjectContext)
         } catch {
             managedObjectContext.rollback()
             print("Errore nel salvataggio del log: \(error)")

@@ -40,11 +40,11 @@ struct CriticalDoseLiveActivityPlanner {
         let events = generator.generateEvents(therapies: therapies, from: windowStart, to: windowEnd)
         let intakeLogsByMedicineID = buildIntakeLogCache(for: therapies)
 
-        let therapyByObjectID = Dictionary(therapies.map { ($0.objectID, $0) }, uniquingKeysWith: { first, _ in first })
+        let therapyByID = Dictionary(therapies.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var activeCandidates: [CriticalDoseCandidate] = []
 
         for event in events {
-            guard let therapy = therapyByObjectID[event.therapyId] else { continue }
+            guard let therapy = therapyByID[event.therapyId] else { continue }
             guard !hasMatchingIntakeLog(
                 for: event.date,
                 therapy: therapy,
@@ -196,13 +196,13 @@ struct CriticalDoseLiveActivityPlanner {
         return "unità"
     }
 
-    private func buildIntakeLogCache(for therapies: [Therapy]) -> [NSManagedObjectID: [Log]] {
-        var cache: [NSManagedObjectID: [Log]] = [:]
-        var seenMedicineIDs = Set<NSManagedObjectID>()
+    private func buildIntakeLogCache(for therapies: [Therapy]) -> [UUID: [Log]] {
+        var cache: [UUID: [Log]] = [:]
+        var seenMedicineIDs = Set<UUID>()
 
         for therapy in therapies {
             let medicine = therapy.medicine
-            let medicineID = medicine.objectID
+            let medicineID = medicine.id
             guard seenMedicineIDs.insert(medicineID).inserted else { continue }
             cache[medicineID] = medicine.effectiveIntakeLogs()
         }
@@ -213,16 +213,16 @@ struct CriticalDoseLiveActivityPlanner {
     private func hasMatchingIntakeLog(
         for eventDate: Date,
         therapy: Therapy,
-        intakeLogsByMedicineID: [NSManagedObjectID: [Log]]
+        intakeLogsByMedicineID: [UUID: [Log]]
     ) -> Bool {
         let tolerance = max(config.leadTimeInterval, config.overdueToleranceInterval)
-        let intakeLogs = intakeLogsByMedicineID[therapy.medicine.objectID] ?? []
+        let intakeLogs = intakeLogsByMedicineID[therapy.medicine.id] ?? []
         guard !intakeLogs.isEmpty else { return false }
         let targetBucket = Int(eventDate.timeIntervalSince1970 / 60)
 
         for log in intakeLogs {
             if let logTherapy = log.therapy {
-                if logTherapy.objectID != therapy.objectID { continue }
+                if logTherapy.id != therapy.id { continue }
             } else {
                 let therapyCount = therapy.medicine.therapies?.count ?? 0
                 if therapyCount == 1 {

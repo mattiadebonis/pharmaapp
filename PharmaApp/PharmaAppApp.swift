@@ -6,18 +6,14 @@
 //
 
 import SwiftUI
-import FirebaseCore
 import UserNotifications
 
 
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
-  private lazy var notificationActionHandler = NotificationActionHandler(
-    context: PersistenceController.shared.container.viewContext
-  )
+  private lazy var notificationActionHandler = NotificationActionHandler()
 
   func application(_ application: UIApplication,
                    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
-    FirebaseApp.configure()
     UNUserNotificationCenter.current().delegate = self
     registerNotificationCategories()
 
@@ -77,19 +73,35 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
 @main
 struct PharmaAppApp: App {
     let persistenceController = PersistenceController.shared
+    private let appDataProvider: any AppDataProvider
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
 
     @StateObject var appViewModel = AppViewModel()
     @StateObject private var appRouter = AppRouter()
-    @StateObject var authViewModel = AuthViewModel()
+    @StateObject private var appDataStore: AppDataStore
+    @StateObject var authViewModel: AuthViewModel
     @StateObject private var favoritesStore = FavoritesStore()
-    @StateObject private var backupCoordinator = BackupCoordinator(
-        persistenceController: PersistenceController.shared
-    )
-    @StateObject private var notificationCoordinator = NotificationCoordinator(
-        context: PersistenceController.shared.container.viewContext,
-        policy: PerformancePolicy.current()
-    )
+    @State private var observedRestoreRevision: Int
+    @State private var didStartBackupObservation = false
+
+    init() {
+        let backupCoordinator = BackupCoordinator(
+            persistenceController: PersistenceController.shared
+        )
+        let appDataProvider = DataProviderFactory.make(
+            backupCoordinator: backupCoordinator
+        )
+        self.appDataProvider = appDataProvider
+        AppDataProviderRegistry.shared.provider = appDataProvider
+        UserIdentityProvider.shared.configureAuthUserIDProvider {
+            appDataProvider.auth.currentUser?.id
+        }
+        _appDataStore = StateObject(wrappedValue: AppDataStore(provider: appDataProvider))
+        _authViewModel = StateObject(
+            wrappedValue: AuthViewModel(authGateway: appDataProvider.auth)
+        )
+        _observedRestoreRevision = State(initialValue: appDataProvider.backup.state.restoreRevision)
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -97,9 +109,9 @@ struct PharmaAppApp: App {
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .environmentObject(appViewModel)
                 .environmentObject(appRouter)
+                .environmentObject(appDataStore)
                 .environmentObject(authViewModel)
                 .environmentObject(favoritesStore)
-                .environmentObject(backupCoordinator)
                 .onOpenURL { url in
                     Task { @MainActor in
                         if url.scheme == "pharmaapp" {
@@ -125,9 +137,6 @@ struct PharmaAppApp: App {
                 .onChange(of: authViewModel.user) { user in
                     syncIdentity(from: user)
                 }
-                .onChange(of: backupCoordinator.restoreRevision) { _ in
-                    handleRestoreCompletion()
-                }
                 .task {
                     let context = persistenceController.container.viewContext
                     DataManager.shared.performOneTimeBootstrapIfNeeded()
@@ -139,15 +148,20 @@ struct PharmaAppApp: App {
                     AccountPersonService.shared.migrateLegacyCodiceFiscaleIfNeeded(in: context)
                     syncIdentity(from: authViewModel.user)
                     appRouter.consumePendingRouteIfAny()
-                    backupCoordinator.start()
-                    notificationCoordinator.start()
+                    appDataProvider.backup.start()
+                    appDataProvider.notifications.start()
+                }
+                .task {
+                    guard !didStartBackupObservation else { return }
+                    didStartBackupObservation = true
+                    await observeBackupStateChanges()
                 }
         }
     }
 
     private func syncIdentity(from user: AuthUser?) {
         let context = persistenceController.container.viewContext
-        backupCoordinator.setAuthenticatedUserID(user?.id)
+        appDataProvider.backup.setAuthenticatedUserID(user?.id)
         UserIdentityProvider.shared.syncAuthenticatedIdentity(from: user, in: context)
         AccountPersonService.shared.syncAccountDisplayName(from: user, in: context)
     }
@@ -160,9 +174,20 @@ struct PharmaAppApp: App {
         AccountPersonService.shared.ensureAccountPerson(in: context)
         UserIdentityProvider.shared.syncAuthenticatedIdentity(from: authViewModel.user, in: context)
         AccountPersonService.shared.syncAccountDisplayName(from: authViewModel.user, in: context)
-        notificationCoordinator.refreshAfterStoreChange()
+        appDataProvider.notifications.refreshAfterStoreChange(reason: "backup-restore")
         Task { @MainActor in
-            _ = await CriticalDoseLiveActivityCoordinator.shared.refresh(reason: "backup-restore", now: nil)
+            await appDataProvider.notifications.refreshCriticalLiveActivity(reason: "backup-restore", now: nil)
+        }
+    }
+
+    private func observeBackupStateChanges() async {
+        for await state in appDataProvider.backup.observeState() {
+            guard state.restoreRevision != observedRestoreRevision else { continue }
+            let didIncrease = state.restoreRevision > observedRestoreRevision
+            observedRestoreRevision = state.restoreRevision
+            if didIncrease {
+                handleRestoreCompletion()
+            }
         }
     }
 }

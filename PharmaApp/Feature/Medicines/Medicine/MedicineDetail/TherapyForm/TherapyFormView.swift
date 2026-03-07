@@ -60,19 +60,17 @@ struct TaperStepDraft: Identifiable, Equatable {
 struct TherapyFormView: View {
     
     // MARK: - Environment
-    @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var appViewModel: AppViewModel
-    @FetchRequest(
-        entity: Person.entity(),
-        sortDescriptors: [NSSortDescriptor(key: "nome", ascending: true)]
-    ) private var persons: FetchedResults<Person>
-    @FetchRequest(fetchRequest: Doctor.extractDoctors()) private var doctors: FetchedResults<Doctor>
-    @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
+    @EnvironmentObject private var appDataStore: AppDataStore
+    private let context: NSManagedObjectContext
+    @State private var persons: [Person] = []
+    @State private var doctors: [Doctor] = []
+    @State private var hasStartedObservation = false
     
     // Nuovo state per la persona selezionata
     @State private var selectedPerson: Person?
-    @State private var selectedDoctorID: NSManagedObjectID?
+    @State private var selectedDoctorID: UUID?
 
     // MARK: - Modello
     var medicine: Medicine
@@ -153,6 +151,7 @@ struct TherapyFormView: View {
     ) {
         self.medicine = medicine
         self.package = package
+        self.context = context
         self.medicinePackage = medicinePackage
         self.editingTherapy = editingTherapy
         self.onSave = onSave
@@ -277,10 +276,10 @@ struct TherapyFormView: View {
             if medicine.obbligo_ricetta {
                 Section(header: Text("Prescrizione")) {
                     Picker("Medico prescrittore", selection: $selectedDoctorID) {
-                        Text("Nessuno").tag(NSManagedObjectID?.none)
-                        ForEach(doctors, id: \.objectID) { doctor in
+                        Text("Nessuno").tag(UUID?.none)
+                        ForEach(Array(doctors.enumerated()), id: \.offset) { _, doctor in
                             Text(doctorDisplayName(doctor))
-                                .tag(Optional(doctor.objectID))
+                                .tag(doctor.id)
                         }
                     }
                 }
@@ -357,6 +356,7 @@ struct TherapyFormView: View {
             }
         }
         .onAppear {
+            reloadFetchedState()
             startDate = startDateToday
             // Edit: popola dai dati della therapy
             if let therapy = editingTherapy {
@@ -368,10 +368,10 @@ struct TherapyFormView: View {
                     let candidates: [Therapy] = {
                         if let entry = medicinePackage {
                             let linked = (entry.therapies ?? []).filter {
-                                $0.medicine.objectID == medicine.objectID
-                                    && $0.package.objectID == entry.package.objectID
+                                $0.medicine.id == medicine.id
+                                    && $0.package.id == entry.package.id
                             }
-                            let fallback = all.filter { $0.package.objectID == entry.package.objectID }
+                            let fallback = all.filter { $0.package.id == entry.package.id }
                             return Array(Set(linked).union(fallback))
                         }
                         return all.filter { $0.package == package }
@@ -387,6 +387,13 @@ struct TherapyFormView: View {
                 selectedDoctorID = defaultPrescribingDoctorID
             }
             updateRecurrenceInputIfNeeded(force: true)
+        }
+        .task {
+            guard !hasStartedObservation else { return }
+            hasStartedObservation = true
+            for await _ in appDataStore.provider.observe(scopes: [.people, .doctors, .options]) {
+                reloadFetchedState()
+            }
         }
         .onChange(of: selectedFrequencyType) { _ in
             updateRecurrenceInputIfNeeded(force: false)
@@ -510,22 +517,22 @@ struct TherapyFormView: View {
 
     private var selectedDoctor: Doctor? {
         guard let selectedDoctorID else { return nil }
-        return doctors.first(where: { $0.objectID == selectedDoctorID })
+        return doctors.first(where: { $0.id == selectedDoctorID })
     }
 
-    private var defaultPrescribingDoctorID: NSManagedObjectID? {
-        if let current = editingTherapy?.prescribingDoctor?.objectID {
+    private var defaultPrescribingDoctorID: UUID? {
+        if let current = editingTherapy?.prescribingDoctor?.id {
             return current
         }
 
         let candidateTherapies: [Therapy] = {
             if let entry = medicinePackage {
                 let linked = (entry.therapies ?? []).filter {
-                    $0.medicine.objectID == medicine.objectID
-                        && $0.package.objectID == entry.package.objectID
+                    $0.medicine.id == medicine.id
+                        && $0.package.id == entry.package.id
                 }
                 let fallback = (medicine.therapies ?? []).filter {
-                    $0.package.objectID == entry.package.objectID
+                    $0.package.id == entry.package.id
                 }
                 return Array(Set(linked).union(fallback))
             }
@@ -533,9 +540,20 @@ struct TherapyFormView: View {
             return all.filter { $0.package == package }
         }()
 
-        let doctorsByID = Dictionary(grouping: candidateTherapies.compactMap { $0.prescribingDoctor }) { $0.objectID }
-        guard doctorsByID.count == 1 else { return nil }
-        return doctorsByID.keys.first
+        let doctorIDs = Set(candidateTherapies.compactMap { $0.prescribingDoctor?.id })
+        guard doctorIDs.count == 1 else { return nil }
+        return doctorIDs.first
+    }
+
+    private func reloadFetchedState() {
+        do {
+            let snapshot = try appDataStore.provider.medicines.fetchTherapyFormSnapshot()
+            persons = snapshot.persons
+            doctors = snapshot.doctors
+        } catch {
+            persons = []
+            doctors = []
+        }
     }
 
     private func doctorDisplayName(_ doctor: Doctor) -> String {
@@ -1334,7 +1352,7 @@ extension TherapyFormView {
     
     private func populateFromTherapy(_ therapy: Therapy) {
         selectedPerson = therapy.person
-        selectedDoctorID = therapy.prescribingDoctor?.objectID
+        selectedDoctorID = therapy.prescribingDoctor?.id
         automaticIntakeEnabled = therapy.automaticIntakeEnabled
         notificationsSilenced = therapy.notifications_silenced
         isPharmacoCritical = therapy.isPharmacoCritical
@@ -1397,14 +1415,6 @@ extension TherapyFormView {
             courseEnabled = true
             courseTotalDays = inclusiveDayCount(from: baseStartDate, to: untilDate)
             syncCourseUntilFromCourse()
-        }
-    }
-
-    private func saveContext() {
-        do {
-            try context.save()
-        } catch {
-            print("Errore durante il salvataggio del contesto: \(error.localizedDescription)")
         }
     }
 

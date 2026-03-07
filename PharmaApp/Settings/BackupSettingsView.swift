@@ -1,9 +1,19 @@
 import SwiftUI
 
 struct BackupSettingsView: View {
-    @EnvironmentObject private var backupCoordinator: BackupCoordinator
+    @EnvironmentObject private var appDataStore: AppDataStore
 
     @State private var isRestoreSheetPresented = false
+    @State private var backupState = BackupGatewayState(
+        status: .idle,
+        cloudAvailability: .unavailable,
+        snapshots: [],
+        lastSuccessfulBackupAt: nil,
+        lastErrorMessage: nil,
+        backupEnabled: false,
+        restoreRevision: 0
+    )
+    @State private var didStartObservation = false
 
     var body: some View {
         Form {
@@ -11,20 +21,30 @@ struct BackupSettingsView: View {
                 header: Label("Backup iCloud", systemImage: "icloud"),
                 footer: Text("Il backup usa l'iCloud del dispositivo, non l'account PharmaApp.")
             ) {
-                LabeledContent("Stato iCloud", value: backupCoordinator.cloudAvailability.description)
-                LabeledContent("Stato backup", value: backupCoordinator.status.description)
-                LabeledContent("Snapshot disponibili", value: "\(backupCoordinator.snapshots.count)")
+                LabeledContent("Stato iCloud", value: backupState.cloudAvailability.description)
+                LabeledContent("Stato backup", value: backupState.status.description)
+                LabeledContent("Snapshot disponibili", value: "\(backupState.snapshots.count)")
                 LabeledContent("Ultimo backup", value: lastBackupText)
 
-                Toggle("Backup automatico", isOn: $backupCoordinator.backupEnabled)
-                    .disabled(backupCoordinator.status.isBusy || backupCoordinator.cloudAvailability != .available)
+                Toggle(
+                    "Backup automatico",
+                    isOn: Binding(
+                        get: { backupState.backupEnabled },
+                        set: { newValue in
+                            appDataStore.provider.backup.setEnabled(newValue)
+                            refreshState()
+                        }
+                    )
+                )
+                .disabled(backupState.status.isBusy || backupState.cloudAvailability != .available)
 
                 Button("Aggiorna backup") {
                     Task {
-                        await backupCoordinator.performManualBackup()
+                        _ = await appDataStore.provider.backup.performManualBackup()
+                        refreshState()
                     }
                 }
-                .disabled(backupCoordinator.status.isBusy || backupCoordinator.cloudAvailability != .available)
+                .disabled(backupState.status.isBusy || backupState.cloudAvailability != .available)
 
                 Button {
                     isRestoreSheetPresented = true
@@ -32,17 +52,17 @@ struct BackupSettingsView: View {
                     Text("Ripristina backup")
                 }
                 .disabled(
-                    backupCoordinator.status.isBusy
-                    || backupCoordinator.snapshots.isEmpty
-                    || backupCoordinator.cloudAvailability != .available
+                    backupState.status.isBusy
+                    || backupState.snapshots.isEmpty
+                    || backupState.cloudAvailability != .available
                 )
 
-                if backupCoordinator.status.isBusy {
+                if backupState.status.isBusy {
                     ProgressView()
                 }
             }
 
-            if let lastError = backupCoordinator.lastErrorMessage, !lastError.isEmpty {
+            if let lastError = backupState.lastErrorMessage, !lastError.isEmpty {
                 Section {
                     Text(lastError)
                         .font(.footnote)
@@ -64,11 +84,31 @@ struct BackupSettingsView: View {
                 BackupRestoreListView()
             }
         }
+        .onAppear {
+            refreshState()
+            appDataStore.provider.backup.refreshSnapshots()
+            refreshState()
+        }
+        .task {
+            guard !didStartObservation else { return }
+            didStartObservation = true
+            await observeBackupState()
+        }
     }
 
     private var lastBackupText: String {
-        guard let date = backupCoordinator.lastSuccessfulBackupAt else { return "Mai" }
+        guard let date = backupState.lastSuccessfulBackupAt else { return "Mai" }
         return Self.timestampFormatter.string(from: date)
+    }
+
+    private func refreshState() {
+        backupState = appDataStore.provider.backup.state
+    }
+
+    private func observeBackupState() async {
+        for await state in appDataStore.provider.backup.observeState() {
+            backupState = state
+        }
     }
 
     private static let timestampFormatter: DateFormatter = {
@@ -83,5 +123,12 @@ struct BackupSettingsView: View {
     NavigationStack {
         BackupSettingsView()
     }
-    .environmentObject(BackupCoordinator())
+    .environmentObject(
+        AppDataStore(
+            provider: CoreDataAppDataProvider(
+                authGateway: FirebaseAuthGatewayAdapter(),
+                backupGateway: ICloudBackupGatewayAdapter(coordinator: BackupCoordinator())
+            )
+        )
+    )
 }

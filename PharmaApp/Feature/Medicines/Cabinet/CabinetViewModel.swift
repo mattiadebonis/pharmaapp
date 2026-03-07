@@ -72,7 +72,7 @@ class CabinetViewModel: ObservableObject {
             case cabinet(Cabinet)
             case medicinePackage(MedicinePackage)
         }
-        let id: NSManagedObjectID
+        let id: String
         let priority: Int
         let name: String
         let kind: Kind
@@ -80,7 +80,7 @@ class CabinetViewModel: ObservableObject {
 
     struct ShelfViewState {
         let entries: [ShelfEntry]
-        let orderedEntriesByCabinetID: [NSManagedObjectID: [MedicinePackage]]
+        let orderedEntriesByCabinetID: [String: [MedicinePackage]]
     }
 
     struct CabinetRowSnapshot {
@@ -121,25 +121,25 @@ class CabinetViewModel: ObservableObject {
             favoriteMedicineIDs: favoriteMedicineIDs
         )
 
-        var indexMap: [NSManagedObjectID: Int] = [:]
+        var indexMap: [String: Int] = [:]
         for (idx, entry) in orderedEntries.enumerated() {
-            indexMap[entry.objectID] = idx
+            indexMap[entryKey(entry)] = idx
         }
 
         var medicineEntries: [ShelfEntry] = []
         for entry in orderedEntries where entry.cabinet == nil {
-            let priority = indexMap[entry.objectID] ?? Int.max
+            let priority = indexMap[entryKey(entry)] ?? Int.max
             let name = entry.medicine.nome
-            medicineEntries.append(ShelfEntry(id: entry.objectID, priority: priority, name: name, kind: .medicinePackage(entry)))
+            medicineEntries.append(ShelfEntry(id: entryKey(entry), priority: priority, name: name, kind: .medicinePackage(entry)))
         }
 
         let baseIndex = orderedEntries.count
         var cabinetEntries: [ShelfEntry] = []
         for (cabIdx, cabinet) in cabinets.enumerated() {
-            let cabinetEntryItems = orderedEntries.filter { $0.cabinet?.objectID == cabinet.objectID }
-            let idxs = cabinetEntryItems.compactMap { indexMap[$0.objectID] }
+            let cabinetEntryItems = orderedEntries.filter { cabinetKey($0.cabinet) == cabinetKey(cabinet) }
+            let idxs = cabinetEntryItems.compactMap { indexMap[entryKey($0)] }
             let priority = idxs.min() ?? (baseIndex + cabIdx)
-            cabinetEntries.append(ShelfEntry(id: cabinet.objectID, priority: priority, name: cabinet.displayName, kind: .cabinet(cabinet)))
+            cabinetEntries.append(ShelfEntry(id: cabinetKey(cabinet), priority: priority, name: cabinet.displayName, kind: .cabinet(cabinet)))
         }
 
         let sorter: (ShelfEntry, ShelfEntry) -> Bool = { lhs, rhs in
@@ -149,14 +149,14 @@ class CabinetViewModel: ObservableObject {
             return lhs.priority < rhs.priority
         }
 
-        var orderedEntriesByCabinetID: [NSManagedObjectID: [MedicinePackage]] = [:]
+        var orderedEntriesByCabinetID: [String: [MedicinePackage]] = [:]
         for entry in orderedEntries {
-            if let cabinetID = entry.cabinet?.objectID {
+            if let cabinetID = cabinetKey(entry.cabinet) {
                 orderedEntriesByCabinetID[cabinetID, default: []].append(entry)
             }
         }
-        for cabinet in cabinets where orderedEntriesByCabinetID[cabinet.objectID] == nil {
-            orderedEntriesByCabinetID[cabinet.objectID] = []
+        for cabinet in cabinets where orderedEntriesByCabinetID[cabinetKey(cabinet)] == nil {
+            orderedEntriesByCabinetID[cabinetKey(cabinet)] = []
         }
 
         return ShelfViewState(
@@ -166,7 +166,7 @@ class CabinetViewModel: ObservableObject {
     }
 
     func sortedEntries(in cabinet: Cabinet, entries: [MedicinePackage], option: Option?) -> [MedicinePackage] {
-        let filtered = entries.filter { $0.cabinet?.objectID == cabinet.objectID }
+        let filtered = entries.filter { $0.cabinet?.id == cabinet.id }
         return orderedMedicinePackages(
             entries: filtered,
             option: option,
@@ -180,7 +180,7 @@ class CabinetViewModel: ObservableObject {
         option: Option?,
         favoriteMedicineIDs: Set<UUID>
     ) -> [MedicinePackage] {
-        let filtered = entries.filter { $0.cabinet?.objectID == cabinet.objectID }
+        let filtered = entries.filter { $0.cabinet?.id == cabinet.id }
         return orderedMedicinePackages(
             entries: filtered,
             option: option,
@@ -199,18 +199,18 @@ class CabinetViewModel: ObservableObject {
         entries: [MedicinePackage],
         option: Option?,
         now: Date = Date()
-    ) -> [NSManagedObjectID: CabinetRowSnapshot] {
+    ) -> [String: CabinetRowSnapshot] {
         let recurrenceManager = RecurrenceManager.shared
         let calendar = Calendar.current
         let builder = snapshotBuilder(for: entries)
         let optionSnapshot = builder.makeOptionSnapshot(option: option)
 
-        var snapshots: [NSManagedObjectID: CabinetRowSnapshot] = [:]
-        var medicineLogCache: [NSManagedObjectID: [Log]] = [:]
+        var snapshots: [String: CabinetRowSnapshot] = [:]
+        var medicineLogCache: [String: [Log]] = [:]
 
         for entry in displayableEntries(from: entries) {
             let medicine = entry.medicine
-            let medicineID = medicine.objectID
+            let medicineID = medicineKey(medicine)
 
             // Cache intake logs per medicine
             let intakeLogsToday: [Log]
@@ -268,7 +268,7 @@ class CabinetViewModel: ObservableObject {
                 option: optionSnapshot
             )
 
-            snapshots[entry.objectID] = CabinetRowSnapshot(
+            snapshots[entryKey(entry)] = CabinetRowSnapshot(
                 presentation: presentation,
                 shouldShowPrescription: shouldShowPrescription
             )
@@ -460,9 +460,9 @@ class CabinetViewModel: ObservableObject {
     }
 
     private struct EntryGroupKey: Hashable {
-        let medicineID: NSManagedObjectID
-        let packageID: NSManagedObjectID
-        let cabinetID: NSManagedObjectID?
+        let medicineID: String
+        let packageID: String
+        let cabinetID: String?
     }
 
     private func displayableEntries(from entries: [MedicinePackage]) -> [MedicinePackage] {
@@ -471,25 +471,46 @@ class CabinetViewModel: ObservableObject {
 
         let grouped = Dictionary(grouping: active) { entry in
             EntryGroupKey(
-                medicineID: entry.medicine.objectID,
-                packageID: entry.package.objectID,
-                cabinetID: entry.cabinet?.objectID
+                medicineID: medicineKey(entry.medicine),
+                packageID: packageKey(entry.package),
+                cabinetID: cabinetKey(entry.cabinet)
             )
         }
 
-        var hiddenPlaceholderIDs = Set<NSManagedObjectID>()
+        var hiddenPlaceholderIDs = Set<String>()
         for groupEntries in grouped.values {
             let hasPurchasedEntry = groupEntries.contains { $0.isPurchased && !$0.isReversed }
             guard hasPurchasedEntry else { continue }
             for entry in groupEntries where entry.isPlaceholder {
-                hiddenPlaceholderIDs.insert(entry.objectID)
+                hiddenPlaceholderIDs.insert(entryKey(entry))
             }
         }
 
-        return active.filter { !hiddenPlaceholderIDs.contains($0.objectID) }
+        return active.filter { !hiddenPlaceholderIDs.contains(entryKey($0)) }
     }
 
     private func deadlineIndicator(for entry: MedicinePackage) -> MedicineRowView.Snapshot.DeadlineIndicator? {
         makeMedicineRowDeadlineIndicator(for: entry.medicine, medicinePackage: entry)
+    }
+
+    private func entryKey(_ entry: MedicinePackage) -> String {
+        entry.id.uuidString
+    }
+
+    private func medicineKey(_ medicine: Medicine) -> String {
+        medicine.id.uuidString
+    }
+
+    private func packageKey(_ package: Package) -> String {
+        package.id.uuidString
+    }
+
+    private func cabinetKey(_ cabinet: Cabinet) -> String {
+        cabinet.id.uuidString
+    }
+
+    private func cabinetKey(_ cabinet: Cabinet?) -> String? {
+        guard let cabinet else { return nil }
+        return cabinetKey(cabinet)
     }
 }

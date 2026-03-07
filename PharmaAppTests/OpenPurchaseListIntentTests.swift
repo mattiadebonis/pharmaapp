@@ -29,9 +29,9 @@ private final class OpenPurchaseListRouteStoreFake: PendingAppRouteStoring {
 struct OpenPurchaseListIntentTests {
     @Test func openPurchaseListIntentQueuesTodayPurchaseRoute() async throws {
         let fakeStore = OpenPurchaseListRouteStoreFake()
-        let previousStore = OpenPurchaseListIntent.routeStore
-        OpenPurchaseListIntent.routeStore = fakeStore
-        defer { OpenPurchaseListIntent.routeStore = previousStore }
+        let previousStore = OpenPurchaseListIntent.routeStoreOverride
+        OpenPurchaseListIntent.routeStoreOverride = fakeStore
+        defer { OpenPurchaseListIntent.routeStoreOverride = previousStore }
 
         _ = try await OpenPurchaseListIntent().perform()
 

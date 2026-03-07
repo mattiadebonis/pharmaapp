@@ -130,7 +130,7 @@ class TherapyFormViewModel: ObservableObject {
         }
 
         do {
-            try context.save()
+            try CoreDataWriteCommand.saveIfNeeded(context)
             successMessage = "Salvataggio riuscito!"
             DispatchQueue.main.async {
                 self.isDataUpdated = true
@@ -209,7 +209,7 @@ class TherapyFormViewModel: ObservableObject {
         }
         
         do {
-            try context.save()
+            try CoreDataWriteCommand.saveIfNeeded(context)
             successMessage = "Aggiornamento riuscito!"
             DispatchQueue.main.async {
                 self.isDataUpdated = true
@@ -251,7 +251,7 @@ class TherapyFormViewModel: ObservableObject {
             }
 
             context.delete(therapy)
-            try context.save()
+            try CoreDataWriteCommand.saveIfNeeded(context)
             successMessage = "Terapia eliminata!"
             DispatchQueue.main.async {
                 self.isDataUpdated = true

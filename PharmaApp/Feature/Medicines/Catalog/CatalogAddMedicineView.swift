@@ -1,5 +1,4 @@
 import SwiftUI
-import CoreData
 import Vision
 
 struct CatalogAddMedicineView: View {
@@ -23,11 +22,10 @@ struct CatalogAddMedicineView: View {
         let message: String
     }
 
-    @Environment(\.managedObjectContext) private var managedObjectContext
+    @EnvironmentObject private var appDataStore: AppDataStore
     @Environment(\.dismiss) private var dismiss
 
-    @FetchRequest(fetchRequest: Medicine.extractMedicines())
-    private var medicines: FetchedResults<Medicine>
+    @State private var medicines: [Medicine] = []
 
     let autoStartScan: Bool
 
@@ -41,13 +39,10 @@ struct CatalogAddMedicineView: View {
     @State private var scanErrorMessage: String?
     @State private var showScanError = false
     @State private var feedback: Feedback?
-    @State private var therapyContext: CatalogResolvedContext?
+    @State private var therapyContext: SearchCatalogResolvedContext?
+    @State private var hasStartedObservation = false
 
     private let repository = CatalogSelectionRepository()
-
-    private var resolver: CatalogSelectionResolver {
-        CatalogSelectionResolver(context: managedObjectContext, repository: repository)
-    }
 
     private var trimmedSearchText: String {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -111,6 +106,14 @@ struct CatalogAddMedicineView: View {
         }
         .task {
             loadCatalogIfNeeded()
+            guard !hasStartedObservation else { return }
+            hasStartedObservation = true
+            reloadMedicines()
+            for await _ in appDataStore.provider.observe(
+                scopes: [.medicines, .therapies, .logs, .stocks, .cabinets]
+            ) {
+                reloadMedicines()
+            }
         }
         .onAppear {
             guard !didHandleInitialAppearance else { return }
@@ -131,7 +134,7 @@ struct CatalogAddMedicineView: View {
                 TherapyFormView(
                     medicine: context.medicine,
                     package: context.package,
-                    context: managedObjectContext,
+                    context: context.entry.managedObjectContext ?? PersistenceController.shared.container.viewContext,
                     medicinePackage: context.entry,
                     onSave: {
                         therapyContext = nil
@@ -301,10 +304,9 @@ struct CatalogAddMedicineView: View {
 
     private func handleAddToCabinet(_ selection: CatalogSelection) {
         do {
-            _ = try resolver.addToCabinet(selection)
+            try appDataStore.provider.search.addCatalogSelectionToCabinet(selection)
             feedback = Feedback(kind: .success, message: "Aggiunto all'armadietto.")
         } catch {
-            managedObjectContext.rollback()
             feedback = Feedback(
                 kind: .error,
                 message: "Non sono riuscito ad aggiungere il farmaco all'armadietto."
@@ -314,10 +316,8 @@ struct CatalogAddMedicineView: View {
 
     private func handleAddTherapy(_ selection: CatalogSelection) {
         do {
-            let resolved = try resolver.prepareTherapy(selection)
-            therapyContext = resolved
+            therapyContext = try appDataStore.provider.search.prepareCatalogTherapy(selection)
         } catch {
-            managedObjectContext.rollback()
             feedback = Feedback(
                 kind: .error,
                 message: "Non sono riuscito ad aprire il form terapia."
@@ -327,13 +327,20 @@ struct CatalogAddMedicineView: View {
 
     private func handleBuy(_ selection: CatalogSelection) {
         do {
-            _ = try resolver.buyOnePackage(selection)
+            let preparation = try appDataStore.provider.search.prepareCatalogPackageEditor(selection)
+            let month = Int(preparation.deadlineMonth.trimmingCharacters(in: .whitespacesAndNewlines))
+            let year = Int(preparation.deadlineYear.trimmingCharacters(in: .whitespacesAndNewlines))
+            try appDataStore.provider.search.applyCatalogStockEditor(
+                preparation.context,
+                targetUnits: preparation.defaultTargetUnits,
+                deadlineMonth: month,
+                deadlineYear: year
+            )
             feedback = Feedback(
                 kind: .success,
                 message: "Confezione acquistata (\(catalogPackageShortLabel(selection))) e scorte aggiornate."
             )
         } catch {
-            managedObjectContext.rollback()
             feedback = Feedback(
                 kind: .error,
                 message: "Non sono riuscito a registrare l'acquisto."
@@ -359,6 +366,14 @@ struct CatalogAddMedicineView: View {
                 catalogSelections = selections
                 isLoading = false
             }
+        }
+    }
+
+    private func reloadMedicines() {
+        do {
+            medicines = try appDataStore.provider.search.fetchSnapshot().medicines
+        } catch {
+            medicines = []
         }
     }
 

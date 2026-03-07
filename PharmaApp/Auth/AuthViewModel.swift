@@ -1,8 +1,6 @@
 import SwiftUI
 import AuthenticationServices
 import CryptoKit
-import FirebaseAuth
-import FirebaseCore
 import UIKit
 
 @MainActor
@@ -18,30 +16,31 @@ final class AuthViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var isBusy: Bool = false
 
-    private let firebaseAuthClient: FirebaseAuthClientProtocol
+    private let authGateway: any AuthGateway
     private let googleSignInClient: GoogleSignInClientProtocol
     private let legacyAuthStore: LegacyAuthStoreProtocol
     private let presentingViewControllerProvider: () -> UIViewController?
-    private let isFirebaseConfigured: () -> Bool
 
-    private var listenerHandle: AnyObject?
+    private var authStateTask: Task<Void, Never>?
     private var didStart: Bool = false
     private var currentNonce: String?
     private var legacyUser: AuthUser?
     private var pendingProfileFallback: PendingProfileFallback?
 
     init(
-        firebaseAuthClient: FirebaseAuthClientProtocol = FirebaseAuthClient(),
+        authGateway: (any AuthGateway)? = nil,
         googleSignInClient: GoogleSignInClientProtocol = GoogleSignInClient(),
         legacyAuthStore: LegacyAuthStoreProtocol = LegacyAuthStore(),
-        presentingViewControllerProvider: (() -> UIViewController?)? = nil,
-        isFirebaseConfigured: @escaping () -> Bool = { FirebaseApp.app() != nil }
+        presentingViewControllerProvider: (() -> UIViewController?)? = nil
     ) {
-        self.firebaseAuthClient = firebaseAuthClient
+        self.authGateway = authGateway ?? FirebaseAuthGatewayAdapter()
         self.googleSignInClient = googleSignInClient
         self.legacyAuthStore = legacyAuthStore
         self.presentingViewControllerProvider = presentingViewControllerProvider ?? { UIApplication.topViewController() }
-        self.isFirebaseConfigured = isFirebaseConfigured
+    }
+
+    deinit {
+        authStateTask?.cancel()
     }
 
     func start() {
@@ -50,13 +49,16 @@ final class AuthViewModel: ObservableObject {
         state = .loading
         legacyUser = legacyAuthStore.consumeUser()
 
-        guard isFirebaseConfigured() else {
+        guard authGateway.isConfigured() else {
             state = .unauthenticated
             return
         }
 
-        listenerHandle = firebaseAuthClient.startListening { [weak self] authUser in
-            self?.handleAuthStateDidChange(authUser)
+        let stream = authGateway.observeAuthState()
+        authStateTask = Task { [weak self] in
+            for await authUser in stream {
+                self?.handleAuthStateDidChange(authUser)
+            }
         }
     }
 
@@ -90,7 +92,7 @@ final class AuthViewModel: ObservableObject {
     }
 
     func signInWithGoogle() {
-        guard let clientID = Self.googleClientID() else {
+        guard let clientID = authGateway.googleClientID() else {
             errorMessage = "Google Sign-In non configurato. Imposta CLIENT_ID e REVERSED_CLIENT_ID di Firebase."
             return
         }
@@ -109,7 +111,7 @@ final class AuthViewModel: ObservableObject {
         var capturedError: Error?
 
         do {
-            try firebaseAuthClient.signOut()
+            try authGateway.signOut()
         } catch {
             capturedError = error
         }
@@ -146,7 +148,7 @@ final class AuthViewModel: ObservableObject {
                 fullName: payload.fullName,
                 imageURL: payload.imageURL
             )
-            try await firebaseAuthClient.signInWithGoogle(idToken: payload.idToken, accessToken: payload.accessToken)
+            try await authGateway.signInWithGoogle(idToken: payload.idToken, accessToken: payload.accessToken)
         } catch {
             pendingProfileFallback = nil
             guard !Self.isCancellation(error) else { return }
@@ -188,7 +190,7 @@ final class AuthViewModel: ObservableObject {
                 fullName: Self.formatAppleName(credential.fullName),
                 imageURL: nil
             )
-            try await firebaseAuthClient.signInWithApple(
+            try await authGateway.signInWithApple(
                 idToken: payload.idToken,
                 rawNonce: payload.rawNonce,
                 fullName: payload.fullName
@@ -259,7 +261,7 @@ final class AuthViewModel: ObservableObject {
         guard needsDisplayName || needsPhoto else { return }
 
         do {
-            try await firebaseAuthClient.updateCurrentUser(
+            try await authGateway.updateCurrentUser(
                 displayName: enriched.fullName,
                 photoURL: enriched.imageURL
             )
@@ -275,27 +277,13 @@ final class AuthViewModel: ObservableObject {
         return normalizedValue(from: name)
     }
 
-    private static func googleClientID() -> String? {
-        if let clientID = sanitizedClientID(FirebaseApp.app()?.options.clientID) {
-            return clientID
-        }
-
-        if let clientID = sanitizedClientID(Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String) {
-            return clientID
-        }
-
-        guard let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
-              let dict = NSDictionary(contentsOfFile: path),
-              let clientID = sanitizedClientID(dict["CLIENT_ID"] as? String) else {
-            return nil
-        }
-
-        return clientID
-    }
-
     private func localizedMessage(for error: Error) -> String? {
         if let flowError = error as? AuthFlowError {
             return flowError.errorDescription
+        }
+
+        if let gatewayError = error as? AuthGatewayError {
+            return gatewayError.errorDescription
         }
 
         if let googleError = error as? GoogleSignInClientError {
@@ -319,89 +307,7 @@ final class AuthViewModel: ObservableObject {
             }
         }
 
-        let nsError = error as NSError
-        if nsError.domain == AuthErrorDomain,
-           let code = AuthErrorCode(rawValue: nsError.code) {
-            switch code {
-            case .accountExistsWithDifferentCredential:
-                return "Esiste già un account con un provider diverso. Accedi con il provider usato in precedenza."
-            case .credentialAlreadyInUse:
-                return "Queste credenziali risultano già collegate a un altro account."
-            case .internalError:
-                return firebaseInternalErrorMessage(from: nsError)
-            case .operationNotAllowed:
-                return "Login con Apple non abilitato in Firebase Authentication."
-            case .invalidCredential:
-                return "Credenziali Apple non valide oppure configurazione Apple/Firebase incompleta."
-            case .missingOrInvalidNonce:
-                return "Nonce Apple non valido. Riprova."
-            case .appNotAuthorized:
-                return "L'app non è autorizzata alla configurazione Firebase corrente."
-            case .invalidAPIKey:
-                return "Configurazione Firebase non valida. Controlla GoogleService-Info.plist."
-            case .networkError:
-                return "Errore di rete durante l'accesso. Riprova."
-            case .keychainError:
-                return "Impossibile completare l'accesso su questo dispositivo. Controlla account Apple e portachiavi."
-            case .webContextCancelled:
-                return nil
-            default:
-                break
-            }
-        }
-
-        return nsError.localizedDescription
-    }
-
-    private func firebaseInternalErrorMessage(from error: NSError) -> String {
-        let backendMessage = firebaseBackendMessage(from: error)
-        if let backendMessage {
-            let normalizedBackendMessage = backendMessage.uppercased()
-            if normalizedBackendMessage.contains("CONFIGURATION_NOT_FOUND") ||
-                normalizedBackendMessage.contains("CONFIGURATION NOT FOUND") {
-                return "Il provider Apple non risulta configurato nel progetto Firebase corrente. Controlla Sign-in method > Apple nel progetto pharmapp-1987 e verifica Service ID, Team ID, Key ID, private key e Return URL."
-            }
-            return "Firebase Auth ha restituito un errore interno: \(backendMessage). Verifica la configurazione del provider Apple in Firebase Console e Apple Developer."
-        }
-
-        if let underlyingError = deepestUnderlyingError(from: error),
-           underlyingError.localizedDescription != error.localizedDescription {
-            return "Firebase Auth ha restituito un errore interno: \(underlyingError.localizedDescription)"
-        }
-
-        return "Firebase Auth ha restituito un errore interno. Di solito indica una configurazione Apple/Firebase incompleta o non coerente."
-    }
-
-    private func firebaseBackendMessage(from error: NSError) -> String? {
-        let responseKey = "FIRAuthErrorUserInfoDeserializedResponseKey"
-
-        if let directResponse = error.userInfo[responseKey] as? [String: AnyHashable],
-           let message = Self.normalizedValue(from: directResponse["message"] as? String) {
-            return message
-        }
-
-        var currentError = error.userInfo[NSUnderlyingErrorKey] as? NSError
-        while let unwrappedError = currentError {
-            if let response = unwrappedError.userInfo[responseKey] as? [String: AnyHashable],
-               let message = Self.normalizedValue(from: response["message"] as? String) {
-                return message
-            }
-            currentError = unwrappedError.userInfo[NSUnderlyingErrorKey] as? NSError
-        }
-
-        return nil
-    }
-
-    private func deepestUnderlyingError(from error: NSError) -> NSError? {
-        var currentError: NSError? = error
-        var deepestError: NSError?
-
-        while let nextError = currentError?.userInfo[NSUnderlyingErrorKey] as? NSError {
-            deepestError = nextError
-            currentError = nextError
-        }
-
-        return deepestError
+        return (error as NSError).localizedDescription
     }
 
     private func recordAuthError(_ error: Error, context: String) {
@@ -420,10 +326,8 @@ final class AuthViewModel: ObservableObject {
             return true
         }
 
-        let nsError = error as NSError
-        if nsError.domain == AuthErrorDomain,
-           let authErrorCode = AuthErrorCode(rawValue: nsError.code),
-           authErrorCode == .webContextCancelled {
+        if let gatewayError = error as? AuthGatewayError,
+           gatewayError == .cancelled {
             return true
         }
 
@@ -434,14 +338,6 @@ final class AuthViewModel: ObservableObject {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private static func sanitizedClientID(_ value: String?) -> String? {
-        guard let trimmed = normalizedValue(from: value) else { return nil }
-        if trimmed.contains("REPLACE_WITH_FIREBASE") {
-            return nil
-        }
-        return trimmed
     }
 
     private static func shouldApplyFallback(_ fallback: PendingProfileFallback, to authUser: AuthUser) -> Bool {

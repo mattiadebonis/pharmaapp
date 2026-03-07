@@ -7,7 +7,9 @@ struct DidITakeEverythingTodayIntent: AppIntent {
     static var openAppWhenRun = false
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let status = SiriIntentFacade.shared.doneTodayStatus()
+        let status = await MainActor.run {
+            IntentsGatewayBridge.gateway.doneTodayStatus(now: Date())
+        }
 
         if status.totalPlanned == 0 {
             return .result(dialog: SiriIntentSupport.dialog("Oggi non risultano assunzioni pianificate."))

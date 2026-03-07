@@ -6,7 +6,7 @@ struct CatalogResolvedContext: Identifiable {
     let package: Package
     let entry: MedicinePackage
 
-    var id: NSManagedObjectID { entry.objectID }
+    var id: UUID { entry.id }
 }
 
 struct CatalogSelectionResolver {
@@ -52,9 +52,8 @@ struct CatalogSelectionResolver {
         }
 
         do {
-            try context.save()
+            try CoreDataWriteCommand.saveOrRollback(context)
         } catch {
-            context.rollback()
             throw error
         }
 
@@ -125,7 +124,7 @@ struct CatalogSelectionResolver {
         if let latest = MedicinePackage.latestActiveEntry(for: medicine, package: package, in: context) {
             return latest
         }
-        return medicine.medicinePackages?.first(where: { $0.package.objectID == package.objectID })
+        return medicine.medicinePackages?.first(where: { $0.package.id == package.id })
     }
 
     private func packageMatches(_ package: Package, selection: CatalogSelection) -> Bool {
@@ -179,9 +178,7 @@ struct CatalogSelectionResolver {
     }
 
     private func saveIfNeeded() throws {
-        if context.hasChanges {
-            try context.save()
-        }
+        try CoreDataWriteCommand.saveIfNeeded(context)
     }
 }
 

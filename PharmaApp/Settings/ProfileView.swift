@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import CoreData
 import MapKit
 import CoreLocation
 import CoreImage
@@ -651,6 +650,12 @@ struct CodiceFiscaleBarcodeView: View {
         ProfileView()
     }
     .environmentObject(AuthViewModel())
-    .environmentObject(BackupCoordinator())
-    .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
+    .environmentObject(
+        AppDataStore(
+            provider: CoreDataAppDataProvider(
+                authGateway: FirebaseAuthGatewayAdapter(),
+                backupGateway: ICloudBackupGatewayAdapter(coordinator: BackupCoordinator())
+            )
+        )
+    )
 }

@@ -10,7 +10,9 @@ struct MarkMedicinePurchasedIntent: AppIntent {
     var medicine: MedicineIntentEntity
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let result = SiriIntentFacade.shared.markPurchased(medicineID: medicine.id)
+        let result = await MainActor.run {
+            IntentsGatewayBridge.gateway.markPurchased(medicineID: medicine.id)
+        }
         let dialogText: String
         if result.succeeded {
             dialogText = "Acquisto registrato per \(result.medicineName ?? medicine.name)."

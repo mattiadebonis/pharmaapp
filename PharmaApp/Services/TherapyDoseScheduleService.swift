@@ -24,7 +24,7 @@ struct MissedDoseCandidate: Identifiable {
 
     var id: String {
         let bucket = Int(scheduledAt.timeIntervalSince1970 / 60)
-        return "\(therapy.objectID.uriRepresentation().absoluteString)|\(bucket)"
+        return "\(therapy.id.uuidString)|\(bucket)"
     }
 }
 
@@ -50,7 +50,7 @@ final class TherapyDoseScheduleService {
         let package = inContextOptional(package)
         let therapies = Array(medicine.therapies ?? []).filter { therapy in
             (therapy.manual_intake_registration || medicine.manual_intake_registration)
-                && (package == nil || therapy.package.objectID == package?.objectID)
+                && (package == nil || therapy.package.id == package?.id)
         }
         return missedDoseCandidate(for: therapies, now: now)
     }
@@ -194,18 +194,18 @@ final class TherapyDoseScheduleService {
         let therapy = inContext(therapy)
         let logsOnDay = therapy.medicine.effectiveIntakeLogs(on: day, calendar: calendar)
 
-        let assigned = logsOnDay.filter { $0.therapy?.objectID == therapy.objectID }
+        let assigned = logsOnDay.filter { $0.therapy?.id == therapy.id }
         let unassigned = logsOnDay.filter { $0.therapy == nil }
         let therapyCount = therapy.medicine.therapies?.count ?? 0
         let packageMatched = therapyCount == 1
             ? unassigned
-            : unassigned.filter { $0.package?.objectID == therapy.package.objectID }
+            : unassigned.filter { $0.package?.id == therapy.package.id }
 
-        var byObjectID: [NSManagedObjectID: Log] = [:]
+        var byId: [UUID: Log] = [:]
         for log in assigned + packageMatched {
-            byObjectID[log.objectID] = log
+            byId[log.id] = log
         }
-        return byObjectID.values.sorted { $0.timestamp < $1.timestamp }
+        return byId.values.sorted { $0.timestamp < $1.timestamp }
     }
 
     private func overrideRecords(on day: Date, for therapy: Therapy) -> [DoseEventRecord] {

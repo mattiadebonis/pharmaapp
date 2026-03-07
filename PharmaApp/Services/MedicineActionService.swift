@@ -279,15 +279,6 @@ final class MedicineActionService {
         return stockService.undoLog(operationId: operationId)
     }
 
-    @discardableResult
-    func undoLog(logObjectID: NSManagedObjectID) -> Bool {
-        guard let log = try? context.existingObject(with: logObjectID) as? Log else { return false }
-        if let operationId = log.operation_id {
-            return undoLog(operationId: operationId)
-        }
-        return stockService.undoLog(log)
-    }
-
     // MARK: - Helpers
     private func package(for medicine: Medicine) -> Package? {
         if let therapies = medicine.therapies, let therapy = therapies.first {
@@ -328,11 +319,11 @@ final class MedicineActionService {
 
     private func therapies(for entry: MedicinePackage) -> [Therapy] {
         let linked = (entry.therapies ?? []).filter {
-            $0.medicine.objectID == entry.medicine.objectID
-                && $0.package.objectID == entry.package.objectID
+            $0.medicine.id == entry.medicine.id
+                && $0.package.id == entry.package.id
         }
         let fallback = (entry.medicine.therapies ?? []).filter {
-            $0.package.objectID == entry.package.objectID
+            $0.package.id == entry.package.id
         }
         return Array(Set(linked).union(fallback))
     }
@@ -360,7 +351,7 @@ final class MedicineActionService {
     }
 
     private func resolveTherapyCandidate(for medicine: Medicine, package: Package, now: Date) -> Therapy? {
-        let therapies = (medicine.therapies ?? []).filter { $0.package.objectID == package.objectID }
+        let therapies = (medicine.therapies ?? []).filter { $0.package.id == package.id }
         guard !therapies.isEmpty else { return nil }
         let recurrenceManager = RecurrenceManager(context: context)
 

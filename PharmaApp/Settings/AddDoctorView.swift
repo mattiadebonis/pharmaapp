@@ -8,8 +8,8 @@
 import SwiftUI
 
 struct AddDoctorView: View {
-    @Environment(\.managedObjectContext) private var managedObjectContext
     @Environment(\.dismiss) var dismiss
+    @EnvironmentObject private var appDataStore: AppDataStore
     
     @State private var nome: String = ""
     @State private var mail: String = ""
@@ -20,6 +20,7 @@ struct AddDoctorView: View {
     @State private var segreteriaTelefono: String = ""
     @State private var schedule = DoctorScheduleDTO()
     @State private var segreteriaSchedule = DoctorScheduleDTO()
+    @State private var errorMessage: String?
     
     var body: some View {
         Form {
@@ -65,6 +66,14 @@ struct AddDoctorView: View {
                     }
                 }
             }
+
+            if let errorMessage {
+                Section {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+            }
         }
         .navigationTitle("Aggiungi Dottore")
         .navigationBarTitleDisplayMode(.inline)
@@ -78,24 +87,24 @@ struct AddDoctorView: View {
     }
     
     private func addDoctor() {
-        let nuovoDottore = Doctor(context: managedObjectContext)
-        nuovoDottore.id = UUID()
-        nuovoDottore.nome = normalizedValue(from: nome)
-        nuovoDottore.cognome = nil
-        nuovoDottore.mail = normalizedValue(from: mail)
-        nuovoDottore.telefono = normalizedValue(from: telefono)
-        nuovoDottore.specializzazione = normalizedValue(from: specializzazione)
-        nuovoDottore.scheduleDTO = schedule
-        nuovoDottore.segreteria_nome = normalizedValue(from: segreteriaNome)
-        nuovoDottore.segreteria_mail = normalizedValue(from: segreteriaMail)
-        nuovoDottore.segreteria_telefono = normalizedValue(from: segreteriaTelefono)
-        nuovoDottore.secretaryScheduleDTO = segreteriaSchedule
-        
         do {
-            try managedObjectContext.save()
+            _ = try appDataStore.provider.settings.saveDoctor(
+                DoctorWriteInput(
+                    id: nil,
+                    name: normalizedValue(from: nome),
+                    email: normalizedValue(from: mail),
+                    phone: normalizedValue(from: telefono),
+                    specialization: normalizedValue(from: specializzazione),
+                    schedule: schedule,
+                    secretaryName: normalizedValue(from: segreteriaNome),
+                    secretaryEmail: normalizedValue(from: segreteriaMail),
+                    secretaryPhone: normalizedValue(from: segreteriaTelefono),
+                    secretarySchedule: segreteriaSchedule
+                )
+            )
             dismiss()
         } catch {
-            print("Errore nel salvataggio del dottore: \(error.localizedDescription)")
+            errorMessage = error.localizedDescription
         }
     }
 

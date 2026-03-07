@@ -31,9 +31,9 @@ struct CoreDataSnapshotBuilder {
     }
 
     func makeMedicineSnapshots(medicines: [Medicine], logs: [Log]) -> [MedicineSnapshot] {
-        let logsByMedicine: [NSManagedObjectID: [Log]] = {
+        let logsByMedicine: [UUID: [Log]] = {
             guard !logs.isEmpty else { return [:] }
-            return Dictionary(grouping: logs, by: { $0.medicine.objectID })
+            return Dictionary(grouping: logs, by: { $0.medicine.id })
         }()
 
         return medicines.map { medicine in
@@ -41,7 +41,7 @@ struct CoreDataSnapshotBuilder {
                 if logsByMedicine.isEmpty {
                     return Array(medicine.logs ?? [])
                 }
-                return logsByMedicine[medicine.objectID] ?? []
+                return logsByMedicine[medicine.id] ?? []
             }()
             return makeMedicineSnapshot(medicine: medicine, logs: logsForMedicine)
         }
@@ -103,11 +103,11 @@ struct CoreDataSnapshotBuilder {
 
         // Resolve therapies for this entry
         let linked = (entry.therapies ?? []).filter {
-            $0.medicine.objectID == medicine.objectID
-                && $0.package.objectID == package.objectID
+            $0.medicine.id == medicine.id
+                && $0.package.id == package.id
         }
         let fallback = (medicine.therapies ?? []).filter {
-            $0.package.objectID == package.objectID
+            $0.package.id == package.id
         }
         let entryTherapies = Array(Set(linked).union(fallback))
 

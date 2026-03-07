@@ -8,7 +8,7 @@ struct CabinetView: View {
         let pinnedMedicineEntries: [CabinetViewModel.ShelfEntry]
         let cabinetEntries: [CabinetViewModel.ShelfEntry]
         let otherMedicineEntries: [CabinetViewModel.ShelfEntry]
-        let orderedEntriesByCabinetID: [NSManagedObjectID: [MedicinePackage]]
+        let orderedEntriesByCabinetID: [String: [MedicinePackage]]
 
         static let empty = ShelfViewState(
             pinnedMedicineEntries: [],
@@ -35,19 +35,16 @@ struct CabinetView: View {
 
     @EnvironmentObject private var appVM: AppViewModel
     @EnvironmentObject private var appRouter: AppRouter
+    @EnvironmentObject private var appDataStore: AppDataStore
     @EnvironmentObject private var favoritesStore: FavoritesStore
-    @Environment(\.managedObjectContext) private var managedObjectContext
     @StateObject private var viewModel = CabinetViewModel()
     @StateObject private var locationVM = LocationSearchViewModel()
 
-    @FetchRequest(fetchRequest: MedicinePackage.extractEntries())
-    private var medicinePackages: FetchedResults<MedicinePackage>
-    @FetchRequest(fetchRequest: Option.extractOptions())
-    private var options: FetchedResults<Option>
-    @FetchRequest(fetchRequest: Cabinet.extractCabinets())
-    private var cabinets: FetchedResults<Cabinet>
+    @State private var medicinePackages: [MedicinePackage] = []
+    @State private var options: [Option] = []
+    @State private var cabinets: [Cabinet] = []
 
-    @State private var activeCabinetID: NSManagedObjectID?
+    @State private var activeCabinetID: String?
     @State private var entryToMove: MedicinePackage?
     @State private var isNewCabinetPresented = false
     @State private var newCabinetName = ""
@@ -60,8 +57,9 @@ struct CabinetView: View {
     @State private var cachedSummaryLines: [String] = ["Per ora non ci sono azioni da fare."]
     @State private var cachedInlineAction: String = "Per ora nessuna azione"
     @State private var cachedShelfState: ShelfViewState = .empty
-    @State private var rowSnapshotsByEntryID: [NSManagedObjectID: CabinetViewModel.CabinetRowSnapshot] = [:]
+    @State private var rowSnapshotsByEntryID: [String: CabinetViewModel.CabinetRowSnapshot] = [:]
     @State private var syncWorkItem: DispatchWorkItem?
+    @State private var hasStartedObservation = false
 
     var body: some View {
         cabinetRootView
@@ -91,34 +89,25 @@ struct CabinetView: View {
                     .accessibilityLabel("Aggiungi farmaco")
                 }
             }
-            .onAppear {
+            .task {
+                guard !hasStartedObservation else { return }
+                hasStartedObservation = true
                 locationVM.ensureStarted()
+                reloadFetchedState()
                 recomputeAllCachedState()
                 handlePendingRoute(appRouter.pendingRoute)
-            }
-            .onChange(of: medicinePackages.count) { _ in
-                recomputeAllCachedState()
-            }
-            .onChange(of: cabinets.count) { _ in
-                recomputeAllCachedState()
-            }
-            .onChange(of: options.count) { _ in
-                recomputeAllCachedState()
+                for await _ in appDataStore.provider.observe(
+                    scopes: [.medicines, .therapies, .logs, .stocks, .cabinets, .options]
+                ) {
+                    reloadFetchedState()
+                    recomputeAllCachedState()
+                }
             }
             .onChange(of: favoritesStore.favoriteMedicineIDs) { _ in
                 recomputeShelfState()
             }
             .onChange(of: favoritesStore.favoriteCabinetIDs) { _ in
                 recomputeShelfState()
-            }
-            .onReceive(
-                NotificationCenter.default.publisher(
-                    for: .NSManagedObjectContextObjectsDidChange,
-                    object: managedObjectContext
-                )
-            ) { notification in
-                guard hasRelevantCabinetChanges(notification) else { return }
-                recomputeAllCachedState()
             }
             .onChange(of: locationVM.pinItem?.title) { _ in
                 recomputeSummaryLines()
@@ -141,6 +130,19 @@ struct CabinetView: View {
         recomputeSummaryLines()
         recomputeShelfState()
         syncSummaryToWidgetDebounced()
+    }
+
+    private func reloadFetchedState() {
+        do {
+            let snapshot = try appDataStore.provider.medicines.fetchCabinetSnapshot()
+            medicinePackages = snapshot.medicinePackages
+            options = snapshot.options
+            cabinets = snapshot.cabinets
+        } catch {
+            medicinePackages = []
+            options = []
+            cabinets = []
+        }
     }
 
     private func recomputeSummaryLines() {
@@ -174,28 +176,6 @@ struct CabinetView: View {
         }
         syncWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
-    }
-
-    private func hasRelevantCabinetChanges(_ notification: Notification) -> Bool {
-        let keys: [String] = [NSInsertedObjectsKey, NSUpdatedObjectsKey, NSDeletedObjectsKey]
-
-        for key in keys {
-            guard let objects = notification.userInfo?[key] as? Set<NSManagedObject> else { continue }
-            if objects.contains(where: isRelevantCabinetObject) {
-                return true
-            }
-        }
-
-        return false
-    }
-
-    private func isRelevantCabinetObject(_ object: NSManagedObject) -> Bool {
-        switch object {
-        case is MedicinePackage, is Medicine, is Therapy, is Dose, is Stock, is Log, is Cabinet, is Option, is Package:
-            return true
-        default:
-            return false
-        }
     }
 
     private var cabinetListWithNewCabinetSheet: some View {
@@ -238,8 +218,14 @@ struct CabinetView: View {
                     entry: entry,
                     cabinets: Array(cabinets),
                     onSelect: { cabinet in
-                        entry.cabinet = cabinet
-                        saveContext()
+                        do {
+                            try appDataStore.provider.medicines.moveEntry(
+                                entryId: entry.id,
+                                toCabinet: cabinet?.id
+                            )
+                        } catch {
+                            // Keep current behavior: ignore move failures and stay on sheet flow.
+                        }
                     }
                 )
                 .presentationDetents([.medium, .large])
@@ -291,10 +277,10 @@ struct CabinetView: View {
     }
 
     private var uniqueMedicines: [Medicine] {
-        var seen = Set<NSManagedObjectID>()
+        var seen = Set<UUID>()
         return medicinePackages.compactMap { entry -> Medicine? in
             guard !entry.isDeleted, entry.managedObjectContext != nil else { return nil }
-            let id = entry.medicine.objectID
+            let id = entry.medicine.id
             guard seen.insert(id).inserted else { return nil }
             return entry.medicine
         }
@@ -465,13 +451,13 @@ struct CabinetView: View {
     @ViewBuilder
     private func shelfRow(
         for entry: CabinetViewModel.ShelfEntry,
-        orderedEntriesByCabinetID: [NSManagedObjectID: [MedicinePackage]]
+        orderedEntriesByCabinetID: [String: [MedicinePackage]]
     ) -> some View {
         switch entry.kind {
         case .cabinet(let cabinet):
             cabinetRow(
                 for: cabinet,
-                entries: orderedEntriesByCabinetID[cabinet.objectID] ?? []
+                entries: orderedEntriesByCabinetID[cabinet.id.uuidString] ?? []
             )
         case .medicinePackage(let entry):
             row(for: entry)
@@ -554,20 +540,17 @@ struct CabinetView: View {
     private func createCabinet() {
         let name = trimmedCabinetName
         guard !name.isEmpty else { return }
-        let cabinet = Cabinet(context: managedObjectContext)
-        cabinet.id = UUID()
-        cabinet.name = name
-        cabinet.created_at = Date()
-        saveContext()
-        newCabinetName = ""
-    }
-
-    private func saveContext() {
-        try? managedObjectContext.save()
+        do {
+            _ = try appDataStore.provider.medicines.createCabinet(name: name)
+            newCabinetName = ""
+        } catch {
+            // Keep current behavior: fail silently without interrupting the sheet flow.
+        }
     }
 
     private func row(for entry: MedicinePackage) -> some View {
-        let rowSnapshot = rowSnapshotsByEntryID[entry.objectID]
+        let entryKey = entry.id.uuidString
+        let rowSnapshot = rowSnapshotsByEntryID[entryKey]
         let shouldShowRx = rowSnapshot?.shouldShowPrescription ?? viewModel.shouldShowPrescriptionAction(for: entry)
         return MedicineSwipeRow(
             entry: entry,
@@ -605,7 +588,7 @@ struct CabinetView: View {
             subtitleMode: .activeTherapies,
             snapshot: rowSnapshot?.presentation
         )
-        .accessibilityIdentifier("MedicineRow_\(entry.objectID)")
+        .accessibilityIdentifier("MedicineRow_\(entry.id.uuidString)")
         .listRowSeparator(.hidden, edges: .all)
         .listRowInsets(
             EdgeInsets(
@@ -635,14 +618,14 @@ struct CabinetView: View {
     }
 
     private func hasSufficientStockForIntake(_ entry: MedicinePackage) -> Bool {
-        guard let context = entry.managedObjectContext ?? entry.package.managedObjectContext else { return false }
-        return StockService(context: context).unitsReadOnly(for: entry.package) > 0
+        appDataStore.provider.medicines.hasSufficientStockForIntake(entryId: entry.id)
     }
 
     private func cabinetRow(for cabinet: Cabinet, entries: [MedicinePackage]) -> some View {
         let isFavoriteCabinet = favoritesStore.isFavorite(cabinet)
+        let cabinetKey = cabinet.id.uuidString
         return Button {
-            activeCabinetID = cabinet.objectID
+            activeCabinetID = cabinetKey
         } label: {
             CabinetCardView(cabinet: cabinet)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -652,7 +635,7 @@ struct CabinetView: View {
             NavigationLink(
                 destination: CabinetDetailView(cabinet: cabinet, entries: entries, viewModel: viewModel),
                 isActive: Binding(
-                    get: { activeCabinetID == cabinet.objectID },
+                    get: { activeCabinetID == cabinetKey },
                     set: { newValue in
                         if !newValue { activeCabinetID = nil }
                     }

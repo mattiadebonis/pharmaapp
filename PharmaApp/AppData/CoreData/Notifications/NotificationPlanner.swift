@@ -173,7 +173,7 @@ struct NotificationPlanner {
         let events = generator.generateEvents(therapies: activeTherapies, from: now, to: endDate)
         guard !events.isEmpty else { return [] }
 
-        let therapyLookup = Dictionary(activeTherapies.map { ($0.objectID, $0) }, uniquingKeysWith: { first, _ in first })
+        let therapyLookup = Dictionary(activeTherapies.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var items: [NotificationPlanItem] = []
 
         let graceWindow = Double(config.therapyGraceWindowSeconds)
@@ -192,7 +192,7 @@ struct NotificationPlanner {
             let id = "therapy-\(UUID().uuidString)"
             let userInfo = [
                 "type": NotificationPlanKind.therapy.rawValue,
-                "therapyId": therapy.objectID.uriRepresentation().absoluteString,
+                "therapyId": therapy.id.uuidString,
                 "medicineId": medicine.id.uuidString
             ]
             let origin: NotificationPlanOrigin = delta <= 0 ? .immediate : .scheduled

@@ -1,5 +1,4 @@
 import SwiftUI
-import CoreData
 
 enum MedicineSubtitleMode {
     case nextDose
@@ -7,7 +6,6 @@ enum MedicineSubtitleMode {
 }
 
 struct MedicineRowView: View {
-    @FetchRequest(fetchRequest: Option.extractOptions()) private var options: FetchedResults<Option>
     private let recurrenceManager = RecurrenceManager.shared
     
     // MARK: - Costanti
@@ -19,6 +17,9 @@ struct MedicineRowView: View {
     var isPinned: Bool = false
     var isSelected: Bool = false
     var isInSelectionMode: Bool = false
+    @EnvironmentObject private var appDataStore: AppDataStore
+    @State private var option: Option?
+    @State private var hasStartedObservation = false
     enum RowSection { case purchase, tuttoOk }
 
     struct Snapshot {
@@ -43,17 +44,16 @@ struct MedicineRowView: View {
     }
     
     // MARK: - Computed
-    private var option: Option? { options.first }
     private var therapies: Set<Therapy> {
         guard let entry = medicinePackage else {
             return medicine.therapies ?? []
         }
         let linked = (entry.therapies ?? []).filter {
-            $0.medicine.objectID == medicine.objectID
-                && $0.package.objectID == entry.package.objectID
+            $0.medicine.id == medicine.id
+                && $0.package.id == entry.package.id
         }
         let fallback = (medicine.therapies ?? []).filter {
-            $0.package.objectID == entry.package.objectID
+            $0.package.id == entry.package.id
         }
         return Set(linked).union(fallback)
     }
@@ -213,8 +213,7 @@ struct MedicineRowView: View {
     private var remainingUnits: Int? {
         guard therapies.isEmpty else { return nil }
         if let entry = medicinePackage {
-            let context = medicine.managedObjectContext ?? entry.package.managedObjectContext ?? PersistenceController.shared.container.viewContext
-            return StockService(context: context).unitsReadOnly(for: entry.package)
+            return appDataStore.provider.medicines.units(for: entry.package)
         }
         return medicine.remainingUnitsWithoutTherapy()
     }
@@ -242,6 +241,14 @@ struct MedicineRowView: View {
             if isInSelectionMode {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(selectionBorderColor, lineWidth: selectionBorderWidth)
+            }
+        }
+        .task {
+            guard !hasStartedObservation else { return }
+            hasStartedObservation = true
+            reloadOptionIfNeeded()
+            for await _ in appDataStore.provider.observe(scopes: [.options]) {
+                reloadOption()
             }
         }
     }
@@ -316,6 +323,20 @@ struct MedicineRowView: View {
         let logsToday = medicine.effectiveIntakeLogs(on: now, calendar: calendar)
         guard let entry = medicinePackage else { return logsToday }
         return logsToday.filter { $0.package == entry.package }
+    }
+
+    private func reloadOptionIfNeeded() {
+        if option == nil {
+            reloadOption()
+        }
+    }
+
+    private func reloadOption() {
+        do {
+            option = try appDataStore.provider.medicines.fetchCurrentOption()
+        } catch {
+            option = nil
+        }
     }
 
     private var subtitleBlock: some View {

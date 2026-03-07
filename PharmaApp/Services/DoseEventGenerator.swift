@@ -3,8 +3,8 @@ import CoreData
 
 struct DoseEvent {
     let date: Date
-    let therapyId: NSManagedObjectID
-    let medicineId: NSManagedObjectID
+    let therapyId: UUID
+    let medicineId: UUID
 }
 
 struct DoseEventGenerator {
@@ -34,7 +34,7 @@ struct DoseEventGenerator {
                 guard !scheduled.isEmpty else { continue }
                 for date in scheduled {
                     guard date >= rangeStart && date <= end else { continue }
-                    events.append(DoseEvent(date: date, therapyId: therapy.objectID, medicineId: therapy.medicine.objectID))
+                    events.append(DoseEvent(date: date, therapyId: therapy.id, medicineId: therapy.medicine.id))
                 }
             }
             guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }

@@ -1,18 +1,14 @@
 import Foundation
-import CoreData
 import UserNotifications
 
 @MainActor
 final class NotificationActionHandler {
     private let center: NotificationCenterClient
-    private let context: NSManagedObjectContext
 
     init(
-        center: NotificationCenterClient = UNUserNotificationCenter.current(),
-        context: NSManagedObjectContext = PersistenceController.shared.container.viewContext
+        center: NotificationCenterClient = UNUserNotificationCenter.current()
     ) {
         self.center = center
-        self.context = context
     }
 
     func handle(response: UNNotificationResponse, now: Date = Date()) async {

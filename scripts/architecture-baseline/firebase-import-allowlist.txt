@@ -1,0 +1,2 @@
+PharmaApp/AppData/Auth/FirebaseAuthGatewayAdapter.swift
+PharmaApp/Auth/FirebaseAuthClient.swift

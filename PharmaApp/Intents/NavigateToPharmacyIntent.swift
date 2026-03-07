@@ -7,7 +7,9 @@ struct NavigateToPharmacyIntent: AppIntent {
     static var openAppWhenRun = true
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        SiriIntentFacade.shared.queueRoute(.pharmacy)
+        await MainActor.run {
+            IntentsGatewayBridge.gateway.queueRoute(.pharmacy)
+        }
         return .result(dialog: SiriIntentSupport.dialog("Ti porto alla schermata farmacia suggerita."))
     }
 }

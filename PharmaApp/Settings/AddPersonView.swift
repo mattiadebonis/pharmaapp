@@ -7,8 +7,8 @@
 import SwiftUI
 
 struct AddPersonView: View {
-    @Environment(\.managedObjectContext) private var managedObjectContext
     @Environment(\.dismiss) var dismiss
+    @EnvironmentObject private var appDataStore: AppDataStore
     
     @State private var nome: String = ""
     @State private var codiceFiscale: String = ""
@@ -53,19 +53,23 @@ struct AddPersonView: View {
             return
         }
 
-        let nuovaPersona = Person(context: managedObjectContext)
-        nuovaPersona.id = UUID()
-        nuovaPersona.nome = nome
-        nuovaPersona.cognome = nil
-        nuovaPersona.condizione = nil
-        nuovaPersona.is_account = false
-        nuovaPersona.codice_fiscale = normalizedCF.isEmpty ? nil : normalizedCF
-        
         do {
-            try managedObjectContext.save()
+            _ = try appDataStore.provider.settings.savePerson(
+                PersonWriteInput(
+                    id: nil,
+                    name: normalizedValue(from: nome),
+                    codiceFiscale: normalizedCF.isEmpty ? nil : normalizedCF,
+                    isAccount: false
+                )
+            )
             dismiss()
         } catch {
-            print("Errore nel salvataggio della persona: \(error.localizedDescription)")
+            errorMessage = error.localizedDescription
         }
+    }
+
+    private func normalizedValue(from value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

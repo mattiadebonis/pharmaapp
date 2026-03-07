@@ -7,8 +7,12 @@ struct WhatShouldIBuyIntent: AppIntent {
     static var openAppWhenRun = true
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let summary = SiriIntentFacade.shared.purchaseSummary(maxItems: 3)
-        SiriIntentFacade.shared.queueRoute(.pharmacy)
+        let summary = await MainActor.run {
+            IntentsGatewayBridge.gateway.purchaseSummary(maxItems: 3)
+        }
+        await MainActor.run {
+            IntentsGatewayBridge.gateway.queueRoute(.pharmacy)
+        }
 
         guard summary.totalCount > 0 else {
             return .result(dialog: SiriIntentSupport.dialog("Al momento non risultano acquisti urgenti. Ti apro comunque la lista completa."))

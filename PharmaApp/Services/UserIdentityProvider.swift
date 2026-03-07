@@ -8,13 +8,12 @@
 import Foundation
 import CoreData
 import UIKit
-import FirebaseAuth
 
 final class UserIdentityProvider {
     static let shared = UserIdentityProvider()
 
     private let userDefaults: UserDefaults
-    private let authUserIDProvider: () -> String?
+    private var authUserIDProvider: () -> String?
     private let userIdKey: String
     private let deviceIdKey: String
 
@@ -22,12 +21,16 @@ final class UserIdentityProvider {
         userDefaults: UserDefaults = .standard,
         userIdKey: String = "pharmaapp.user_id",
         deviceIdKey: String = "pharmaapp.device_id",
-        authUserIDProvider: @escaping () -> String? = { Auth.auth().currentUser?.uid }
+        authUserIDProvider: @escaping () -> String? = { nil }
     ) {
         self.userDefaults = userDefaults
         self.userIdKey = userIdKey
         self.deviceIdKey = deviceIdKey
         self.authUserIDProvider = authUserIDProvider
+    }
+
+    func configureAuthUserIDProvider(_ provider: @escaping () -> String?) {
+        authUserIDProvider = provider
     }
 
     var userId: String {
@@ -79,8 +82,8 @@ final class UserIdentityProvider {
         guard let authUser else {
             return
         }
-
         let legacyUserId = self.legacyUserId
+        userDefaults.set(authUser.id, forKey: userIdKey)
         migrateUserProfile(from: legacyUserId, to: authUser, in: context)
         migrateNotificationSettings(from: legacyUserId, to: authUser.id, in: context)
         migrateCabinetMemberships(from: legacyUserId, to: authUser.id, in: context)

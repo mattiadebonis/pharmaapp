@@ -1,27 +1,19 @@
 import SwiftUI
-import CoreData
 import MapKit
 import UIKit
 
 struct GlobalSearchView: View {
-    @Environment(\.managedObjectContext) private var managedObjectContext
     @Environment(\.openURL) private var openURL
     @EnvironmentObject private var appRouter: AppRouter
+    @EnvironmentObject private var appDataStore: AppDataStore
 
-    @FetchRequest(fetchRequest: Medicine.extractMedicines())
-    private var medicines: FetchedResults<Medicine>
-
-    @FetchRequest(fetchRequest: MedicinePackage.extractEntries())
-    private var medicineEntries: FetchedResults<MedicinePackage>
-
-    @FetchRequest(fetchRequest: Therapy.extractTherapies())
-    private var therapies: FetchedResults<Therapy>
-
-    @FetchRequest(fetchRequest: Doctor.extractDoctors())
-    private var doctors: FetchedResults<Doctor>
-
-    @FetchRequest(fetchRequest: Person.extractPersons())
-    private var persons: FetchedResults<Person>
+    @State private var medicines: [Medicine] = []
+    @State private var medicineEntries: [MedicinePackage] = []
+    @State private var therapies: [Therapy] = []
+    @State private var doctors: [Doctor] = []
+    @State private var persons: [Person] = []
+    @State private var option: Option?
+    @State private var hasStartedObservation = false
 
     @StateObject private var locationVM = LocationSearchViewModel()
     @StateObject private var cabinetViewModel = CabinetViewModel()
@@ -74,7 +66,7 @@ struct GlobalSearchView: View {
     private enum QuickAction: Hashable, Identifiable {
         case lowStock
         case today
-        case person(NSManagedObjectID)
+        case person(String)
 
         var id: String {
             switch self {
@@ -97,17 +89,64 @@ struct GlobalSearchView: View {
     private struct RecentItem: Identifiable, Codable {
         let id: UUID
         let kind: RecentKind
-        let objectURI: String?
+        let entityId: String?
         let title: String
         let subtitle: String?
         let timestamp: Date
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case kind
+            case entityId
+            case objectURI
+            case title
+            case subtitle
+            case timestamp
+        }
+
+        init(
+            id: UUID,
+            kind: RecentKind,
+            entityId: String?,
+            title: String,
+            subtitle: String?,
+            timestamp: Date
+        ) {
+            self.id = id
+            self.kind = kind
+            self.entityId = entityId
+            self.title = title
+            self.subtitle = subtitle
+            self.timestamp = timestamp
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(UUID.self, forKey: .id)
+            kind = try container.decode(RecentKind.self, forKey: .kind)
+            entityId = try container.decodeIfPresent(String.self, forKey: .entityId)
+                ?? container.decodeIfPresent(String.self, forKey: .objectURI)
+            title = try container.decode(String.self, forKey: .title)
+            subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
+            timestamp = try container.decode(Date.self, forKey: .timestamp)
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(id, forKey: .id)
+            try container.encode(kind, forKey: .kind)
+            try container.encodeIfPresent(entityId, forKey: .entityId)
+            try container.encode(title, forKey: .title)
+            try container.encodeIfPresent(subtitle, forKey: .subtitle)
+            try container.encode(timestamp, forKey: .timestamp)
+        }
     }
 
     private struct NextDoseEntry: Identifiable {
         let medicine: Medicine
         let nextDose: Date
 
-        var id: NSManagedObjectID { medicine.objectID }
+        var id: UUID { medicine.id }
     }
 
     private struct CommandFeedback: Identifiable {
@@ -130,16 +169,9 @@ struct GlobalSearchView: View {
         let message: String
     }
 
-    private struct CatalogResolvedContext {
-        let selection: CatalogSelection
-        let medicine: Medicine
-        let package: Package
-        let entry: MedicinePackage
-    }
-
     private struct CatalogStockEditorState: Identifiable {
         let id: UUID = UUID()
-        let context: CatalogResolvedContext
+        let context: SearchCatalogResolvedContext
         let initialUnits: Int
         let deadlineMonth: String
         let deadlineYear: String
@@ -147,7 +179,7 @@ struct GlobalSearchView: View {
 
     private struct CatalogTherapyEditorState: Identifiable {
         let id: UUID = UUID()
-        let context: CatalogResolvedContext
+        let context: SearchCatalogResolvedContext
     }
 
     private struct WatchEntry: Identifiable {
@@ -171,7 +203,7 @@ struct GlobalSearchView: View {
         let priority: Int
         let sortValue: Double
 
-        var id: NSManagedObjectID { medicine.objectID }
+        var id: UUID { medicine.id }
     }
 
     private struct PharmacyResult: Identifiable {
@@ -199,15 +231,7 @@ struct GlobalSearchView: View {
         .shared
     }
 
-    private var stockService: MedicineStockService {
-        MedicineStockService(context: managedObjectContext)
-    }
-
-    private var option: Option? {
-        Option.current(in: managedObjectContext)
-    }
-
-    private var medicineRowSnapshots: [NSManagedObjectID: CabinetViewModel.CabinetRowSnapshot] {
+    private var medicineRowSnapshots: [String: CabinetViewModel.CabinetRowSnapshot] {
         cabinetViewModel.buildRowSnapshots(entries: filteredMedicineEntries, option: option)
     }
 
@@ -252,9 +276,14 @@ struct GlobalSearchView: View {
     }
 
     private var lowStockOrExpiringMedicines: [Medicine] {
-        let lowStock = Set(
-            medicines.filter { $0.isInEsaurimento(option: option!, recurrenceManager: recurrenceManager) }
-        )
+        let lowStock: Set<Medicine>
+        if let option {
+            lowStock = Set(
+                medicines.filter { $0.isInEsaurimento(option: option, recurrenceManager: recurrenceManager) }
+            )
+        } else {
+            lowStock = []
+        }
         let expiring = Set(
             medicines.filter { $0.deadlineStatus == .expiringSoon || $0.deadlineStatus == .expired }
         )
@@ -295,12 +324,12 @@ struct GlobalSearchView: View {
 
     private func medicinesForPerson(_ person: Person) -> [Medicine] {
         guard let therapySet = person.therapies else { return [] }
-        var seen = Set<NSManagedObjectID>()
+        var seen = Set<UUID>()
         var result: [Medicine] = []
         for therapy in therapySet {
             let medicine = therapy.medicine
-            if !seen.contains(medicine.objectID) {
-                seen.insert(medicine.objectID)
+            if !seen.contains(medicine.id) {
+                seen.insert(medicine.id)
                 result.append(medicine)
             }
         }
@@ -317,8 +346,9 @@ struct GlobalSearchView: View {
         }
         if persons.count > 1 {
             for person in persons {
-                if !personMedicinesForObjectID(person.objectID).isEmpty {
-                    actions.append(.person(person.objectID))
+                guard let personId = person.id?.uuidString else { continue }
+                if !personMedicinesForPersonID(personId).isEmpty {
+                    actions.append(.person(personId))
                 }
             }
         }
@@ -329,8 +359,8 @@ struct GlobalSearchView: View {
         switch action {
         case .lowStock: return "Scorte basse"
         case .today: return "Oggi"
-        case .person(let oid):
-            if let person = try? managedObjectContext.existingObject(with: oid) as? Person {
+        case .person(let personId):
+            if let person = personById(personId) {
                 return personDisplayName(for: person)
             }
             return "Persona"
@@ -341,17 +371,17 @@ struct GlobalSearchView: View {
         switch action {
         case .lowStock: return lowStockOrExpiringMedicines.count
         case .today: return todayDoseEntries.count
-        case .person(let oid): return personMedicinesForObjectID(oid).count
+        case .person(let personId): return personMedicinesForPersonID(personId).count
         }
     }
 
     private var watchEntries: [WatchEntry] {
-        var grouped: [NSManagedObjectID: WatchEntry] = [:]
+        var grouped: [UUID: WatchEntry] = [:]
         let calendar = Calendar.current
         let now = Date()
 
         for medicine in medicines {
-            if medicine.isInEsaurimento(option: option!, recurrenceManager: recurrenceManager) {
+            if let option, medicine.isInEsaurimento(option: option, recurrenceManager: recurrenceManager) {
                 let days = stockCoverageDays(for: medicine)
                 let detail: String
                 let sortValue: Double
@@ -362,7 +392,7 @@ struct GlobalSearchView: View {
                     detail = "Scorte da verificare"
                     sortValue = 9_999
                 }
-                grouped[medicine.objectID] = WatchEntry(
+                grouped[medicine.id] = WatchEntry(
                     medicine: medicine,
                     badge: .lowStock,
                     detail: detail,
@@ -380,12 +410,12 @@ struct GlobalSearchView: View {
                     priority: 1,
                     sortValue: next.timeIntervalSinceReferenceDate
                 )
-                if let existing = grouped[medicine.objectID] {
+                if let existing = grouped[medicine.id] {
                     if candidate.priority < existing.priority || (candidate.priority == existing.priority && candidate.sortValue < existing.sortValue) {
-                        grouped[medicine.objectID] = candidate
+                        grouped[medicine.id] = candidate
                     }
                 } else {
-                    grouped[medicine.objectID] = candidate
+                    grouped[medicine.id] = candidate
                 }
             }
 
@@ -404,12 +434,12 @@ struct GlobalSearchView: View {
                     priority: 2,
                     sortValue: Double(days)
                 )
-                if let existing = grouped[medicine.objectID] {
+                if let existing = grouped[medicine.id] {
                     if candidate.priority < existing.priority || (candidate.priority == existing.priority && candidate.sortValue < existing.sortValue) {
-                        grouped[medicine.objectID] = candidate
+                        grouped[medicine.id] = candidate
                     }
                 } else {
-                    grouped[medicine.objectID] = candidate
+                    grouped[medicine.id] = candidate
                 }
             }
         }
@@ -618,6 +648,16 @@ struct GlobalSearchView: View {
                 shouldAutoFocusSearch = false
             }
         )
+        .task {
+            guard !hasStartedObservation else { return }
+            hasStartedObservation = true
+            reloadFetchedState()
+            for await _ in appDataStore.provider.observe(
+                scopes: [.medicines, .therapies, .logs, .stocks, .people, .doctors, .options, .cabinets]
+            ) {
+                reloadFetchedState()
+            }
+        }
         .onChange(of: query) { value in
             if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 activeAction = nil
@@ -661,12 +701,22 @@ struct GlobalSearchView: View {
         }
         .navigationDestination(isPresented: $isDoctorDetailPresented) {
             if let doctor = selectedDoctor {
-                DoctorDetailView(doctor: doctor)
+                if let doctorRecord = settingsDoctorRecord(from: doctor) {
+                    DoctorDetailView(doctor: doctorRecord)
+                } else {
+                    Text("Dottore non disponibile.")
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .navigationDestination(isPresented: $isPersonDetailPresented) {
             if let person = selectedPerson {
-                PersonDetailView(person: person)
+                if let personRecord = settingsPersonRecord(from: person) {
+                    PersonDetailView(person: personRecord)
+                } else {
+                    Text("Persona non disponibile.")
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .fullScreenCover(isPresented: Binding(
@@ -874,7 +924,7 @@ struct GlobalSearchView: View {
                     .buttonStyle(.plain)
                 }
 
-                ForEach(suggestedTopMedicines, id: \.medicine.objectID) { item in
+                ForEach(suggestedTopMedicines, id: \.medicine.id) { item in
                     Button {
                         openMedicine(item.medicine)
                     } label: {
@@ -1022,8 +1072,8 @@ struct GlobalSearchView: View {
                 sectionHeader("Oggi")
             }
 
-        case .person(let oid):
-            let personMedicines = personMedicinesForObjectID(oid)
+        case .person(let personId):
+            let personMedicines = personMedicinesForPersonID(personId)
             Section {
                 if personMedicines.isEmpty {
                     emptyLine("Nessun farmaco per questa persona")
@@ -1043,8 +1093,8 @@ struct GlobalSearchView: View {
         }
     }
 
-    private func personMedicinesForObjectID(_ oid: NSManagedObjectID) -> [Medicine] {
-        guard let person = try? managedObjectContext.existingObject(with: oid) as? Person else { return [] }
+    private func personMedicinesForPersonID(_ personId: String) -> [Medicine] {
+        guard let person = personById(personId) else { return [] }
         return medicinesForPerson(person)
     }
 
@@ -1054,7 +1104,7 @@ struct GlobalSearchView: View {
             medicine: medicine,
             medicinePackage: entry,
             subtitleMode: .activeTherapies,
-            snapshot: entry.flatMap { medicineRowSnapshots[$0.objectID]?.presentation }
+            snapshot: entry.flatMap { medicineRowSnapshots[$0.id.uuidString]?.presentation }
         )
     }
 
@@ -1095,35 +1145,35 @@ struct GlobalSearchView: View {
     private func recentRow(_ item: RecentItem) -> some View {
         switch item.kind {
         case .medicine:
-            if let medicine: Medicine = object(from: item.objectURI) {
+            if let medicine = medicineById(item.entityId) {
                 fullMedicineRow(for: medicine)
             } else {
                 recentFallbackRow(item)
             }
 
         case .medicineEntry:
-            if let entry: MedicinePackage = object(from: item.objectURI) {
+            if let entry = medicineEntryById(item.entityId) {
                 fullMedicineRow(for: entry.medicine)
             } else {
                 recentFallbackRow(item)
             }
 
         case .therapy:
-            if let therapy: Therapy = object(from: item.objectURI) {
+            if let therapy = therapyById(item.entityId) {
                 recentTherapyRow(therapy)
             } else {
                 recentFallbackRow(item)
             }
 
         case .doctor:
-            if let doctor: Doctor = object(from: item.objectURI) {
+            if let doctor = doctorById(item.entityId) {
                 recentDoctorRow(doctor)
             } else {
                 recentFallbackRow(item)
             }
 
         case .person:
-            if let person: Person = object(from: item.objectURI) {
+            if let person = personById(item.entityId) {
                 recentPersonRow(person)
             } else {
                 recentFallbackRow(item)
@@ -1286,7 +1336,7 @@ struct GlobalSearchView: View {
             medicine: entry.medicine,
             medicinePackage: entry,
             subtitleMode: .activeTherapies,
-            snapshot: medicineRowSnapshots[entry.objectID]?.presentation
+            snapshot: medicineRowSnapshots[entry.id.uuidString]?.presentation
         )
     }
 
@@ -1437,7 +1487,7 @@ struct GlobalSearchView: View {
         selectedMedicine = medicine
         addRecent(
             kind: .medicine,
-            objectID: medicine.objectID,
+            entityId: medicine.id.uuidString,
             title: camelCase(medicine.nome),
             subtitle: nil
         )
@@ -1449,19 +1499,17 @@ struct GlobalSearchView: View {
         selectedMedicineEntry = entry
         addRecent(
             kind: .medicineEntry,
-            objectID: entry.objectID,
+            entityId: entry.id.uuidString,
             title: camelCase(entry.medicine.nome),
             subtitle: nil
         )
     }
 
     private func handleCatalogAddToCabinet(_ selection: CatalogSelection) {
-        _ = resolveCatalogContext(for: selection)
         do {
-            try saveManagedContextIfNeeded()
+            try appDataStore.provider.search.addCatalogSelectionToCabinet(selection)
             inlineFeedback = CommandFeedback(kind: .success, message: "Aggiunto all'armadietto.")
         } catch {
-            managedObjectContext.rollback()
             inlineFeedback = CommandFeedback(
                 kind: .error,
                 message: "Non sono riuscito ad aggiungere il farmaco all'armadietto."
@@ -1470,36 +1518,27 @@ struct GlobalSearchView: View {
     }
 
     private func handleCatalogAddPackage(_ selection: CatalogSelection) {
-        let resolved = resolveCatalogContext(for: selection)
         do {
-            try saveManagedContextIfNeeded()
+            let preparation = try appDataStore.provider.search.prepareCatalogPackageEditor(selection)
+            catalogStockEditorState = CatalogStockEditorState(
+                context: preparation.context,
+                initialUnits: preparation.defaultTargetUnits,
+                deadlineMonth: preparation.deadlineMonth,
+                deadlineYear: preparation.deadlineYear
+            )
         } catch {
-            managedObjectContext.rollback()
             inlineFeedback = CommandFeedback(
                 kind: .error,
                 message: "Non sono riuscito a preparare la modifica scorte."
             )
-            return
         }
-
-        let currentUnits = StockService(context: managedObjectContext).units(for: resolved.package)
-        let (month, year) = deadlineInputs(for: resolved.medicine, package: resolved.package)
-        let defaultTarget = currentUnits + max(1, selection.units)
-        catalogStockEditorState = CatalogStockEditorState(
-            context: resolved,
-            initialUnits: defaultTarget,
-            deadlineMonth: month,
-            deadlineYear: year
-        )
     }
 
     private func handleCatalogAddTherapy(_ selection: CatalogSelection) {
-        let resolved = resolveCatalogContext(for: selection)
         do {
-            try saveManagedContextIfNeeded()
+            let resolved = try appDataStore.provider.search.prepareCatalogTherapy(selection)
             catalogTherapyEditorState = CatalogTherapyEditorState(context: resolved)
         } catch {
-            managedObjectContext.rollback()
             inlineFeedback = CommandFeedback(
                 kind: .error,
                 message: "Non sono riuscito ad aprire il form terapia."
@@ -1507,109 +1546,8 @@ struct GlobalSearchView: View {
         }
     }
 
-    private func resolveCatalogContext(for selection: CatalogSelection) -> CatalogResolvedContext {
-        let medicine = existingCatalogMedicine(for: selection) ?? createCatalogMedicine(from: selection)
-        medicine.in_cabinet = true
-        medicine.obbligo_ricetta = medicine.obbligo_ricetta || selection.requiresPrescription
-
-        let package = existingCatalogPackage(for: medicine, selection: selection)
-            ?? createCatalogPackage(for: medicine, selection: selection)
-        let entry = existingCatalogEntry(for: medicine, package: package)
-            ?? createCatalogEntry(for: medicine, package: package)
-
-        return CatalogResolvedContext(
-            selection: selection,
-            medicine: medicine,
-            package: package,
-            entry: entry
-        )
-    }
-
-    private func existingCatalogMedicine(for selection: CatalogSelection) -> Medicine? {
-        let identity = catalogIdentityKey(name: selection.name, principle: selection.principle)
-        if let exact = medicines.first(where: {
-            catalogIdentityKey(name: $0.nome, principle: $0.principio_attivo) == identity
-        }) {
-            return exact
-        }
-
-        let normalizedName = normalizeCatalogText(selection.name)
-        return medicines.first(where: { normalizeCatalogText($0.nome) == normalizedName })
-    }
-
-    private func existingCatalogPackage(for medicine: Medicine, selection: CatalogSelection) -> Package? {
-        medicine.packages.first(where: { packageMatchesCatalogSelection($0, selection: selection) })
-    }
-
-    private func existingCatalogEntry(for medicine: Medicine, package: Package) -> MedicinePackage? {
-        if let latest = MedicinePackage.latestActiveEntry(
-            for: medicine,
-            package: package,
-            in: managedObjectContext
-        ) {
-            return latest
-        }
-        return medicine.medicinePackages?.first(where: { $0.package.objectID == package.objectID })
-    }
-
-    private func packageMatchesCatalogSelection(_ package: Package, selection: CatalogSelection) -> Bool {
-        let sameUnits = Int(package.numero) == max(1, selection.units)
-        let sameType = normalizeCatalogText(package.tipologia) == normalizeCatalogText(selection.tipologia)
-        let sameValue = package.valore == selection.valore
-        let sameUnit = normalizeCatalogText(package.unita) == normalizeCatalogText(selection.unita)
-        let sameVolume = normalizeCatalogText(package.volume) == normalizeCatalogText(selection.volume)
-        return sameUnits && sameType && sameValue && sameUnit && sameVolume
-    }
-
-    private func createCatalogMedicine(from selection: CatalogSelection) -> Medicine {
-        let medicine = Medicine(context: managedObjectContext)
-        medicine.id = UUID()
-        medicine.source_id = medicine.id
-        medicine.visibility = "local"
-        medicine.nome = selection.name
-        medicine.principio_attivo = selection.principle
-        medicine.obbligo_ricetta = selection.requiresPrescription
-        medicine.in_cabinet = true
-        return medicine
-    }
-
-    private func createCatalogPackage(for medicine: Medicine, selection: CatalogSelection) -> Package {
-        let package = Package(context: managedObjectContext)
-        package.id = UUID()
-        package.source_id = package.id
-        package.visibility = "local"
-        package.tipologia = selection.tipologia.isEmpty ? "Confezione" : selection.tipologia
-        package.numero = Int32(max(1, selection.units))
-        package.unita = selection.unita.isEmpty ? "unita" : selection.unita
-        package.volume = selection.volume
-        package.valore = max(0, selection.valore)
-        package.principio_attivo = selection.principle
-        package.medicine = medicine
-        medicine.addToPackages(package)
-        return package
-    }
-
-    private func createCatalogEntry(for medicine: Medicine, package: Package) -> MedicinePackage {
-        let entry = MedicinePackage(context: managedObjectContext)
-        entry.id = UUID()
-        entry.created_at = Date()
-        entry.source_id = entry.id
-        entry.visibility = "local"
-        entry.medicine = medicine
-        entry.package = package
-        entry.cabinet = nil
-        medicine.addToMedicinePackages(entry)
-        return entry
-    }
-
-    private func saveManagedContextIfNeeded() throws {
-        if managedObjectContext.hasChanges {
-            try managedObjectContext.save()
-        }
-    }
-
     private func saveCatalogStock(
-        _ resolved: CatalogResolvedContext,
+        _ resolved: SearchCatalogResolvedContext,
         targetUnits: Int,
         monthInput: String,
         yearInput: String
@@ -1624,55 +1562,31 @@ struct GlobalSearchView: View {
         }
 
         do {
-            try saveManagedContextIfNeeded()
+            try appDataStore.provider.search.applyCatalogStockEditor(
+                resolved,
+                targetUnits: max(0, targetUnits),
+                deadlineMonth: parsedDeadline.month,
+                deadlineYear: parsedDeadline.year
+            )
+        } catch let error as SearchGatewayError {
+            let message: String
+            switch error {
+            case .purchaseRegistrationFailed:
+                message = "Non sono riuscito a registrare l'acquisto."
+            case .purchasedEntryNotFound:
+                message = "Non sono riuscito ad associare la confezione acquistata."
+            case .persistence:
+                message = "Non sono riuscito a salvare la scadenza."
+            }
+            inlineFeedback = CommandFeedback(kind: .error, message: message)
+            return false
         } catch {
-            managedObjectContext.rollback()
             inlineFeedback = CommandFeedback(
                 kind: .error,
                 message: "Non sono riuscito a salvare la scadenza."
             )
             return false
         }
-
-        guard let purchaseOperationId = stockService.addPurchase(
-            medicine: resolved.medicine,
-            package: resolved.package
-        ) else {
-            inlineFeedback = CommandFeedback(
-                kind: .error,
-                message: "Non sono riuscito a registrare l'acquisto."
-            )
-            return false
-        }
-
-        guard let purchasedEntry = MedicinePackage.fetchByPurchaseOperationId(
-            purchaseOperationId,
-            in: managedObjectContext
-        ) else {
-            inlineFeedback = CommandFeedback(
-                kind: .error,
-                message: "Non sono riuscito ad associare la confezione acquistata."
-            )
-            return false
-        }
-
-        purchasedEntry.updateDeadline(month: parsedDeadline.month, year: parsedDeadline.year)
-        do {
-            try saveManagedContextIfNeeded()
-        } catch {
-            managedObjectContext.rollback()
-            inlineFeedback = CommandFeedback(
-                kind: .error,
-                message: "Non sono riuscito a salvare la scadenza."
-            )
-            return false
-        }
-
-        stockService.setStockUnits(
-            medicine: resolved.medicine,
-            package: resolved.package,
-            targetUnits: max(0, targetUnits)
-        )
 
         catalogStockEditorState = nil
         inlineFeedback = CommandFeedback(
@@ -1703,21 +1617,13 @@ struct GlobalSearchView: View {
         return (true, month, year)
     }
 
-    private func deadlineInputs(for medicine: Medicine, package: Package) -> (month: String, year: String) {
-        if let entry = MedicinePackage.latestActiveEntry(for: medicine, package: package, in: managedObjectContext),
-           let info = entry.deadlineMonthYear {
-            return (String(format: "%02d", info.month), String(info.year))
-        }
-        return ("", "")
-    }
-
     private func openTherapy(_ therapy: Therapy) {
         guard let medicine = therapyMedicine(therapy) else { return }
         selectedPackage = therapyPackage(therapy) ?? getPackage(for: medicine)
         selectedMedicine = medicine
         addRecent(
             kind: .therapy,
-            objectID: therapy.objectID,
+            entityId: therapy.id.uuidString,
             title: medicine.nome,
             subtitle: "Terapia"
         )
@@ -1728,7 +1634,7 @@ struct GlobalSearchView: View {
         isDoctorDetailPresented = true
         addRecent(
             kind: .doctor,
-            objectID: doctor.objectID,
+            entityId: doctor.id?.uuidString,
             title: doctorDisplayName(doctor),
             subtitle: doctorPhone(doctor)
         )
@@ -1739,7 +1645,7 @@ struct GlobalSearchView: View {
         isPersonDetailPresented = true
         addRecent(
             kind: .person,
-            objectID: person.objectID,
+            entityId: person.id?.uuidString,
             title: personDisplayName(for: person),
             subtitle: person.codice_fiscale
         )
@@ -1809,6 +1715,23 @@ struct GlobalSearchView: View {
         let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let full = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
         return full.isEmpty ? "Dottore" : full
+    }
+
+    private func settingsDoctorRecord(from doctor: Doctor) -> SettingsDoctorRecord? {
+        guard let id = doctor.id else { return nil }
+        return SettingsDoctorRecord(
+            id: id,
+            name: normalizedText(doctorDisplayName(doctor)),
+            email: normalizedText(doctor.mail),
+            phone: normalizedText(doctor.telefono),
+            specialization: normalizedText(doctor.specializzazione),
+            schedule: doctor.scheduleDTO,
+            secretaryName: normalizedText(doctor.segreteria_nome),
+            secretaryEmail: normalizedText(doctor.segreteria_mail),
+            secretaryPhone: normalizedText(doctor.segreteria_telefono),
+            secretarySchedule: doctor.secretaryScheduleDTO,
+            prescriptionMessageTemplate: normalizedText(doctor.prescription_message_template)
+        )
     }
 
     private func doctorPhone(_ doctor: Doctor) -> String? {
@@ -1981,6 +1904,22 @@ struct GlobalSearchView: View {
         let last = (person.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let full = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
         return full.isEmpty ? "Persona" : full
+    }
+
+    private func settingsPersonRecord(from person: Person) -> SettingsPersonRecord? {
+        guard let id = person.id else { return nil }
+        return SettingsPersonRecord(
+            id: id,
+            name: normalizedText(personDisplayName(for: person)),
+            codiceFiscale: normalizedText(person.codice_fiscale),
+            isAccount: person.is_account
+        )
+    }
+
+    private func normalizedText(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func therapyPerson(_ therapy: Therapy) -> Person? {
@@ -2263,13 +2202,12 @@ struct GlobalSearchView: View {
         return "\(normalizedName)|\(normalizedPrinciple)"
     }
 
-    private func addRecent(kind: RecentKind, objectID: NSManagedObjectID?, title: String, subtitle: String?) {
+    private func addRecent(kind: RecentKind, entityId: String?, title: String, subtitle: String?) {
         guard kind == .medicine || kind == .medicineEntry else { return }
-        let objectURI = objectID?.uriRepresentation().absoluteString
         let item = RecentItem(
             id: UUID(),
             kind: kind,
-            objectURI: objectURI,
+            entityId: entityId,
             title: title,
             subtitle: subtitle,
             timestamp: Date()
@@ -2278,7 +2216,7 @@ struct GlobalSearchView: View {
         var updated = recentItems
         updated.removeAll { existing in
             existing.kind == item.kind
-            && existing.objectURI == item.objectURI
+            && existing.entityId == item.entityId
             && existing.title == item.title
         }
         updated.insert(item, at: 0)
@@ -2290,7 +2228,7 @@ struct GlobalSearchView: View {
 
     private func addRecentQuery(_ text: String) {
         guard !text.isEmpty else { return }
-        addRecent(kind: .query, objectID: nil, title: text, subtitle: selectedScope.menuLabel)
+        addRecent(kind: .query, entityId: nil, title: text, subtitle: selectedScope.menuLabel)
     }
 
     private func saveRecentItems(_ items: [RecentItem]) {
@@ -2299,6 +2237,36 @@ struct GlobalSearchView: View {
             return
         }
         recentItemsRaw = raw
+    }
+
+    private func parseUUID(_ value: String?) -> UUID? {
+        guard let value else { return nil }
+        return UUID(uuidString: value)
+    }
+
+    private func medicineById(_ id: String?) -> Medicine? {
+        guard let uuid = parseUUID(id) else { return nil }
+        return medicines.first { $0.id == uuid }
+    }
+
+    private func medicineEntryById(_ id: String?) -> MedicinePackage? {
+        guard let uuid = parseUUID(id) else { return nil }
+        return medicineEntries.first { $0.id == uuid }
+    }
+
+    private func therapyById(_ id: String?) -> Therapy? {
+        guard let uuid = parseUUID(id) else { return nil }
+        return therapies.first { $0.id == uuid }
+    }
+
+    private func doctorById(_ id: String?) -> Doctor? {
+        guard let uuid = parseUUID(id) else { return nil }
+        return doctors.first { $0.id == uuid }
+    }
+
+    private func personById(_ id: String?) -> Person? {
+        guard let uuid = parseUUID(id) else { return nil }
+        return persons.first { $0.id == uuid }
     }
 
     private func searchNearbyPharmacies(query: String) {
@@ -2341,23 +2309,23 @@ struct GlobalSearchView: View {
     private func openRecent(_ item: RecentItem) {
         switch item.kind {
         case .medicine:
-            guard let medicine: Medicine = object(from: item.objectURI) else { return }
+            guard let medicine = medicineById(item.entityId) else { return }
             openMedicine(medicine)
 
         case .medicineEntry:
-            guard let entry: MedicinePackage = object(from: item.objectURI) else { return }
+            guard let entry = medicineEntryById(item.entityId) else { return }
             openMedicineEntry(entry)
 
         case .therapy:
-            guard let therapy: Therapy = object(from: item.objectURI) else { return }
+            guard let therapy = therapyById(item.entityId) else { return }
             openTherapy(therapy)
 
         case .doctor:
-            guard let doctor: Doctor = object(from: item.objectURI) else { return }
+            guard let doctor = doctorById(item.entityId) else { return }
             openDoctor(doctor)
 
         case .person:
-            guard let person: Person = object(from: item.objectURI) else { return }
+            guard let person = personById(item.entityId) else { return }
             openPerson(person)
 
         case .query:
@@ -2366,15 +2334,23 @@ struct GlobalSearchView: View {
         }
     }
 
-    private func object<T: NSManagedObject>(from uriString: String?) -> T? {
-        guard let uriString,
-              let uri = URL(string: uriString),
-              let coordinator = managedObjectContext.persistentStoreCoordinator,
-              let objectID = coordinator.managedObjectID(forURIRepresentation: uri),
-              let object = try? managedObjectContext.existingObject(with: objectID) as? T else {
-            return nil
+    private func reloadFetchedState() {
+        do {
+            let snapshot = try appDataStore.provider.search.fetchSnapshot()
+            medicines = snapshot.medicines
+            medicineEntries = snapshot.medicineEntries
+            therapies = snapshot.therapies
+            doctors = snapshot.doctors
+            persons = snapshot.persons
+            option = snapshot.option
+        } catch {
+            medicines = []
+            medicineEntries = []
+            therapies = []
+            doctors = []
+            persons = []
+            option = nil
         }
-        return object
     }
 
     private static let hourFormatter: DateFormatter = {
