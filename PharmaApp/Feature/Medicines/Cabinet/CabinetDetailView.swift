@@ -2,6 +2,10 @@ import SwiftUI
 
 /// Dettaglio di un cabinet con elenco dei medicinali contenuti.
 struct CabinetDetailView: View {
+    private struct EntrySelection: Identifiable {
+        let id: UUID
+    }
+
     private struct DetailRow: Identifiable {
         let entry: MedicinePackage
 
@@ -18,10 +22,10 @@ struct CabinetDetailView: View {
     @State private var options: [Option] = []
     @State private var cabinets: [Cabinet] = []
     
-    @State private var selectedEntry: MedicinePackage?
+    @State private var selectedEntrySelection: EntrySelection?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
     @State private var missedDoseSheet: MissedDoseSheetState?
-    @State private var entryToMove: MedicinePackage?
+    @State private var entryToMoveSelection: EntrySelection?
     @State private var isDeleteDialogPresented = false
     @State private var isMoveCabinetSheetPresented = false
     @State private var hasStartedObservation = false
@@ -62,10 +66,14 @@ struct CabinetDetailView: View {
             }
         }
         .sheet(isPresented: Binding(
-            get: { selectedEntry != nil && !(selectedEntry?.isDeleted ?? true) },
-            set: { newValue in if !newValue { selectedEntry = nil } }
+            get: {
+                guard let selection = selectedEntrySelection else { return false }
+                return currentEntry(id: selection.id) != nil
+            },
+            set: { newValue in if !newValue { selectedEntrySelection = nil } }
         )) {
-            if let entry = selectedEntry, !entry.isDeleted, entry.managedObjectContext != nil {
+            if let selection = selectedEntrySelection,
+               let entry = currentEntry(id: selection.id) {
                 MedicineDetailView(
                     medicine: entry.medicine,
                     package: entry.package,
@@ -75,33 +83,35 @@ struct CabinetDetailView: View {
                 .presentationDragIndicator(.visible)
             }
         }
-        .sheet(item: $entryToMove) { entry in
-            MoveToCabinetSheet(
-                entry: entry,
-                cabinets: cabinets,
-                onSelect: { cabinet in
-                    do {
-                        try appDataStore.provider.medicines.moveEntry(
-                            entryId: entry.id,
-                            toCabinet: cabinet?.id
-                        )
-                    } catch {
-                        // Keep behavior unchanged: ignore persistence errors in move flow.
+        .sheet(item: $entryToMoveSelection) { selection in
+            if let entry = currentEntry(id: selection.id) {
+                MoveToCabinetSheet(
+                    entry: entry,
+                    cabinets: cabinets,
+                    onSelect: { cabinet in
+                        do {
+                            try appDataStore.provider.medicines.moveEntry(
+                                entryId: entry.id,
+                                toCabinet: cabinet?.id
+                            )
+                        } catch {
+                            // Keep behavior unchanged: ignore persistence errors in move flow.
+                        }
                     }
-                }
-            )
-            .presentationDetents([PresentationDetent.medium, PresentationDetent.large])
+                )
+                .presentationDetents([PresentationDetent.medium, PresentationDetent.large])
+            }
         }
         .sheet(item: $missedDoseSheet) { state in
             MissedDoseIntakeSheet(candidate: state.candidate) { takenAt, nextAction in
-                let log = viewModel.actionService.recordMissedDoseIntake(
+                let didRecord = appDataStore.provider.medicines.recordMissedDoseIntake(
                     candidate: state.candidate,
                     takenAt: takenAt,
                     nextAction: nextAction,
                     operationId: state.operationId
                 )
                 if let key = state.operationKey {
-                    handleOperationResult(log, key: key)
+                    handleOperationResult(didRecord, key: key)
                 }
             }
         }
@@ -138,7 +148,7 @@ struct CabinetDetailView: View {
     }
 
     private func buildRows() -> [DetailRow] {
-        let valid = entries.filter { !$0.isDeleted && $0.managedObjectContext != nil }
+        let valid = entries.filter { !$0.isDeleted }
         return viewModel.sortedEntries(
             in: cabinet,
             entries: valid,
@@ -149,7 +159,7 @@ struct CabinetDetailView: View {
     }
     
     private func row(for entry: MedicinePackage) -> some View {
-        let isSelected = viewModel.selectedEntries.contains(entry)
+        let isSelected = viewModel.selectedEntryIDs.contains(entry.id)
         let shouldShowRx = shouldShowPrescriptionAction(for: entry)
         return MedicineSwipeRow(
             entry: entry,
@@ -159,31 +169,41 @@ struct CabinetDetailView: View {
             isPinned: favoritesStore.isFavorite(entry),
             onTap: {
                 if viewModel.isSelecting {
-                    viewModel.toggleSelection(for: entry)
+                    viewModel.toggleSelection(for: entry.id)
                 } else {
-                    selectedEntry = entry
+                    selectedEntrySelection = EntrySelection(id: entry.id)
                 }
             },
             onLongPress: {
-                selectedEntry = entry
+                selectedEntrySelection = EntrySelection(id: entry.id)
                 Haptics.impact(.medium)
             },
-            onToggleSelection: { viewModel.toggleSelection(for: entry) },
-            onEnterSelection: { viewModel.enterSelectionMode(with: entry) },
+            onToggleSelection: { viewModel.toggleSelection(for: entry.id) },
+            onEnterSelection: { viewModel.enterSelectionMode(with: entry.id) },
             onMarkTaken: {
                 beginMarkTaken(for: entry)
             },
             onMarkPurchased: {
                 let token = operationToken(for: .purchase, entry: entry)
-                let log = viewModel.actionService.markAsPurchased(for: entry, operationId: token.id)
-                handleOperationResult(log, key: token.key)
+                let didRecord = appDataStore.provider.medicines.recordPurchase(
+                    medicine: entry.medicine,
+                    package: entry.package,
+                    medicinePackage: entry,
+                    operationId: token.id
+                )
+                handleOperationResult(didRecord, key: token.key)
             },
             onRequestPrescription: shouldShowRx ? {
                 let token = operationToken(for: .prescriptionRequest, entry: entry)
-                let log = viewModel.actionService.requestPrescription(for: entry, operationId: token.id)
-                handleOperationResult(log, key: token.key)
+                let didRecord = appDataStore.provider.medicines.recordPrescriptionRequest(
+                    medicine: entry.medicine,
+                    package: entry.package,
+                    medicinePackage: entry,
+                    operationId: token.id
+                )
+                handleOperationResult(didRecord, key: token.key)
             } : nil,
-            onMove: { entryToMove = entry },
+            onMove: { entryToMoveSelection = EntrySelection(id: entry.id) },
             subtitleMode: .activeTherapies
         )
         .listRowSeparator(.hidden, edges: .all)
@@ -194,7 +214,11 @@ struct CabinetDetailView: View {
         guard hasSufficientStockForIntake(entry) else { return }
 
         let token = operationToken(for: .intake, entry: entry)
-        if let candidate = viewModel.actionService.missedDoseCandidate(for: entry) {
+        if let candidate = appDataStore.provider.medicines.missedDoseCandidate(
+            medicine: entry.medicine,
+            package: entry.package,
+            now: Date()
+        ) {
             missedDoseSheet = MissedDoseSheetState(
                 candidate: candidate,
                 operationId: token.id,
@@ -203,12 +227,21 @@ struct CabinetDetailView: View {
             return
         }
 
-        let log = viewModel.actionService.markAsTaken(for: entry, operationId: token.id)
-        handleOperationResult(log, key: token.key)
+        let didRecord = appDataStore.provider.medicines.recordIntake(
+            medicine: entry.medicine,
+            package: entry.package,
+            medicinePackage: entry,
+            operationId: token.id
+        )
+        handleOperationResult(didRecord, key: token.key)
     }
 
     private func hasSufficientStockForIntake(_ entry: MedicinePackage) -> Bool {
         appDataStore.provider.medicines.hasSufficientStockForIntake(entryId: entry.id)
+    }
+
+    private func currentEntry(id: UUID) -> MedicinePackage? {
+        entries.first { $0.id == id && !$0.isDeleted }
     }
     
     private func shouldShowPrescriptionAction(for entry: MedicinePackage) -> Bool {
@@ -226,8 +259,8 @@ struct CabinetDetailView: View {
         return (id, key)
     }
 
-    private func handleOperationResult(_ log: Log?, key: OperationKey) {
-        if log != nil {
+    private func handleOperationResult(_ didSucceed: Bool, key: OperationKey) {
+        if didSucceed {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
                 OperationIdProvider.shared.clear(key)
             }

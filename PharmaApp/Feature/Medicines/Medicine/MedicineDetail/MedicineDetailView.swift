@@ -15,9 +15,6 @@ struct MedicineDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @EnvironmentObject private var appDataStore: AppDataStore
-    @StateObject private var actionsViewModel = MedicineRowViewModel(
-        managedObjectContext: PersistenceController.shared.container.viewContext
-    )
     @State private var emailDetent: PresentationDetent = .fraction(0.55)
     @State private var therapySheet: TherapySheetState?
     @State private var missedDoseSheet: MissedDoseSheetState?
@@ -139,14 +136,12 @@ struct MedicineDetailView: View {
                 onCopy: { meds in
                     UIPasteboard.general.string = emailBody(for: meds)
                     meds.forEach { med in
-                        actionsViewModel.addNewPrescriptionRequest(for: med)
-                        actionsViewModel.addNewPrescription(for: med)
+                        recordPrescriptionFlow(for: med)
                     }
                 },
                 onSend: { meds in
                     meds.forEach { med in
-                        actionsViewModel.addNewPrescriptionRequest(for: med)
-                        actionsViewModel.addNewPrescription(for: med)
+                        recordPrescriptionFlow(for: med)
                     }
                 }
             )
@@ -324,17 +319,13 @@ struct MedicineDetailView: View {
         therapies.count
     }
 
-    private var deadlineTargetEntry: MedicinePackage? {
+    private var preferredDeadlineEntry: MedicinePackage? {
         if let medicinePackage {
             if !medicinePackage.isDeleted, medicinePackage.managedObjectContext != nil {
                 return medicinePackage
             }
         }
-        return MedicinePackage.latestActiveEntry(for: medicine, package: package, in: resolvedContext)
-    }
-
-    private var deadlineSummaryText: String {
-        deadlineTargetEntry?.deadlineLabel ?? "Non impostata"
+        return nil
     }
     
     private var therapySummarySubtitle: String {
@@ -883,7 +874,11 @@ extension MedicineDetailView {
         guard canMarkTakenForSelectedPackage else { return }
 
         let token = intakeOperationToken()
-        if let candidate = actionService.missedDoseCandidate(for: medicine, package: package) {
+        if let candidate = appDataStore.provider.medicines.missedDoseCandidate(
+            medicine: medicine,
+            package: package,
+            now: Date()
+        ) {
             missedDoseSheet = MissedDoseSheetState(
                 candidate: candidate,
                 operationId: token.id,
@@ -892,13 +887,13 @@ extension MedicineDetailView {
             return
         }
 
-        let log: Log?
-        if let medicinePackage {
-            log = actionService.markAsTaken(for: medicinePackage, operationId: token.id)
-        } else {
-            log = actionService.markAsTaken(for: medicine, package: package, operationId: token.id)
-        }
-        handleOperationResult(log, key: token.key)
+        let didRecord = appDataStore.provider.medicines.recordIntake(
+            medicine: medicine,
+            package: package,
+            medicinePackage: medicinePackage,
+            operationId: token.id
+        )
+        handleOperationResult(didRecord, key: token.key)
     }
 
     private func intakeOperationToken() -> (id: UUID, key: OperationKey) {
@@ -912,8 +907,8 @@ extension MedicineDetailView {
         return (id, key)
     }
 
-    private func handleOperationResult(_ log: Log?, key: OperationKey) {
-        if log != nil {
+    private func handleOperationResult(_ didSucceed: Bool, key: OperationKey) {
+        if didSucceed {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
                 OperationIdProvider.shared.clear(key)
             }
@@ -922,8 +917,45 @@ extension MedicineDetailView {
         }
     }
 
+    private func recordPrescriptionFlow(for medicine: Medicine) {
+        let requestToken = prescriptionOperationToken(action: .prescriptionRequest, medicine: medicine)
+        let didRequest = appDataStore.provider.medicines.recordPrescriptionRequest(
+            medicine: medicine,
+            package: nil,
+            medicinePackage: nil,
+            operationId: requestToken.id
+        )
+        handleOperationResult(didRequest, key: requestToken.key)
+
+        let receivedToken = prescriptionOperationToken(action: .prescriptionReceived, medicine: medicine)
+        let didReceive = appDataStore.provider.medicines.recordPrescriptionReceived(
+            medicine: medicine,
+            package: nil,
+            medicinePackage: nil,
+            operationId: receivedToken.id
+        )
+        handleOperationResult(didReceive, key: receivedToken.key)
+    }
+
+    private func prescriptionOperationToken(
+        action: OperationAction,
+        medicine: Medicine
+    ) -> (id: UUID, key: OperationKey) {
+        let key = OperationKey.medicineAction(
+            action: action,
+            medicineId: medicine.id,
+            source: .medicineRow
+        )
+        let id = OperationIdProvider.shared.operationId(for: key, ttl: 3)
+        return (id, key)
+    }
+
     private func syncDeadlineInputs() {
-        if let info = deadlineTargetEntry?.deadlineMonthYear {
+        if let info = appDataStore.provider.medicines.deadlineMonthYear(
+            medicine: medicine,
+            package: package,
+            preferredEntry: preferredDeadlineEntry
+        ) {
             deadlineMonthInput = String(format: "%02d", info.month)
             deadlineYearInput = String(info.year)
         } else {
@@ -938,7 +970,7 @@ extension MedicineDetailView {
         try? appDataStore.provider.medicines.updateDeadline(
             medicine: medicine,
             package: package,
-            preferredEntry: deadlineTargetEntry,
+            preferredEntry: preferredDeadlineEntry,
             month: nil,
             year: nil
         )
@@ -963,7 +995,7 @@ extension MedicineDetailView {
         try? appDataStore.provider.medicines.updateDeadline(
             medicine: medicine,
             package: package,
-            preferredEntry: deadlineTargetEntry,
+            preferredEntry: preferredDeadlineEntry,
             month: month,
             year: year
         )

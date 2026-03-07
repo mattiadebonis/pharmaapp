@@ -81,6 +81,12 @@ protocol MedicinesGateway {
         month: Int?,
         year: Int?
     ) throws
+    func deadlineMonthYear(
+        medicine: Medicine,
+        package: Package,
+        preferredEntry: MedicinePackage?
+    ) -> (month: Int, year: Int)?
+    func recurrenceRule(for therapy: Therapy) -> RecurrenceRule
     func setCustomStockThreshold(medicine: Medicine, threshold: Int32) throws
     func deleteCabinet(cabinetId: UUID, moveToCabinetId: UUID?) throws
     func deletePackage(medicine: Medicine, package: Package) throws
@@ -99,6 +105,27 @@ protocol MedicinesGateway {
     func recordIntake(
         medicine: Medicine,
         package: Package,
+        medicinePackage: MedicinePackage?,
+        operationId: UUID
+    ) -> Bool
+    @discardableResult
+    func recordPurchase(
+        medicine: Medicine,
+        package: Package?,
+        medicinePackage: MedicinePackage?,
+        operationId: UUID
+    ) -> Bool
+    @discardableResult
+    func recordPrescriptionRequest(
+        medicine: Medicine,
+        package: Package?,
+        medicinePackage: MedicinePackage?,
+        operationId: UUID
+    ) -> Bool
+    @discardableResult
+    func recordPrescriptionReceived(
+        medicine: Medicine,
+        package: Package?,
         medicinePackage: MedicinePackage?,
         operationId: UUID
     ) -> Bool

@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import CoreData
 
 // MARK: - Frequenza supportata
 /// Ora abbiamo solo due tipi: Giornaliera o In giorni specifici
@@ -63,7 +62,6 @@ struct TherapyFormView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var appViewModel: AppViewModel
     @EnvironmentObject private var appDataStore: AppDataStore
-    private let context: NSManagedObjectContext
     @State private var persons: [Person] = []
     @State private var doctors: [Doctor] = []
     @State private var hasStartedObservation = false
@@ -81,9 +79,6 @@ struct TherapyFormView: View {
     var editingTherapy: Therapy?
     var onSave: (() -> Void)?
     var isEmbedded: Bool = false
-    
-    // MARK: - ViewModel
-    @StateObject var therapyFormViewModel: TherapyFormViewModel
     
     // MARK: - Stato Frequenza
     @State private var selectedFrequencyType: FrequencyType = .daily
@@ -143,7 +138,6 @@ struct TherapyFormView: View {
     init(
         medicine: Medicine,
         package: Package,
-        context: NSManagedObjectContext,
         medicinePackage: MedicinePackage? = nil,
         editingTherapy: Therapy? = nil,
         onSave: (() -> Void)? = nil,
@@ -151,15 +145,11 @@ struct TherapyFormView: View {
     ) {
         self.medicine = medicine
         self.package = package
-        self.context = context
         self.medicinePackage = medicinePackage
         self.editingTherapy = editingTherapy
         self.onSave = onSave
         self.isEmbedded = isEmbedded
         _automaticIntakeEnabled = State(initialValue: !medicine.manual_intake_registration)
-        _therapyFormViewModel = StateObject(
-            wrappedValue: TherapyFormViewModel(context: context)
-        )
     }
     
     var body: some View {
@@ -1233,7 +1223,6 @@ extension TherapyFormView {
         }
 
         let effectiveStartDate = baseStartDate
-        let effectiveImportance = editingTherapy?.importance ?? "standard"
         let clinicalRules = buildClinicalRules()
         let effectivePackage = editingTherapy?.package ?? package
         let effectiveMedicinePackage = medicinePackage ?? editingTherapy?.medicinePackage
@@ -1246,90 +1235,58 @@ extension TherapyFormView {
         let cycleOff = isCycle ? cycleOffDays : nil
         let effectivePrescribingDoctor = selectedDoctor
 
-        // Persona associata: in modifica usa quella della therapy; altrimenti usa selezione/first/crea
-        let effectivePerson: Person = {
-            if let sel = selectedPerson { return sel }
-            if let t = editingTherapy { return t.person }
-            if let first = persons.first { return first }
-            let newPerson = Person(context: context)
-            newPerson.id = UUID()
-            newPerson.nome = ""
-            newPerson.cognome = nil
-            newPerson.condizione = nil
-            return newPerson
-        }()
+        guard let effectivePerson = selectedPerson ?? editingTherapy?.person ?? persons.first else {
+            print("Error: missing person while saving therapy.")
+            return
+        }
 
-        // Se stiamo modificando, aggiorna sempre quella therapy
-        if let therapyToUpdate = editingTherapy {
-            therapyFormViewModel.updateTherapy(
-                therapy: therapyToUpdate,
-                freq: effectiveFreq,
-                interval: effectiveInterval,
-                until: useUntil ? untilDate : nil,
-                count: useCount ? countNumber : nil,
-                byDay: effectiveByDay,
-                cycleOnDays: cycleOn,
-                cycleOffDays: cycleOff,
-                startDate: effectiveStartDate,
-                doses: doses,
-                package: effectivePackage,
-                medicinePackage: effectiveMedicinePackage,
-                importance: effectiveImportance,
-                person: effectivePerson,
-                prescribingDoctor: effectivePrescribingDoctor,
-                manualIntake: !automaticIntakeEnabled,
-                notificationsSilenced: notificationsSilenced,
-                notificationLevel: isPharmacoCritical ? .alarm : .normal,
-                snoozeMinutes: snoozeMinutes,
-                clinicalRules: clinicalRules
-            )
-        } else {
-            // In creazione: aggiungi sempre una nuova therapy per la combinazione selezionata.
-            therapyFormViewModel.saveTherapy(
-                medicine: medicine,
-                freq: effectiveFreq,
-                interval: effectiveInterval,
-                until: useUntil ? untilDate : nil,
-                count: useCount ? countNumber : nil,
-                byDay: effectiveByDay,
-                cycleOnDays: cycleOn,
-                cycleOffDays: cycleOff,
-                startDate: effectiveStartDate,
-                doses: doses,
-                package: effectivePackage,
-                medicinePackage: effectiveMedicinePackage,
-                importance: "standard",
-                person: effectivePerson,
-                prescribingDoctor: effectivePrescribingDoctor,
-                manualIntake: !automaticIntakeEnabled,
-                notificationsSilenced: notificationsSilenced,
-                notificationLevel: isPharmacoCritical ? .alarm : .normal,
-                snoozeMinutes: snoozeMinutes,
-                clinicalRules: clinicalRules
-            )
+        let input = TherapyWriteInput(
+            medicine: medicine,
+            package: effectivePackage,
+            medicinePackage: effectiveMedicinePackage,
+            freq: effectiveFreq,
+            interval: effectiveInterval,
+            until: useUntil ? untilDate : nil,
+            count: useCount ? countNumber : nil,
+            byDay: effectiveByDay,
+            cycleOnDays: cycleOn,
+            cycleOffDays: cycleOff,
+            startDate: effectiveStartDate,
+            doses: doses.map { TherapyDoseDraft(id: $0.id, time: $0.time, amount: $0.amount) },
+            importance: editingTherapy?.importance ?? "standard",
+            person: effectivePerson,
+            prescribingDoctor: effectivePrescribingDoctor,
+            manualIntake: !automaticIntakeEnabled,
+            notificationsSilenced: notificationsSilenced,
+            notificationLevel: isPharmacoCritical ? .alarm : .normal,
+            snoozeMinutes: snoozeMinutes,
+            clinicalRules: clinicalRules
+        )
+
+        do {
+            if let therapyToUpdate = editingTherapy {
+                try appDataStore.provider.medicines.updateTherapy(therapyToUpdate, input: input)
+            } else {
+                try appDataStore.provider.medicines.createTherapy(input)
+            }
+        } catch {
+            print("Error: \(error.localizedDescription)")
+            return
         }
 
         appViewModel.isSearchIndexPresented = false
         onSave?()
         if !isEmbedded {
             dismiss()
-        }
-        
-        if let success = therapyFormViewModel.successMessage {
-            print("Success: \(success)")
-        }
-        if let error = therapyFormViewModel.errorMessage {
-            print("Error: \(error)")
         }
     }
 
     private func deleteCurrentTherapy() {
         guard let therapyToDelete = editingTherapy else { return }
-        therapyFormViewModel.deleteTherapy(therapyToDelete)
-        guard therapyFormViewModel.errorMessage == nil else {
-            if let error = therapyFormViewModel.errorMessage {
-                print("Error: \(error)")
-            }
+        do {
+            try appDataStore.provider.medicines.deleteTherapy(therapyToDelete)
+        } catch {
+            print("Error: \(error.localizedDescription)")
             return
         }
         appViewModel.isSearchIndexPresented = false
@@ -1337,17 +1294,6 @@ extension TherapyFormView {
         if !isEmbedded {
             dismiss()
         }
-    }
-    
-    private func populateIfExisting() {
-        // Se la medicine ha una therapy già salvata
-        if let existingTherapy = medicine.therapies?.first {
-            populateFromTherapy(existingTherapy)
-            return
-        }
-        // Oppure la fetch dal ViewModel
-        guard let fetchedTherapy = therapyFormViewModel.fetchTherapy(for: medicine) else { return }
-        populateFromTherapy(fetchedTherapy)
     }
     
     private func populateFromTherapy(_ therapy: Therapy) {
@@ -1358,44 +1304,37 @@ extension TherapyFormView {
         isPharmacoCritical = therapy.isPharmacoCritical
         snoozeMinutes = therapy.effectiveSnoozeMinutes
         startDate = Calendar.current.startOfDay(for: therapy.start_date ?? startDateToday)
-        if let rruleString = therapy.rrule, !rruleString.isEmpty {
-            let parsedRule = RecurrenceManager(context: context)
-                .parseRecurrenceString(rruleString)
-            
-            freq = parsedRule.freq
-            byDay = parsedRule.byDay
-            interval = max(1, parsedRule.interval ?? 1)
-            cycleOnDays = parsedRule.cycleOnDays ?? cycleOnDays
-            cycleOffDays = parsedRule.cycleOffDays ?? cycleOffDays
-            
-            if let count = parsedRule.count {
-                useCount = true
-                countNumber = count
-                useUntil = false
-            } else {
-                useCount = false
-                if let until = parsedRule.until {
-                    useUntil = true
-                    untilDate = until
-                } else {
-                    useUntil = false
-                }
-            }
-            
-            if let on = parsedRule.cycleOnDays, let off = parsedRule.cycleOffDays, on > 0, off > 0 {
-                selectedFrequencyType = .cycle
-                freq = "DAILY"
-                interval = 1
-                byDay = []
-            } else if freq == "DAILY" {
-                selectedFrequencyType = .daily
-            } else {
-                selectedFrequencyType = .specificDays
-            }
-        } else {
+        let parsedRule = appDataStore.provider.medicines.recurrenceRule(for: therapy)
 
-            selectedFrequencyType = .daily
+        freq = parsedRule.freq
+        byDay = parsedRule.byDay
+        interval = max(1, parsedRule.interval)
+        cycleOnDays = parsedRule.cycleOnDays ?? cycleOnDays
+        cycleOffDays = parsedRule.cycleOffDays ?? cycleOffDays
+
+        if let count = parsedRule.count {
+            useCount = true
+            countNumber = count
+            useUntil = false
+        } else {
+            useCount = false
+            if let until = parsedRule.until {
+                useUntil = true
+                untilDate = until
+            } else {
+                useUntil = false
+            }
+        }
+
+        if let on = parsedRule.cycleOnDays, let off = parsedRule.cycleOffDays, on > 0, off > 0 {
+            selectedFrequencyType = .cycle
             freq = "DAILY"
+            interval = 1
+            byDay = []
+        } else if freq == "DAILY" {
+            selectedFrequencyType = .daily
+        } else {
+            selectedFrequencyType = .specificDays
         }
         
         if let existingDoses = therapy.doses as? Set<Dose> {

@@ -1,9 +1,12 @@
 import SwiftUI
-import CoreData
 import WidgetKit
 
 /// Vista dedicata al tab "Armadietto" (ex ramo medicines di FeedView)
 struct CabinetView: View {
+    private struct EntrySelection: Identifiable {
+        let id: UUID
+    }
+
     private struct ShelfViewState {
         let pinnedMedicineEntries: [CabinetViewModel.ShelfEntry]
         let cabinetEntries: [CabinetViewModel.ShelfEntry]
@@ -45,13 +48,13 @@ struct CabinetView: View {
     @State private var cabinets: [Cabinet] = []
 
     @State private var activeCabinetID: String?
-    @State private var entryToMove: MedicinePackage?
+    @State private var entryToMoveSelection: EntrySelection?
     @State private var isNewCabinetPresented = false
     @State private var newCabinetName = ""
     @State private var isCatalogAddPresented = false
     @State private var shouldAutoStartCatalogScan = false
     @State private var isProfilePresented = false
-    @State private var selectedEntry: MedicinePackage?
+    @State private var selectedEntrySelection: EntrySelection?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
     @State private var missedDoseSheet: MissedDoseSheetState?
     @State private var cachedSummaryLines: [String] = ["Per ora non ci sono azioni da fare."]
@@ -200,10 +203,14 @@ struct CabinetView: View {
     private var cabinetListWithDetailSheet: some View {
         cabinetListStyled
             .sheet(isPresented: Binding(
-                get: { selectedEntry != nil && !(selectedEntry?.isDeleted ?? true) },
-                set: { newValue in if !newValue { selectedEntry = nil } }
+                get: {
+                    guard let selection = selectedEntrySelection else { return false }
+                    return currentEntry(id: selection.id) != nil
+                },
+                set: { newValue in if !newValue { selectedEntrySelection = nil } }
             )) {
-                if let entry = selectedEntry, !entry.isDeleted, entry.managedObjectContext != nil {
+                if let selection = selectedEntrySelection,
+                   let entry = currentEntry(id: selection.id) {
                     MedicineDetailView(
                         medicine: entry.medicine,
                         package: entry.package,
@@ -213,33 +220,35 @@ struct CabinetView: View {
                     .presentationDragIndicator(.visible)
                 }
             }
-            .sheet(item: $entryToMove) { entry in
-                MoveToCabinetSheet(
-                    entry: entry,
-                    cabinets: Array(cabinets),
-                    onSelect: { cabinet in
-                        do {
-                            try appDataStore.provider.medicines.moveEntry(
-                                entryId: entry.id,
-                                toCabinet: cabinet?.id
-                            )
-                        } catch {
-                            // Keep current behavior: ignore move failures and stay on sheet flow.
+            .sheet(item: $entryToMoveSelection) { selection in
+                if let entry = currentEntry(id: selection.id) {
+                    MoveToCabinetSheet(
+                        entry: entry,
+                        cabinets: Array(cabinets),
+                        onSelect: { cabinet in
+                            do {
+                                try appDataStore.provider.medicines.moveEntry(
+                                    entryId: entry.id,
+                                    toCabinet: cabinet?.id
+                                )
+                            } catch {
+                                // Keep current behavior: ignore move failures and stay on sheet flow.
+                            }
                         }
-                    }
-                )
-                .presentationDetents([.medium, .large])
+                    )
+                    .presentationDetents([.medium, .large])
+                }
             }
             .sheet(item: $missedDoseSheet) { state in
                 MissedDoseIntakeSheet(candidate: state.candidate) { takenAt, nextAction in
-                    let log = viewModel.actionService.recordMissedDoseIntake(
+                    let didRecord = appDataStore.provider.medicines.recordMissedDoseIntake(
                         candidate: state.candidate,
                         takenAt: takenAt,
                         nextAction: nextAction,
                         operationId: state.operationId
                     )
                     if let key = state.operationKey {
-                        handleOperationResult(log, key: key)
+                        handleOperationResult(didRecord, key: key)
                     }
                 }
             }
@@ -279,7 +288,7 @@ struct CabinetView: View {
     private var uniqueMedicines: [Medicine] {
         var seen = Set<UUID>()
         return medicinePackages.compactMap { entry -> Medicine? in
-            guard !entry.isDeleted, entry.managedObjectContext != nil else { return nil }
+            guard !entry.isDeleted else { return nil }
             let id = entry.medicine.id
             guard seen.insert(id).inserted else { return nil }
             return entry.medicine
@@ -554,37 +563,47 @@ struct CabinetView: View {
         let shouldShowRx = rowSnapshot?.shouldShowPrescription ?? viewModel.shouldShowPrescriptionAction(for: entry)
         return MedicineSwipeRow(
             entry: entry,
-            isSelected: viewModel.selectedEntries.contains(entry),
+            isSelected: viewModel.selectedEntryIDs.contains(entry.id),
             isInSelectionMode: viewModel.isSelecting,
             shouldShowPrescription: shouldShowRx,
             isPinned: favoritesStore.isFavorite(entry),
             onTap: {
                 if viewModel.isSelecting {
-                    viewModel.toggleSelection(for: entry)
+                    viewModel.toggleSelection(for: entry.id)
                 } else {
-                    selectedEntry = entry
+                    selectedEntrySelection = EntrySelection(id: entry.id)
                 }
             },
             onLongPress: {
-                selectedEntry = entry
+                selectedEntrySelection = EntrySelection(id: entry.id)
                 Haptics.impact(.medium)
             },
-            onToggleSelection: { viewModel.toggleSelection(for: entry) },
-            onEnterSelection: { viewModel.enterSelectionMode(with: entry) },
+            onToggleSelection: { viewModel.toggleSelection(for: entry.id) },
+            onEnterSelection: { viewModel.enterSelectionMode(with: entry.id) },
             onMarkTaken: {
                 beginMarkTaken(for: entry)
             },
             onMarkPurchased: {
                 let token = operationToken(for: .purchase, entry: entry)
-                let log = viewModel.actionService.markAsPurchased(for: entry, operationId: token.id)
-                handleOperationResult(log, key: token.key)
+                let didRecord = appDataStore.provider.medicines.recordPurchase(
+                    medicine: entry.medicine,
+                    package: entry.package,
+                    medicinePackage: entry,
+                    operationId: token.id
+                )
+                handleOperationResult(didRecord, key: token.key)
             },
             onRequestPrescription: shouldShowRx ? {
                 let token = operationToken(for: .prescriptionRequest, entry: entry)
-                let log = viewModel.actionService.requestPrescription(for: entry, operationId: token.id)
-                handleOperationResult(log, key: token.key)
+                let didRecord = appDataStore.provider.medicines.recordPrescriptionRequest(
+                    medicine: entry.medicine,
+                    package: entry.package,
+                    medicinePackage: entry,
+                    operationId: token.id
+                )
+                handleOperationResult(didRecord, key: token.key)
             } : nil,
-            onMove: { entryToMove = entry },
+            onMove: { entryToMoveSelection = EntrySelection(id: entry.id) },
             subtitleMode: .activeTherapies,
             snapshot: rowSnapshot?.presentation
         )
@@ -604,7 +623,11 @@ struct CabinetView: View {
         guard hasSufficientStockForIntake(entry) else { return }
 
         let token = operationToken(for: .intake, entry: entry)
-        if let candidate = viewModel.actionService.missedDoseCandidate(for: entry) {
+        if let candidate = appDataStore.provider.medicines.missedDoseCandidate(
+            medicine: entry.medicine,
+            package: entry.package,
+            now: Date()
+        ) {
             missedDoseSheet = MissedDoseSheetState(
                 candidate: candidate,
                 operationId: token.id,
@@ -613,12 +636,21 @@ struct CabinetView: View {
             return
         }
 
-        let log = viewModel.actionService.markAsTaken(for: entry, operationId: token.id)
-        handleOperationResult(log, key: token.key)
+        let didRecord = appDataStore.provider.medicines.recordIntake(
+            medicine: entry.medicine,
+            package: entry.package,
+            medicinePackage: entry,
+            operationId: token.id
+        )
+        handleOperationResult(didRecord, key: token.key)
     }
 
     private func hasSufficientStockForIntake(_ entry: MedicinePackage) -> Bool {
         appDataStore.provider.medicines.hasSufficientStockForIntake(entryId: entry.id)
+    }
+
+    private func currentEntry(id: UUID) -> MedicinePackage? {
+        medicinePackages.first { $0.id == id && !$0.isDeleted }
     }
 
     private func cabinetRow(for cabinet: Cabinet, entries: [MedicinePackage]) -> some View {
@@ -679,8 +711,8 @@ struct CabinetView: View {
         return (id, key)
     }
 
-    private func handleOperationResult(_ log: Log?, key: OperationKey) {
-        if log != nil {
+    private func handleOperationResult(_ didSucceed: Bool, key: OperationKey) {
+        if didSucceed {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
                 OperationIdProvider.shared.clear(key)
             }

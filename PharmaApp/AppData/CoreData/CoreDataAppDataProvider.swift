@@ -176,6 +176,23 @@ private final class CoreDataMedicinesGateway: MedicinesGateway {
         try CoreDataWriteCommand.saveOrRollback(context)
     }
 
+    func deadlineMonthYear(
+        medicine: Medicine,
+        package: Package,
+        preferredEntry: MedicinePackage?
+    ) -> (month: Int, year: Int)? {
+        let medicine = inContext(medicine)
+        let package = inContext(package)
+        let preferredEntry = inContextOptional(preferredEntry)
+        let entry = preferredEntry ?? MedicinePackage.latestActiveEntry(for: medicine, package: package, in: context)
+        return entry?.deadlineMonthYear
+    }
+
+    func recurrenceRule(for therapy: Therapy) -> RecurrenceRule {
+        let therapy = inContext(therapy)
+        return RecurrenceManager(context: context).parseRecurrenceString(therapy.rrule ?? "")
+    }
+
     func setCustomStockThreshold(medicine: Medicine, threshold: Int32) throws {
         let medicine = inContext(medicine)
         medicine.custom_stock_threshold = threshold
@@ -304,6 +321,60 @@ private final class CoreDataMedicinesGateway: MedicinesGateway {
             package: inContext(package),
             operationId: operationId
         ) != nil
+    }
+
+    @discardableResult
+    func recordPurchase(
+        medicine: Medicine,
+        package: Package?,
+        medicinePackage: MedicinePackage?,
+        operationId: UUID
+    ) -> Bool {
+        let actionService = MedicineActionService(context: context)
+        if let entry = inContextOptional(medicinePackage) {
+            return actionService.markAsPurchased(for: entry, operationId: operationId) != nil
+        }
+        if let package = inContextOptional(package),
+           let entry = MedicinePackage.latestActiveEntry(for: inContext(medicine), package: package, in: context) {
+            return actionService.markAsPurchased(for: entry, operationId: operationId) != nil
+        }
+        return actionService.markAsPurchased(for: inContext(medicine), operationId: operationId) != nil
+    }
+
+    @discardableResult
+    func recordPrescriptionRequest(
+        medicine: Medicine,
+        package: Package?,
+        medicinePackage: MedicinePackage?,
+        operationId: UUID
+    ) -> Bool {
+        let actionService = MedicineActionService(context: context)
+        if let entry = inContextOptional(medicinePackage) {
+            return actionService.requestPrescription(for: entry, operationId: operationId) != nil
+        }
+        if let package = inContextOptional(package),
+           let entry = MedicinePackage.latestActiveEntry(for: inContext(medicine), package: package, in: context) {
+            return actionService.requestPrescription(for: entry, operationId: operationId) != nil
+        }
+        return actionService.requestPrescription(for: inContext(medicine), operationId: operationId) != nil
+    }
+
+    @discardableResult
+    func recordPrescriptionReceived(
+        medicine: Medicine,
+        package: Package?,
+        medicinePackage: MedicinePackage?,
+        operationId: UUID
+    ) -> Bool {
+        let actionService = MedicineActionService(context: context)
+        if let entry = inContextOptional(medicinePackage) {
+            return actionService.markPrescriptionReceived(for: entry, operationId: operationId) != nil
+        }
+        if let package = inContextOptional(package),
+           let entry = MedicinePackage.latestActiveEntry(for: inContext(medicine), package: package, in: context) {
+            return actionService.markPrescriptionReceived(for: entry, operationId: operationId) != nil
+        }
+        return actionService.markPrescriptionReceived(for: inContext(medicine), operationId: operationId) != nil
     }
 
     func createTherapy(_ input: TherapyWriteInput) throws {
@@ -470,6 +541,7 @@ private final class CoreDataMedicinesGateway: MedicinesGateway {
 @MainActor
 private final class CoreDataSearchGateway: SearchGateway {
     private let context: NSManagedObjectContext
+    private let repository = CatalogSelectionRepository()
 
     init(context: NSManagedObjectContext) {
         self.context = context
@@ -568,12 +640,21 @@ private final class CoreDataSearchGateway: SearchGateway {
     }
 
     private func resolveCatalogContext(for selection: CatalogSelection) -> SearchCatalogResolvedContext {
-        let resolved = CatalogSelectionResolver(context: context).resolveOrCreateContext(for: selection)
+        let medicine = existingMedicine(for: selection) ?? createMedicine(from: selection)
+        medicine.in_cabinet = true
+        medicine.obbligo_ricetta = medicine.obbligo_ricetta || selection.requiresPrescription
+
+        let package = existingPackage(for: medicine, selection: selection)
+            ?? createPackage(for: medicine, selection: selection)
+        let entry = existingEntry(for: medicine, package: package)
+            ?? createEntry(for: medicine, package: package)
+        entry.cabinet = nil
+
         return SearchCatalogResolvedContext(
             selection: selection,
-            medicine: resolved.medicine,
-            package: resolved.package,
-            entry: resolved.entry
+            medicine: medicine,
+            package: package,
+            entry: entry
         )
     }
 
@@ -583,6 +664,82 @@ private final class CoreDataSearchGateway: SearchGateway {
             return (String(format: "%02d", info.month), String(info.year))
         }
         return ("", "")
+    }
+
+    private func existingMedicine(for selection: CatalogSelection) -> Medicine? {
+        let request = Medicine.extractMedicines()
+        guard let medicines = try? context.fetch(request) else { return nil }
+
+        let identity = repository.identityKey(for: selection)
+        if let exact = medicines.first(where: {
+            repository.identityKey(name: $0.nome, principle: $0.principio_attivo) == identity
+        }) {
+            return exact
+        }
+
+        let normalizedName = repository.normalizeText(selection.name)
+        return medicines.first(where: { repository.normalizeText($0.nome) == normalizedName })
+    }
+
+    private func existingPackage(for medicine: Medicine, selection: CatalogSelection) -> Package? {
+        medicine.packages.first(where: { packageMatches($0, selection: selection) })
+    }
+
+    private func existingEntry(for medicine: Medicine, package: Package) -> MedicinePackage? {
+        if let latest = MedicinePackage.latestActiveEntry(for: medicine, package: package, in: context) {
+            return latest
+        }
+        return medicine.medicinePackages?.first(where: { $0.package.id == package.id })
+    }
+
+    private func packageMatches(_ package: Package, selection: CatalogSelection) -> Bool {
+        let sameUnits = Int(package.numero) == max(1, selection.units)
+        let sameType = repository.normalizeText(package.tipologia) == repository.normalizeText(selection.tipologia)
+        let sameValue = package.valore == selection.valore
+        let sameUnit = repository.normalizeText(package.unita) == repository.normalizeText(selection.unita)
+        let sameVolume = repository.normalizeText(package.volume) == repository.normalizeText(selection.volume)
+        return sameUnits && sameType && sameValue && sameUnit && sameVolume
+    }
+
+    private func createMedicine(from selection: CatalogSelection) -> Medicine {
+        let medicine = Medicine(context: context)
+        medicine.id = UUID()
+        medicine.source_id = medicine.id
+        medicine.visibility = "local"
+        medicine.nome = selection.name
+        medicine.principio_attivo = selection.principle
+        medicine.obbligo_ricetta = selection.requiresPrescription
+        medicine.in_cabinet = true
+        return medicine
+    }
+
+    private func createPackage(for medicine: Medicine, selection: CatalogSelection) -> Package {
+        let package = Package(context: context)
+        package.id = UUID()
+        package.source_id = package.id
+        package.visibility = "local"
+        package.tipologia = selection.tipologia.isEmpty ? "Confezione" : selection.tipologia
+        package.numero = Int32(max(1, selection.units))
+        package.unita = selection.unita.isEmpty ? "unita" : selection.unita
+        package.volume = selection.volume
+        package.valore = max(0, selection.valore)
+        package.principio_attivo = selection.principle
+        package.medicine = medicine
+        medicine.addToPackages(package)
+        return package
+    }
+
+    private func createEntry(for medicine: Medicine, package: Package) -> MedicinePackage {
+        let entry = MedicinePackage(context: context)
+        entry.id = UUID()
+        entry.created_at = Date()
+        entry.source_id = entry.id
+        entry.visibility = "local"
+        entry.medicine = medicine
+        entry.package = package
+        entry.cabinet = nil
+        medicine.addToMedicinePackages(entry)
+        return entry
     }
 }
 

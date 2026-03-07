@@ -1,13 +1,10 @@
 import SwiftUI
-import CoreData
 
 /// ViewModel dedicato al tab "Armadietto".
 class CabinetViewModel: ObservableObject {
     // Stato di selezione (solo per il tab Armadietto)
-    @Published var selectedEntries: Set<MedicinePackage> = []
+    @Published var selectedEntryIDs: Set<UUID> = []
     @Published var isSelecting: Bool = false
-
-    let actionService: MedicineActionService
 
     // MARK: - PharmaCore dependencies
     private let pharmaCoreFactory: PharmaCoreFactory
@@ -19,50 +16,48 @@ class CabinetViewModel: ObservableObject {
     private(set) lazy var optionRepository: OptionRepository = pharmaCoreFactory.makeOptionRepository()
 
     init(
-        actionService: MedicineActionService = MedicineActionService(),
         pharmaCoreFactory: PharmaCoreFactory = PharmaCoreFactory()
     ) {
-        self.actionService = actionService
         self.pharmaCoreFactory = pharmaCoreFactory
     }
 
-    private func snapshotBuilder(for context: NSManagedObjectContext?) -> CoreDataSnapshotBuilder {
-        CoreDataSnapshotBuilder(context: context ?? PersistenceController.shared.container.viewContext)
-    }
-
     private func snapshotBuilder(for entries: [MedicinePackage]) -> CoreDataSnapshotBuilder {
-        snapshotBuilder(for: entries.first?.managedObjectContext)
+        CoreDataSnapshotBuilder(
+            context: entries.first?.managedObjectContext ?? PersistenceController.shared.container.viewContext
+        )
     }
 
     private func snapshotBuilder(for medicines: [Medicine]) -> CoreDataSnapshotBuilder {
-        snapshotBuilder(for: medicines.first?.managedObjectContext)
+        CoreDataSnapshotBuilder(
+            context: medicines.first?.managedObjectContext ?? PersistenceController.shared.container.viewContext
+        )
     }
 
     // MARK: - Selection
-    func enterSelectionMode(with entry: MedicinePackage) {
+    func enterSelectionMode(with entryId: UUID) {
         isSelecting = true
-        selectedEntries.insert(entry)
+        selectedEntryIDs.insert(entryId)
     }
 
-    func toggleSelection(for entry: MedicinePackage) {
-        if selectedEntries.contains(entry) {
-            selectedEntries.remove(entry)
-            if selectedEntries.isEmpty {
+    func toggleSelection(for entryId: UUID) {
+        if selectedEntryIDs.contains(entryId) {
+            selectedEntryIDs.remove(entryId)
+            if selectedEntryIDs.isEmpty {
                 isSelecting = false
             }
         } else {
-            selectedEntries.insert(entry)
+            selectedEntryIDs.insert(entryId)
         }
     }
 
     func cancelSelection() {
-        selectedEntries.removeAll()
+        selectedEntryIDs.removeAll()
         isSelecting = false
     }
 
     func clearSelection() {
         DispatchQueue.main.async {
-            self.selectedEntries.removeAll()
+            self.selectedEntryIDs.removeAll()
             self.isSelecting = false
         }
     }
@@ -189,7 +184,9 @@ class CabinetViewModel: ObservableObject {
     }
 
     func shouldShowPrescriptionAction(for entry: MedicinePackage) -> Bool {
-        let builder = snapshotBuilder(for: entry.managedObjectContext)
+        let builder = CoreDataSnapshotBuilder(
+            context: entry.managedObjectContext ?? PersistenceController.shared.container.viewContext
+        )
         let snapshot = builder.makeEntrySnapshot(entry: entry)
         let optionSnapshot = builder.makeOptionSnapshot(option: nil)
         return sectionCalculator.needsPrescriptionBeforePurchase(snapshot, option: optionSnapshot)

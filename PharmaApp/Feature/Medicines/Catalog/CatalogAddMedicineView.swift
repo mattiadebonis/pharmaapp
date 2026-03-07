@@ -134,7 +134,6 @@ struct CatalogAddMedicineView: View {
                 TherapyFormView(
                     medicine: context.medicine,
                     package: context.package,
-                    context: context.entry.managedObjectContext ?? PersistenceController.shared.container.viewContext,
                     medicinePackage: context.entry,
                     onSave: {
                         therapyContext = nil

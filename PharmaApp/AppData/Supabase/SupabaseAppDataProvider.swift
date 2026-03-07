@@ -76,6 +76,22 @@ private struct SupabaseMedicinesGateway: MedicinesGateway {
         throw SupabaseProviderError.notImplemented
     }
 
+    func deadlineMonthYear(
+        medicine: Medicine,
+        package: Package,
+        preferredEntry: MedicinePackage?
+    ) -> (month: Int, year: Int)? {
+        let _ = medicine
+        let _ = package
+        let _ = preferredEntry
+        return nil
+    }
+
+    func recurrenceRule(for therapy: Therapy) -> RecurrenceRule {
+        let _ = therapy
+        return RecurrenceRule(freq: "DAILY")
+    }
+
     func setCustomStockThreshold(medicine: Medicine, threshold: Int32) throws {
         let _ = medicine
         let _ = threshold
@@ -129,6 +145,48 @@ private struct SupabaseMedicinesGateway: MedicinesGateway {
     func recordIntake(
         medicine: Medicine,
         package: Package,
+        medicinePackage: MedicinePackage?,
+        operationId: UUID
+    ) -> Bool {
+        let _ = medicine
+        let _ = package
+        let _ = medicinePackage
+        let _ = operationId
+        return false
+    }
+
+    @discardableResult
+    func recordPurchase(
+        medicine: Medicine,
+        package: Package?,
+        medicinePackage: MedicinePackage?,
+        operationId: UUID
+    ) -> Bool {
+        let _ = medicine
+        let _ = package
+        let _ = medicinePackage
+        let _ = operationId
+        return false
+    }
+
+    @discardableResult
+    func recordPrescriptionRequest(
+        medicine: Medicine,
+        package: Package?,
+        medicinePackage: MedicinePackage?,
+        operationId: UUID
+    ) -> Bool {
+        let _ = medicine
+        let _ = package
+        let _ = medicinePackage
+        let _ = operationId
+        return false
+    }
+
+    @discardableResult
+    func recordPrescriptionReceived(
+        medicine: Medicine,
+        package: Package?,
         medicinePackage: MedicinePackage?,
         operationId: UUID
     ) -> Bool {

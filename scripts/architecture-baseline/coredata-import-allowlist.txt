@@ -1,4 +1,5 @@
 PharmaApp/AppData/CoreData/CoreDataAppDataProvider.swift
+PharmaApp/AppData/CoreData/CoreDataCatalogSelectionResolver.swift
 PharmaApp/AppData/CoreData/Intents/SiriIntentFacade.swift
 PharmaApp/AppData/CoreData/LiveActivity/CriticalDoseActionService.swift
 PharmaApp/AppData/CoreData/LiveActivity/CriticalDoseLiveActivityCoordinator.swift
@@ -32,19 +33,9 @@ PharmaApp/Data/Therapy.swift
 PharmaApp/Data/UserProfile.swift
 PharmaApp/Feature/Adherence/AdherenceDashboardView.swift
 PharmaApp/Feature/Adherence/AdherenceDashboardViewModel.swift
-PharmaApp/Feature/Medicines/Cabinet/CabinetCardView.swift
 PharmaApp/Feature/Medicines/Cabinet/CabinetComponents.swift
 PharmaApp/Feature/Medicines/Cabinet/CabinetDetailView.swift
-PharmaApp/Feature/Medicines/Cabinet/CabinetView.swift
-PharmaApp/Feature/Medicines/Cabinet/CabinetViewModel.swift
-PharmaApp/Feature/Medicines/Catalog/CatalogAddMedicineView.swift
-PharmaApp/Feature/Medicines/Catalog/CatalogSelectionResolver.swift
-PharmaApp/Feature/Medicines/Medicine/MedicineDetail/MedicineDetailView.swift
-PharmaApp/Feature/Medicines/Medicine/MedicineDetail/TherapyForm/TherapyFormView.swift
-PharmaApp/Feature/Medicines/Medicine/MedicineDetail/TherapyForm/TherapyFormViewModel.swift
 PharmaApp/Feature/Medicines/Medicine/MedicineRowView.swift
-PharmaApp/Feature/Medicines/Medicine/MedicineRowViewModel.swift
-PharmaApp/Feature/Medicines/MedicineWizardView.swift
 PharmaApp/Feature/Search/GlobalSearchView.swift
 PharmaApp/Intents/SiriIntentFacade.swift
 PharmaApp/LiveActivity/CriticalDoseActionService.swift

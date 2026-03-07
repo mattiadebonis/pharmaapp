@@ -63,7 +63,6 @@ struct MedicineWizardView: View {
                 TherapyFormView(
                     medicine: target.medicine,
                     package: target.package,
-                    context: target.entry.managedObjectContext ?? PersistenceController.shared.container.viewContext,
                     medicinePackage: target.entry,
                     onSave: {
                         complete(message: "Terapia aggiunta e farmaco inserito nell'armadietto.")

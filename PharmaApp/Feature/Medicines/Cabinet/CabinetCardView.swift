@@ -1,5 +1,4 @@
 import SwiftUI
-import CoreData
 
 struct CabinetCardView: View {
     let cabinet: Cabinet
