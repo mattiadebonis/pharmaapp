@@ -48,6 +48,7 @@ struct TherapyWriteInput {
     let importance: String
     let person: Person
     let prescribingDoctor: Doctor?
+    let condition: String?
     let manualIntake: Bool
     let notificationsSilenced: Bool
     let notificationLevel: TherapyNotificationLevel

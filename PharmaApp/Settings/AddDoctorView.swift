@@ -12,59 +12,39 @@ struct AddDoctorView: View {
     @EnvironmentObject private var appDataStore: AppDataStore
     
     @State private var nome: String = ""
+    @State private var specializzazione: String = ""
     @State private var mail: String = ""
     @State private var telefono: String = ""
-    @State private var specializzazione: String = ""
     @State private var segreteriaNome: String = ""
     @State private var segreteriaMail: String = ""
     @State private var segreteriaTelefono: String = ""
-    @State private var schedule = DoctorScheduleDTO()
-    @State private var segreteriaSchedule = DoctorScheduleDTO()
+    @State private var schedule: DoctorScheduleDTO = DoctorScheduleDTO()
     @State private var errorMessage: String?
     
     var body: some View {
         Form {
             Section(header: Text("Dettagli Dottore")) {
                 TextField("Nome e cognome", text: $nome)
+                TextField("Specializzazione", text: $specializzazione)
             }
 
-            Section(header: Text("Contatti e disponibilità")) {
-                NavigationLink {
-                    DoctorProfessionalInfoPageView(
-                        title: "Contatti e disponibilità",
-                        email: $mail,
-                        telefono: $telefono,
-                        specializzazione: $specializzazione,
-                        schedule: $schedule
-                    )
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Apri pagina contatti e disponibilità")
-                            .foregroundStyle(.primary)
-                        Text(professionalInfoSummary)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+            Section(header: Text("Contatti dottore")) {
+                TextField("Telefono", text: $telefono)
+                    .keyboardType(.phonePad)
+                TextField("Email", text: $mail)
+                    .keyboardType(.emailAddress)
+            }
+
+            Section(header: Text("Orari dottore")) {
+                DoctorScheduleEditor(schedule: $schedule)
             }
 
             Section(header: Text("Segreteria")) {
-                NavigationLink {
-                    DoctorSecretaryEditorView(
-                        nome: $segreteriaNome,
-                        mail: $segreteriaMail,
-                        telefono: $segreteriaTelefono,
-                        schedule: $segreteriaSchedule
-                    )
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Apri pagina segreteria")
-                            .foregroundStyle(.primary)
-                        Text(secretarySummary)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                TextField("Nome segreteria", text: $segreteriaNome)
+                TextField("Telefono segreteria", text: $segreteriaTelefono)
+                    .keyboardType(.phonePad)
+                TextField("Email segreteria", text: $segreteriaMail)
+                    .keyboardType(.emailAddress)
             }
 
             if let errorMessage {
@@ -99,7 +79,7 @@ struct AddDoctorView: View {
                     secretaryName: normalizedValue(from: segreteriaNome),
                     secretaryEmail: normalizedValue(from: segreteriaMail),
                     secretaryPhone: normalizedValue(from: segreteriaTelefono),
-                    secretarySchedule: segreteriaSchedule
+                    secretarySchedule: DoctorScheduleDTO()
                 )
             )
             dismiss()
@@ -111,31 +91,6 @@ struct AddDoctorView: View {
     private func normalizedValue(from value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private var secretarySummary: String {
-        let values = [
-            normalizedValue(from: segreteriaNome),
-            normalizedValue(from: segreteriaTelefono),
-            normalizedValue(from: segreteriaMail)
-        ].compactMap { $0 }
-        return values.isEmpty ? "Nessuna segreteria configurata" : values.joined(separator: " · ")
-    }
-
-    private func scheduleSummary(_ schedule: DoctorScheduleDTO) -> String {
-        let configuredDays = schedule.days.filter { $0.mode != .closed }.count
-        return configuredDays == 0 ? "Nessun orario configurato" : "\(configuredDays) giorni configurati"
-    }
-
-    private var professionalInfoSummary: String {
-        let values = [
-            normalizedValue(from: mail),
-            normalizedValue(from: telefono),
-            normalizedValue(from: specializzazione)
-        ].compactMap { $0 }
-
-        let contacts = values.isEmpty ? "Contatti non configurati" : values.joined(separator: " · ")
-        return "\(contacts) · \(scheduleSummary(schedule))"
     }
 }
 
@@ -218,23 +173,16 @@ struct TimeSlotRow: View {
 }
 
 struct DoctorSecretaryEditorView: View {
-    @Binding var nome: String
     @Binding var mail: String
     @Binding var telefono: String
-    @Binding var schedule: DoctorScheduleDTO
 
     var body: some View {
         Form {
             Section(header: Text("Contatti segreteria")) {
-                TextField("Nome segreteria", text: $nome)
-                TextField("Email segreteria", text: $mail)
-                    .keyboardType(.emailAddress)
                 TextField("Telefono segreteria", text: $telefono)
                     .keyboardType(.phonePad)
-            }
-
-            Section(header: Text("Orari segreteria")) {
-                DoctorScheduleEditor(schedule: $schedule)
+                TextField("Email segreteria", text: $mail)
+                    .keyboardType(.emailAddress)
             }
         }
         .navigationTitle("Segreteria")
@@ -262,21 +210,14 @@ struct DoctorProfessionalInfoPageView: View {
     let title: String
     @Binding var email: String
     @Binding var telefono: String
-    @Binding var specializzazione: String
-    @Binding var schedule: DoctorScheduleDTO
 
     var body: some View {
         Form {
             Section(header: Text("Contatti professionali")) {
-                TextField("Email", text: $email)
-                    .keyboardType(.emailAddress)
                 TextField("Telefono", text: $telefono)
                     .keyboardType(.phonePad)
-                TextField("Specializzazione", text: $specializzazione)
-            }
-
-            Section(header: Text("Orari studio e reperibilità")) {
-                DoctorScheduleEditor(schedule: $schedule)
+                TextField("Email", text: $email)
+                    .keyboardType(.emailAddress)
             }
         }
         .navigationTitle(title)

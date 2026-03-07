@@ -4,6 +4,7 @@ struct SettingsPersonRecord: Identifiable, Equatable {
     let id: UUID
     var name: String?
     var codiceFiscale: String?
+    var condition: String?
     var isAccount: Bool
 }
 
@@ -30,6 +31,7 @@ struct PersonWriteInput {
     var id: UUID?
     var name: String?
     var codiceFiscale: String?
+    var condition: String?
     var isAccount: Bool
 }
 

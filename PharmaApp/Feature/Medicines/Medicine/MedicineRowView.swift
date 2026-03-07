@@ -470,12 +470,35 @@ struct MedicineRowView: View {
         if let personDetails = line.personDetails, !personDetails.isEmpty {
             baseText =
                 baseText
-                + Text(verbatim: "\u{00A0}")
+                + Text(verbatim: "\n")
                 + Text(Image(systemName: "person"))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(color)
                 + Text(" ").font(subtitleFont).foregroundColor(color)
                 + Text(personDetails).font(subtitleFont).foregroundColor(color)
+        }
+
+        if let doctorDetails = line.prescribingDoctorDetails, !doctorDetails.isEmpty {
+            baseText =
+                baseText
+                + Text(verbatim: "\n")
+                + Text(Image(systemName: "stethoscope"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(color)
+                + Text(" ").font(subtitleFont).foregroundColor(color)
+                + Text(doctorDetails).font(subtitleFont).foregroundColor(color)
+        }
+
+        if let conditionDetails = line.conditionDetails, !conditionDetails.isEmpty {
+            baseText =
+                baseText
+                + Text(verbatim: "\n")
+                + Text(Image(systemName: "cross.case"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(color)
+                + Text(" ").font(subtitleFont).foregroundColor(color)
+                + Text("Condizioni: ").font(subtitleFont).foregroundColor(color)
+                + Text(conditionDetails).font(subtitleFont).foregroundColor(color)
         }
 
         return line.statusIcons.reduce(baseText) { partial, icon in
@@ -495,6 +518,12 @@ struct MedicineRowView: View {
         components.append(line.description)
         if let personDetails = line.personDetails, !personDetails.isEmpty {
             components.append("Persona \(personDetails)")
+        }
+        if let doctorDetails = line.prescribingDoctorDetails, !doctorDetails.isEmpty {
+            components.append("Medico prescrittore \(doctorDetails)")
+        }
+        if let conditionDetails = line.conditionDetails, !conditionDetails.isEmpty {
+            components.append("Condizioni \(conditionDetails)")
         }
         components.append(contentsOf: line.statusIcons.map(\.accessibilityLabel))
         return components.joined(separator: ", ")

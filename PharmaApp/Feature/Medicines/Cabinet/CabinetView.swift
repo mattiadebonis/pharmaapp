@@ -23,7 +23,6 @@ struct CabinetView: View {
 
     private enum Layout {
         static let horizontalInset: CGFloat = 28
-        static let summaryTrailingInset: CGFloat = 40
         static let emptyStateImageHeight: CGFloat = 320
         static let emptyStateImageScale: CGFloat = 2
         static let emptyStateImageHorizontalOffset: CGFloat = 12
@@ -62,7 +61,6 @@ struct CabinetView: View {
     @State private var cachedShelfState: ShelfViewState = .empty
     @State private var rowSnapshotsByEntryID: [String: CabinetViewModel.CabinetRowSnapshot] = [:]
     @State private var syncWorkItem: DispatchWorkItem?
-    @State private var hasStartedObservation = false
 
     var body: some View {
         cabinetRootView
@@ -93,8 +91,6 @@ struct CabinetView: View {
                 }
             }
             .task {
-                guard !hasStartedObservation else { return }
-                hasStartedObservation = true
                 locationVM.ensureStarted()
                 reloadFetchedState()
                 recomputeAllCachedState()
@@ -269,13 +265,6 @@ struct CabinetView: View {
             .scrollIndicators(.hidden)
     }
 
-    private var summaryTextView: some View {
-        Text(cachedSummaryLines.joined(separator: "\n"))
-            .font(.title3.weight(.regular))
-            .foregroundStyle(.primary)
-            .multilineTextAlignment(.leading)
-    }
-
     private func computeSummaryDisplayData() -> CabinetViewModel.SummaryDisplayData {
         // Pharmacy suggestion temporaneamente disabilitata
         viewModel.computeSummaryDisplayData(
@@ -316,21 +305,6 @@ struct CabinetView: View {
 
     @ViewBuilder
     private func standardCabinetSections(viewState: ShelfViewState) -> some View {
-        Section {
-            summaryTextView
-                .listRowInsets(
-                    EdgeInsets(
-                        top: 40,
-                        leading: Layout.horizontalInset,
-                        bottom: 40,
-                        trailing: Layout.summaryTrailingInset
-                    )
-                )
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-        }
-        .listSectionSeparator(.hidden)
-
         if appVM.suggestNearestPharmacies {
             Section {
                 smartBannerCard
@@ -713,6 +687,8 @@ struct CabinetView: View {
 
     private func handleOperationResult(_ didSucceed: Bool, key: OperationKey) {
         if didSucceed {
+            reloadFetchedState()
+            recomputeAllCachedState()
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
                 OperationIdProvider.shared.clear(key)
             }

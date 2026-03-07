@@ -65,10 +65,12 @@ struct TherapyFormView: View {
     @State private var persons: [Person] = []
     @State private var doctors: [Doctor] = []
     @State private var hasStartedObservation = false
+    @State private var didInitializeForm = false
     
     // Nuovo state per la persona selezionata
     @State private var selectedPerson: Person?
     @State private var selectedDoctorID: UUID?
+    @State private var conditions: [String] = []
 
     // MARK: - Modello
     var medicine: Medicine
@@ -253,15 +255,18 @@ struct TherapyFormView: View {
             .listRowBackground(Color(.systemGroupedBackground))
 
             Section(header: Text("Persona")) {
-                Picker("Seleziona Persona", selection: selectedPersonBinding) {
+                Picker("Seleziona Persona", selection: selectedPersonIDBinding) {
                     ForEach(persons, id: \.self) { person in
                         Text(person.nome ?? "")
-                            .tag(person as Person?)
+                            .tag(person.id as UUID?)
                     }
                 }
                 .accessibilityIdentifier("PersonPicker")
             }
             .listRowBackground(Color(.systemGroupedBackground))
+
+            ConditionsEditorSection(conditions: $conditions)
+                .listRowBackground(Color(.systemGroupedBackground))
 
             if medicine.obbligo_ricetta {
                 Section(header: Text("Prescrizione")) {
@@ -346,6 +351,8 @@ struct TherapyFormView: View {
             }
         }
         .onAppear {
+            guard !didInitializeForm else { return }
+            didInitializeForm = true
             reloadFetchedState()
             startDate = startDateToday
             // Edit: popola dai dati della therapy
@@ -377,6 +384,10 @@ struct TherapyFormView: View {
                 selectedDoctorID = defaultPrescribingDoctorID
             }
             updateRecurrenceInputIfNeeded(force: true)
+        }
+        .onChange(of: selectedPerson?.id) { _ in
+            guard editingTherapy == nil else { return }
+            conditions = ConditionListFormatter.parsed(from: selectedPerson?.condizione)
         }
         .task {
             guard !hasStartedObservation else { return }
@@ -496,11 +507,11 @@ struct TherapyFormView: View {
         return true
     }
 
-    private var selectedPersonBinding: Binding<Person?> {
+    private var selectedPersonIDBinding: Binding<UUID?> {
         Binding(
-            get: { selectedPerson },
+            get: { selectedPerson?.id },
             set: { newValue in
-                selectedPerson = newValue
+                selectedPerson = persons.first(where: { $0.id == newValue })
             }
         )
     }
@@ -536,13 +547,24 @@ struct TherapyFormView: View {
     }
 
     private func reloadFetchedState() {
+        let previousSelectedPersonID = selectedPerson?.id
+        let previousSelectedDoctorID = selectedDoctorID
         do {
             let snapshot = try appDataStore.provider.medicines.fetchTherapyFormSnapshot()
             persons = snapshot.persons
             doctors = snapshot.doctors
+            if let previousSelectedPersonID {
+                selectedPerson = persons.first(where: { $0.id == previousSelectedPersonID })
+            }
+            if let previousSelectedDoctorID,
+               !doctors.contains(where: { $0.id == previousSelectedDoctorID }) {
+                selectedDoctorID = nil
+            }
         } catch {
             persons = []
             doctors = []
+            selectedPerson = nil
+            selectedDoctorID = nil
         }
     }
 
@@ -1256,6 +1278,7 @@ extension TherapyFormView {
             importance: editingTherapy?.importance ?? "standard",
             person: effectivePerson,
             prescribingDoctor: effectivePrescribingDoctor,
+            condition: ConditionListFormatter.serialized(from: conditions),
             manualIntake: !automaticIntakeEnabled,
             notificationsSilenced: notificationsSilenced,
             notificationLevel: isPharmacoCritical ? .alarm : .normal,
@@ -1299,6 +1322,12 @@ extension TherapyFormView {
     private func populateFromTherapy(_ therapy: Therapy) {
         selectedPerson = therapy.person
         selectedDoctorID = therapy.prescribingDoctor?.id
+        let therapyConditions = ConditionListFormatter.parsed(from: therapy.condizione)
+        if therapyConditions.isEmpty {
+            conditions = ConditionListFormatter.parsed(from: therapy.person.condizione)
+        } else {
+            conditions = therapyConditions
+        }
         automaticIntakeEnabled = therapy.automaticIntakeEnabled
         notificationsSilenced = therapy.notifications_silenced
         isPharmacoCritical = therapy.isPharmacoCritical

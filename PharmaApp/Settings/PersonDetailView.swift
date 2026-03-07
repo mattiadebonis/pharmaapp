@@ -22,6 +22,7 @@ struct PersonDetailView: View {
 
     @State private var nome: String
     @State private var codiceFiscale: String
+    @State private var conditions: [String]
     @State private var isScannerPresented = false
     @State private var errorMessage: String?
     @State private var showDeleteConfirmation = false
@@ -37,6 +38,7 @@ struct PersonDetailView: View {
         self.showsLogoutAction = showsLogoutAction
         _nome = State(initialValue: person.name ?? "")
         _codiceFiscale = State(initialValue: person.codiceFiscale ?? "")
+        _conditions = State(initialValue: ConditionListFormatter.parsed(from: person.condition))
     }
 
     var body: some View {
@@ -63,6 +65,8 @@ struct PersonDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            ConditionsEditorSection(conditions: $conditions)
 
             if isAccount {
                 Section(header: Text("Account")) {
@@ -110,6 +114,9 @@ struct PersonDetailView: View {
             scheduleAutosave()
         }
         .onChange(of: codiceFiscale) { _ in
+            scheduleAutosave()
+        }
+        .onChange(of: conditions) { _ in
             scheduleAutosave()
         }
         .onChange(of: focusedField) { newValue in
@@ -195,6 +202,7 @@ struct PersonDetailView: View {
                         id: personId,
                         name: normalizedValue(from: nome),
                         codiceFiscale: normalizedCF.isEmpty ? nil : normalizedCF,
+                        condition: ConditionListFormatter.serialized(from: conditions),
                         isAccount: isAccount
                     )
                 )
@@ -247,6 +255,7 @@ struct PersonDetailView: View {
             guard let person = try appDataStore.provider.settings.person(id: personId) else { return }
             nome = person.name ?? ""
             codiceFiscale = person.codiceFiscale ?? ""
+            conditions = ConditionListFormatter.parsed(from: person.condition)
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

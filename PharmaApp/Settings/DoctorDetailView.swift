@@ -13,14 +13,14 @@ struct DoctorDetailView: View {
     private let doctorId: UUID
 
     @State private var nome: String
+    @State private var specializzazione: String
     @State private var mail: String
     @State private var telefono: String
-    @State private var specializzazione: String
-    @State private var schedule: DoctorScheduleDTO
     @State private var segreteriaNome: String
     @State private var segreteriaMail: String
     @State private var segreteriaTelefono: String
-    @State private var segreteriaSchedule: DoctorScheduleDTO
+    @State private var schedule: DoctorScheduleDTO
+    @State private var secretarySchedule: DoctorScheduleDTO
     @State private var saveErrorMessage: String?
     @State private var showDeleteConfirmation = false
     @State private var autosaveTask: Task<Void, Never>?
@@ -31,14 +31,14 @@ struct DoctorDetailView: View {
     init(doctor: SettingsDoctorRecord) {
         self.doctorId = doctor.id
         _nome = State(initialValue: doctor.name ?? "")
+        _specializzazione = State(initialValue: doctor.specialization ?? "")
         _mail = State(initialValue: doctor.email ?? "")
         _telefono = State(initialValue: doctor.phone ?? "")
-        _specializzazione = State(initialValue: doctor.specialization ?? "")
-        _schedule = State(initialValue: doctor.schedule)
         _segreteriaNome = State(initialValue: doctor.secretaryName ?? "")
         _segreteriaMail = State(initialValue: doctor.secretaryEmail ?? "")
         _segreteriaTelefono = State(initialValue: doctor.secretaryPhone ?? "")
-        _segreteriaSchedule = State(initialValue: doctor.secretarySchedule)
+        _schedule = State(initialValue: doctor.schedule)
+        _secretarySchedule = State(initialValue: doctor.secretarySchedule)
         _prescriptionMessageTemplate = State(initialValue: doctor.prescriptionMessageTemplate)
     }
 
@@ -46,45 +46,26 @@ struct DoctorDetailView: View {
         Form {
             Section(header: Text("Dettagli Dottore")) {
                 TextField("Nome e cognome", text: $nome)
+                TextField("Specializzazione", text: $specializzazione)
             }
 
-            Section(header: Text("Contatti e disponibilità")) {
-                NavigationLink {
-                    DoctorProfessionalInfoPageView(
-                        title: "Contatti e disponibilità",
-                        email: $mail,
-                        telefono: $telefono,
-                        specializzazione: $specializzazione,
-                        schedule: $schedule
-                    )
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Apri pagina contatti e disponibilità")
-                            .foregroundStyle(.primary)
-                        Text(professionalInfoSummary)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+            Section(header: Text("Contatti dottore")) {
+                TextField("Telefono", text: $telefono)
+                    .keyboardType(.phonePad)
+                TextField("Email", text: $mail)
+                    .keyboardType(.emailAddress)
+            }
+
+            Section(header: Text("Orari dottore")) {
+                DoctorScheduleEditor(schedule: $schedule)
             }
 
             Section(header: Text("Segreteria")) {
-                NavigationLink {
-                    DoctorSecretaryEditorView(
-                        nome: $segreteriaNome,
-                        mail: $segreteriaMail,
-                        telefono: $segreteriaTelefono,
-                        schedule: $segreteriaSchedule
-                    )
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Apri pagina segreteria")
-                            .foregroundStyle(.primary)
-                        Text(secretarySummary)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                TextField("Nome segreteria", text: $segreteriaNome)
+                TextField("Telefono segreteria", text: $segreteriaTelefono)
+                    .keyboardType(.phonePad)
+                TextField("Email segreteria", text: $segreteriaMail)
+                    .keyboardType(.emailAddress)
             }
 
             Section(header: Text("Richieste ricetta")) {
@@ -124,16 +105,13 @@ struct DoctorDetailView: View {
         .onChange(of: nome) { _ in
             scheduleAutosave()
         }
+        .onChange(of: specializzazione) { _ in
+            scheduleAutosave()
+        }
         .onChange(of: mail) { _ in
             scheduleAutosave()
         }
         .onChange(of: telefono) { _ in
-            scheduleAutosave()
-        }
-        .onChange(of: specializzazione) { _ in
-            scheduleAutosave()
-        }
-        .onChange(of: schedule) { _ in
             scheduleAutosave()
         }
         .onChange(of: segreteriaNome) { _ in
@@ -145,7 +123,7 @@ struct DoctorDetailView: View {
         .onChange(of: segreteriaTelefono) { _ in
             scheduleAutosave()
         }
-        .onChange(of: segreteriaSchedule) { _ in
+        .onChange(of: schedule) { _ in
             scheduleAutosave()
         }
         .onDisappear {
@@ -193,7 +171,7 @@ struct DoctorDetailView: View {
                     secretaryName: normalizedValue(from: segreteriaNome),
                     secretaryEmail: normalizedValue(from: segreteriaMail),
                     secretaryPhone: normalizedValue(from: segreteriaTelefono),
-                    secretarySchedule: segreteriaSchedule
+                    secretarySchedule: secretarySchedule
                 )
             )
             saveErrorMessage = nil
@@ -218,31 +196,6 @@ struct DoctorDetailView: View {
     private func normalizedValue(from value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private var secretarySummary: String {
-        let values = [
-            normalizedValue(from: segreteriaNome),
-            normalizedValue(from: segreteriaTelefono),
-            normalizedValue(from: segreteriaMail)
-        ].compactMap { $0 }
-        return values.isEmpty ? "Nessuna segreteria configurata" : values.joined(separator: " · ")
-    }
-
-    private var scheduleSummary: String {
-        let configuredDays = schedule.days.filter { $0.mode != .closed }.count
-        return configuredDays == 0 ? "Nessun orario configurato" : "\(configuredDays) giorni configurati"
-    }
-
-    private var professionalInfoSummary: String {
-        let values = [
-            normalizedValue(from: mail),
-            normalizedValue(from: telefono),
-            normalizedValue(from: specializzazione)
-        ].compactMap { $0 }
-
-        let contacts = values.isEmpty ? "Contatti non configurati" : values.joined(separator: " · ")
-        return "\(contacts) · \(scheduleSummary)"
     }
 
     private var prescriptionTemplateStatus: String {
@@ -271,14 +224,14 @@ struct DoctorDetailView: View {
         do {
             guard let doctor = try appDataStore.provider.settings.doctor(id: doctorId) else { return }
             nome = doctor.name ?? ""
+            specializzazione = doctor.specialization ?? ""
             mail = doctor.email ?? ""
             telefono = doctor.phone ?? ""
-            specializzazione = doctor.specialization ?? ""
-            schedule = doctor.schedule
             segreteriaNome = doctor.secretaryName ?? ""
             segreteriaMail = doctor.secretaryEmail ?? ""
             segreteriaTelefono = doctor.secretaryPhone ?? ""
-            segreteriaSchedule = doctor.secretarySchedule
+            schedule = doctor.schedule
+            secretarySchedule = doctor.secretarySchedule
             prescriptionMessageTemplate = doctor.prescriptionMessageTemplate
             saveErrorMessage = nil
         } catch {

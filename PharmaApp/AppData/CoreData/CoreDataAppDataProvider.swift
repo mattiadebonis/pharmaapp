@@ -432,6 +432,7 @@ private final class CoreDataMedicinesGateway: MedicinesGateway {
             medicinePackage: inContextOptional(input.medicinePackage),
             person: inContext(input.person),
             prescribingDoctor: inContextOptional(input.prescribingDoctor),
+            condition: input.condition,
             freq: input.freq,
             interval: input.interval,
             until: input.until,
@@ -457,7 +458,7 @@ private final class CoreDataMedicinesGateway: MedicinesGateway {
         therapy.importance = input.importance
         therapy.person = input.person
         therapy.prescribingDoctor = input.prescribingDoctor
-        therapy.condizione = nil
+        therapy.condizione = normalizedText(input.condition)
         therapy.manual_intake_registration = input.manualIntake
         therapy.notifications_silenced = input.notificationsSilenced
         therapy.notification_level = input.notificationLevel.rawValue
@@ -488,12 +489,19 @@ private final class CoreDataMedicinesGateway: MedicinesGateway {
         }
     }
 
+    private func normalizedText(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     private struct ResolvedTherapyWriteInput {
         let medicine: Medicine
         let package: Package
         let medicinePackage: MedicinePackage?
         let person: Person
         let prescribingDoctor: Doctor?
+        let condition: String?
         let freq: String?
         let interval: Int?
         let until: Date?
@@ -885,7 +893,7 @@ private final class CoreDataSettingsGateway: SettingsGateway {
         }
         person.nome = input.name
         person.cognome = nil
-        person.condizione = nil
+        person.condizione = normalizedText(input.condition)
         person.is_account = input.isAccount
         person.codice_fiscale = input.codiceFiscale
 
@@ -1020,6 +1028,7 @@ private final class CoreDataSettingsGateway: SettingsGateway {
             id: id,
             name: normalizedPersonName(from: person),
             codiceFiscale: normalizedText(person.codice_fiscale),
+            condition: normalizedText(person.condizione),
             isAccount: person.is_account
         )
     }

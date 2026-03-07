@@ -495,9 +495,11 @@ struct GlobalSearchView: View {
             let medicineName = therapyMedicine(therapy)?.nome ?? ""
             let principle = therapyMedicine(therapy)?.principio_attivo ?? ""
             let personName = therapyPerson(therapy).map(personDisplayName(for:)) ?? "Persona"
+            let condition = therapy.condizione ?? ""
             return medicineName.localizedCaseInsensitiveContains(trimmedQuery)
             || principle.localizedCaseInsensitiveContains(trimmedQuery)
             || personName.localizedCaseInsensitiveContains(trimmedQuery)
+            || condition.localizedCaseInsensitiveContains(trimmedQuery)
         }
         .sorted { lhs, rhs in
             therapyMedicineName(lhs).localizedCaseInsensitiveCompare(therapyMedicineName(rhs)) == .orderedAscending
@@ -528,6 +530,7 @@ struct GlobalSearchView: View {
             (person.nome ?? "").localizedCaseInsensitiveContains(trimmedQuery)
             || (person.cognome ?? "").localizedCaseInsensitiveContains(trimmedQuery)
             || (person.codice_fiscale ?? "").localizedCaseInsensitiveContains(trimmedQuery)
+            || (person.condizione ?? "").localizedCaseInsensitiveContains(trimmedQuery)
         }
         .sorted { lhs, rhs in
             personDisplayName(for: lhs).localizedCaseInsensitiveCompare(personDisplayName(for: rhs)) == .orderedAscending
@@ -1912,6 +1915,7 @@ struct GlobalSearchView: View {
             id: id,
             name: normalizedText(personDisplayName(for: person)),
             codiceFiscale: normalizedText(person.codice_fiscale),
+            condition: normalizedText(person.condizione),
             isAccount: person.is_account
         )
     }

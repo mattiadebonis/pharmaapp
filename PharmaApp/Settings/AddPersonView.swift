@@ -12,6 +12,7 @@ struct AddPersonView: View {
     
     @State private var nome: String = ""
     @State private var codiceFiscale: String = ""
+    @State private var conditions: [String] = []
     @State private var errorMessage: String?
     
     var body: some View {
@@ -26,6 +27,8 @@ struct AddPersonView: View {
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
             }
+
+            ConditionsEditorSection(conditions: $conditions)
 
             if let errorMessage {
                 Section {
@@ -59,6 +62,7 @@ struct AddPersonView: View {
                     id: nil,
                     name: normalizedValue(from: nome),
                     codiceFiscale: normalizedCF.isEmpty ? nil : normalizedCF,
+                    condition: ConditionListFormatter.serialized(from: conditions),
                     isAccount: false
                 )
             )

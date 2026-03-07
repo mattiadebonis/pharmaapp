@@ -22,6 +22,8 @@ struct TherapyLine: Hashable {
     let prefix: String?
     let description: String
     let personDetails: String?
+    let prescribingDoctorDetails: String?
+    let conditionDetails: String?
     var hasOverdueDose: Bool = false
     var statusIcons: [TherapyLineStatusIcon] = []
 
@@ -29,12 +31,16 @@ struct TherapyLine: Hashable {
         prefix: String?,
         description: String,
         personDetails: String? = nil,
+        prescribingDoctorDetails: String? = nil,
+        conditionDetails: String? = nil,
         hasOverdueDose: Bool = false,
         statusIcons: [TherapyLineStatusIcon] = []
     ) {
         self.prefix = prefix
         self.description = description
         self.personDetails = personDetails
+        self.prescribingDoctorDetails = prescribingDoctorDetails
+        self.conditionDetails = conditionDetails
         self.hasOverdueDose = hasOverdueDose
         self.statusIcons = statusIcons
     }
@@ -61,7 +67,11 @@ struct TherapySummaryBuilder {
 
     /// Summary style matching the Therapy list in MedicineDetailView.
     func summary(for therapy: Therapy) -> String {
-        descriptionText(for: therapy, includeTimes: true, includePerson: true)
+        var summary = descriptionText(for: therapy, includeTimes: true, includePerson: true)
+        if let conditionDetails = conditionDetailsText(for: therapy) {
+            summary += " - Condizioni: \(conditionDetails)"
+        }
+        return summary
     }
 
     func line(for therapy: Therapy, now: Date = Date()) -> TherapyLine {
@@ -71,6 +81,8 @@ struct TherapySummaryBuilder {
             prefix: prefix,
             description: description,
             personDetails: personDisplayName(for: therapy.person),
+            prescribingDoctorDetails: doctorDisplayName(for: therapy.prescribingDoctor),
+            conditionDetails: conditionDetailsText(for: therapy),
             statusIcons: statusIcons(for: therapy)
         )
     }
@@ -107,6 +119,32 @@ struct TherapySummaryBuilder {
         guard let person else { return nil }
         let first = (person.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return first.isEmpty ? nil : first
+    }
+
+    private func doctorDisplayName(for doctor: Doctor?) -> String? {
+        guard let doctor else { return nil }
+        let first = (doctor.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let last = (doctor.cognome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let fullName = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+        return fullName.isEmpty ? nil : fullName
+    }
+
+    private func conditionDetailsText(for therapy: Therapy) -> String? {
+        guard let rawValue = therapy.condizione else { return nil }
+        let chunks = rawValue.components(separatedBy: CharacterSet(charactersIn: ",;\n"))
+        var values: [String] = []
+        for chunk in chunks {
+            let trimmed = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let alreadyIncluded = values.contains {
+                $0.caseInsensitiveCompare(trimmed) == .orderedSame
+            }
+            if !alreadyIncluded {
+                values.append(trimmed)
+            }
+        }
+        guard !values.isEmpty else { return nil }
+        return values.joined(separator: ", ")
     }
 
 
