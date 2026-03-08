@@ -135,6 +135,9 @@ struct TherapyFormView: View {
     @State private var isShowingDurationSheet = false
     @State private var isShowingMonitoringSheet = false
     @State private var showDeleteConfirmation = false
+    private let showsStartEndSection = false
+    private let showsPersonSection = false
+    private let showsConditionsSection = false
     
     // MARK: - Init
     init(
@@ -151,7 +154,7 @@ struct TherapyFormView: View {
         self.editingTherapy = editingTherapy
         self.onSave = onSave
         self.isEmbedded = isEmbedded
-        _automaticIntakeEnabled = State(initialValue: !medicine.manual_intake_registration)
+        _automaticIntakeEnabled = State(initialValue: true)
     }
     
     var body: some View {
@@ -231,42 +234,48 @@ struct TherapyFormView: View {
             }
             .listRowBackground(Color(.systemGroupedBackground))
 
-            Section(header: Text("Durata e inizio")) {
-                DatePicker(
-                    "Inizio",
-                    selection: Binding(
-                        get: { startDate },
-                        set: { startDate = Calendar.current.startOfDay(for: $0) }
-                    ),
-                    displayedComponents: .date
-                )
-                Button {
-                    isShowingDurationSheet = true
-                } label: {
-                    HStack {
-                        Text("Fine")
-                        Spacer()
-                        Text(durationSummaryText)
-                            .foregroundColor(.blue)
+            if showsStartEndSection {
+                Section(header: Text("Durata e inizio")) {
+                    DatePicker(
+                        "Inizio",
+                        selection: Binding(
+                            get: { startDate },
+                            set: { startDate = Calendar.current.startOfDay(for: $0) }
+                        ),
+                        displayedComponents: .date
+                    )
+                    Button {
+                        isShowingDurationSheet = true
+                    } label: {
+                        HStack {
+                            Text("Fine")
+                            Spacer()
+                            Text(durationSummaryText)
+                                .foregroundColor(.blue)
+                        }
                     }
+                    .accessibilityLabel("Seleziona fine terapia")
                 }
-                .accessibilityLabel("Seleziona fine terapia")
-            }
-            .listRowBackground(Color(.systemGroupedBackground))
-
-            Section(header: Text("Persona")) {
-                Picker("Seleziona Persona", selection: selectedPersonIDBinding) {
-                    ForEach(persons, id: \.self) { person in
-                        Text(person.nome ?? "")
-                            .tag(person.id as UUID?)
-                    }
-                }
-                .accessibilityIdentifier("PersonPicker")
-            }
-            .listRowBackground(Color(.systemGroupedBackground))
-
-            ConditionsEditorSection(conditions: $conditions)
                 .listRowBackground(Color(.systemGroupedBackground))
+            }
+
+            if showsPersonSection {
+                Section(header: Text("Persona")) {
+                    Picker("Seleziona Persona", selection: selectedPersonIDBinding) {
+                        ForEach(persons, id: \.self) { person in
+                            Text(person.nome ?? "")
+                                .tag(person.id as UUID?)
+                        }
+                    }
+                    .accessibilityIdentifier("PersonPicker")
+                }
+                .listRowBackground(Color(.systemGroupedBackground))
+            }
+
+            if showsConditionsSection {
+                ConditionsEditorSection(conditions: $conditions)
+                    .listRowBackground(Color(.systemGroupedBackground))
+            }
 
             if medicine.obbligo_ricetta {
                 Section(header: Text("Prescrizione")) {
@@ -285,7 +294,9 @@ struct TherapyFormView: View {
                 header: Text("Automazioni terapia"),
                 footer: Text("Queste impostazioni valgono solo per questa terapia.")
             ) {
-                Toggle("Registra assunzioni automaticamente", isOn: $automaticIntakeEnabled)
+                Text("Le assunzioni vengono registrate automaticamente.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 Toggle("Notifiche in silenzioso", isOn: $notificationsSilenced)
 
                 Toggle("Notifica farmacocritica", isOn: $isPharmacoCritical)
@@ -1279,7 +1290,7 @@ extension TherapyFormView {
             person: effectivePerson,
             prescribingDoctor: effectivePrescribingDoctor,
             condition: ConditionListFormatter.serialized(from: conditions),
-            manualIntake: !automaticIntakeEnabled,
+            manualIntake: false,
             notificationsSilenced: notificationsSilenced,
             notificationLevel: isPharmacoCritical ? .alarm : .normal,
             snoozeMinutes: snoozeMinutes,
@@ -1328,7 +1339,7 @@ extension TherapyFormView {
         } else {
             conditions = therapyConditions
         }
-        automaticIntakeEnabled = therapy.automaticIntakeEnabled
+        automaticIntakeEnabled = true
         notificationsSilenced = therapy.notifications_silenced
         isPharmacoCritical = therapy.isPharmacoCritical
         snoozeMinutes = therapy.effectiveSnoozeMinutes

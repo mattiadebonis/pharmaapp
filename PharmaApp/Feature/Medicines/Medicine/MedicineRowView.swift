@@ -343,15 +343,22 @@ struct MedicineRowView: View {
         let snapshot = presentationSnapshot
         return VStack(alignment: .leading, spacing: subtitleBlockSpacing) {
             if subtitleMode == .activeTherapies {
-                // 1. Terapie
-                therapyLinesView(snapshot.therapyLines, color: snapshot.therapyLineColor)
-                // 2. Scorte
+                // 1. Copertura stimata
                 if !snapshot.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    stockLineText(snapshot.line1, color: snapshot.line1Color)
+                    Text(snapshot.line1)
+                        .font(subtitleFont)
+                        .foregroundColor(snapshot.line1Color)
                         .lineLimit(1)
                         .multilineTextAlignment(.leading)
                         .truncationMode(.tail)
                 }
+                // 2. Confezioni e unita'
+                if !snapshot.line2.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    line2View(for: snapshot.line2, color: snapshot.line2Color)
+                }
+                // 3. Terapie attive
+                // 4. Dicitura calcolata sulle terapie attive
+                therapyLinesView(snapshot.therapyLines, color: snapshot.therapyLineColor)
             } else {
                 // 1. Prossima dose (terapia)
                 if !snapshot.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -444,7 +451,7 @@ struct MedicineRowView: View {
     private var fallbackLine2Color: Color {
         switch subtitleMode {
         case .activeTherapies:
-            return subtitleColor
+            return isAutonomyBelowThreshold ? .red : subtitleColor
         case .nextDose:
             return isAutonomyBelowThreshold ? .red : subtitleColor
         }

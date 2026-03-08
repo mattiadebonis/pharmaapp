@@ -260,7 +260,7 @@ class CabinetViewModel: ObservableObject {
                 line2: payload.line2,
                 therapyLines: payload.therapyLines,
                 line1Tone: autonomyBelowThreshold ? .danger : .normal,
-                line2Tone: .normal,
+                line2Tone: autonomyBelowThreshold ? .danger : .normal,
                 therapyLineTone: skippedDose ? .danger : .normal,
                 deadlineIndicator: deadlineIndicator(for: entry)
             )
@@ -408,38 +408,75 @@ class CabinetViewModel: ObservableObject {
         option: Option?,
         favoriteMedicineIDs: Set<UUID>
     ) -> [MedicinePackage] {
+        let _ = option
         let visibleEntries = displayableEntries(from: entries)
         guard !visibleEntries.isEmpty else { return [] }
-        guard let builder = snapshotBuilder(for: visibleEntries) else {
-            let fallback = visibleEntries.sorted {
-                $0.medicine.nome.localizedCaseInsensitiveCompare($1.medicine.nome) == .orderedAscending
-            }
-            return prioritizeFavoriteMedicines(
-                fallback,
-                favoriteMedicineIDs: favoriteMedicineIDs
+
+        let context = visibleEntries.first?.managedObjectContext
+        let recurrenceManager = context.map { RecurrenceManager(context: $0) } ?? RecurrenceManager.shared
+        let stockService = context.map { StockService(context: $0) }
+
+        let orderedEntries = visibleEntries.sorted { lhs, rhs in
+            let lhsMetric = remainingDaysSortMetric(
+                for: lhs,
+                recurrenceManager: recurrenceManager,
+                stockService: stockService
             )
+            let rhsMetric = remainingDaysSortMetric(
+                for: rhs,
+                recurrenceManager: recurrenceManager,
+                stockService: stockService
+            )
+
+            if lhsMetric.bucket != rhsMetric.bucket {
+                return lhsMetric.bucket < rhsMetric.bucket
+            }
+            if lhsMetric.value != rhsMetric.value {
+                return lhsMetric.value < rhsMetric.value
+            }
+            let nameCompare = lhs.medicine.nome.localizedCaseInsensitiveCompare(rhs.medicine.nome)
+            if nameCompare != .orderedSame {
+                return nameCompare == .orderedAscending
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
         }
 
-        // Convert entries to snapshots
-        let optionSnapshot = makeOptionSnapshot(option: option)
-        var snapshotToEntry: [String: MedicinePackage] = [:]
-        var medicineSnapshots: [MedicineSnapshot] = []
-
-        for entry in visibleEntries {
-            let snapshot = builder.makeEntrySnapshot(entry: entry)
-            snapshotToEntry[snapshot.externalKey] = entry
-            medicineSnapshots.append(snapshot)
-        }
-
-        // Use PharmaCore priority-based sorting (matches CabinetSummary priority hierarchy)
-        let sorted = sectionCalculator.prioritySortedMedicines(for: medicineSnapshots, option: optionSnapshot)
-
-        // Map back to CoreData entities preserving PharmaCore's order
-        let orderedEntries = sorted.compactMap { snapshotToEntry[$0.externalKey] }
         return prioritizeFavoriteMedicines(
             orderedEntries,
             favoriteMedicineIDs: favoriteMedicineIDs
         )
+    }
+
+    private func remainingDaysSortMetric(
+        for entry: MedicinePackage,
+        recurrenceManager: RecurrenceManager,
+        stockService: StockService?
+    ) -> (bucket: Int, value: Double) {
+        let therapies = therapies(for: entry)
+        let units = max(0, stockService?.unitsReadOnly(for: entry.package) ?? 0)
+
+        if !therapies.isEmpty {
+            let dailyUsage = therapies.reduce(0.0) { partial, therapy in
+                partial + therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
+            }
+            if dailyUsage > 0 {
+                let days = Double(units) / dailyUsage
+                return (bucket: 0, value: max(0, days))
+            }
+        }
+
+        return (bucket: 1, value: Double(units))
+    }
+
+    private func therapies(for entry: MedicinePackage) -> Set<Therapy> {
+        let linked = (entry.therapies ?? []).filter {
+            $0.medicine.id == entry.medicine.id
+                && $0.package.id == entry.package.id
+        }
+        let fallback = (entry.medicine.therapies ?? []).filter {
+            $0.package.id == entry.package.id
+        }
+        return Set(linked).union(fallback)
     }
 
     private func normalizedSearchText(_ text: String) -> String {

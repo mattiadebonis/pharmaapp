@@ -49,7 +49,8 @@ func makeMedicineActiveTherapiesSubtitle(
     intakeLogsToday: [Log],
     now: Date = Date()
 ) -> MedicineActiveTherapiesSubtitlePayload {
-    let base = makeMedicineSubtitle(medicine: medicine, medicinePackage: medicinePackage, now: now)
+    let _ = intakeLogsToday
+    let _ = now
     let therapiesSet: Set<Therapy>
     if let entry = medicinePackage {
         therapiesSet = therapies(for: entry)
@@ -57,42 +58,57 @@ func makeMedicineActiveTherapiesSubtitle(
         therapiesSet = medicine.therapies ?? []
     }
 
-    guard !therapiesSet.isEmpty else {
-        return MedicineActiveTherapiesSubtitlePayload(
-            line1: base.line2,
-            line2: "",
-            chip: base.chip,
-            therapyLines: []
-        )
-    }
-
-    let builder = TherapySummaryBuilder(recurrenceManager: recurrenceManager)
-    let active: [(Therapy, Date)] = therapiesSet.compactMap { therapy in
-        guard let next = nextUpcomingDoseDate(
-            for: therapy,
-            now: now,
-            recurrenceManager: recurrenceManager
-        ) else {
-            return nil
+    let therapyCount = therapiesSet.count
+    let context = medicine.managedObjectContext ?? PersistenceController.shared.container.viewContext
+    let stockUnits: Int = {
+        if let entry = medicinePackage {
+            return max(0, StockService(context: context).unitsReadOnly(for: entry.package))
         }
-        return (therapy, next)
-    }
-
-    let sortedTherapies: [Therapy]
-    if !active.isEmpty {
-        sortedTherapies = active.sorted(by: { $0.1 < $1.1 }).map(\.0)
-    } else {
-        sortedTherapies = therapiesSet.sorted {
-            ($0.start_date ?? .distantPast) < ($1.start_date ?? .distantPast)
+        if let units = medicine.remainingUnitsWithoutTherapy() {
+            return max(0, units)
         }
-    }
-    let lines = sortedTherapies.map { builder.line(for: $0, now: now) }
+        return max(0, therapiesSet.reduce(0) { $0 + Int($1.leftover()) })
+    }()
+    let unitsPerPackage: Int = {
+        if let entry = medicinePackage {
+            return max(1, Int(entry.package.numero))
+        }
+        if let firstPackage = medicine.packages.first {
+            return max(1, Int(firstPackage.numero))
+        }
+        return 1
+    }()
+    let packageCount = Int(ceil(Double(stockUnits) / Double(max(1, unitsPerPackage))))
+
+    let estimatedCoverageText: String = {
+        guard therapyCount > 0 else { return "—" }
+        var dailyUsage = 0.0
+        for therapy in therapiesSet {
+            dailyUsage += therapy.stimaConsumoGiornaliero(recurrenceManager: recurrenceManager)
+        }
+        guard dailyUsage > 0 else { return "—" }
+        let coverage = Double(stockUnits) / dailyUsage
+        if coverage < 1 {
+            return "< 1 giorno"
+        }
+        let roundedDown = Int(floor(coverage))
+        if roundedDown == 1 { return "1 giorno" }
+        return "\(roundedDown) giorni"
+    }()
+
+    let line1 = "Copertura stimata: \(estimatedCoverageText)"
+    let line2 = "Confezioni: \(packageCount) · Unità: \(stockUnits)"
+    let line3 = "Terapie attive: \(therapyCount)"
+    let line4 = "Calcolata sulle terapie attive"
 
     return MedicineActiveTherapiesSubtitlePayload(
-        line1: base.line2,
-        line2: "",
-        chip: base.chip,
-        therapyLines: lines
+        line1: line1,
+        line2: line2,
+        chip: nil,
+        therapyLines: [
+            TherapyLine(prefix: nil, description: line3),
+            TherapyLine(prefix: nil, description: line4)
+        ]
     )
 }
 
