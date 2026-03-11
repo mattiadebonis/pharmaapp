@@ -2,14 +2,11 @@ import Foundation
 import AppIntents
 
 struct ShowCodiceFiscaleIntent: AppIntent {
-    static var title: LocalizedStringResource = "Mostra codice fiscale"
-    static var description = IntentDescription("Apre direttamente la visualizzazione fullscreen del codice fiscale.")
+    static var title: LocalizedStringResource = "Codice fiscale non disponibile"
+    static var description = IntentDescription("La visualizzazione del codice fiscale non è più disponibile nell'app.")
     static var openAppWhenRun = true
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        await MainActor.run {
-            IntentsGatewayBridge.gateway.queueRoute(.codiceFiscaleFullscreen)
-        }
-        return .result(dialog: SiriIntentSupport.dialog("Ti apro i codici fiscali associati alle ricette in corso."))
+        return .result(dialog: SiriIntentSupport.dialog("Il codice fiscale non è più gestito in questa versione dell'app."))
     }
 }

@@ -2,23 +2,15 @@ import Foundation
 import AppIntents
 
 struct MarkMedicineTakenIntent: AppIntent {
-    static var title: LocalizedStringResource = "Segna assunto"
-    static var description = IntentDescription("Registra subito l'assunzione di un medicinale.")
+    static var title: LocalizedStringResource = "Registrazione automatica dose"
+    static var description = IntentDescription("La registrazione manuale è disattivata: l'assunzione viene registrata automaticamente.")
     static var openAppWhenRun = false
 
     @Parameter(title: "Medicinale")
     var medicine: MedicineIntentEntity
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let result = await MainActor.run {
-            IntentsGatewayBridge.gateway.markTaken(medicineID: medicine.id)
-        }
-        let dialogText: String
-        if result.succeeded {
-            dialogText = "Segnato come assunto: \(result.medicineName ?? medicine.name)."
-        } else {
-            dialogText = result.message
-        }
+        let dialogText = "Le assunzioni vengono registrate automaticamente all'orario della terapia."
         return .result(dialog: SiriIntentSupport.dialog(dialogText))
     }
 }

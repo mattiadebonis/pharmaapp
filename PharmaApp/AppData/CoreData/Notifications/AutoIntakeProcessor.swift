@@ -53,7 +53,6 @@ final class AutoIntakeProcessor {
 
             for event in events {
                 guard let therapy = lookup[event.therapyId] else { continue }
-                guard !requiresManualConfirmation(therapy) else { continue }
                 guard !hasMatchingIntakeLog(
                     for: event.date,
                     therapy: therapy,
@@ -101,7 +100,6 @@ final class AutoIntakeProcessor {
 
             let recurrenceManager = RecurrenceManager(context: context)
             let candidates: [Date] = therapies.compactMap { therapy in
-                guard !requiresManualConfirmation(therapy) else { return nil }
                 let rule = recurrenceManager.parseRecurrenceString(therapy.rrule ?? "")
                 let start = therapy.start_date ?? now
                 return recurrenceManager.nextOccurrence(
@@ -123,15 +121,11 @@ final class AutoIntakeProcessor {
             return therapies.filter { therapy in
                 guard let rrule = therapy.rrule, !rrule.isEmpty else { return false }
                 guard let doses = therapy.doses, !doses.isEmpty else { return false }
-                return !requiresManualConfirmation(therapy)
+                return true
             }
         } catch {
             return []
         }
-    }
-
-    private func requiresManualConfirmation(_ therapy: Therapy) -> Bool {
-        therapy.manual_intake_registration
     }
 
     private func buildIntakeMinuteIndex(therapies: [Therapy]) -> [UUID: Set<Int>] {

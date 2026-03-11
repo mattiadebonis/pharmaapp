@@ -96,18 +96,26 @@ func makeMedicineActiveTherapiesSubtitle(
         return "\(roundedDown) giorni"
     }()
 
-    let line1 = "Copertura stimata: \(estimatedCoverageText)"
+    if therapyCount == 0 {
+        return MedicineActiveTherapiesSubtitlePayload(
+            line1: formatCount(packageCount, singular: "confezione", plural: "confezioni"),
+            line2: "",
+            chip: nil,
+            therapyLines: []
+        )
+    }
+
+    let line1 = "Copertura scorte: \(estimatedCoverageText)"
     let line2 = "Confezioni: \(packageCount) · Unità: \(stockUnits)"
-    let line3 = "Terapie attive: \(therapyCount)"
-    let line4 = "Calcolata sulle terapie attive"
+    let therapyLabel = therapyCount == 1 ? "terapia attiva" : "terapie attive"
+    let line3 = "\(therapyCount) \(therapyLabel)"
 
     return MedicineActiveTherapiesSubtitlePayload(
         line1: line1,
         line2: line2,
         chip: nil,
         therapyLines: [
-            TherapyLine(prefix: nil, description: line3),
-            TherapyLine(prefix: nil, description: line4)
+            TherapyLine(prefix: nil, description: line3)
         ]
     )
 }

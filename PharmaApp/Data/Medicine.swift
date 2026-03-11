@@ -12,6 +12,7 @@ import CoreData
 public class Medicine: NSManagedObject, Identifiable {
     @NSManaged public var source_id: UUID?
     @NSManaged public var visibility: String?
+    @NSManaged public var etichetta: String?
     @NSManaged public var id: UUID
     @NSManaged public var nome: String
     @NSManaged public var principio_attivo: String
@@ -91,6 +92,10 @@ public class Medicine: NSManagedObject, Identifiable {
 }
 
 extension Medicine {
+    var displayLabel: String? {
+        let trimmed = (etichetta ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
     
     static func extractMedicines() -> NSFetchRequest<Medicine> {
         let request: NSFetchRequest<Medicine> = Medicine.fetchRequest() as! NSFetchRequest<Medicine>

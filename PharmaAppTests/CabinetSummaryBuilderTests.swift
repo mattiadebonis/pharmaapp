@@ -245,6 +245,38 @@ struct CabinetSummaryBuilderTests {
     }
 
     @MainActor
+    @Test func medicineActiveTherapiesSubtitleOrdersCoverageStockAndTherapyRows() throws {
+        let container = try TestCoreDataFactory.makeContainer()
+        let context = container.viewContext
+        let calendar = makeCalendar()
+
+        let medicine = try TestCoreDataFactory.makeMedicine(context: context)
+        let package = try TestCoreDataFactory.makePackage(context: context, medicine: medicine)
+        package.numero = 10
+        _ = try makeDailyTherapy(
+            context: context,
+            medicine: medicine,
+            package: package,
+            doseTimes: [makeDate(2026, 2, 28, 8, 0, calendar: calendar)]
+        )
+
+        let stockService = StockService(context: context)
+        stockService.setUnits(20, for: package)
+
+        let payload = makeMedicineActiveTherapiesSubtitle(
+            medicine: medicine,
+            recurrenceManager: RecurrenceManager(context: context),
+            intakeLogsToday: [],
+            now: makeDate(2026, 2, 28, 10, 0, calendar: calendar)
+        )
+
+        #expect(payload.line1 == "Copertura scorte: 20 giorni")
+        #expect(payload.line2 == "Confezioni: 2 · Unità: 20")
+        #expect(payload.therapyLines.count == 1)
+        #expect(payload.therapyLines.first?.description == "1 terapia attiva")
+    }
+
+    @MainActor
     @Test func medicineSubtitleShowsPackagesWhenUnitsAreAboveHalfPackageWithoutTherapy() throws {
         let container = try TestCoreDataFactory.makeContainer()
         let context = container.viewContext

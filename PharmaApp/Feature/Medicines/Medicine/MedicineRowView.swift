@@ -261,6 +261,7 @@ struct MedicineRowView: View {
         let line1Color: Color
         let line2Color: Color
         let therapyLineColor: Color
+        let stockBelowThreshold: Bool
         let stockWarning: (text: String, color: Color, icon: String)?
     }
 
@@ -274,6 +275,7 @@ struct MedicineRowView: View {
                 line1Color: color(for: snapshot.line1Tone),
                 line2Color: color(for: snapshot.line2Tone),
                 therapyLineColor: color(for: snapshot.therapyLineTone),
+                stockBelowThreshold: snapshot.line1Tone == .danger || snapshot.line2Tone == .danger,
                 stockWarning: nil
             )
         }
@@ -297,6 +299,7 @@ struct MedicineRowView: View {
                 line1Color: fallbackLine1Color,
                 line2Color: fallbackLine2Color,
                 therapyLineColor: fallbackTherapyLineColor,
+                stockBelowThreshold: isAutonomyBelowThreshold,
                 stockWarning: nil
             )
         case .nextDose:
@@ -313,6 +316,7 @@ struct MedicineRowView: View {
                 line1Color: fallbackLine1Color,
                 line2Color: fallbackLine2Color,
                 therapyLineColor: fallbackTherapyLineColor,
+                stockBelowThreshold: false,
                 stockWarning: stocksWarning
             )
         }
@@ -343,44 +347,38 @@ struct MedicineRowView: View {
         let snapshot = presentationSnapshot
         return VStack(alignment: .leading, spacing: subtitleBlockSpacing) {
             if subtitleMode == .activeTherapies {
-                // 1. Copertura stimata
                 if !snapshot.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(snapshot.line1)
                         .font(subtitleFont)
                         .foregroundColor(snapshot.line1Color)
-                        .lineLimit(1)
+                        .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                // 2. Confezioni e unita'
                 if !snapshot.line2.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     line2View(for: snapshot.line2, color: snapshot.line2Color)
                 }
-                // 3. Terapie attive
-                // 4. Dicitura calcolata sulle terapie attive
-                therapyLinesView(snapshot.therapyLines, color: snapshot.therapyLineColor)
+                if !therapies.isEmpty {
+                    therapyLinesView(
+                        snapshot.therapyLines,
+                        color: snapshot.therapyLineColor,
+                        highlightCoverage: snapshot.stockBelowThreshold
+                    )
+                }
             } else {
-                // 1. Prossima dose (terapia)
                 if !snapshot.line1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(snapshot.line1)
                         .font(subtitleFont)
                         .foregroundColor(snapshot.line1Color)
-                        .lineLimit(1)
+                        .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                // 2. Scorte
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     line2View(for: snapshot.line2, color: snapshot.line2Color)
                 }
-            }
-            // 3. Scadenze
-            if let indicator = snapshot.deadlineIndicator {
-                Text(indicator.label)
-                    .font(subtitleFont)
-                    .foregroundColor(indicator.color)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
             }
         }
     }
@@ -388,9 +386,10 @@ struct MedicineRowView: View {
     @ViewBuilder
     private func line2View(for line: String, color: Color) -> some View {
         stockLineText(line, color: color)
-            .lineLimit(subtitleMode == .activeTherapies ? nil : 1)
+            .lineLimit(2)
             .multilineTextAlignment(.leading)
             .truncationMode(.tail)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func stockLineText(_ line: String, color: Color) -> Text {
@@ -416,11 +415,17 @@ struct MedicineRowView: View {
     }
 
     @ViewBuilder
-    private func therapyLinesView(_ lines: [TherapyLine], color: Color) -> some View {
+    private func therapyLinesView(_ lines: [TherapyLine], color: Color, highlightCoverage: Bool) -> some View {
         if !lines.isEmpty {
             VStack(alignment: .leading, spacing: subtitleBlockSpacing) {
-                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                    therapyLineView(line, color: color)
+                let visibleLines = Array(lines.prefix(2))
+                ForEach(Array(visibleLines.enumerated()), id: \.offset) { _, line in
+                    therapyLineView(line, color: color, highlightCoverage: highlightCoverage)
+                }
+                if lines.count > visibleLines.count {
+                    Text("+\(lines.count - visibleLines.count) altre terapie")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -451,17 +456,76 @@ struct MedicineRowView: View {
     private var fallbackLine2Color: Color {
         switch subtitleMode {
         case .activeTherapies:
-            return isAutonomyBelowThreshold ? .red : subtitleColor
+            return isTherapyOutOfStock ? .red : subtitleColor
         case .nextDose:
             return isAutonomyBelowThreshold ? .red : subtitleColor
         }
+    }
+
+    private var isTherapyOutOfStock: Bool {
+        guard !therapies.isEmpty else { return false }
+        return therapies.reduce(0) { total, therapy in
+            total + Int(therapy.leftover())
+        } <= 0
     }
 
     private var fallbackTherapyLineColor: Color {
         hasSkippedDose ? .red : subtitleColor
     }
 
-    private func therapyLineText(_ line: TherapyLine, color: Color) -> Text {
+    private func therapyLineText(_ line: TherapyLine, color: Color, highlightCoverage: Bool) -> Text {
+        if let summary = activeTherapiesCoverageSummaryText(line.description) {
+            let coverageColor = highlightCoverage ? Color.red : color
+            var summaryText =
+                Text(summary.therapyPart).font(subtitleFont).foregroundColor(color)
+                + Text(" ").font(subtitleFont).foregroundColor(color)
+                + Text(Image(systemName: "shield.fill")).font(.system(size: 12, weight: .semibold)).foregroundColor(coverageColor)
+                + Text(" ").font(subtitleFont).foregroundColor(color)
+                + Text(summary.coveragePart).font(subtitleFont).foregroundColor(coverageColor)
+
+            if let personDetails = line.personDetails, !personDetails.isEmpty {
+                summaryText =
+                    summaryText
+                    + Text(verbatim: "\n")
+                    + Text(Image(systemName: "person"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(color)
+                    + Text(" ").font(subtitleFont).foregroundColor(color)
+                    + Text(personDetails).font(subtitleFont).foregroundColor(color)
+            }
+
+            if let doctorDetails = line.prescribingDoctorDetails, !doctorDetails.isEmpty {
+                summaryText =
+                    summaryText
+                    + Text(verbatim: "\n")
+                    + Text(Image(systemName: "stethoscope"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(color)
+                    + Text(" ").font(subtitleFont).foregroundColor(color)
+                    + Text(doctorDetails).font(subtitleFont).foregroundColor(color)
+            }
+
+            if let conditionDetails = line.conditionDetails, !conditionDetails.isEmpty {
+                summaryText =
+                    summaryText
+                    + Text(verbatim: "\n")
+                    + Text(Image(systemName: "cross.case"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(color)
+                    + Text(" ").font(subtitleFont).foregroundColor(color)
+                    + Text("Condizioni: ").font(subtitleFont).foregroundColor(color)
+                    + Text(conditionDetails).font(subtitleFont).foregroundColor(color)
+            }
+
+            return line.statusIcons.reduce(summaryText) { partial, icon in
+                partial
+                    + Text(verbatim: "\u{00A0}")
+                    + Text(Image(systemName: icon.rawValue))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Color(.systemGray2))
+            }
+        }
+
         var baseText: Text
         if let prefix = line.prefix, !prefix.isEmpty {
             baseText =
@@ -517,6 +581,18 @@ struct MedicineRowView: View {
         }
     }
 
+    private func activeTherapiesCoverageSummaryText(_ description: String) -> (therapyPart: String, coveragePart: String)? {
+        let marker = " · "
+        guard description.localizedCaseInsensitiveContains("copertura scorte"),
+              let range = description.range(of: marker) else {
+            return nil
+        }
+        let therapyPart = description[..<range.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
+        let coveragePart = description[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !therapyPart.isEmpty, !coveragePart.isEmpty else { return nil }
+        return (therapyPart: therapyPart, coveragePart: coveragePart)
+    }
+
     private func therapyLineAccessibilityLabel(_ line: TherapyLine) -> String {
         var components: [String] = []
         if let prefix = line.prefix, !prefix.isEmpty {
@@ -537,8 +613,8 @@ struct MedicineRowView: View {
     }
 
     @ViewBuilder
-    private func therapyLineView(_ line: TherapyLine, color: Color) -> some View {
-        therapyLineText(line, color: color)
+    private func therapyLineView(_ line: TherapyLine, color: Color, highlightCoverage: Bool) -> some View {
+        therapyLineText(line, color: color, highlightCoverage: highlightCoverage)
             .lineLimit(nil)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
@@ -583,6 +659,7 @@ struct MedicineRowView: View {
         let base = trimmed.isEmpty ? "Medicinale" : trimmed
         let name = camelCase(base)
         let dosage = primaryPackageDosage
+        let label = medicine.displayLabel
         return HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(name)
                 .font(.system(size: 16, weight: .regular))
@@ -599,6 +676,18 @@ struct MedicineRowView: View {
                 Text(dosage)
                     .font(.system(size: 16, weight: .regular))
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+            if let label {
+                Text(label)
+                    .font(.system(size: 11, weight: .semibold))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.blue.opacity(0.12))
+                    )
+                    .foregroundStyle(.blue)
                     .lineLimit(1)
             }
         }

@@ -37,7 +37,7 @@ struct AdherenceDashboardView: View {
             .padding(.top, 30)
             .padding(.bottom, 44)
         }
-        .background(Color.white)
+        .background(Color(.systemGroupedBackground))
         .toolbar(.hidden, for: .navigationBar)
         .onAppear(perform: reloadDataAndMetrics)
         .onChange(of: selectedRange) { _ in reload() }

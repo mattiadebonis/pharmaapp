@@ -22,7 +22,7 @@ struct CabinetView: View {
     }
 
     private enum Layout {
-        static let horizontalInset: CGFloat = 28
+        static let horizontalInset: CGFloat = 16
         static let emptyStateImageHeight: CGFloat = 320
         static let emptyStateImageScale: CGFloat = 2
         static let emptyStateImageHorizontalOffset: CGFloat = 12
@@ -35,10 +35,10 @@ struct CabinetView: View {
         static let emptyStateBottomTextHorizontalInset: CGFloat = 14
     }
 
-    @EnvironmentObject private var appVM: AppViewModel
     @EnvironmentObject private var appRouter: AppRouter
     @EnvironmentObject private var appDataStore: AppDataStore
     @EnvironmentObject private var favoritesStore: FavoritesStore
+    @Environment(\.openURL) private var openURL
     @StateObject private var viewModel = CabinetViewModel()
     @StateObject private var locationVM = LocationSearchViewModel()
 
@@ -55,9 +55,12 @@ struct CabinetView: View {
     @State private var isProfilePresented = false
     @State private var selectedEntrySelection: EntrySelection?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
-    @State private var missedDoseSheet: MissedDoseSheetState?
-    @State private var cachedSummaryLines: [String] = ["Per ora non ci sono azioni da fare."]
-    @State private var cachedInlineAction: String = "Per ora nessuna azione"
+    @State private var cachedSummaryLines: [String] = [
+        "0 su 0",
+        "farmaci coperti"
+    ]
+    @State private var cachedSummaryPriority: CabinetSummaryPriority = .allUnderControl
+    @State private var cachedInlineAction: String = "Scorte 0/0"
     @State private var cachedShelfState: ShelfViewState = .empty
     @State private var rowSnapshotsByEntryID: [String: CabinetViewModel.CabinetRowSnapshot] = [:]
     @State private var syncWorkItem: DispatchWorkItem?
@@ -72,12 +75,8 @@ struct CabinetView: View {
 
     private var cabinetListWithNavigation: some View {
         cabinetListWithNewCabinetSheet
-            .background {
-                NavigationBarInsetConfigurator(horizontalInset: Layout.horizontalInset)
-            }
             .navigationTitle("Armadietto")
             .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(.automatic, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -120,6 +119,14 @@ struct CabinetView: View {
                 recomputeSummaryLines()
                 syncSummaryToWidgetDebounced()
             }
+            .onChange(of: locationVM.walkingRouteMinutes) { _ in
+                recomputeSummaryLines()
+                syncSummaryToWidgetDebounced()
+            }
+            .onChange(of: locationVM.drivingRouteMinutes) { _ in
+                recomputeSummaryLines()
+                syncSummaryToWidgetDebounced()
+            }
             .onChange(of: appRouter.pendingRoute) { route in
                 handlePendingRoute(route)
             }
@@ -147,6 +154,7 @@ struct CabinetView: View {
     private func recomputeSummaryLines() {
         let displayData = computeSummaryDisplayData()
         cachedSummaryLines = displayData.lines
+        cachedSummaryPriority = displayData.summary.priority
         cachedInlineAction = displayData.inlineAction
     }
 
@@ -235,19 +243,6 @@ struct CabinetView: View {
                     .presentationDetents([.medium, .large])
                 }
             }
-            .sheet(item: $missedDoseSheet) { state in
-                MissedDoseIntakeSheet(candidate: state.candidate) { takenAt, nextAction in
-                    let didRecord = appDataStore.provider.medicines.recordMissedDoseIntake(
-                        candidate: state.candidate,
-                        takenAt: takenAt,
-                        nextAction: nextAction,
-                        operationId: state.operationId
-                    )
-                    if let key = state.operationKey {
-                        handleOperationResult(didRecord, key: key)
-                    }
-                }
-            }
     }
 
     private var cabinetListStyled: some View {
@@ -258,19 +253,35 @@ struct CabinetView: View {
             .listSectionSpacingIfAvailable(4)
             .listRowSpacing(18)
             .listStyle(.plain)
-            .padding(.top, 16)
-            .scrollContentBackground(.hidden)
-            .background(Color.white)
             .scrollDisabled(isShelfEmpty(cachedShelfState))
             .scrollIndicators(.hidden)
     }
 
     private func computeSummaryDisplayData() -> CabinetViewModel.SummaryDisplayData {
-        // Pharmacy suggestion temporaneamente disabilitata
         viewModel.computeSummaryDisplayData(
             medicines: uniqueMedicines,
             option: options.first,
-            pharmacy: nil
+            pharmacy: summaryPharmacyInfo
+        )
+    }
+
+    private var summaryPharmacyInfo: PharmacyInfo? {
+        let normalizedName = locationVM.pinItem?.title
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = (normalizedName?.isEmpty == false) ? normalizedName : nil
+        let normalizedDistance = (pharmacyRouteSummaryText ?? locationVM.distanceString)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let distance = (normalizedDistance?.isEmpty == false) ? normalizedDistance : nil
+        let isOpen = locationVM.isLikelyOpen
+
+        if name == nil, distance == nil, isOpen == nil {
+            return nil
+        }
+
+        return PharmacyInfo(
+            name: name,
+            isOpen: isOpen,
+            distanceText: distance
         )
     }
 
@@ -305,14 +316,14 @@ struct CabinetView: View {
 
     @ViewBuilder
     private func standardCabinetSections(viewState: ShelfViewState) -> some View {
-        if appVM.suggestNearestPharmacies {
+        if shouldShowPharmacySuggestion {
             Section {
-                smartBannerCard
+                pharmacyRecommendationRow
                     .listRowInsets(
                         EdgeInsets(
                             top: 12,
                             leading: Layout.horizontalInset,
-                            bottom: 16,
+                            bottom: 18,
                             trailing: Layout.horizontalInset
                         )
                     )
@@ -332,14 +343,17 @@ struct CabinetView: View {
                             trailing: 0
                         )
                     )
-                    .listRowBackground(Color.white)
+                    .listRowBackground(Color(.systemBackground))
             }
             .listSectionSeparator(.hidden)
         }
 
-        if !viewState.pinnedMedicineEntries.isEmpty {
-            Section {
+        if !viewState.pinnedMedicineEntries.isEmpty || !viewState.otherMedicineEntries.isEmpty {
+            Section(header: sectionHeader("Medicinali", topPadding: 0)) {
                 ForEach(viewState.pinnedMedicineEntries, id: \.id) { entry in
+                    shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
+                }
+                ForEach(viewState.otherMedicineEntries, id: \.id) { entry in
                     shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
                 }
             }
@@ -349,15 +363,6 @@ struct CabinetView: View {
         if !viewState.cabinetEntries.isEmpty {
             Section(header: sectionHeader("Armadietti")) {
                 ForEach(viewState.cabinetEntries, id: \.id) { entry in
-                    shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
-                }
-            }
-            .listSectionSeparator(.hidden)
-        }
-
-        if !viewState.otherMedicineEntries.isEmpty {
-            Section {
-                ForEach(viewState.otherMedicineEntries, id: \.id) { entry in
                     shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
                 }
             }
@@ -395,7 +400,7 @@ struct CabinetView: View {
                     .padding(.top, Layout.emptyStateOverlayTopPadding)
             }
 
-            Text("Potrai vedere le scorte, sapere quando stanno per finire e registrare acquisti e assunzioni facilmente.")
+            Text("Potrai vedere le scorte, sapere quando stanno per finire e gestire refill e restore facilmente.")
             .font(.title2)
             .foregroundColor(.secondary)
             .multilineTextAlignment(.center)
@@ -405,7 +410,7 @@ struct CabinetView: View {
         }
         .padding(.horizontal, Layout.horizontalInset)
         .frame(maxWidth: .infinity, alignment: .center)
-        .background(Color.white)
+        .background(Color(.systemBackground))
     }
 
     private func shelfSections(from shelfState: CabinetViewModel.ShelfViewState) -> ShelfViewState {
@@ -469,16 +474,10 @@ struct CabinetView: View {
         return pinnedCabinets + regularCabinets
     }
 
-    private func sectionHeader(_ title: String) -> some View {
-        HStack {
-            Text(title)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.primary)
-            Spacer()
-        }
-        .padding(.top, 12)
-        .padding(.bottom, 6)
-        .padding(.horizontal, Layout.horizontalInset)
+    private func sectionHeader(_ title: String, topPadding: CGFloat = 12) -> some View {
+        Text(title)
+            .textCase(nil)
+            .padding(.top, topPadding)
     }
 
     private func swipeLabel(_ text: String, systemImage: String) -> some View {
@@ -554,9 +553,6 @@ struct CabinetView: View {
             },
             onToggleSelection: { viewModel.toggleSelection(for: entry.id) },
             onEnterSelection: { viewModel.enterSelectionMode(with: entry.id) },
-            onMarkTaken: {
-                beginMarkTaken(for: entry)
-            },
             onMarkPurchased: {
                 let token = operationToken(for: .purchase, entry: entry)
                 let didRecord = appDataStore.provider.medicines.recordPurchase(
@@ -591,36 +587,6 @@ struct CabinetView: View {
                 trailing: Layout.horizontalInset
             )
         )
-    }
-
-    private func beginMarkTaken(for entry: MedicinePackage) {
-        guard hasSufficientStockForIntake(entry) else { return }
-
-        let token = operationToken(for: .intake, entry: entry)
-        if let candidate = appDataStore.provider.medicines.missedDoseCandidate(
-            medicine: entry.medicine,
-            package: entry.package,
-            now: Date()
-        ) {
-            missedDoseSheet = MissedDoseSheetState(
-                candidate: candidate,
-                operationId: token.id,
-                operationKey: token.key
-            )
-            return
-        }
-
-        let didRecord = appDataStore.provider.medicines.recordIntake(
-            medicine: entry.medicine,
-            package: entry.package,
-            medicinePackage: entry,
-            operationId: token.id
-        )
-        handleOperationResult(didRecord, key: token.key)
-    }
-
-    private func hasSufficientStockForIntake(_ entry: MedicinePackage) -> Bool {
-        appDataStore.provider.medicines.hasSufficientStockForIntake(entryId: entry.id)
     }
 
     private func currentEntry(id: UUID) -> MedicinePackage? {
@@ -697,108 +663,108 @@ struct CabinetView: View {
         }
     }
 
-    // MARK: - Banner
-    private var smartBannerCard: some View {
-        Button {
-            appVM.isStocksIndexPresented = true
-        } label: {
-            HStack(alignment: .center, spacing: 12) {
-                Image(systemName: "shippingbox.fill")
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(14)
-                    .background(Circle().fill(Color.white.opacity(0.2)))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Rifornisci i farmaci in esaurimento")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                    Text("Ti suggeriamo la farmacia più comoda in questo momento.")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.8))
+    // MARK: - Pharmacy Suggestion
+    private var pharmacyRecommendationRow: some View {
+        Button(action: openPharmacyMap) {
+            HStack(spacing: 10) {
+                Text(pharmacyInlineText)
+                    .font(.callout)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                    .layoutPriority(1)
+
+                Spacer(minLength: 6)
+
+                HStack(spacing: 4) {
+                    Text("Mappe")
+                    Image(systemName: "arrow.turn.up.right")
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.8))
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
             }
-            .padding(18)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(LinearGradient(colors: [.accentColor, .accentColor.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing))
-            )
+            .padding(.vertical, 2)
         }
         .buttonStyle(.plain)
     }
 
-}
-
-private struct NavigationBarInsetConfigurator: UIViewControllerRepresentable {
-    let horizontalInset: CGFloat
-
-    func makeUIViewController(context: Context) -> Controller {
-        Controller(horizontalInset: horizontalInset)
+    private var pharmacyDisplayName: String {
+        let trimmedName = locationVM.pinItem?.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmedName, !trimmedName.isEmpty {
+            return trimmedName
+        }
+        return "Farmacia più vicina"
     }
 
-    func updateUIViewController(_ uiViewController: Controller, context: Context) {
-        uiViewController.horizontalInset = horizontalInset
-        uiViewController.applyInsetIfNeeded()
+    private var pharmacyInlineText: String {
+        var parts: [String] = []
+
+        parts.append(pharmacyDisplayName)
+
+        if locationVM.isLikelyOpen == true {
+            parts.append("Aperta")
+        } else if locationVM.isLikelyOpen == false {
+            parts.append("Chiusa")
+        }
+
+        if let walking = routeMinutes(for: .walking) {
+            parts.append("\(walking) min")
+        } else if let distance = compactDistanceText {
+            parts.append(distance)
+        }
+
+        return parts.joined(separator: " · ")
     }
 
-    final class Controller: UIViewController {
-        var horizontalInset: CGFloat
-        private weak var observedNavigationBar: UINavigationBar?
-        private var previousDirectionalLayoutMargins: NSDirectionalEdgeInsets?
+    private var compactDistanceText: String? {
+        let raw = locationVM.distanceString?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let raw, !raw.isEmpty else { return nil }
+        return raw.components(separatedBy: "·").first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
-        init(horizontalInset: CGFloat) {
-            self.horizontalInset = horizontalInset
-            super.init(nibName: nil, bundle: nil)
-        }
-
-        @available(*, unavailable)
-        required init?(coder: NSCoder) {
-            fatalError("init(coder:) has not been implemented")
-        }
-
-        override func viewWillAppear(_ animated: Bool) {
-            super.viewWillAppear(animated)
-            applyInsetIfNeeded()
-        }
-
-        override func viewDidDisappear(_ animated: Bool) {
-            super.viewDidDisappear(animated)
-            restoreInsetsIfNeeded()
-        }
-
-        func applyInsetIfNeeded() {
-            guard let navigationBar = navigationController?.navigationBar else { return }
-
-            if observedNavigationBar !== navigationBar {
-                restoreInsetsIfNeeded()
-                observedNavigationBar = navigationBar
-                previousDirectionalLayoutMargins = navigationBar.directionalLayoutMargins
-            } else if previousDirectionalLayoutMargins == nil {
-                previousDirectionalLayoutMargins = navigationBar.directionalLayoutMargins
-            }
-
-            var margins = navigationBar.directionalLayoutMargins
-            margins.leading = horizontalInset
-            margins.trailing = horizontalInset
-            navigationBar.directionalLayoutMargins = margins
-            navigationBar.setNeedsLayout()
-            navigationBar.layoutIfNeeded()
-        }
-
-        private func restoreInsetsIfNeeded() {
-            guard
-                let navigationBar = observedNavigationBar,
-                let previousDirectionalLayoutMargins
-            else { return }
-
-            navigationBar.directionalLayoutMargins = previousDirectionalLayoutMargins
-            navigationBar.setNeedsLayout()
-            navigationBar.layoutIfNeeded()
-            observedNavigationBar = nil
-            self.previousDirectionalLayoutMargins = nil
+    private var shouldShowPharmacySuggestion: Bool {
+        switch cachedSummaryPriority {
+        case .refillBeforeNextDose, .refillWithinToday, .refillSoon:
+            return true
+        default:
+            return false
         }
     }
+
+    private enum PharmacyRouteMode {
+        case walking
+        case driving
+    }
+
+    private func routeMinutes(for mode: PharmacyRouteMode) -> Int? {
+        guard let distance = locationVM.distanceMeters else { return nil }
+        switch mode {
+        case .walking:
+            return locationVM.walkingRouteMinutes ?? max(1, Int(round(distance / 83.0)))
+        case .driving:
+            return locationVM.drivingRouteMinutes ?? max(1, Int(round(distance / 750.0)))
+        }
+    }
+
+    private var pharmacyRouteSummaryText: String? {
+        let walkingText = routeMinutes(for: .walking).map { "\($0) min a piedi" }
+        let drivingText = routeMinutes(for: .driving).map { "\($0) min in auto" }
+        let parts = [walkingText, drivingText].compactMap { $0 }
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: " · ")
+    }
+
+    private func openPharmacyMap() {
+        if locationVM.pinItem != nil {
+            locationVM.openInMaps()
+            return
+        }
+        locationVM.ensureStarted()
+        if let url = URL(string: "maps://?q=farmacia") {
+            openURL(url)
+        }
+    }
+
 }

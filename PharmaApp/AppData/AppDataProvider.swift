@@ -88,6 +88,7 @@ protocol MedicinesGateway {
         preferredEntry: MedicinePackage?
     ) -> (month: Int, year: Int)?
     func recurrenceRule(for therapy: Therapy) -> RecurrenceRule
+    func setLabel(medicine: Medicine, label: String?) throws
     func setCustomStockThreshold(medicine: Medicine, threshold: Int32) throws
     func deleteCabinet(cabinetId: UUID, moveToCabinetId: UUID?) throws
     func deletePackage(medicine: Medicine, package: Package) throws

@@ -29,6 +29,7 @@ public struct MedicineSnapshot {
     public let id: MedicineId
     public let externalKey: String
     public let name: String
+    public let label: String?
     public let requiresPrescription: Bool
     public let inCabinet: Bool
     public let manualIntakeRegistration: Bool
@@ -44,6 +45,7 @@ public struct MedicineSnapshot {
         id: MedicineId,
         externalKey: String,
         name: String,
+        label: String? = nil,
         requiresPrescription: Bool,
         inCabinet: Bool,
         manualIntakeRegistration: Bool,
@@ -58,6 +60,7 @@ public struct MedicineSnapshot {
         self.id = id
         self.externalKey = externalKey
         self.name = name
+        self.label = label
         self.requiresPrescription = requiresPrescription
         self.inCabinet = inCabinet
         self.manualIntakeRegistration = manualIntakeRegistration

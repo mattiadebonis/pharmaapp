@@ -24,7 +24,6 @@ struct CabinetDetailView: View {
     
     @State private var selectedEntrySelection: EntrySelection?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
-    @State private var missedDoseSheet: MissedDoseSheetState?
     @State private var entryToMoveSelection: EntrySelection?
     @State private var isDeleteDialogPresented = false
     @State private var isMoveCabinetSheetPresented = false
@@ -44,7 +43,7 @@ struct CabinetDetailView: View {
         .listSectionSpacingIfAvailable(4)
         .listRowSpacing(8)
         .scrollContentBackground(.hidden)
-        .background(Color.white)
+        .background(Color(.systemBackground))
         .navigationTitle(cabinet.displayName)
         .navigationBarTitleDisplayMode(.large)
         .toolbarBackground(.automatic, for: .navigationBar)
@@ -102,20 +101,6 @@ struct CabinetDetailView: View {
                 .presentationDetents([PresentationDetent.medium, PresentationDetent.large])
             }
         }
-        .sheet(item: $missedDoseSheet) { state in
-            MissedDoseIntakeSheet(candidate: state.candidate) { takenAt, nextAction in
-                let didRecord = appDataStore.provider.medicines.recordMissedDoseIntake(
-                    candidate: state.candidate,
-                    takenAt: takenAt,
-                    nextAction: nextAction,
-                    operationId: state.operationId
-                )
-                if let key = state.operationKey {
-                    handleOperationResult(didRecord, key: key)
-                }
-            }
-        }
-
         .sheet(isPresented: $isMoveCabinetSheetPresented) {
             MoveCabinetSelectionSheet(
                 cabinets: moveTargets,
@@ -180,9 +165,6 @@ struct CabinetDetailView: View {
             },
             onToggleSelection: { viewModel.toggleSelection(for: entry.id) },
             onEnterSelection: { viewModel.enterSelectionMode(with: entry.id) },
-            onMarkTaken: {
-                beginMarkTaken(for: entry)
-            },
             onMarkPurchased: {
                 let token = operationToken(for: .purchase, entry: entry)
                 let didRecord = appDataStore.provider.medicines.recordPurchase(
@@ -208,36 +190,6 @@ struct CabinetDetailView: View {
         )
         .listRowSeparator(.hidden, edges: .all)
         .listRowInsets(EdgeInsets(top: 1, leading: 16, bottom: 1, trailing: 16))
-    }
-
-    private func beginMarkTaken(for entry: MedicinePackage) {
-        guard hasSufficientStockForIntake(entry) else { return }
-
-        let token = operationToken(for: .intake, entry: entry)
-        if let candidate = appDataStore.provider.medicines.missedDoseCandidate(
-            medicine: entry.medicine,
-            package: entry.package,
-            now: Date()
-        ) {
-            missedDoseSheet = MissedDoseSheetState(
-                candidate: candidate,
-                operationId: token.id,
-                operationKey: token.key
-            )
-            return
-        }
-
-        let didRecord = appDataStore.provider.medicines.recordIntake(
-            medicine: entry.medicine,
-            package: entry.package,
-            medicinePackage: entry,
-            operationId: token.id
-        )
-        handleOperationResult(didRecord, key: token.key)
-    }
-
-    private func hasSufficientStockForIntake(_ entry: MedicinePackage) -> Bool {
-        appDataStore.provider.medicines.hasSufficientStockForIntake(entryId: entry.id)
     }
 
     private func currentEntry(id: UUID) -> MedicinePackage? {

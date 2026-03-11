@@ -17,7 +17,6 @@ struct MedicineDetailView: View {
     @EnvironmentObject private var appDataStore: AppDataStore
     @State private var emailDetent: PresentationDetent = .fraction(0.55)
     @State private var therapySheet: TherapySheetState?
-    @State private var missedDoseSheet: MissedDoseSheetState?
     @State private var deadlineMonthInput: String = ""
     @State private var deadlineYearInput: String = ""
     
@@ -36,7 +35,9 @@ struct MedicineDetailView: View {
     @State private var showEmailSheet = false
     @State private var showLogsSheet = false
     @State private var showThresholdAlert = false
+    @State private var showLabelAlert = false
     @State private var thresholdInput: String = ""
+    @State private var labelInput: String = ""
     @State private var didHandleInitialAction = false
     @State private var hasStartedObservation = false
 
@@ -62,6 +63,7 @@ struct MedicineDetailView: View {
     var body: some View {
         NavigationStack {
             Form {
+                medicineInfoSection
                 stockManagementSection
                 therapiesInlineSection
             }
@@ -169,19 +171,6 @@ struct MedicineDetailView: View {
             )
             .presentationDetents([.large])
         }
-        .sheet(item: $missedDoseSheet) { state in
-            MissedDoseIntakeSheet(candidate: state.candidate) { takenAt, nextAction in
-                let didRecord = appDataStore.provider.medicines.recordMissedDoseIntake(
-                    candidate: state.candidate,
-                    takenAt: takenAt,
-                    nextAction: nextAction,
-                    operationId: state.operationId
-                )
-                if let key = state.operationKey {
-                    handleOperationResult(didRecord, key: key)
-                }
-            }
-        }
         .alert("Soglia scorte", isPresented: $showThresholdAlert) {
             TextField("Giorni", text: $thresholdInput)
                 .keyboardType(.numberPad)
@@ -202,6 +191,26 @@ struct MedicineDetailView: View {
             Button("Annulla", role: .cancel) { }
         } message: {
             Text("Inserisci il numero di giorni sotto cui ricevere l'avviso di scorte basse.")
+        }
+        .alert("Etichetta", isPresented: $showLabelAlert) {
+            TextField("Es. Salvavita, Bambini, Viaggio", text: $labelInput)
+            Button("Salva") {
+                try? appDataStore.provider.medicines.setLabel(
+                    medicine: medicine,
+                    label: labelInput
+                )
+            }
+            if medicine.displayLabel != nil {
+                Button("Rimuovi", role: .destructive) {
+                    try? appDataStore.provider.medicines.setLabel(
+                        medicine: medicine,
+                        label: nil
+                    )
+                }
+            }
+            Button("Annulla", role: .cancel) { }
+        } message: {
+            Text("Aggiungi una breve etichetta personalizzata per riconoscere il farmaco più rapidamente.")
         }
 
     }
@@ -300,6 +309,10 @@ struct MedicineDetailView: View {
     private var packageSummary: String? {
         formattedPackageLabel(package)
     }
+
+    private var medicineLabel: String? {
+        medicine.displayLabel
+    }
     
     private var activeIngredient: String? {
         let active = medicine.principio_attivo.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -361,10 +374,6 @@ struct MedicineDetailView: View {
 
     private var stockUnitsText: String {
         stockUnitsForSelectedPackage == 1 ? "1 unità" : "\(stockUnitsForSelectedPackage) unità"
-    }
-
-    private var canMarkTakenForSelectedPackage: Bool {
-        stockUnitsForSelectedPackage > 0
     }
 
     private var stockPackagesForSelectedPackage: Int {
@@ -739,6 +748,54 @@ struct MedicineDetailView: View {
 
 // MARK: - Decorative sections
 extension MedicineDetailView {
+    private var medicineInfoSection: some View {
+        Section {
+            Button {
+                labelInput = medicineLabel ?? ""
+                showLabelAlert = true
+            } label: {
+                HStack(spacing: 12) {
+                    Text("Etichetta")
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    if let medicineLabel {
+                        Text(medicineLabel)
+                            .font(.footnote.weight(.semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.blue.opacity(0.12))
+                            )
+                            .foregroundStyle(.blue)
+                    } else {
+                        Text("Aggiungi")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+
+            if let activeIngredient {
+                LabeledContent("Principio attivo") {
+                    Text(activeIngredient)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+
+            if let packageSummary {
+                LabeledContent("Confezione") {
+                    Text(packageSummary)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+        } header: {
+            Text("Info farmaco")
+                .font(.body.weight(.semibold))
+        }
+        .textCase(nil)
+    }
+
     private var stockManagementSection: some View {
         Section {
             Stepper(
@@ -802,15 +859,6 @@ extension MedicineDetailView {
             }
 
             Button {
-                beginMarkTaken()
-            } label: {
-                Label("Assunto", systemImage: "checkmark.circle.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(CapsuleActionButtonStyle(fill: .green, textColor: .white))
-            .disabled(!canMarkTakenForSelectedPackage)
-
-            Button {
                 _ = appDataStore.provider.medicines.addPurchase(medicine: medicine, package: package)
             } label: {
                 Label("Confezione acquistata (\(packageUnitSize))", systemImage: "cart.fill")
@@ -868,43 +916,6 @@ extension MedicineDetailView {
             }
         }
         .textCase(nil)
-    }
-
-    private func beginMarkTaken() {
-        guard canMarkTakenForSelectedPackage else { return }
-
-        let token = intakeOperationToken()
-        if let candidate = appDataStore.provider.medicines.missedDoseCandidate(
-            medicine: medicine,
-            package: package,
-            now: Date()
-        ) {
-            missedDoseSheet = MissedDoseSheetState(
-                candidate: candidate,
-                operationId: token.id,
-                operationKey: token.key
-            )
-            return
-        }
-
-        let didRecord = appDataStore.provider.medicines.recordIntake(
-            medicine: medicine,
-            package: package,
-            medicinePackage: medicinePackage,
-            operationId: token.id
-        )
-        handleOperationResult(didRecord, key: token.key)
-    }
-
-    private func intakeOperationToken() -> (id: UUID, key: OperationKey) {
-        let key = OperationKey.medicineAction(
-            action: .intake,
-            medicineId: medicine.id,
-            packageId: package.id,
-            source: .medicineRow
-        )
-        let id = OperationIdProvider.shared.operationId(for: key, ttl: 3)
-        return (id, key)
     }
 
     private func handleOperationResult(_ didSucceed: Bool, key: OperationKey) {

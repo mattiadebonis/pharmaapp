@@ -7,12 +7,13 @@ import GoogleSignInSwift
 
 struct LoginView: View {
     @EnvironmentObject private var auth: AuthViewModel
+    @Environment(\.colorScheme) private var colorScheme
     @State private var showError: Bool = false
 
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [Color(red: 0.93, green: 0.96, blue: 1.0), Color.white],
+                colors: backgroundGradientColors,
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -60,11 +61,11 @@ struct LoginView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 48)
-                        .background(Color.white)
-                        .foregroundStyle(.black)
+                        .background(Color(.secondarySystemBackground))
+                        .foregroundStyle(.primary)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.black.opacity(0.1), lineWidth: 1)
+                                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
                         )
                     }
                     #endif
@@ -95,6 +96,13 @@ struct LoginView: View {
         } message: {
             Text(auth.errorMessage ?? "Si è verificato un errore.")
         }
+    }
+
+    private var backgroundGradientColors: [Color] {
+        if colorScheme == .dark {
+            return [Color(.systemBackground), Color(.secondarySystemBackground)]
+        }
+        return [Color(red: 0.93, green: 0.96, blue: 1.0), Color(.systemBackground)]
     }
 }
 

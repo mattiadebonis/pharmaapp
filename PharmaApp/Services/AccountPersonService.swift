@@ -8,6 +8,7 @@ final class AccountPersonService {
     private let keychain: KeychainClient
     private let userDefaults: UserDefaults
     private let migrationFlagKey = "pharmaapp.migration.account_person_cf.v1"
+    private let accountOnlyMigrationKey = "pharmaapp.migration.account_only_profile.v1"
 
     init(
         keychain: KeychainClient = KeychainClient(),
@@ -92,6 +93,48 @@ final class AccountPersonService {
 
         // Dopo la migrazione manteniamo una sola sorgente di verità su Person.
         try? keychain.delete()
+    }
+
+    func migrateToSingleAccountProfileIfNeeded(in context: NSManagedObjectContext) {
+        if userDefaults.bool(forKey: accountOnlyMigrationKey) {
+            return
+        }
+        defer {
+            userDefaults.set(true, forKey: accountOnlyMigrationKey)
+        }
+
+        let account = ensureAccountPerson(in: context)
+        let request = Person.extractPersons(includeAccount: true)
+        let allPersons = (try? context.fetch(request)) ?? []
+
+        for person in allPersons {
+            person.codice_fiscale = nil
+            person.condizione = nil
+
+            guard person.objectID != account.objectID else {
+                person.is_account = true
+                continue
+            }
+
+            let therapyRequest = Therapy.extractTherapies()
+            therapyRequest.predicate = NSPredicate(format: "person == %@", person)
+            let relatedTherapies = (try? context.fetch(therapyRequest)) ?? []
+            for therapy in relatedTherapies {
+                therapy.person = account
+                therapy.condizione = nil
+            }
+            context.delete(person)
+        }
+
+        let therapyRequest = Therapy.extractTherapies()
+        if let therapies = try? context.fetch(therapyRequest) {
+            for therapy in therapies {
+                therapy.condizione = nil
+            }
+        }
+
+        try? keychain.delete()
+        saveIfNeeded(context)
     }
 
     private func normalizedName(from value: String?) -> String? {

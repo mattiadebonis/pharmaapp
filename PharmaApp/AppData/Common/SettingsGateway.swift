@@ -6,6 +6,8 @@ struct SettingsPersonRecord: Identifiable, Equatable {
     var codiceFiscale: String?
     var condition: String?
     var isAccount: Bool
+    var providerName: String?
+    var accountStatus: String?
 }
 
 struct SettingsDoctorRecord: Identifiable, Equatable {

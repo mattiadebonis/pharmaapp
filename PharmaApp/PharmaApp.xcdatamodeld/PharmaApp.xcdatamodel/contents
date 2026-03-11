@@ -83,6 +83,7 @@
 		    <entity name="Medicine" representedClassName=".Medicine" syncable="YES">
 		        <attribute name="source_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
 		        <attribute name="visibility" optional="YES" attributeType="String" defaultValueString="local"/>
+		        <attribute name="etichetta" optional="YES" attributeType="String"/>
 		        <attribute name="custom_stock_threshold" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
 		        <attribute name="deadline_month" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
 		        <attribute name="deadline_year" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>

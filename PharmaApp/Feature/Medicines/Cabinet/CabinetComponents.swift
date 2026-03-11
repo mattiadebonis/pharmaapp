@@ -11,17 +11,12 @@ struct MedicineSwipeRow: View {
     var onLongPress: () -> Void
     var onToggleSelection: () -> Void
     var onEnterSelection: () -> Void
-    var onMarkTaken: () -> Void
     var onMarkPurchased: () -> Void
     var onRequestPrescription: (() -> Void)?
     var onMove: (() -> Void)?
     var subtitleMode: MedicineSubtitleMode = .nextDose
     var snapshot: MedicineRowView.Snapshot? = nil
     private var medicine: Medicine { entry.medicine }
-    @EnvironmentObject private var appDataStore: AppDataStore
-    private var hasSufficientStockForIntake: Bool {
-        appDataStore.provider.medicines.hasSufficientStockForIntake(entryId: entry.id)
-    }
     @EnvironmentObject private var favoritesStore: FavoritesStore
 
     var body: some View {
@@ -47,14 +42,6 @@ struct MedicineSwipeRow: View {
             //     }
             //     .tint(.indigo)
             // }
-
-            Button {
-                onMarkTaken()
-            } label: {
-                swipeLabel("Assunto", systemImage: "checkmark.circle.fill")
-            }
-            .tint(.green)
-            .disabled(!hasSufficientStockForIntake)
 
             Button {
                 onMarkPurchased()

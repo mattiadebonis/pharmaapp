@@ -234,9 +234,8 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .refillBeforeNextDose)
         #expect(summary.state == .critical)
-        #expect(summary.title == "Serve un rifornimento prima della prossima terapia.")
-        #expect(summary.subtitle.contains("20:30"))
-        #expect(summary.subtitle.contains("farmacia più vicina"))
+        #expect(summary.title == "Un farmaco in esaurimento.")
+        #expect(summary.subtitle.contains("Farmacia suggerita"))
     }
 
     @Test func refillBeforeNextDoseUsesSingleFocusedCopy() {
@@ -272,7 +271,7 @@ struct CabinetSummaryReadModelTests {
         )
 
         #expect(summary.priority == .refillBeforeNextDose)
-        #expect(summary.title == "Serve un rifornimento prima della prossima terapia.")
+        #expect(summary.title == "2 farmaci in esaurimento.")
     }
 
     // MARK: - Scenario 4: Imminent dose (within 60 min)
@@ -500,9 +499,8 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .refillWithinToday)
         #expect(summary.state == .warning)
-        #expect(summary.title == "Oggi conviene organizzare un rifornimento.")
-        #expect(summary.subtitle.contains("1 farmaco va rifornito entro oggi."))
-        #expect(summary.subtitle.contains("farmacia più vicina"))
+        #expect(summary.title == "Un farmaco in esaurimento.")
+        #expect(summary.subtitle.contains("Farmacia suggerita"))
     }
 
     // MARK: - Scenario 6: Next dose today (no stock issues)
@@ -613,9 +611,8 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .refillSoon)
         #expect(summary.state == .info)
-        #expect(summary.title == "A breve sarà utile fare un rifornimento.")
-        #expect(summary.subtitle.contains("1 farmaco richiede rifornimento."))
-        #expect(summary.subtitle.contains("farmacia più vicina"))
+        #expect(summary.title == "Un farmaco in esaurimento.")
+        #expect(summary.subtitle.contains("Farmacia suggerita"))
     }
 
     // MARK: - Scenario 9: Refill soon beats next dose today
@@ -655,7 +652,7 @@ struct CabinetSummaryReadModelTests {
 
         #expect(summary.priority == .refillSoon)
         #expect(summary.state == .info)
-        #expect(summary.title == "A breve sarà utile fare un rifornimento.")
+        #expect(summary.title == "Un farmaco in esaurimento.")
     }
 
     // MARK: - Inline action
@@ -824,7 +821,7 @@ struct CabinetSummaryReadModelTests {
 
         #expect(lines.count == 2)
         #expect(lines[0] == "Per ora non ci sono azioni da fare.")
-        #expect(lines[1] == "Le terapie sono coperte e le scorte sono adeguate.")
+        #expect(lines[1] == "Tutto sotto controllo e le scorte sono sufficienti.")
     }
 
     // MARK: - No option provided

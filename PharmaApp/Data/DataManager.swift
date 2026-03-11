@@ -324,15 +324,16 @@ class DataManager {
 
     private let manualIntakeMigrationKey = "pharmaapp.migration.manualIntakeDefaultTrue.v1"
     private let therapyManualIntakeScopeMigrationKey = "pharmaapp.migration.therapyManualIntakeScope.v1"
+    private let automaticIntakeOnlyMigrationKey = "pharmaapp.migration.automaticIntakeOnly.v1"
     private let deadlineToEntryMigrationKey = "pharmaapp.migration.deadline_to_entry.v1"
 
     func migrateManualIntakeDefaultIfNeeded(userDefaults: UserDefaults = .standard) {
         guard !userDefaults.bool(forKey: manualIntakeMigrationKey) else { return }
         let request: NSFetchRequest<Medicine> = Medicine.fetchRequest() as! NSFetchRequest<Medicine>
-        request.predicate = NSPredicate(format: "manual_intake_registration == NO")
+        request.predicate = NSPredicate(format: "manual_intake_registration == YES")
         if let medicines = try? context.fetch(request) {
             for medicine in medicines {
-                medicine.manual_intake_registration = true
+                medicine.manual_intake_registration = false
             }
         }
         if context.hasChanges {
@@ -353,6 +354,36 @@ class DataManager {
             try? context.save()
         }
         userDefaults.set(true, forKey: therapyManualIntakeScopeMigrationKey)
+    }
+
+    func migrateToAutomaticIntakeOnlyIfNeeded(userDefaults: UserDefaults = .standard) {
+        guard !userDefaults.bool(forKey: automaticIntakeOnlyMigrationKey) else { return }
+
+        let optionRequest: NSFetchRequest<Option> = Option.fetchRequest() as! NSFetchRequest<Option>
+        if let options = try? context.fetch(optionRequest) {
+            for option in options {
+                option.manual_intake_registration = false
+            }
+        }
+
+        let medicineRequest: NSFetchRequest<Medicine> = Medicine.fetchRequest() as! NSFetchRequest<Medicine>
+        if let medicines = try? context.fetch(medicineRequest) {
+            for medicine in medicines {
+                medicine.manual_intake_registration = false
+            }
+        }
+
+        let therapyRequest: NSFetchRequest<Therapy> = Therapy.fetchRequest() as! NSFetchRequest<Therapy>
+        if let therapies = try? context.fetch(therapyRequest) {
+            for therapy in therapies {
+                therapy.manual_intake_registration = false
+            }
+        }
+
+        if context.hasChanges {
+            try? context.save()
+        }
+        userDefaults.set(true, forKey: automaticIntakeOnlyMigrationKey)
     }
 
     func migrateDeadlineToEntryIfNeeded(userDefaults: UserDefaults = .standard) {

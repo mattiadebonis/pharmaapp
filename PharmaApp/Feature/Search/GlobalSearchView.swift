@@ -65,13 +65,13 @@ struct GlobalSearchView: View {
 
     private enum QuickAction: Hashable, Identifiable {
         case lowStock
-        case today
+        case therapies
         case person(String)
 
         var id: String {
             switch self {
             case .lowStock: return "lowStock"
-            case .today: return "today"
+            case .therapies: return "therapies"
             case .person(let oid): return "person-\(oid)"
             }
         }
@@ -258,10 +258,12 @@ struct GlobalSearchView: View {
         guard !q.isEmpty else { return false }
         if medicineEntries.contains(where: {
             ($0.medicine.nome).localizedCaseInsensitiveContains(q)
+            || (($0.medicine.displayLabel ?? "")).localizedCaseInsensitiveContains(q)
             || ($0.medicine.principio_attivo).localizedCaseInsensitiveContains(q)
         }) { return true }
         if therapies.contains(where: {
             (therapyMedicine($0)?.nome ?? "").localizedCaseInsensitiveContains(q)
+            || (therapyMedicine($0)?.displayLabel ?? "").localizedCaseInsensitiveContains(q)
             || (therapyMedicine($0)?.principio_attivo ?? "").localizedCaseInsensitiveContains(q)
         }) { return true }
         if doctors.contains(where: {
@@ -298,19 +300,6 @@ struct GlobalSearchView: View {
             }
     }
 
-    private var todayDoseEntries: [NextDoseEntry] {
-        let now = Date()
-        let calendar = Calendar.current
-        return medicines.compactMap { medicine in
-            guard let next = medicine.nextIntakeDate(from: now, recurrenceManager: recurrenceManager),
-                  calendar.isDateInToday(next) else {
-                return nil
-            }
-            return NextDoseEntry(medicine: medicine, nextDose: next)
-        }
-        .sorted { $0.nextDose < $1.nextDose }
-    }
-
     private var nextDoseEntries: [NextDoseEntry] {
         let now = Date()
         return medicines.compactMap { medicine in
@@ -336,13 +325,54 @@ struct GlobalSearchView: View {
         return result.sorted { $0.nome.localizedCaseInsensitiveCompare($1.nome) == .orderedAscending }
     }
 
+    private func therapies(for entry: MedicinePackage) -> [Therapy] {
+        let linked = (entry.therapies ?? []).filter {
+            $0.medicine.id == entry.medicine.id
+                && $0.package.id == entry.package.id
+        }
+        let fallback = (entry.medicine.therapies ?? []).filter {
+            $0.package.id == entry.package.id
+        }
+        return Array(Set(linked).union(fallback))
+    }
+
+    private var therapyMedicineEntries: [MedicinePackage] {
+        let now = Date()
+        var seenMedicineIDs = Set<UUID>()
+
+        return medicineEntries
+            .filter { !therapies(for: $0).isEmpty }
+            .sorted { lhs, rhs in
+                let leftNextDose = lhs.medicine.nextIntakeDate(from: now, recurrenceManager: recurrenceManager)
+                let rightNextDose = rhs.medicine.nextIntakeDate(from: now, recurrenceManager: recurrenceManager)
+
+                switch (leftNextDose, rightNextDose) {
+                case let (left?, right?) where left != right:
+                    return left < right
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                default:
+                    let compare = lhs.medicine.nome.localizedCaseInsensitiveCompare(rhs.medicine.nome)
+                    if compare != .orderedSame {
+                        return compare == .orderedAscending
+                    }
+                    return lhs.id.uuidString < rhs.id.uuidString
+                }
+            }
+            .filter { entry in
+                seenMedicineIDs.insert(entry.medicine.id).inserted
+            }
+    }
+
     private var availableQuickActions: [QuickAction] {
         var actions: [QuickAction] = []
         if !lowStockOrExpiringMedicines.isEmpty {
             actions.append(.lowStock)
         }
-        if !todayDoseEntries.isEmpty {
-            actions.append(.today)
+        if !therapyMedicineEntries.isEmpty {
+            actions.append(.therapies)
         }
         if persons.count > 1 {
             for person in persons {
@@ -358,7 +388,7 @@ struct GlobalSearchView: View {
     private func quickActionTitle(_ action: QuickAction) -> String {
         switch action {
         case .lowStock: return "Scorte basse"
-        case .today: return "Oggi"
+        case .therapies: return "Terapie"
         case .person(let personId):
             if let person = personById(personId) {
                 return personDisplayName(for: person)
@@ -370,7 +400,7 @@ struct GlobalSearchView: View {
     private func quickActionCount(_ action: QuickAction) -> Int {
         switch action {
         case .lowStock: return lowStockOrExpiringMedicines.count
-        case .today: return todayDoseEntries.count
+        case .therapies: return therapyMedicineEntries.count
         case .person(let personId): return personMedicinesForPersonID(personId).count
         }
     }
@@ -493,10 +523,12 @@ struct GlobalSearchView: View {
         guard selectedScope == .all || selectedScope == .therapies else { return [] }
         return therapies.filter { therapy in
             let medicineName = therapyMedicine(therapy)?.nome ?? ""
+            let medicineLabel = therapyMedicine(therapy)?.displayLabel ?? ""
             let principle = therapyMedicine(therapy)?.principio_attivo ?? ""
             let personName = therapyPerson(therapy).map(personDisplayName(for:)) ?? "Persona"
             let condition = therapy.condizione ?? ""
             return medicineName.localizedCaseInsensitiveContains(trimmedQuery)
+            || medicineLabel.localizedCaseInsensitiveContains(trimmedQuery)
             || principle.localizedCaseInsensitiveContains(trimmedQuery)
             || personName.localizedCaseInsensitiveContains(trimmedQuery)
             || condition.localizedCaseInsensitiveContains(trimmedQuery)
@@ -570,13 +602,6 @@ struct GlobalSearchView: View {
     }
 
     private var preferredDoctor: Doctor? {
-        let now = Date()
-        if let open = doctors.first(where: { activeDoctorInterval(for: $0, now: now) != nil }) {
-            return open
-        }
-        if let today = doctors.first(where: { doctorTodaySlotText(for: $0) != nil }) {
-            return today
-        }
         return doctors.first
     }
 
@@ -852,17 +877,16 @@ struct GlobalSearchView: View {
     }
 
     private func doctorPrimaryLineFor(_ doctor: Doctor) -> String {
-        let now = Date()
-        if let active = activeDoctorInterval(for: doctor, now: now) {
-            return "Aperto fino alle \(OpeningHoursParser.timeString(from: active.end))"
+        if let specialization = normalizedText(doctor.specializzazione) {
+            return specialization
         }
-        if let today = doctorTodaySlotText(for: doctor) {
-            return "Oggi \(today)"
+        if let phone = doctorPhone(doctor) {
+            return phone
         }
-        if let next = doctorNextOpeningLabel(for: doctor, now: now) {
-            return "Prossima apertura: \(next)"
+        if let phone = secretaryPhone(doctor) {
+            return "Segreteria: \(phone)"
         }
-        return "Orari non disponibili"
+        return "Contatti non disponibili"
     }
 
     @ViewBuilder
@@ -970,8 +994,8 @@ struct GlobalSearchView: View {
                 if !lowStockOrExpiringMedicines.isEmpty {
                     quickActionRow(title: "Scorte basse") { handleActionTap(.lowStock) }
                 }
-                if !todayDoseEntries.isEmpty {
-                    quickActionRow(title: "Oggi") { handleActionTap(.today) }
+                if !therapyMedicineEntries.isEmpty {
+                    quickActionRow(title: "Terapie") { handleActionTap(.therapies) }
                 }
             } header: {
                 sectionHeader("Filtri")
@@ -1057,22 +1081,22 @@ struct GlobalSearchView: View {
                 sectionHeader("Scorte basse")
             }
 
-        case .today:
+        case .therapies:
             Section {
-                if todayDoseEntries.isEmpty {
-                    emptyLine("Nessuna dose per oggi")
+                if therapyMedicineEntries.isEmpty {
+                    emptyLine("Nessun farmaco con terapie")
                 } else {
-                    ForEach(todayDoseEntries) { entry in
+                    ForEach(therapyMedicineEntries) { entry in
                         Button {
-                            openMedicine(entry.medicine)
+                            openMedicineEntry(entry)
                         } label: {
-                            fullMedicineRow(for: entry.medicine)
+                            medicineRow(entry)
                         }
                         .buttonStyle(.plain)
                     }
                 }
             } header: {
-                sectionHeader("Oggi")
+                sectionHeader("Terapie")
             }
 
         case .person(let personId):
@@ -1916,7 +1940,9 @@ struct GlobalSearchView: View {
             name: normalizedText(personDisplayName(for: person)),
             codiceFiscale: normalizedText(person.codice_fiscale),
             condition: normalizedText(person.condizione),
-            isAccount: person.is_account
+            isAccount: person.is_account,
+            providerName: nil,
+            accountStatus: nil
         )
     }
 

@@ -2,8 +2,8 @@ import Foundation
 import AppIntents
 
 struct LiveActivityMarkTakenIntent: AppIntent {
-    static var title: LocalizedStringResource = "Assunto"
-    static var description = IntentDescription("Segna come assunta la dose principale della Live Activity È quasi ora.")
+    static var title: LocalizedStringResource = "Registrazione automatica"
+    static var description = IntentDescription("La registrazione manuale non è disponibile: la dose viene registrata automaticamente.")
     static var openAppWhenRun = false
 
     @Parameter(title: "Terapia")

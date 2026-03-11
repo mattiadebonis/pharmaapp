@@ -277,8 +277,8 @@ struct TherapyFormView: View {
                     .listRowBackground(Color(.systemGroupedBackground))
             }
 
-            if medicine.obbligo_ricetta {
-                Section(header: Text("Prescrizione")) {
+            if showsPrescribingDoctorSection {
+                Section(header: Text(prescribingDoctorSectionTitle)) {
                     Picker("Medico prescrittore", selection: $selectedDoctorID) {
                         Text("Nessuno").tag(UUID?.none)
                         ForEach(Array(doctors.enumerated()), id: \.offset) { _, doctor in
@@ -391,7 +391,7 @@ struct TherapyFormView: View {
                     }
                 }
             }
-            if medicine.obbligo_ricetta, selectedDoctorID == nil {
+            if showsPrescribingDoctorSection, selectedDoctorID == nil {
                 selectedDoctorID = defaultPrescribingDoctorID
             }
             updateRecurrenceInputIfNeeded(force: true)
@@ -530,6 +530,14 @@ struct TherapyFormView: View {
     private var selectedDoctor: Doctor? {
         guard let selectedDoctorID else { return nil }
         return doctors.first(where: { $0.id == selectedDoctorID })
+    }
+
+    private var showsPrescribingDoctorSection: Bool {
+        medicine.obbligo_ricetta || selectedDoctorID != nil || !doctors.isEmpty
+    }
+
+    private var prescribingDoctorSectionTitle: String {
+        medicine.obbligo_ricetta ? "Prescrizione" : "Prescrittore"
     }
 
     private var defaultPrescribingDoctorID: UUID? {

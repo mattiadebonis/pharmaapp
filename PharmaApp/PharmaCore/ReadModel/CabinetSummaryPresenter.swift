@@ -35,30 +35,12 @@ enum CabinetSummaryCopy {
         "L’assunzione è alle \(time)."
     }
 
-    // MARK: Refill before next dose
+    // MARK: Refill
 
-    static let refillBeforeNextDoseTitle = "Serve un rifornimento prima della prossima terapia."
-    static func refillBeforeNextDoseSubtitle(time: String) -> String {
-        "La prossima assunzione è alle \(time)."
-    }
-    static let refillBeforeNextDoseSubtitleFallback = "La prossima assunzione è prevista a breve."
-
-    // MARK: Refill within today
-
-    static let refillWithinTodayTitle = "Oggi conviene organizzare un rifornimento."
-    static func refillWithinTodaySubtitle(count: Int) -> String {
+    static func refillCountTitle(count: Int) -> String {
         count == 1
-            ? "1 farmaco va rifornito entro oggi."
-            : "\(count) farmaci vanno riforniti entro oggi."
-    }
-
-    // MARK: Refill soon
-
-    static let refillSoonTitle = "A breve sarà utile fare un rifornimento."
-    static func refillSoonSubtitle(count: Int) -> String {
-        count == 1
-            ? "1 farmaco richiede rifornimento."
-            : "\(count) farmaci richiedono rifornimento."
+            ? "Un farmaco in esaurimento."
+            : "\(count) farmaci in esaurimento."
     }
 
     // MARK: Next dose today
@@ -75,7 +57,7 @@ enum CabinetSummaryCopy {
     // MARK: All under control
 
     static let allUnderControlTitle = "Per ora non ci sono azioni da fare."
-    static let allUnderControlSubtitle = "Le terapie sono coperte e le scorte sono adeguate."
+    static let allUnderControlSubtitle = "Tutto sotto controllo e le scorte sono sufficienti."
 
     // MARK: Inline actions
 
@@ -154,15 +136,9 @@ struct CabinetSummaryPresenter {
 
         // 3. Refill before next dose (critical)
         if a.refillBeforeNextDoseCount > 0 {
-            let subtitle: String
-            if let nextTime = a.refillBeforeNextDoseCandidate?.nextDoseTime {
-                subtitle = CabinetSummaryCopy.refillBeforeNextDoseSubtitle(time: formatTime(nextTime))
-            } else {
-                subtitle = CabinetSummaryCopy.refillBeforeNextDoseSubtitleFallback
-            }
             return CabinetSummary(
-                title: CabinetSummaryCopy.refillBeforeNextDoseTitle,
-                subtitle: appendPharmacySuggestion(to: subtitle, pharmacy: pharmacy),
+                title: CabinetSummaryCopy.refillCountTitle(count: a.refillBeforeNextDoseCount),
+                subtitle: refillSubtitle(pharmacy: pharmacy),
                 state: .critical,
                 priority: .refillBeforeNextDose
             )
@@ -170,11 +146,9 @@ struct CabinetSummaryPresenter {
 
         // 4. Refill within today
         if a.refillWithinTodayCount > 0 {
-            let n = a.refillWithinTodayCount
-            let subtitle = CabinetSummaryCopy.refillWithinTodaySubtitle(count: n)
             return CabinetSummary(
-                title: CabinetSummaryCopy.refillWithinTodayTitle,
-                subtitle: appendPharmacySuggestion(to: subtitle, pharmacy: pharmacy),
+                title: CabinetSummaryCopy.refillCountTitle(count: a.refillWithinTodayCount),
+                subtitle: refillSubtitle(pharmacy: pharmacy),
                 state: .warning,
                 priority: .refillWithinToday
             )
@@ -182,11 +156,9 @@ struct CabinetSummaryPresenter {
 
         // 5. Refill soon
         if a.refillSoonCount > 0 {
-            let n = a.refillSoonCount
-            let subtitle = CabinetSummaryCopy.refillSoonSubtitle(count: n)
             return CabinetSummary(
-                title: CabinetSummaryCopy.refillSoonTitle,
-                subtitle: appendPharmacySuggestion(to: subtitle, pharmacy: pharmacy),
+                title: CabinetSummaryCopy.refillCountTitle(count: a.refillSoonCount),
+                subtitle: refillSubtitle(pharmacy: pharmacy),
                 state: .info,
                 priority: .refillSoon
             )
@@ -286,16 +258,42 @@ struct CabinetSummaryPresenter {
         return formatter.string(from: date)
     }
 
-    private func appendPharmacySuggestion(to subtitle: String, pharmacy: PharmacyInfo?) -> String {
-        guard let suggestion = pharmacySuggestion(from: pharmacy) else { return subtitle }
-        return "\(subtitle) \(suggestion)"
+    private func refillSubtitle(pharmacy: PharmacyInfo?) -> String {
+        pharmacySuggestion(from: pharmacy) ?? ""
     }
 
     private func pharmacySuggestion(from pharmacy: PharmacyInfo?) -> String? {
-        guard let text = pharmacy?.distanceText?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !text.isEmpty else { return nil }
-        let normalized = text.replacingOccurrences(of: " · ", with: " o ")
-        return "La farmacia più vicina è a \(normalized)."
+        let name = pharmacy?.name?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedName = (name?.isEmpty == false) ? name : nil
+
+        let distance = pharmacy?.distanceText?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " · ", with: " o ")
+        let resolvedDistance = (distance?.isEmpty == false) ? distance : nil
+
+        let status = pharmacy?.isOpen.map { $0 ? "aperta" : "chiusa" }
+
+        guard resolvedName != nil || resolvedDistance != nil || status != nil else { return nil }
+
+        if let resolvedName {
+            let detailParts = [status, resolvedDistance.map { "a \($0)" }].compactMap { $0 }
+            if detailParts.isEmpty {
+                return "Farmacia suggerita: \(resolvedName)."
+            }
+            return "Farmacia suggerita: \(resolvedName), \(detailParts.joined(separator: " "))."
+        }
+
+        if let status, let resolvedDistance {
+            return "Farmacia suggerita: \(status) a \(resolvedDistance)."
+        }
+        if let status {
+            return "Farmacia suggerita: \(status)."
+        }
+        if let resolvedDistance {
+            return "Farmacia suggerita: a \(resolvedDistance)."
+        }
+
+        return nil
     }
 }

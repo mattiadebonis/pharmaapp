@@ -89,8 +89,51 @@ class CabinetViewModel: ObservableObject {
         let shouldShowPrescription: Bool
     }
 
+    struct SummaryKPI {
+        enum StockStatusTone: Equatable {
+            case neutral
+            case success
+            case warning
+            case critical
+        }
+
+        let coveredCount: Int
+        let totalCount: Int
+        let valueText: String
+        let labelText: String
+        let inlineText: String
+        let stockStatusText: String
+        let stockStatusDetailText: String?
+        let stockStatusTone: StockStatusTone
+        let refillCount: Int
+        let nextRefillInDays: Int?
+
+        static let empty = SummaryKPI(
+            coveredCount: 0,
+            totalCount: 0,
+            valueText: "0 su 0",
+            labelText: "farmaci coperti",
+            inlineText: "Scorte 0/0",
+            stockStatusText: "Vuoto",
+            stockStatusDetailText: nil,
+            stockStatusTone: .neutral,
+            refillCount: 0,
+            nextRefillInDays: nil
+        )
+
+        var coverageFraction: Double {
+            guard totalCount > 0 else { return 0 }
+            return Double(coveredCount) / Double(totalCount)
+        }
+
+        var uncoveredCount: Int {
+            max(0, totalCount - coveredCount)
+        }
+    }
+
     struct SummaryDisplayData {
         let summary: CabinetSummary
+        let kpi: SummaryKPI
         let lines: [String]
         let inlineAction: String
     }
@@ -260,7 +303,7 @@ class CabinetViewModel: ObservableObject {
                 line2: payload.line2,
                 therapyLines: payload.therapyLines,
                 line1Tone: autonomyBelowThreshold ? .danger : .normal,
-                line2Tone: autonomyBelowThreshold ? .danger : .normal,
+                line2Tone: stockStatus == .critical ? .danger : .normal,
                 therapyLineTone: skippedDose ? .danger : .normal,
                 deadlineIndicator: deadlineIndicator(for: entry)
             )
@@ -292,10 +335,12 @@ class CabinetViewModel: ObservableObject {
             guard entry.medicine.in_cabinet else { return false }
 
             let medicineName = normalizedSearchText(entry.medicine.nome)
+            let medicineLabel = normalizedSearchText(entry.medicine.displayLabel ?? "")
             let principle = normalizedSearchText(entry.medicine.principio_attivo)
             let packageSummary = normalizedSearchText(packageSearchSummary(for: entry.package))
 
             return medicineName.contains(normalizedQuery)
+                || medicineLabel.contains(normalizedQuery)
                 || principle.contains(normalizedQuery)
                 || packageSummary.contains(normalizedQuery)
         }
@@ -319,13 +364,154 @@ class CabinetViewModel: ObservableObject {
             option: input.optionSnapshot,
             pharmacy: pharmacy
         )
+        let kpi = computeSummaryKPI(
+            medicines: input.medicineSnapshots,
+            option: input.optionSnapshot
+        )
         let summary = presentation.summary
-        let lines = [summary.title, summary.subtitle].filter { !$0.isEmpty }
+        let lines: [String]
+
+        if isRefillPriority(summary.priority) {
+            let pharmacyLine = summary.subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            if pharmacyLine.isEmpty {
+                lines = [kpi.valueText, kpi.labelText]
+            } else {
+                lines = [kpi.valueText, kpi.labelText, pharmacyLine]
+            }
+        } else {
+            lines = [kpi.valueText, kpi.labelText]
+        }
+
         return SummaryDisplayData(
             summary: summary,
+            kpi: kpi,
             lines: lines,
-            inlineAction: presentation.inlineAction.text
+            inlineAction: kpi.inlineText
         )
+    }
+
+    private func computeSummaryKPI(
+        medicines: [MedicineSnapshot],
+        option: OptionSnapshot?
+    ) -> SummaryKPI {
+        let total = medicines.count
+        var covered = 0
+        var criticalCount = 0
+        var lowCount = 0
+        var unknownCount = 0
+        var refillCount = 0
+        var refillDays: [Int] = []
+
+        for medicine in medicines {
+            let status = sectionCalculator.stockStatus(for: medicine, option: option)
+            if status == .ok {
+                covered += 1
+            }
+            switch status {
+            case .critical:
+                criticalCount += 1
+                refillCount += 1
+                if let days = refillAutonomyDays(for: medicine) {
+                    refillDays.append(max(0, days))
+                }
+            case .low:
+                lowCount += 1
+                refillCount += 1
+                if let days = refillAutonomyDays(for: medicine) {
+                    refillDays.append(max(0, days))
+                }
+            case .unknown:
+                unknownCount += 1
+            case .ok:
+                break
+            }
+        }
+
+        let statusValueText: String
+        let statusTone: SummaryKPI.StockStatusTone
+        if total == 0 {
+            statusValueText = "Vuoto"
+            statusTone = .neutral
+        } else if criticalCount > 0 {
+            statusValueText = "Critico"
+            statusTone = .critical
+        } else if lowCount > 0 {
+            statusValueText = "Attenzione"
+            statusTone = .warning
+        } else if unknownCount > 0 {
+            statusValueText = "Da verificare"
+            statusTone = .warning
+        } else {
+            statusValueText = "Sotto controllo"
+            statusTone = .success
+        }
+
+        let nextRefillInDays = refillDays.min()
+        let statusDetailText: String?
+        if refillCount > 0 {
+            let refillText = refillCount == 1
+                ? "1 farmaco da rifornire"
+                : "\(refillCount) farmaci da rifornire"
+            let nextText: String
+            if let nextRefillInDays {
+                switch nextRefillInDays {
+                case ...0:
+                    nextText = "prossimo oggi"
+                case 1:
+                    nextText = "prossimo domani"
+                default:
+                    nextText = "prossimo tra \(nextRefillInDays) giorni"
+                }
+            } else {
+                nextText = "prossimo da verificare"
+            }
+            statusDetailText = "\(refillText) · \(nextText)"
+        } else {
+            statusDetailText = nil
+        }
+
+        return SummaryKPI(
+            coveredCount: covered,
+            totalCount: total,
+            valueText: "\(covered) su \(total)",
+            labelText: "farmaci coperti",
+            inlineText: "Scorte \(covered)/\(total)",
+            stockStatusText: statusValueText,
+            stockStatusDetailText: statusDetailText,
+            stockStatusTone: statusTone,
+            refillCount: refillCount,
+            nextRefillInDays: nextRefillInDays
+        )
+    }
+
+    private func refillAutonomyDays(for medicine: MedicineSnapshot) -> Int? {
+        guard !medicine.therapies.isEmpty else { return nil }
+
+        var totalLeftover: Double = 0
+        var totalDailyUsage: Double = 0
+        let recurrenceService = pharmaCoreFactory.makeRecurrenceService()
+
+        for therapy in medicine.therapies {
+            totalLeftover += Double(therapy.leftoverUnits)
+            totalDailyUsage += therapy.stimaConsumoGiornaliero(recurrenceService: recurrenceService)
+        }
+
+        if totalLeftover <= 0 {
+            return 0
+        }
+        guard totalDailyUsage > 0 else {
+            return nil
+        }
+        return max(0, Int(floor(totalLeftover / totalDailyUsage)))
+    }
+
+    private func isRefillPriority(_ priority: CabinetSummaryPriority) -> Bool {
+        switch priority {
+        case .refillBeforeNextDose, .refillWithinToday, .refillSoon:
+            return true
+        default:
+            return false
+        }
     }
 
     func computeSummaryLines(
@@ -537,7 +723,34 @@ class CabinetViewModel: ObservableObject {
             }
         }
 
-        return active.filter { !hiddenPlaceholderIDs.contains(entryKey($0)) }
+        var visibleEntries: [MedicinePackage] = []
+        visibleEntries.reserveCapacity(grouped.count)
+
+        for groupEntries in grouped.values {
+            let candidates = groupEntries.filter { !hiddenPlaceholderIDs.contains(entryKey($0)) }
+            guard !candidates.isEmpty else { continue }
+            visibleEntries.append(preferredEntry(from: candidates))
+        }
+
+        return visibleEntries
+    }
+
+    private func preferredEntry(from entries: [MedicinePackage]) -> MedicinePackage {
+        entries.max { lhs, rhs in
+            // Prefer purchased entries over placeholders when both are still visible.
+            if lhs.isPurchased != rhs.isPurchased {
+                return !lhs.isPurchased && rhs.isPurchased
+            }
+
+            // Keep the most recent entry for the same medicine/package/cabinet tuple.
+            let lhsCreated = lhs.created_at ?? .distantPast
+            let rhsCreated = rhs.created_at ?? .distantPast
+            if lhsCreated != rhsCreated {
+                return lhsCreated < rhsCreated
+            }
+
+            return lhs.id.uuidString < rhs.id.uuidString
+        } ?? entries[0]
     }
 
     private func deadlineIndicator(for entry: MedicinePackage) -> MedicineRowView.Snapshot.DeadlineIndicator? {

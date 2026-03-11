@@ -2,7 +2,6 @@ import Foundation
 
 enum LiveActivityActionURLBuilder {
     enum Action: String {
-        case markTaken = "mark-taken"
         case remindLater = "remind-later"
     }
 

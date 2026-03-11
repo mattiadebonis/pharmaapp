@@ -14,7 +14,7 @@ struct AuthenticationGateView: View {
                 case .loading:
                     ProgressView("Caricamento...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.white)
+                        .background(Color(.systemBackground))
                 case .unauthenticated:
                     LoginView()
                 case .authenticated:

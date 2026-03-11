@@ -1,6 +1,5 @@
 import WidgetKit
 import SwiftUI
-import AppIntents
 
 struct CriticalDoseLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
@@ -46,22 +45,6 @@ struct CriticalDoseLiveActivityWidget: Widget {
                             .minimumScaleFactor(0.9)
                     }
 
-                    if #available(iOSApplicationExtension 17.0, *) {
-                        HStack(spacing: 8) {
-                            intentButton(
-                                title: "Assunto",
-                                intent: markTakenIntent(for: context.state),
-                                prominent: true,
-                                compact: false
-                            )
-                            intentButton(
-                                title: "Ricordamelo dopo",
-                                intent: remindLaterIntent(for: context.state),
-                                prominent: false,
-                                compact: false
-                            )
-                        }
-                    }
                 }
                 .padding(10)
                 .modifier(TherapyActivityBackgroundModifier())
@@ -95,7 +78,7 @@ struct CriticalDoseLiveActivityWidget: Widget {
                 }
                 DynamicIslandExpandedRegion(.center) {
                     if let confirmedName = context.state.confirmedTakenName {
-                        Text("\(confirmedName) segnato come assunto")
+                        Text("\(confirmedName) registrato")
                             .font(.subheadline.weight(.bold))
                             .lineLimit(2)
                             .minimumScaleFactor(0.85)
@@ -114,24 +97,7 @@ struct CriticalDoseLiveActivityWidget: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    if context.state.confirmedTakenName == nil {
-                        if #available(iOSApplicationExtension 17.0, *) {
-                            HStack(spacing: 8) {
-                                intentButton(
-                                    title: "Assunto",
-                                    intent: markTakenIntent(for: context.state),
-                                    prominent: true,
-                                    compact: true
-                                )
-                                intentButton(
-                                    title: "Ricordamelo dopo",
-                                    intent: remindLaterIntent(for: context.state),
-                                    prominent: false,
-                                    compact: true
-                                )
-                            }
-                        }
-                    }
+                    EmptyView()
                 }
             } compactLeading: {
                 if context.state.confirmedTakenName != nil {
@@ -142,7 +108,7 @@ struct CriticalDoseLiveActivityWidget: Widget {
                 }
             } compactTrailing: {
                 if context.state.confirmedTakenName != nil {
-                    Text("Assunto")
+                    Text("Registrato")
                         .font(.caption2.weight(.semibold))
                 } else {
                     Text(context.state.primaryScheduledAt, style: .timer)
@@ -170,7 +136,7 @@ struct CriticalDoseLiveActivityWidget: Widget {
             Image(systemName: "checkmark.circle.fill")
                 .font(.largeTitle)
                 .foregroundStyle(.green)
-            Text("\(medicineName) assunto")
+            Text("\(medicineName) registrato")
                 .font(.headline.weight(.bold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
@@ -202,60 +168,6 @@ struct CriticalDoseLiveActivityWidget: Widget {
             value += " · +\(state.additionalCount)"
         }
         return value
-    }
-
-    // MARK: - Intent Buttons
-
-    @available(iOSApplicationExtension 17.0, *)
-    @ViewBuilder
-    private func intentButton(
-        title: String,
-        intent: some AppIntent,
-        prominent: Bool,
-        compact: Bool
-    ) -> some View {
-        Button(intent: intent) {
-            Text(title)
-                .font((compact ? Font.footnote : Font.callout).weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
-                .allowsTightening(true)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, compact ? 7 : 9)
-                .padding(.horizontal, compact ? 8 : 10)
-        }
-        .foregroundStyle(prominent ? Color.white : Color.primary)
-        .background(
-            RoundedRectangle(cornerRadius: compact ? 10 : 11, style: .continuous)
-                .fill(prominent ? Color.accentColor : Color(.secondarySystemBackground))
-        )
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Intent Factories
-
-    private func markTakenIntent(
-        for state: CriticalDoseLiveActivityAttributes.ContentState
-    ) -> LiveActivityMarkTakenIntent {
-        LiveActivityMarkTakenIntent(
-            therapyId: state.primaryTherapyId,
-            medicineId: state.primaryMedicineId,
-            medicineName: state.primaryMedicineName,
-            doseText: state.primaryDoseText,
-            scheduledAt: state.primaryScheduledAt
-        )
-    }
-
-    private func remindLaterIntent(
-        for state: CriticalDoseLiveActivityAttributes.ContentState
-    ) -> LiveActivityRemindLaterIntent {
-        LiveActivityRemindLaterIntent(
-            therapyId: state.primaryTherapyId,
-            medicineId: state.primaryMedicineId,
-            medicineName: state.primaryMedicineName,
-            doseText: state.primaryDoseText,
-            scheduledAt: state.primaryScheduledAt
-        )
     }
 
     private static let hourFormatter: DateFormatter = {

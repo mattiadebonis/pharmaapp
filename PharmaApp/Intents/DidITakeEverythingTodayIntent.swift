@@ -2,7 +2,7 @@ import Foundation
 import AppIntents
 
 struct DidITakeEverythingTodayIntent: AppIntent {
-    static var title: LocalizedStringResource = "Ho preso tutto oggi"
+    static var title: LocalizedStringResource = "Stato terapie di oggi"
     static var description = IntentDescription("Controlla le dosi pianificate oggi confrontandole con i log di assunzione.")
     static var openAppWhenRun = false
 

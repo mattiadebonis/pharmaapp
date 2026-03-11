@@ -92,6 +92,12 @@ private struct SupabaseMedicinesGateway: MedicinesGateway {
         return RecurrenceRule(freq: "DAILY")
     }
 
+    func setLabel(medicine: Medicine, label: String?) throws {
+        let _ = medicine
+        let _ = label
+        throw SupabaseProviderError.notImplemented
+    }
+
     func setCustomStockThreshold(medicine: Medicine, threshold: Int32) throws {
         let _ = medicine
         let _ = threshold

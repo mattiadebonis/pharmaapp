@@ -108,8 +108,10 @@ private final class CoreDataMedicinesGateway: MedicinesGateway {
     }
 
     func fetchTherapyFormSnapshot() throws -> MedicinesTherapyFormSnapshot {
-        MedicinesTherapyFormSnapshot(
-            persons: try context.fetch(Person.extractPersons(includeAccount: true)),
+        let accountRequest = Person.fetchAccountPerson()
+        let accountPerson = try context.fetch(accountRequest)
+        return MedicinesTherapyFormSnapshot(
+            persons: accountPerson,
             doctors: try context.fetch(Doctor.extractDoctors())
         )
     }
@@ -191,6 +193,13 @@ private final class CoreDataMedicinesGateway: MedicinesGateway {
     func recurrenceRule(for therapy: Therapy) -> RecurrenceRule {
         let therapy = inContext(therapy)
         return RecurrenceManager(context: context).parseRecurrenceString(therapy.rrule ?? "")
+    }
+
+    func setLabel(medicine: Medicine, label: String?) throws {
+        let medicine = inContext(medicine)
+        let trimmed = label?.trimmingCharacters(in: .whitespacesAndNewlines)
+        medicine.etichetta = (trimmed?.isEmpty == false) ? trimmed : nil
+        try CoreDataWriteCommand.saveOrRollback(context)
     }
 
     func setCustomStockThreshold(medicine: Medicine, threshold: Int32) throws {
@@ -458,7 +467,7 @@ private final class CoreDataMedicinesGateway: MedicinesGateway {
         therapy.importance = input.importance
         therapy.person = input.person
         therapy.prescribingDoctor = input.prescribingDoctor
-        therapy.condizione = normalizedText(input.condition)
+        therapy.condizione = nil
         therapy.manual_intake_registration = input.manualIntake
         therapy.notifications_silenced = input.notificationsSilenced
         therapy.notification_level = input.notificationLevel.rawValue
@@ -556,12 +565,13 @@ private final class CoreDataSearchGateway: SearchGateway {
     }
 
     func fetchSnapshot() throws -> SearchDataSnapshot {
-        SearchDataSnapshot(
+        let accountRequest = Person.fetchAccountPerson()
+        return SearchDataSnapshot(
             medicines: try context.fetch(Medicine.extractMedicines()),
             medicineEntries: try context.fetch(MedicinePackage.extractEntries()),
             therapies: try context.fetch(Therapy.extractTherapies()),
             doctors: try context.fetch(Doctor.extractDoctors()),
-            persons: try context.fetch(Person.extractPersons()),
+            persons: try context.fetch(accountRequest),
             option: Option.current(in: context)
         )
     }
@@ -885,7 +895,7 @@ private final class CoreDataSettingsGateway: SettingsGateway {
         } else {
             person = Person(context: context)
             person.id = input.id ?? UUID()
-            person.is_account = input.isAccount
+            person.is_account = true
         }
 
         if person.id == nil {
@@ -893,9 +903,9 @@ private final class CoreDataSettingsGateway: SettingsGateway {
         }
         person.nome = input.name
         person.cognome = nil
-        person.condizione = normalizedText(input.condition)
-        person.is_account = input.isAccount
-        person.codice_fiscale = input.codiceFiscale
+        person.condizione = nil
+        person.is_account = true
+        person.codice_fiscale = nil
 
         do {
             try CoreDataWriteCommand.saveOrRollback(context)
@@ -1029,7 +1039,9 @@ private final class CoreDataSettingsGateway: SettingsGateway {
             name: normalizedPersonName(from: person),
             codiceFiscale: normalizedText(person.codice_fiscale),
             condition: normalizedText(person.condizione),
-            isAccount: person.is_account
+            isAccount: person.is_account,
+            providerName: nil,
+            accountStatus: nil
         )
     }
 

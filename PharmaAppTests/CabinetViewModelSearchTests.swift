@@ -76,4 +76,26 @@ final class CabinetViewModelSearchTests: XCTestCase {
 
         XCTAssertEqual(results.map(\.objectID), [entry.objectID])
     }
+
+    func testSearchEntriesMatchesMedicineLabel() throws {
+        let medicine = try TestCoreDataFactory.makeMedicine(context: context)
+        medicine.nome = "Bentelan"
+        medicine.etichetta = "Salvavita"
+        medicine.in_cabinet = true
+
+        let package = try TestCoreDataFactory.makePackage(context: context, medicine: medicine, numero: 10)
+        let entry = try TestCoreDataFactory.makeMedicinePackage(
+            context: context,
+            medicine: medicine,
+            package: package
+        )
+
+        let results = CabinetViewModel().searchEntries(
+            query: "salvavita",
+            entries: [entry],
+            option: nil
+        )
+
+        XCTAssertEqual(results.map(\.objectID), [entry.objectID])
+    }
 }

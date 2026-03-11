@@ -2,11 +2,9 @@ import Foundation
 import AppIntents
 
 struct LiveActivityMarkTakenIntent: AppIntent {
-    static var title: LocalizedStringResource = "Assunto"
-    static var description = IntentDescription("Segna come assunta la dose principale della Live Activity È quasi ora.")
+    static var title: LocalizedStringResource = "Registrazione automatica"
+    static var description = IntentDescription("La registrazione manuale è disattivata: la dose viene registrata automaticamente.")
     static var openAppWhenRun = false
-    @MainActor static var actionPerformer: CriticalDoseActionPerforming = GatewayCriticalDoseActionPerformer()
-    @MainActor static var liveActivityRefresher: CriticalDoseLiveActivityRefreshing = GatewayCriticalDoseLiveActivityRefresher()
 
     @Parameter(title: "Terapia")
     var therapyId: String
@@ -40,28 +38,7 @@ struct LiveActivityMarkTakenIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let content = CriticalDoseLiveActivityAttributes.ContentState(
-            primaryTherapyId: therapyId,
-            primaryMedicineId: medicineId,
-            primaryMedicineName: medicineName,
-            primaryDoseText: doseText,
-            primaryScheduledAt: scheduledAt,
-            additionalCount: 0,
-            subtitleDisplay: "\(medicineName) · \(doseText)",
-            expiryAt: scheduledAt
-        )
-
-        let success = await Self.actionPerformer.markTaken(contentState: content)
-
-        if success {
-            await Self.liveActivityRefresher.showConfirmationThenRefresh(medicineName: medicineName)
-        } else {
-            _ = await Self.liveActivityRefresher.refresh(reason: "intent-assunto", now: nil)
-        }
-
-        let dialog = success
-            ? "Perfetto, segnato come assunto."
-            : "Non sono riuscito a segnare l'assunzione in questo momento."
+        let dialog = "Le assunzioni vengono registrate automaticamente all'orario della terapia."
         return .result(dialog: SiriIntentSupport.dialog(dialog))
     }
 }

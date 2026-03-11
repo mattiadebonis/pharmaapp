@@ -19,8 +19,6 @@ struct DoctorDetailView: View {
     @State private var segreteriaNome: String
     @State private var segreteriaMail: String
     @State private var segreteriaTelefono: String
-    @State private var schedule: DoctorScheduleDTO
-    @State private var secretarySchedule: DoctorScheduleDTO
     @State private var saveErrorMessage: String?
     @State private var showDeleteConfirmation = false
     @State private var autosaveTask: Task<Void, Never>?
@@ -37,8 +35,6 @@ struct DoctorDetailView: View {
         _segreteriaNome = State(initialValue: doctor.secretaryName ?? "")
         _segreteriaMail = State(initialValue: doctor.secretaryEmail ?? "")
         _segreteriaTelefono = State(initialValue: doctor.secretaryPhone ?? "")
-        _schedule = State(initialValue: doctor.schedule)
-        _secretarySchedule = State(initialValue: doctor.secretarySchedule)
         _prescriptionMessageTemplate = State(initialValue: doctor.prescriptionMessageTemplate)
     }
 
@@ -54,10 +50,6 @@ struct DoctorDetailView: View {
                     .keyboardType(.phonePad)
                 TextField("Email", text: $mail)
                     .keyboardType(.emailAddress)
-            }
-
-            Section(header: Text("Orari dottore")) {
-                DoctorScheduleEditor(schedule: $schedule)
             }
 
             Section(header: Text("Segreteria")) {
@@ -123,9 +115,6 @@ struct DoctorDetailView: View {
         .onChange(of: segreteriaTelefono) { _ in
             scheduleAutosave()
         }
-        .onChange(of: schedule) { _ in
-            scheduleAutosave()
-        }
         .onDisappear {
             autosaveTask?.cancel()
             saveChanges()
@@ -167,11 +156,11 @@ struct DoctorDetailView: View {
                     email: normalizedValue(from: mail),
                     phone: normalizedValue(from: telefono),
                     specialization: normalizedValue(from: specializzazione),
-                    schedule: schedule,
+                    schedule: DoctorScheduleDTO(),
                     secretaryName: normalizedValue(from: segreteriaNome),
                     secretaryEmail: normalizedValue(from: segreteriaMail),
                     secretaryPhone: normalizedValue(from: segreteriaTelefono),
-                    secretarySchedule: secretarySchedule
+                    secretarySchedule: DoctorScheduleDTO()
                 )
             )
             saveErrorMessage = nil
@@ -230,8 +219,6 @@ struct DoctorDetailView: View {
             segreteriaNome = doctor.secretaryName ?? ""
             segreteriaMail = doctor.secretaryEmail ?? ""
             segreteriaTelefono = doctor.secretaryPhone ?? ""
-            schedule = doctor.schedule
-            secretarySchedule = doctor.secretarySchedule
             prescriptionMessageTemplate = doctor.prescriptionMessageTemplate
             saveErrorMessage = nil
         } catch {

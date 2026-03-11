@@ -3,7 +3,7 @@ import AppIntents
 
 struct WhatShouldITakeNowIntent: AppIntent {
     static var title: LocalizedStringResource = "Cosa devo prendere"
-    static var description = IntentDescription("Legge il prossimo evento di assunzione e suggerisce il comando rapido per registrarlo.")
+    static var description = IntentDescription("Legge il prossimo evento di assunzione previsto dalla terapia.")
     static var openAppWhenRun = false
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
@@ -19,7 +19,6 @@ struct WhatShouldITakeNowIntent: AppIntent {
         if let dose = next.doseSummary, !dose.isEmpty {
             message += ", dose \(dose)"
         }
-        message += ". Se vuoi registrarla subito, di 'Ho preso \(next.medicine.name)'."
 
         return .result(dialog: SiriIntentSupport.dialog(message))
     }

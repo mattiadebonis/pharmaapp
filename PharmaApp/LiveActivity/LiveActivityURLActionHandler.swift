@@ -14,9 +14,7 @@ final class LiveActivityURLActionHandler {
     }
 
     private enum Action: String {
-        case markTaken = "mark-taken"
         case remindLater = "remind-later"
-        case openHealthCard = "open-health-card"
     }
 
     private let actionPerformer: CriticalDoseActionPerforming
@@ -50,20 +48,10 @@ final class LiveActivityURLActionHandler {
         }
 
         switch action {
-        case .markTaken:
-            guard let state = makeState(from: queryValues) else { return true }
-            let success = actionPerformer.markTaken(contentState: state)
-            if success {
-                await liveActivityRefresher.showConfirmationThenRefresh(medicineName: state.primaryMedicineName)
-            } else {
-                _ = await liveActivityRefresher.refresh(reason: "url-\(action.rawValue)", now: nil)
-            }
         case .remindLater:
             guard let state = makeState(from: queryValues) else { return true }
             _ = await actionPerformer.remindLater(contentState: state, now: now)
             _ = await liveActivityRefresher.refresh(reason: "url-\(action.rawValue)", now: nil)
-        case .openHealthCard:
-            IntentsGatewayBridge.gateway.queueRoute(.codiceFiscaleFullscreen)
         }
 
         return true
