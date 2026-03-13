@@ -1,5 +1,4 @@
 import Foundation
-import AuthenticationServices
 
 @MainActor
 private struct SupabaseMedicinesGateway: MedicinesGateway {
@@ -29,6 +28,26 @@ private struct SupabaseMedicinesGateway: MedicinesGateway {
     @discardableResult
     func createCabinet(name: String) throws -> Cabinet {
         let _ = name
+        throw SupabaseProviderError.notImplemented
+    }
+
+    @discardableResult
+    func createCustomFilter(name: String, query: String) throws -> CabinetCustomFilterRecord {
+        let _ = name
+        let _ = query
+        throw SupabaseProviderError.notImplemented
+    }
+
+    @discardableResult
+    func updateCustomFilter(id: UUID, name: String, query: String) throws -> CabinetCustomFilterRecord {
+        let _ = id
+        let _ = name
+        let _ = query
+        throw SupabaseProviderError.notImplemented
+    }
+
+    func deleteCustomFilter(id: UUID) throws {
+        let _ = id
         throw SupabaseProviderError.notImplemented
     }
 
@@ -453,42 +472,6 @@ private enum SupabaseProviderError: LocalizedError {
 }
 
 @MainActor
-private final class SupabaseAuthGateway: AuthGateway {
-    var currentUser: AuthUser? { nil }
-
-    func observeAuthState() -> AsyncStream<AuthUser?> {
-        AsyncStream { continuation in
-            continuation.yield(nil)
-            continuation.finish()
-        }
-    }
-
-    func signInWithGoogle(idToken: String, accessToken: String) async throws {
-        throw SupabaseProviderError.notImplemented
-    }
-
-    func signInWithApple(idToken: String, rawNonce: String, fullName: PersonNameComponents?) async throws {
-        throw SupabaseProviderError.notImplemented
-    }
-
-    func signOut() throws {
-        throw SupabaseProviderError.notImplemented
-    }
-
-    func updateCurrentUser(displayName: String?, photoURL: URL?) async throws {
-        throw SupabaseProviderError.notImplemented
-    }
-
-    func isConfigured() -> Bool {
-        false
-    }
-
-    func googleClientID() -> String? {
-        nil
-    }
-}
-
-@MainActor
 private final class SupabaseBackupGateway: BackupGateway {
     var state: BackupGatewayState {
         BackupGatewayState(
@@ -557,7 +540,7 @@ final class SupabaseAppDataProvider: AppDataProvider {
     let settings: any SettingsGateway = SupabaseSettingsGateway()
     let notifications: any NotificationsGateway = SupabaseNotificationsGateway()
     let intents: any IntentsGateway = SupabaseIntentsGateway()
-    let auth: any AuthGateway = SupabaseAuthGateway()
+    let auth: any AuthGateway = SupabaseAuthGatewayAdapter()
     let backup: any BackupGateway = SupabaseBackupGateway()
 
     func observe(scopes: Set<DataScope>) -> AsyncStream<DataChangeEvent> {

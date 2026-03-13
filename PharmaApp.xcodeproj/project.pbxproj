@@ -16,8 +16,8 @@
 		7826F6952F27DD78007E55C4 /* FirebaseAnalyticsCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7826F6942F27DD78007E55C4 /* FirebaseAnalyticsCore */; };
 		7826F6972F27DD78007E55C4 /* FirebaseAnalyticsIdentitySupport in Frameworks */ = {isa = PBXBuildFile; productRef = 7826F6962F27DD78007E55C4 /* FirebaseAnalyticsIdentitySupport */; };
 		7826F6992F27EE99007E55C4 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 7826F6982F27EE99007E55C4 /* FirebaseAuth */; };
-		A1C8D3E62F99200100AA0001 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = A1C8D3E52F99200100AA0001 /* Supabase */; };
 		A1B2C301D4E5F60789000001 /* PharmaAppLiveActivityExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F60789000003 /* PharmaAppLiveActivityExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A1C8D3E62F99200100AA0001 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = A1C8D3E52F99200100AA0001 /* Supabase */; };
 		D881D84BDE1CAA89D28F6787 /* Code39 in Frameworks */ = {isa = PBXBuildFile; productRef = 3E175392B5572D45497B960D /* Code39 */; };
 /* End PBXBuildFile section */
 
@@ -523,9 +523,10 @@
 				DEVELOPMENT_ASSET_PATHS = "\"PharmaApp/Preview Content\"";
 				DEVELOPMENT_TEAM = P8V8X3MUBK;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				GOOGLE_CLIENT_ID = REPLACE_WITH_FIREBASE_CLIENT_ID;
-				GOOGLE_REVERSED_CLIENT_ID = REPLACE_WITH_FIREBASE_REVERSED_CLIENT_ID;
+				GENERATE_INFOPLIST_FILE = NO;
+					GOOGLE_CLIENT_ID = "64986489607-ump6cg95b0ltfff8ifsu6mcd2q5hbpmg.apps.googleusercontent.com";
+					GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.64986489607-ump6cg95b0ltfff8ifsu6mcd2q5hbpmg";
+				INFOPLIST_FILE = "PharmaApp-Info.plist";
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = pharmaapp;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = pharmaapp;
@@ -567,9 +568,9 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = auto;
+				SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrdGhhdG52emFjbmVocmpxeWptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzOTgxMTcsImV4cCI6MjA4ODk3NDExN30.-Md3H9V6INoj27nk8IaZ4etk76SDOfIWhWeNzVEMhAY";
+				SUPABASE_URL = "https://lkthatnvzacnehrjqyjm.supabase.co";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
-				SUPABASE_PUBLISHABLE_KEY = "";
-				SUPABASE_URL = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,7";
@@ -589,9 +590,10 @@
 				DEVELOPMENT_ASSET_PATHS = "\"PharmaApp/Preview Content\"";
 				DEVELOPMENT_TEAM = P8V8X3MUBK;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				GOOGLE_CLIENT_ID = REPLACE_WITH_FIREBASE_CLIENT_ID;
-				GOOGLE_REVERSED_CLIENT_ID = REPLACE_WITH_FIREBASE_REVERSED_CLIENT_ID;
+				GENERATE_INFOPLIST_FILE = NO;
+					GOOGLE_CLIENT_ID = "64986489607-ump6cg95b0ltfff8ifsu6mcd2q5hbpmg.apps.googleusercontent.com";
+					GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.64986489607-ump6cg95b0ltfff8ifsu6mcd2q5hbpmg";
+				INFOPLIST_FILE = "PharmaApp-Info.plist";
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = pharmaapp;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = pharmaapp;
@@ -633,9 +635,9 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = auto;
+				SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrdGhhdG52emFjbmVocmpxeWptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzOTgxMTcsImV4cCI6MjA4ODk3NDExN30.-Md3H9V6INoj27nk8IaZ4etk76SDOfIWhWeNzVEMhAY";
+				SUPABASE_URL = "https://lkthatnvzacnehrjqyjm.supabase.co";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
-				SUPABASE_PUBLISHABLE_KEY = "";
-				SUPABASE_URL = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,7";

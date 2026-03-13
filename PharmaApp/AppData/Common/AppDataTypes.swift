@@ -6,6 +6,7 @@ enum DataScope: String, CaseIterable, Hashable {
     case logs
     case stocks
     case cabinets
+    case customFilters
     case people
     case doctors
     case options

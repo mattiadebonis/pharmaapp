@@ -33,7 +33,7 @@ final class AuthViewModel: ObservableObject {
         legacyAuthStore: LegacyAuthStoreProtocol = LegacyAuthStore(),
         presentingViewControllerProvider: (() -> UIViewController?)? = nil
     ) {
-        self.authGateway = authGateway ?? FirebaseAuthGatewayAdapter()
+        self.authGateway = authGateway ?? SupabaseAuthGatewayAdapter()
         self.googleSignInClient = googleSignInClient
         self.legacyAuthStore = legacyAuthStore
         self.presentingViewControllerProvider = presentingViewControllerProvider ?? { UIApplication.topViewController() }
@@ -93,7 +93,7 @@ final class AuthViewModel: ObservableObject {
 
     func signInWithGoogle() {
         guard let clientID = authGateway.googleClientID() else {
-            errorMessage = "Google Sign-In non configurato. Imposta CLIENT_ID e REVERSED_CLIENT_ID di Firebase."
+            errorMessage = "Google Sign-In non configurato. Imposta GOOGLE_CLIENT_ID e GOOGLE_REVERSED_CLIENT_ID (OAuth iOS)."
             return
         }
 
@@ -198,7 +198,7 @@ final class AuthViewModel: ObservableObject {
         } catch {
             pendingProfileFallback = nil
             guard !Self.isCancellation(error) else { return }
-            recordAuthError(error, context: "apple.firebaseSignIn")
+            recordAuthError(error, context: "apple.signIn")
             errorMessage = localizedMessage(for: error)
         }
     }
@@ -217,7 +217,7 @@ final class AuthViewModel: ObservableObject {
         pendingProfileFallback = nil
 
         Task {
-            await backfillFirebaseProfileIfNeeded(original: authUser, enriched: enrichedUser)
+            await backfillAuthProfileIfNeeded(original: authUser, enriched: enrichedUser)
         }
     }
 
@@ -253,7 +253,7 @@ final class AuthViewModel: ObservableObject {
         )
     }
 
-    private func backfillFirebaseProfileIfNeeded(original: AuthUser, enriched: AuthUser) async {
+    private func backfillAuthProfileIfNeeded(original: AuthUser, enriched: AuthUser) async {
         let needsDisplayName = Self.normalizedValue(from: original.fullName) == nil
             && Self.normalizedValue(from: enriched.fullName) != nil
         let needsPhoto = original.imageURL == nil && enriched.imageURL != nil

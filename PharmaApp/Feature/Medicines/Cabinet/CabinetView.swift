@@ -7,6 +7,20 @@ struct CabinetView: View {
         let id: UUID
     }
 
+    private enum CustomFilterEditorMode: Identifiable {
+        case create
+        case edit(CabinetCustomFilterRecord)
+
+        var id: String {
+            switch self {
+            case .create:
+                return "create"
+            case .edit(let filter):
+                return "edit-\(filter.id.uuidString)"
+            }
+        }
+    }
+
     private struct ShelfViewState {
         let pinnedMedicineEntries: [CabinetViewModel.ShelfEntry]
         let cabinetEntries: [CabinetViewModel.ShelfEntry]
@@ -42,20 +56,15 @@ struct CabinetView: View {
         case critical
 
         var systemImage: String {
-            switch self {
-            case .ok:
-                return "checkmark.circle.fill"
-            case .protected, .warning, .critical:
-                return "shield.fill"
-            }
+            "shield.fill"
         }
 
         var color: Color {
             switch self {
-            case .ok, .protected:
+            case .ok:
                 return .green
-            case .warning:
-                return .yellow
+            case .protected, .warning:
+                return .orange
             case .critical:
                 return .red
             }
@@ -67,6 +76,144 @@ struct CabinetView: View {
         let indicator: StockFilterIndicator
     }
 
+    private struct CustomFilterEditorSheet: View {
+        let mode: CustomFilterEditorMode
+        let previewResolver: (String) -> FilterChipPresentation?
+        let parser: CabinetCustomFilterQueryParser
+        let onSave: (String, String) -> Void
+
+        @Environment(\.dismiss) private var dismiss
+        @State private var name: String
+        @State private var query: String
+        @State private var validationError: String?
+        @State private var preview: FilterChipPresentation?
+
+        init(
+            mode: CustomFilterEditorMode,
+            previewResolver: @escaping (String) -> FilterChipPresentation?,
+            parser: CabinetCustomFilterQueryParser,
+            onSave: @escaping (String, String) -> Void
+        ) {
+            self.mode = mode
+            self.previewResolver = previewResolver
+            self.parser = parser
+            self.onSave = onSave
+
+            switch mode {
+            case .create:
+                _name = State(initialValue: "")
+                _query = State(initialValue: "")
+            case .edit(let filter):
+                _name = State(initialValue: filter.name)
+                _query = State(initialValue: filter.query)
+            }
+        }
+
+        var body: some View {
+            NavigationStack {
+                Form {
+                    Section("Nome filtro") {
+                        TextField("Es. Scorte casa", text: $name)
+                            .textInputAutocapitalization(.words)
+                        if trimmedName.isEmpty {
+                            Text("Nome obbligatorio.")
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
+                    }
+
+                    Section("Query") {
+                        TextField("Es. stock:low AND NOT cabinet:\"Ufficio\"", text: $query, axis: .vertical)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .lineLimit(2...5)
+                        Text("Campi: name, label, stock, therapy, rx, cabinet, deadline. Supporta AND, OR, NOT e parentesi.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        if let validationError {
+                            Text(validationError)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
+                    }
+
+                    if let preview {
+                        Section("Anteprima") {
+                            HStack(spacing: 8) {
+                                Text("\(preview.count) farmaci")
+                                Spacer()
+                                Image(systemName: preview.indicator.systemImage)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(preview.indicator.color)
+                            }
+                        }
+                    }
+                }
+                .navigationTitle(modeTitle)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Annulla") { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Salva") {
+                            onSave(trimmedName, trimmedQuery)
+                            dismiss()
+                        }
+                        .disabled(isSaveDisabled)
+                    }
+                }
+                .onAppear {
+                    recomputeValidationAndPreview()
+                }
+                .onChange(of: query) { _ in
+                    recomputeValidationAndPreview()
+                }
+            }
+        }
+
+        private var modeTitle: String {
+            switch mode {
+            case .create:
+                return "Nuovo filtro"
+            case .edit:
+                return "Modifica filtro"
+            }
+        }
+
+        private var trimmedName: String {
+            name.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        private var trimmedQuery: String {
+            query.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        private var isSaveDisabled: Bool {
+            trimmedName.isEmpty || trimmedQuery.isEmpty || validationError != nil
+        }
+
+        private func recomputeValidationAndPreview() {
+            let query = trimmedQuery
+            guard !query.isEmpty else {
+                validationError = "Query obbligatoria."
+                preview = nil
+                return
+            }
+
+            do {
+                _ = try parser.parse(query)
+                validationError = nil
+                preview = previewResolver(query)
+            } catch let error as CabinetCustomFilterLanguageError {
+                validationError = error.errorDescription
+                preview = nil
+            } catch {
+                validationError = "Query non valida."
+                preview = nil
+            }
+        }
+    }
+
     @EnvironmentObject private var appRouter: AppRouter
     @EnvironmentObject private var appDataStore: AppDataStore
     @EnvironmentObject private var favoritesStore: FavoritesStore
@@ -76,6 +223,7 @@ struct CabinetView: View {
     @State private var medicinePackages: [MedicinePackage] = []
     @State private var options: [Option] = []
     @State private var cabinets: [Cabinet] = []
+    @State private var customFilters: [CabinetCustomFilterRecord] = []
 
     @State private var activeFilter: CabinetFilter?
     @State private var activeCabinetID: String?
@@ -85,6 +233,8 @@ struct CabinetView: View {
     @State private var isCatalogAddPresented = false
     @State private var shouldAutoStartCatalogScan = false
     @State private var isProfilePresented = false
+    @State private var customFilterEditorMode: CustomFilterEditorMode?
+    @State private var pendingCustomFilterDeletion: CabinetCustomFilterRecord?
     @State private var selectedEntrySelection: EntrySelection?
     @State private var detailSheetDetent: PresentationDetent = .fraction(0.75)
     @State private var cachedSummaryLines: [String] = [
@@ -97,6 +247,9 @@ struct CabinetView: View {
     @State private var cachedShelfState: ShelfViewState = .empty
     @State private var rowSnapshotsByEntryID: [String: CabinetViewModel.CabinetRowSnapshot] = [:]
     @State private var syncWorkItem: DispatchWorkItem?
+
+    private let customFilterParser = CabinetCustomFilterQueryParser()
+    private let customFilterEvaluator = CabinetCustomFilterEvaluator()
 
     var body: some View {
         cabinetRootView
@@ -137,7 +290,7 @@ struct CabinetView: View {
                 recomputeAllCachedState()
                 handlePendingRoute(appRouter.pendingRoute)
                 for await _ in appDataStore.provider.observe(
-                    scopes: [.medicines, .therapies, .logs, .stocks, .cabinets, .options]
+                    scopes: [.medicines, .therapies, .logs, .stocks, .cabinets, .options, .customFilters]
                 ) {
                     reloadFetchedState()
                     recomputeAllCachedState()
@@ -187,10 +340,22 @@ struct CabinetView: View {
             medicinePackages = snapshot.medicinePackages
             options = snapshot.options
             cabinets = snapshot.cabinets
+            customFilters = snapshot.customFilters.sorted { lhs, rhs in
+                if lhs.position == rhs.position {
+                    return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                }
+                return lhs.position < rhs.position
+            }
         } catch {
             medicinePackages = []
             options = []
             cabinets = []
+            customFilters = []
+        }
+
+        if let activeFilter,
+           !availableFilters.contains(where: { $0.id == activeFilter.id }) {
+            self.activeFilter = nil
         }
     }
 
@@ -243,6 +408,42 @@ struct CabinetView: View {
                 NavigationStack {
                     ProfileView()
                 }
+            }
+            .sheet(item: $customFilterEditorMode) { mode in
+                CustomFilterEditorSheet(
+                    mode: mode,
+                    previewResolver: previewPresentation(for:),
+                    parser: customFilterParser
+                ) { name, query in
+                    switch mode {
+                    case .create:
+                        createCustomFilter(name: name, query: query)
+                    case .edit(let filter):
+                        updateCustomFilter(filterID: filter.id, name: name, query: query)
+                    }
+                }
+            }
+            .confirmationDialog(
+                "Eliminare questo filtro?",
+                isPresented: Binding(
+                    get: { pendingCustomFilterDeletion != nil },
+                    set: { newValue in
+                        if !newValue {
+                            pendingCustomFilterDeletion = nil
+                        }
+                    }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Elimina", role: .destructive) {
+                    guard let filter = pendingCustomFilterDeletion else { return }
+                    deleteCustomFilter(filterID: filter.id)
+                }
+                Button("Annulla", role: .cancel) {
+                    pendingCustomFilterDeletion = nil
+                }
+            } message: {
+                Text(pendingCustomFilterDeletion?.name ?? "")
             }
     }
 
@@ -521,12 +722,14 @@ struct CabinetView: View {
         case stock
         case therapies
         case label(String)
+        case custom(CabinetCustomFilterRecord)
 
         var id: String {
             switch self {
             case .stock: return "stock"
             case .therapies: return "therapies"
             case .label(let l): return "label-\(l.lowercased())"
+            case .custom(let filter): return "custom-\(filter.id.uuidString)"
             }
         }
 
@@ -535,57 +738,30 @@ struct CabinetView: View {
             case .stock: return "Scorte"
             case .therapies: return "Terapie"
             case .label(let l): return l
+            case .custom(let filter): return filter.name
             }
         }
     }
 
     private var availableFilters: [CabinetFilter] {
-        var filters: [CabinetFilter] = []
-
-        let hasEntries = medicinePackages.contains { entry in
-            !entry.isDeleted
-        }
-        if hasEntries {
-            filters.append(.stock)
-        }
-
-        let hasTherapies = medicinePackages.contains { entry in
-            guard !entry.isDeleted else { return false }
-            guard let therapies = entry.medicine.therapies else { return false }
-            return !therapies.isEmpty
-        }
-        if hasTherapies {
-            filters.append(.therapies)
-        }
-
-        var labelsByKey: [String: String] = [:]
-        for entry in medicinePackages where !entry.isDeleted {
-            for label in entry.medicine.displayLabels {
-                let key = label.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                if labelsByKey[key] == nil {
-                    labelsByKey[key] = label
+        customFilters
+            .sorted(by: { lhs, rhs in
+                if lhs.position == rhs.position {
+                    return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
                 }
-            }
-        }
-        for label in labelsByKey.values.sorted(by: { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }) {
-            filters.append(.label(label))
-        }
-
-        return filters
+                return lhs.position < rhs.position
+            })
+            .map(CabinetFilter.custom)
     }
 
     private func filteredShelfState(_ viewState: ShelfViewState) -> ShelfViewState {
         guard let filter = activeFilter else { return viewState }
-
-        func matches(_ entry: MedicinePackage) -> Bool {
-            matchesFilter(filter, medicine: entry.medicine)
-        }
+        let matchingIDs = matchingMedicineIDs(for: filter)
 
         func filterEntries(_ entries: [CabinetViewModel.ShelfEntry]) -> [CabinetViewModel.ShelfEntry] {
             entries.filter { shelfEntry in
                 if case .medicinePackage(let mp) = shelfEntry.kind {
-                    return matches(mp)
+                    return matchingIDs.contains(mp.medicine.id)
                 }
                 return false
             }
@@ -606,16 +782,16 @@ struct CabinetView: View {
     @ViewBuilder
     private var filterChipsSection: some View {
         let filters = availableFilters
-        if !filters.isEmpty && !isShelfEmpty(cachedShelfState) {
+        if !isShelfEmpty(cachedShelfState) {
             Section {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(filters) { filter in
-                            let isActive = activeFilter == filter
+                            let isActive = activeFilter?.id == filter.id
                             let count = filterCount(filter)
                             Button {
                                 withAnimation(.easeInOut(duration: 0.2)) {
-                                    if activeFilter == filter {
+                                    if activeFilter?.id == filter.id {
                                         activeFilter = nil
                                     } else {
                                         activeFilter = filter
@@ -623,17 +799,15 @@ struct CabinetView: View {
                                 }
                             } label: {
                                 HStack(spacing: 5) {
+                                    Text(filter.title)
+                                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    Text("\(count)")
+                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                        .foregroundStyle(isActive ? Color.white.opacity(0.7) : Color(.tertiaryLabel))
                                     if let indicator = filterIndicator(for: filter) {
                                         Image(systemName: indicator.systemImage)
                                             .font(.system(size: 12, weight: .semibold))
                                             .foregroundStyle(indicator.color)
-                                    }
-                                    Text(filter.title)
-                                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                    if count > 0 {
-                                        Text("\(count)")
-                                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                            .foregroundStyle(isActive ? Color.white.opacity(0.7) : Color(.tertiaryLabel))
                                     }
                                 }
                                 .foregroundStyle(isActive ? Color.white : Color(.secondaryLabel))
@@ -649,7 +823,18 @@ struct CabinetView: View {
                                 )
                             }
                             .buttonStyle(.plain)
+                            .contextMenu {
+                                if case .custom(let customFilter) = filter {
+                                    Button("Modifica") {
+                                        customFilterEditorMode = .edit(customFilter)
+                                    }
+                                    Button("Elimina", role: .destructive) {
+                                        pendingCustomFilterDeletion = customFilter
+                                    }
+                                }
+                            }
                         }
+                        addCustomFilterChip
                     }
                     .padding(.horizontal, Layout.horizontalInset)
                     .padding(.vertical, 4)
@@ -660,6 +845,28 @@ struct CabinetView: View {
             .listRowSeparator(.hidden)
             .listSectionSeparator(.hidden)
         }
+    }
+
+    private var addCustomFilterChip: some View {
+        Button {
+            customFilterEditorMode = .create
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color(.secondaryLabel))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color(.secondarySystemGroupedBackground))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(Color(.separator), lineWidth: 0.5)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Crea filtro")
     }
 
     // MARK: - Helpers
@@ -721,27 +928,149 @@ struct CabinetView: View {
         for filter: CabinetFilter,
         stockStatuses: [UUID: StockStatus]? = nil
     ) -> [Medicine] {
-        uniqueMedicines.filter { matchesFilter(filter, medicine: $0, stockStatuses: stockStatuses) }
+        let ids = matchingMedicineIDs(for: filter, stockStatuses: stockStatuses)
+        return uniqueMedicines.filter { ids.contains($0.id) }
     }
 
-    private func matchesFilter(
-        _ filter: CabinetFilter,
-        medicine: Medicine,
+    private func matchingMedicineIDs(
+        for filter: CabinetFilter,
         stockStatuses: [UUID: StockStatus]? = nil
-    ) -> Bool {
+    ) -> Set<UUID> {
         switch filter {
         case .stock:
-            return stockFilterMedicineIDs(using: stockStatuses).contains(medicine.id)
+            return stockFilterMedicineIDs(using: stockStatuses)
         case .therapies:
-            return !(medicine.therapies ?? []).isEmpty
+            return Set(
+                uniqueMedicines.compactMap { medicine in
+                    !(medicine.therapies ?? []).isEmpty ? medicine.id : nil
+                }
+            )
         case .label(let label):
-            let key = label.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return medicine.displayLabels.contains {
-                $0.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-                    .trimmingCharacters(in: .whitespacesAndNewlines) == key
-            }
+            let key = normalizedFilterToken(label)
+            return Set(
+                uniqueMedicines.compactMap { medicine in
+                    medicine.displayLabels.contains {
+                        normalizedFilterToken($0) == key
+                    } ? medicine.id : nil
+                }
+            )
+        case .custom(let filter):
+            return customFilterMedicineIDs(filter, stockStatuses: stockStatuses)
         }
+    }
+
+    private func customFilterMedicineIDs(
+        _ filter: CabinetCustomFilterRecord,
+        stockStatuses: [UUID: StockStatus]? = nil
+    ) -> Set<UUID> {
+        let trimmedQuery = filter.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else { return [] }
+        guard let expression = try? customFilterParser.parse(trimmedQuery) else { return [] }
+
+        let resolvedStatuses = stockStatuses ?? cachedMedicineStockStatuses
+        return Set(
+            uniqueMedicines.compactMap { medicine in
+                let context = customFilterContext(for: medicine, stockStatuses: resolvedStatuses)
+                return customFilterEvaluator.matches(expression, in: context) ? medicine.id : nil
+            }
+        )
+    }
+
+    private func normalizedFilterToken(
+        _ token: String
+    ) -> String {
+        token
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func customFilterContext(
+        for medicine: Medicine,
+        stockStatuses: [UUID: StockStatus]
+    ) -> CabinetCustomFilterContext {
+        let stock: CabinetCustomFilterStockValue
+        switch stockStatus(for: medicine, from: stockStatuses) {
+        case .ok:
+            stock = .ok
+        case .critical:
+            stock = .out
+        case .low, .unknown:
+            stock = .low
+        }
+
+        return CabinetCustomFilterContext(
+            name: medicine.nome,
+            labels: medicine.displayLabels,
+            stock: stock,
+            hasTherapy: !(medicine.therapies ?? []).isEmpty,
+            requiresPrescription: medicine.obbligo_ricetta,
+            cabinetNames: cabinetNames(for: medicine),
+            deadline: deadlineValue(for: medicine)
+        )
+    }
+
+    private func cabinetNames(for medicine: Medicine) -> [String] {
+        let names = medicinePackages.compactMap { entry -> String? in
+            guard !entry.isDeleted else { return nil }
+            guard entry.medicine.id == medicine.id else { return nil }
+            return entry.cabinet?.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return names.filter { !$0.isEmpty }
+    }
+
+    private func deadlineValue(for medicine: Medicine) -> CabinetCustomFilterDeadlineValue {
+        let statuses = medicinePackages.compactMap { entry -> Medicine.DeadlineStatus? in
+            guard !entry.isDeleted else { return nil }
+            guard entry.medicine.id == medicine.id else { return nil }
+            return entry.deadlineStatus
+        }
+
+        if statuses.contains(.expired) {
+            return .expired
+        }
+        if statuses.contains(.expiringSoon) {
+            return .soon
+        }
+        if statuses.contains(.ok) {
+            return .ok
+        }
+        return .none
+    }
+
+    private func previewPresentation(for query: String) -> FilterChipPresentation? {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else { return nil }
+        guard (try? customFilterParser.parse(trimmedQuery)) != nil else { return nil }
+
+        let temporaryFilter = CabinetCustomFilterRecord(
+            id: UUID(),
+            ownerUserId: UserIdentityProvider.shared.userId,
+            name: "Anteprima",
+            query: trimmedQuery,
+            position: 0,
+            createdAt: nil,
+            updatedAt: nil,
+            deletedAt: nil
+        )
+        let statuses = resolvedStockStatuses()
+        let matchingIDs = customFilterMedicineIDs(temporaryFilter, stockStatuses: statuses)
+        let medicines = uniqueMedicines.filter { matchingIDs.contains($0.id) }
+        let kpi = viewModel.computeSummaryDisplayData(
+            medicines: medicines,
+            option: options.first,
+            pharmacy: nil
+        ).kpi
+        return FilterChipPresentation(count: medicines.count, indicator: stockFilterIndicator(for: kpi))
+    }
+
+    private func resolvedStockStatuses() -> [UUID: StockStatus] {
+        if !cachedMedicineStockStatuses.isEmpty {
+            return cachedMedicineStockStatuses
+        }
+        return Dictionary(uniqueKeysWithValues: uniqueMedicines.map { medicine in
+            (medicine.id, computeStockStatus(for: medicine))
+        })
     }
 
     private func stockFilterMedicineIDs(using stockStatuses: [UUID: StockStatus]? = nil) -> Set<UUID> {
@@ -814,6 +1143,50 @@ struct CabinetView: View {
             newCabinetName = ""
         } catch {
             // Keep current behavior: fail silently without interrupting the sheet flow.
+        }
+    }
+
+    private func createCustomFilter(name: String, query: String) {
+        do {
+            let created = try appDataStore.provider.medicines.createCustomFilter(name: name, query: query)
+            if activeFilter == nil {
+                activeFilter = .custom(created)
+            }
+            reloadFetchedState()
+            recomputeAllCachedState()
+        } catch {
+            // Keep current behavior: fail silently in this flow.
+        }
+    }
+
+    private func updateCustomFilter(filterID: UUID, name: String, query: String) {
+        do {
+            let updated = try appDataStore.provider.medicines.updateCustomFilter(
+                id: filterID,
+                name: name,
+                query: query
+            )
+            if case .custom(let activeCustom)? = activeFilter, activeCustom.id == filterID {
+                activeFilter = .custom(updated)
+            }
+            reloadFetchedState()
+            recomputeAllCachedState()
+        } catch {
+            // Keep current behavior: fail silently in this flow.
+        }
+    }
+
+    private func deleteCustomFilter(filterID: UUID) {
+        do {
+            try appDataStore.provider.medicines.deleteCustomFilter(id: filterID)
+            if case .custom(let activeCustom)? = activeFilter, activeCustom.id == filterID {
+                activeFilter = nil
+            }
+            pendingCustomFilterDeletion = nil
+            reloadFetchedState()
+            recomputeAllCachedState()
+        } catch {
+            // Keep current behavior: fail silently in this flow.
         }
     }
 

@@ -11,6 +11,7 @@ PharmaApp/AppData/CoreData/Notifications/NotificationScheduler.swift
 PharmaApp/Backup/BackupCoordinator.swift
 PharmaApp/Data/Cabinet.swift
 PharmaApp/Data/CabinetMembership.swift
+PharmaApp/Data/CustomFilter.swift
 PharmaApp/Data/DataManager.swift
 PharmaApp/Data/Doctor.swift
 PharmaApp/Data/Dose.swift

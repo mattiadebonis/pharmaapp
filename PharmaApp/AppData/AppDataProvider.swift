@@ -5,6 +5,18 @@ struct MedicinesCabinetSnapshot {
     let medicinePackages: [MedicinePackage]
     let options: [Option]
     let cabinets: [Cabinet]
+    let customFilters: [CabinetCustomFilterRecord]
+}
+
+struct CabinetCustomFilterRecord: Identifiable, Hashable {
+    let id: UUID
+    var ownerUserId: String
+    var name: String
+    var query: String
+    var position: Int
+    var createdAt: Date?
+    var updatedAt: Date?
+    var deletedAt: Date?
 }
 
 struct MedicinesDetailSnapshot {
@@ -69,6 +81,11 @@ protocol MedicinesGateway {
 
     @discardableResult
     func createCabinet(name: String) throws -> Cabinet
+    @discardableResult
+    func createCustomFilter(name: String, query: String) throws -> CabinetCustomFilterRecord
+    @discardableResult
+    func updateCustomFilter(id: UUID, name: String, query: String) throws -> CabinetCustomFilterRecord
+    func deleteCustomFilter(id: UUID) throws
     func moveEntry(entryId: UUID, toCabinet cabinetId: UUID?) throws
     func hasSufficientStockForIntake(entryId: UUID) -> Bool
     func units(for package: Package) -> Int

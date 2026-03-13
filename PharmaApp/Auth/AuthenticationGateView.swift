@@ -3,7 +3,7 @@ import SwiftUI
 struct AuthenticationGateView: View {
     @EnvironmentObject private var auth: AuthViewModel
     // Temporary local bypass while Firebase/Apple auth configuration is being completed.
-    private let bypassAuthentication = true
+    private let bypassAuthentication = false
 
     var body: some View {
         Group {

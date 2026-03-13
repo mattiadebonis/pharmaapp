@@ -15,7 +15,8 @@ enum TestCoreDataFactory {
         "DoseEvent",
         "Person",
         "Cabinet",
-        "Option"
+        "Option",
+        "CustomFilter"
     ]
 
     static func makeModel() throws -> NSManagedObjectModel {

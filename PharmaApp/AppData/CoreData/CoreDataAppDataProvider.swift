@@ -86,10 +86,12 @@ private final class CoreDataMedicinesGateway: MedicinesGateway {
     }
 
     func fetchCabinetSnapshot() throws -> MedicinesCabinetSnapshot {
-        MedicinesCabinetSnapshot(
+        let ownerUserID = UserIdentityProvider.shared.userId
+        return MedicinesCabinetSnapshot(
             medicinePackages: try context.fetch(MedicinePackage.extractEntries()),
             options: try context.fetch(Option.extractOptions()),
-            cabinets: try context.fetch(Cabinet.extractCabinets())
+            cabinets: try context.fetch(Cabinet.extractCabinets()),
+            customFilters: try fetchCustomFilterRecords(ownerUserID: ownerUserID)
         )
     }
 
@@ -148,6 +150,81 @@ private final class CoreDataMedicinesGateway: MedicinesGateway {
         cabinet.created_at = Date()
         try CoreDataWriteCommand.saveOrRollback(context)
         return cabinet
+    }
+
+    @discardableResult
+    func createCustomFilter(name: String, query: String) throws -> CabinetCustomFilterRecord {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            throw SettingsGatewayError.persistence("Nome filtro obbligatorio.")
+        }
+        guard !trimmedQuery.isEmpty else {
+            throw SettingsGatewayError.persistence("Query filtro obbligatoria.")
+        }
+
+        let ownerUserID = UserIdentityProvider.shared.userId
+        let request = CustomFilter.extractActiveFilters(ownerUserID: ownerUserID)
+        let existing = try context.fetch(request)
+        let nextPosition = (existing.map(\.position).max() ?? -1) + 1
+        let now = Date()
+
+        let filter = CustomFilter(context: context)
+        filter.id = UUID()
+        filter.owner_user_id = ownerUserID
+        filter.name = trimmedName
+        filter.query = trimmedQuery
+        filter.position = nextPosition
+        filter.created_at = now
+        filter.updated_at = now
+        filter.deleted_at = nil
+        filter.source_id = filter.id
+        filter.visibility = "local"
+        filter.synced_at = nil
+
+        try CoreDataWriteCommand.saveOrRollback(context)
+        return makeCustomFilterRecord(from: filter, ownerUserID: ownerUserID)
+    }
+
+    @discardableResult
+    func updateCustomFilter(id: UUID, name: String, query: String) throws -> CabinetCustomFilterRecord {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            throw SettingsGatewayError.persistence("Nome filtro obbligatorio.")
+        }
+        guard !trimmedQuery.isEmpty else {
+            throw SettingsGatewayError.persistence("Query filtro obbligatoria.")
+        }
+
+        let ownerUserID = UserIdentityProvider.shared.userId
+        guard let filter = fetchCustomFilter(id: id, ownerUserID: ownerUserID) else {
+            throw SettingsGatewayError.notFound("Filtro non trovato.")
+        }
+
+        filter.owner_user_id = ownerUserID
+        filter.name = trimmedName
+        filter.query = trimmedQuery
+        filter.updated_at = Date()
+        filter.deleted_at = nil
+        filter.source_id = filter.source_id ?? filter.id
+        filter.visibility = filter.visibility ?? "local"
+
+        try CoreDataWriteCommand.saveOrRollback(context)
+        return makeCustomFilterRecord(from: filter, ownerUserID: ownerUserID)
+    }
+
+    func deleteCustomFilter(id: UUID) throws {
+        let ownerUserID = UserIdentityProvider.shared.userId
+        guard let filter = fetchCustomFilter(id: id, ownerUserID: ownerUserID) else {
+            return
+        }
+
+        let now = Date()
+        filter.deleted_at = now
+        filter.updated_at = now
+        filter.synced_at = nil
+        try CoreDataWriteCommand.saveOrRollback(context)
     }
 
     func moveEntry(entryId: UUID, toCabinet cabinetId: UUID?) throws {
@@ -575,6 +652,69 @@ private final class CoreDataMedicinesGateway: MedicinesGateway {
         request.fetchLimit = 1
         request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
         return try? context.fetch(request).first
+    }
+
+    private func fetchCustomFilter(id: UUID, ownerUserID: String) -> CustomFilter? {
+        let request = CustomFilter.extractFilters()
+        request.fetchLimit = 1
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            NSPredicate(format: "id == %@", id as CVarArg),
+            NSPredicate(format: "owner_user_id == %@", ownerUserID)
+        ])
+        return try? context.fetch(request).first
+    }
+
+    private func fetchCustomFilterRecords(ownerUserID: String) throws -> [CabinetCustomFilterRecord] {
+        let request = CustomFilter.extractActiveFilters(ownerUserID: ownerUserID)
+        var filters = try context.fetch(request)
+        var didMutate = false
+
+        for filter in filters {
+            if filter.source_id == nil {
+                filter.source_id = filter.id
+                didMutate = true
+            }
+            if filter.created_at == nil {
+                filter.created_at = Date()
+                didMutate = true
+            }
+            if filter.updated_at == nil {
+                filter.updated_at = filter.created_at
+                didMutate = true
+            }
+            if filter.visibility?.isEmpty != false {
+                filter.visibility = "local"
+                didMutate = true
+            }
+        }
+
+        if didMutate {
+            try CoreDataWriteCommand.saveOrRollback(context)
+            filters = try context.fetch(request)
+        }
+
+        return filters.map { makeCustomFilterRecord(from: $0, ownerUserID: ownerUserID) }
+    }
+
+    private func makeCustomFilterRecord(
+        from filter: CustomFilter,
+        ownerUserID: String
+    ) -> CabinetCustomFilterRecord {
+        CabinetCustomFilterRecord(
+            id: filter.id,
+            ownerUserId: normalizedOwnerUserID(filter.owner_user_id, fallback: ownerUserID),
+            name: filter.name,
+            query: filter.query,
+            position: Int(filter.position),
+            createdAt: filter.created_at,
+            updatedAt: filter.updated_at,
+            deletedAt: filter.deleted_at
+        )
+    }
+
+    private func normalizedOwnerUserID(_ raw: String?, fallback: String) -> String {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? fallback : trimmed
     }
 }
 
@@ -1359,6 +1499,8 @@ final class CoreDataAppDataProvider: AppDataProvider {
                 scopes.insert(.stocks)
             case "cabinet", "cabinetmembership":
                 scopes.insert(.cabinets)
+            case "customfilter":
+                scopes.insert(.customFilters)
             case "person", "userprofile", "privateoverlay":
                 scopes.insert(.people)
             case "doctor":

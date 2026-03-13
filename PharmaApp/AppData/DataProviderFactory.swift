@@ -12,7 +12,7 @@ enum DataProviderFactory {
         case .coredata:
             FirebaseRuntimeConfigurator.configureIfNeeded()
             return CoreDataAppDataProvider(
-                authGateway: FirebaseAuthGatewayAdapter(),
+                authGateway: SupabaseAuthGatewayAdapter(),
                 backupGateway: ICloudBackupGatewayAdapter(coordinator: backupCoordinator)
             )
         case .supabase:

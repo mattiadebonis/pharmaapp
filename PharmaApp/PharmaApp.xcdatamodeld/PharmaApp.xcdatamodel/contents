@@ -192,6 +192,19 @@
         <attribute name="therapy_notification_level" optional="YES" attributeType="String" defaultValueString="normal"/>
         <attribute name="therapy_snooze_minutes" optional="YES" attributeType="Integer 32" defaultValueString="10" usesScalarValueType="YES"/>
     </entity>
+    <entity name="CustomFilter" representedClassName=".CustomFilter" syncable="YES">
+        <attribute name="created_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="deleted_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="owner_user_id" optional="YES" attributeType="String"/>
+        <attribute name="position" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="query" optional="YES" attributeType="String"/>
+        <attribute name="source_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="synced_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="updated_at" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="visibility" optional="YES" attributeType="String" defaultValueString="local"/>
+    </entity>
     <entity name="Package" representedClassName=".Package" syncable="YES">
         <attribute name="catalog_code" optional="YES" attributeType="String"/>
         <attribute name="catalog_country" optional="YES" attributeType="String"/>

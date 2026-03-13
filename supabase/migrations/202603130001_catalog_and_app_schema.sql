@@ -1166,3 +1166,37 @@ alter publication supabase_realtime add table public.activity_logs;
 alter publication supabase_realtime add table public.dose_events;
 alter publication supabase_realtime add table public.monitoring_measurements;
 alter publication supabase_realtime add table public.notification_locks;
+
+create table if not exists public.custom_filters (
+  id uuid primary key default gen_random_uuid(),
+  owner_user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  query text not null,
+  position integer not null default 0,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  deleted_at timestamptz
+);
+
+create index if not exists custom_filters_owner_user_id_position_idx
+  on public.custom_filters(owner_user_id, position);
+
+create index if not exists custom_filters_owner_user_id_updated_at_idx
+  on public.custom_filters(owner_user_id, updated_at desc);
+
+drop trigger if exists set_custom_filters_updated_at on public.custom_filters;
+create trigger set_custom_filters_updated_at
+before update on public.custom_filters
+for each row execute function private.touch_updated_at();
+
+alter table public.custom_filters enable row level security;
+
+drop policy if exists custom_filters_owner_only on public.custom_filters;
+create policy custom_filters_owner_only on public.custom_filters
+for all to authenticated
+using ((select auth.uid()) = owner_user_id)
+with check ((select auth.uid()) = owner_user_id);
+
+grant select, insert, update, delete on public.custom_filters to authenticated;
+
+alter publication supabase_realtime add table public.custom_filters;

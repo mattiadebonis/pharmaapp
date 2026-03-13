@@ -23,14 +23,10 @@ private struct SupabaseConfiguration {
         bundle: Bundle = .main,
         processInfo: ProcessInfo = .processInfo
     ) -> SupabaseConfiguration? {
-        let rawURL = sanitizedValue(
-            processInfo.environment["SUPABASE_URL"]
-            ?? bundle.object(forInfoDictionaryKey: "SUPABASE_URL") as? String
-        )
-        let rawKey = sanitizedValue(
-            processInfo.environment["SUPABASE_PUBLISHABLE_KEY"]
-            ?? bundle.object(forInfoDictionaryKey: "SUPABASE_PUBLISHABLE_KEY") as? String
-        )
+        let rawURL = sanitizedValue(processInfo.environment["SUPABASE_URL"])
+            ?? sanitizedValue(bundle.object(forInfoDictionaryKey: "SUPABASE_URL") as? String)
+        let rawKey = sanitizedValue(processInfo.environment["SUPABASE_PUBLISHABLE_KEY"])
+            ?? sanitizedValue(bundle.object(forInfoDictionaryKey: "SUPABASE_PUBLISHABLE_KEY") as? String)
 
         guard let rawURL,
               let url = URL(string: rawURL),
