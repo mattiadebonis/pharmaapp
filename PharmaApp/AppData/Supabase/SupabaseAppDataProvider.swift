@@ -92,9 +92,9 @@ private struct SupabaseMedicinesGateway: MedicinesGateway {
         return RecurrenceRule(freq: "DAILY")
     }
 
-    func setLabel(medicine: Medicine, label: String?) throws {
+    func setLabels(medicine: Medicine, labels: [String]) throws {
         let _ = medicine
-        let _ = label
+        let _ = labels
         throw SupabaseProviderError.notImplemented
     }
 
@@ -219,7 +219,31 @@ private struct SupabaseMedicinesGateway: MedicinesGateway {
         throw SupabaseProviderError.notImplemented
     }
 }
-private struct SupabaseCatalogGateway: CatalogGateway {}
+private final class SupabaseCatalogGateway: CatalogGateway {
+    private let gateway = SharedCatalogGateway()
+
+    func searchCatalog(
+        country: CatalogCountry,
+        query: String,
+        limit: Int
+    ) async throws -> [CatalogSelection] {
+        try await gateway.searchCatalog(country: country, query: query, limit: limit)
+    }
+
+    func fetchCatalogProduct(
+        country: CatalogCountry,
+        productId: String
+    ) async throws -> CatalogProduct {
+        try await gateway.fetchCatalogProduct(country: country, productId: productId)
+    }
+
+    func fetchCatalogPackage(
+        country: CatalogCountry,
+        packageId: String
+    ) async throws -> CatalogPackage {
+        try await gateway.fetchCatalogPackage(country: country, packageId: packageId)
+    }
+}
 @MainActor
 private struct SupabaseSearchGateway: SearchGateway {
     func fetchSnapshot() throws -> SearchDataSnapshot {

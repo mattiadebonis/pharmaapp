@@ -340,6 +340,12 @@ struct MedicineWizardView: View {
     }
 
     private func existingMedicine(for selection: CatalogSelection, medicines: [Medicine]) -> Medicine? {
+        if let keyed = medicines.first(where: {
+            ($0.catalog_product_key ?? "").caseInsensitiveCompare(selection.productKey) == .orderedSame
+        }) {
+            return keyed
+        }
+
         let identity = repository.identityKey(for: selection)
         if let exact = medicines.first(where: {
             repository.identityKey(name: $0.nome, principle: $0.principio_attivo) == identity
@@ -352,10 +358,19 @@ struct MedicineWizardView: View {
     }
 
     private func existingPackage(for selection: CatalogSelection, medicine: Medicine) -> Package? {
-        medicine.packages.first(where: { packageMatches($0, selection: selection) })
+        if let keyed = medicine.packages.first(where: {
+            ($0.catalog_package_key ?? "").caseInsensitiveCompare(selection.packageKey) == .orderedSame
+        }) {
+            return keyed
+        }
+        return medicine.packages.first(where: { packageMatches($0, selection: selection) })
     }
 
     private func packageMatches(_ package: Package, selection: CatalogSelection) -> Bool {
+        if let packageKey = package.catalog_package_key,
+           packageKey.caseInsensitiveCompare(selection.packageKey) == .orderedSame {
+            return true
+        }
         let sameUnits = Int(package.numero) == max(1, selection.units)
         let sameType = repository.normalizeText(package.tipologia) == repository.normalizeText(selection.tipologia)
         let sameValue = package.valore == selection.valore

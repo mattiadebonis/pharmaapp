@@ -36,7 +36,6 @@ struct GlobalSearchView: View {
     @State private var pendingCatalogSelection: CatalogSelection?
     @State private var catalogStockEditorState: CatalogStockEditorState?
     @State private var catalogTherapyEditorState: CatalogTherapyEditorState?
-    @State private var catalogMedicines: [CatalogSelection] = []
     @State private var inlineFeedback: CommandFeedback?
     @State private var pharmacyResults: [PharmacyResult] = []
     @State private var pharmacySearchTask: Task<Void, Never>?
@@ -526,11 +525,13 @@ struct GlobalSearchView: View {
             let medicineLabel = therapyMedicine(therapy)?.displayLabel ?? ""
             let principle = therapyMedicine(therapy)?.principio_attivo ?? ""
             let personName = therapyPerson(therapy).map(personDisplayName(for:)) ?? "Persona"
+            let doctorName = therapyPrescribingDoctor(therapy).map(doctorDisplayName) ?? ""
             let condition = therapy.condizione ?? ""
             return medicineName.localizedCaseInsensitiveContains(trimmedQuery)
             || medicineLabel.localizedCaseInsensitiveContains(trimmedQuery)
             || principle.localizedCaseInsensitiveContains(trimmedQuery)
             || personName.localizedCaseInsensitiveContains(trimmedQuery)
+            || doctorName.localizedCaseInsensitiveContains(trimmedQuery)
             || condition.localizedCaseInsensitiveContains(trimmedQuery)
         }
         .sorted { lhs, rhs in
@@ -1283,20 +1284,17 @@ struct GlobalSearchView: View {
                 Text(therapyMedicineName(therapy))
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.primary)
-                let nextDose = recurrenceManager.nextOccurrence(
-                    rule: recurrenceManager.parseRecurrenceString(therapy.rrule ?? ""),
-                    startDate: therapy.start_date ?? Date(),
-                    after: Date(),
-                    doses: therapy.doses as NSSet?
-                )
-                if let nextDose {
-                    Text("Prossima dose \(doseDateTimeFormatter.string(from: nextDose))")
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(.secondary)
-                } else {
+                let subtitleLines = therapySubtitleLines(for: therapy)
+                if subtitleLines.isEmpty {
                     Text("Terapia")
                         .font(.system(size: 14, weight: .regular))
                         .foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(subtitleLines.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             Spacer()
@@ -1373,21 +1371,17 @@ struct GlobalSearchView: View {
                 .font(.system(size: 18, weight: .regular))
                 .foregroundStyle(.primary)
 
-            let nextDose = recurrenceManager.nextOccurrence(
-                rule: recurrenceManager.parseRecurrenceString(therapy.rrule ?? ""),
-                startDate: therapy.start_date ?? Date(),
-                after: Date(),
-                doses: therapy.doses as NSSet?
-            )
-
-            if let nextDose {
-                Text("Prossima dose \(doseDateTimeFormatter.string(from: nextDose))")
+            let subtitleLines = therapySubtitleLines(for: therapy)
+            if subtitleLines.isEmpty {
+                Text("Terapia")
                     .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(.secondary)
             } else {
-                Text(therapyPerson(therapy).map(personDisplayName(for:)) ?? "Persona")
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(.secondary)
+                ForEach(Array(subtitleLines.enumerated()), id: \.offset) { _, line in
+                    Text(line)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1952,8 +1946,32 @@ struct GlobalSearchView: View {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    private func therapySubtitleLines(for therapy: Therapy) -> [String] {
+        let nextDose = recurrenceManager.nextOccurrence(
+            rule: recurrenceManager.parseRecurrenceString(therapy.rrule ?? ""),
+            startDate: therapy.start_date ?? Date(),
+            after: Date(),
+            doses: therapy.doses as NSSet?
+        )
+
+        var lines: [String] = []
+        if let nextDose {
+            lines.append("Prossima dose \(doseDateTimeFormatter.string(from: nextDose))")
+        }
+        if let doctorName = therapyPrescribingDoctor(therapy).map(doctorDisplayName) {
+            lines.append("Prescrittore: \(doctorName)")
+        } else if let personName = therapyPerson(therapy).map(personDisplayName(for:)) {
+            lines.append(personName)
+        }
+        return lines
+    }
+
     private func therapyPerson(_ therapy: Therapy) -> Person? {
         therapy.value(forKey: "person") as? Person
+    }
+
+    private func therapyPrescribingDoctor(_ therapy: Therapy) -> Doctor? {
+        therapy.value(forKey: "prescribingDoctor") as? Doctor
     }
 
     private func therapyMedicine(_ therapy: Therapy) -> Medicine? {
@@ -1983,220 +2001,6 @@ struct GlobalSearchView: View {
             return package
         }
         return medicine.packages.first
-    }
-
-    private func loadCatalogMedicinesIfNeeded() {
-        guard catalogMedicines.isEmpty else { return }
-        DispatchQueue.global(qos: .userInitiated).async {
-            let loaded = loadCatalogMedicines()
-            DispatchQueue.main.async {
-                catalogMedicines = loaded
-            }
-        }
-    }
-
-    private func loadCatalogMedicines() -> [CatalogSelection] {
-        let bundle = Bundle.main
-        let data: Data? = {
-            if let fullURL = bundle.url(forResource: "medicinali", withExtension: "json"),
-               let fullData = try? Data(contentsOf: fullURL) {
-                return fullData
-            }
-            if let fallbackURL = bundle.url(forResource: "medicinale_example", withExtension: "json"),
-               let fallbackData = try? Data(contentsOf: fallbackURL) {
-                return fallbackData
-            }
-            return nil
-        }()
-
-        guard let data,
-              let object = try? JSONSerialization.jsonObject(with: data),
-              let entries = catalogEntries(from: object) else {
-            return []
-        }
-
-        var results: [CatalogSelection] = []
-        results.reserveCapacity(800)
-
-        for entry in entries {
-            let medicineInfo = entry["medicinale"] as? [String: Any]
-            let info = entry["informazioni"] as? [String: Any]
-            let principles = entry["principi"] as? [String: Any]
-
-            let rawName = (medicineInfo?["denominazioneMedicinale"] as? String)
-                ?? (entry["denominazioneMedicinale"] as? String)
-                ?? (entry["titolo"] as? String)
-                ?? catalogStringArray(from: entry["principiAttiviIt"]).first
-                ?? catalogStringArray(from: principles?["principiAttiviIt"]).first
-                ?? ""
-            let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else { continue }
-
-            let principleValues = deduplicatedCatalogValues(
-                catalogStringArray(from: entry["principiAttiviIt"])
-                + catalogStringArray(from: principles?["principiAttiviIt"])
-            )
-            let principle = principleValues.isEmpty ? name : principleValues.joined(separator: ", ")
-
-            let packages = entry["confezioni"] as? [[String: Any]] ?? []
-            guard !packages.isEmpty else { continue }
-
-            let dosageSource = (info?["descrizioneFormaDosaggio"] as? String)
-                ?? (entry["descrizioneFormaDosaggio"] as? String)
-            let dosage = parseCatalogDosage(from: dosageSource)
-
-            for package in packages {
-                let rawPackageLabel = (package["denominazionePackage"] as? String) ?? "Confezione"
-                let packageLabel = rawPackageLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-                let packageId = (package["idPackage"] as? String)
-                    ?? (entry["id"] as? String)
-                    ?? UUID().uuidString
-
-                let selection = CatalogSelection(
-                    id: packageId,
-                    name: name,
-                    principle: principle,
-                    requiresPrescription: catalogRequiresPrescription(package),
-                    packageLabel: packageLabel.isEmpty ? "Confezione" : packageLabel,
-                    units: max(1, extractCatalogUnitCount(from: packageLabel)),
-                    tipologia: packageLabel.isEmpty ? "Confezione" : packageLabel,
-                    valore: dosage.value,
-                    unita: dosage.unit,
-                    volume: extractCatalogVolume(from: packageLabel)
-                )
-                results.append(selection)
-            }
-        }
-
-        return results.sorted { lhs, rhs in
-            if lhs.name == rhs.name {
-                return lhs.packageLabel.localizedCaseInsensitiveCompare(rhs.packageLabel) == .orderedAscending
-            }
-            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-        }
-    }
-
-    private func catalogEntries(from object: Any) -> [[String: Any]]? {
-        if let array = object as? [[String: Any]] {
-            return array
-        }
-        if let dictionary = object as? [String: Any] {
-            return [dictionary]
-        }
-        return nil
-    }
-
-    private func catalogStringArray(from value: Any?) -> [String] {
-        guard let value else { return [] }
-        if let array = value as? [String] {
-            return array
-        }
-        if let string = value as? String {
-            return [string]
-        }
-        if let anyArray = value as? [Any] {
-            return anyArray.compactMap { $0 as? String }
-        }
-        return []
-    }
-
-    private func deduplicatedCatalogValues(_ values: [String]) -> [String] {
-        var seen: Set<String> = []
-        var result: [String] = []
-        for value in values {
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            let key = normalizeCatalogText(trimmed)
-            if seen.insert(key).inserted {
-                result.append(trimmed)
-            }
-        }
-        return result
-    }
-
-    private func catalogRequiresPrescription(_ package: [String: Any]) -> Bool {
-        if catalogBoolValue(package["flagPrescrizione"] ?? package["prescrizione"]) {
-            return true
-        }
-        if let classe = (package["classeFornitura"] as? String)?.uppercased(),
-           ["RR", "RRL", "OSP"].contains(classe) {
-            return true
-        }
-        let descriptions = catalogStringArray(from: package["descrizioneRf"])
-        if descriptions.contains(where: catalogRequiresPrescriptionDescription) {
-            return true
-        }
-        return false
-    }
-
-    private func catalogRequiresPrescriptionDescription(_ description: String) -> Bool {
-        let normalized = description
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalized.contains("non soggetto")
-            || normalized.contains("senza ricetta")
-            || normalized.contains("senza prescrizione")
-            || normalized.contains("non richiede") {
-            return false
-        }
-        return normalized.contains("prescrizione") || normalized.contains("ricetta")
-    }
-
-    private func catalogBoolValue(_ value: Any?) -> Bool {
-        guard let value, !(value is NSNull) else { return false }
-        if let bool = value as? Bool { return bool }
-        if let int = value as? Int { return int != 0 }
-        if let int = value as? Int32 { return int != 0 }
-        if let number = value as? NSNumber { return number.intValue != 0 }
-        if let string = value as? String {
-            let normalized = string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            return ["1", "true", "yes", "si", "y", "t"].contains(normalized)
-        }
-        return false
-    }
-
-    private func parseCatalogDosage(from description: String?) -> (value: Int32, unit: String) {
-        guard let text = description else { return (0, "") }
-        let tokens = text.split(separator: " ")
-        var value: Int32 = 0
-        var unit = ""
-
-        for (index, token) in tokens.enumerated() {
-            let digitString = token.filter(\.isNumber)
-            guard !digitString.isEmpty, let parsed = Int32(digitString) else { continue }
-            value = parsed
-            if index + 1 < tokens.count {
-                let possibleUnit = tokens[index + 1]
-                if possibleUnit.rangeOfCharacter(from: .letters) != nil || possibleUnit.contains("/") {
-                    unit = String(possibleUnit)
-                }
-            }
-            break
-        }
-
-        return (value, unit)
-    }
-
-    private func extractCatalogUnitCount(from text: String) -> Int {
-        guard let regex = try? NSRegularExpression(pattern: "\\d+") else { return 0 }
-        let matches = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
-        guard let last = matches.last,
-              let range = Range(last.range, in: text),
-              let value = Int(text[range]) else {
-            return 0
-        }
-        return value
-    }
-
-    private func extractCatalogVolume(from text: String) -> String {
-        let uppercase = text.uppercased()
-        guard let regex = try? NSRegularExpression(pattern: "\\d+\\s*(ML|L)") else { return "" }
-        let range = NSRange(location: 0, length: (uppercase as NSString).length)
-        guard let match = regex.firstMatch(in: uppercase, range: range),
-              let matchRange = Range(match.range, in: uppercase) else {
-            return ""
-        }
-        return uppercase[matchRange].lowercased()
     }
 
     private func normalizeCatalogText(_ text: String) -> String {

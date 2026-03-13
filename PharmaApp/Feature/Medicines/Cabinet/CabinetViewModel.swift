@@ -335,12 +335,12 @@ class CabinetViewModel: ObservableObject {
             guard entry.medicine.in_cabinet else { return false }
 
             let medicineName = normalizedSearchText(entry.medicine.nome)
-            let medicineLabel = normalizedSearchText(entry.medicine.displayLabel ?? "")
+            let medicineLabels = normalizedSearchText(entry.medicine.searchableLabelsText)
             let principle = normalizedSearchText(entry.medicine.principio_attivo)
             let packageSummary = normalizedSearchText(packageSearchSummary(for: entry.package))
 
             return medicineName.contains(normalizedQuery)
-                || medicineLabel.contains(normalizedQuery)
+                || medicineLabels.contains(normalizedQuery)
                 || principle.contains(normalizedQuery)
                 || packageSummary.contains(normalizedQuery)
         }

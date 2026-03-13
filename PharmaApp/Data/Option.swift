@@ -17,6 +17,8 @@ public class Option: NSManagedObject, Identifiable {
     @NSManaged public var therapy_notification_level: String?
     @NSManaged public var therapy_snooze_minutes: Int32
     @NSManaged public var prescription_message_template: String?
+    @NSManaged public var catalog_country: String?
+    @NSManaged public var business_country: String?
 
 }
 

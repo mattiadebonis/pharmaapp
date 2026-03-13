@@ -80,7 +80,7 @@ final class CabinetViewModelSearchTests: XCTestCase {
     func testSearchEntriesMatchesMedicineLabel() throws {
         let medicine = try TestCoreDataFactory.makeMedicine(context: context)
         medicine.nome = "Bentelan"
-        medicine.etichetta = "Salvavita"
+        medicine.displayLabels = ["Salvavita", "Viaggio"]
         medicine.in_cabinet = true
 
         let package = try TestCoreDataFactory.makePackage(context: context, medicine: medicine, numero: 10)
@@ -91,7 +91,7 @@ final class CabinetViewModelSearchTests: XCTestCase {
         )
 
         let results = CabinetViewModel().searchEntries(
-            query: "salvavita",
+            query: "viaggio",
             entries: [entry],
             option: nil
         )

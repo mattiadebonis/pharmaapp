@@ -92,6 +92,12 @@ struct CoreDataCatalogSelectionResolver {
         let request = Medicine.extractMedicines()
         guard let medicines = try? context.fetch(request) else { return nil }
 
+        if let keyed = medicines.first(where: {
+            ($0.catalog_product_key ?? "").caseInsensitiveCompare(selection.productKey) == .orderedSame
+        }) {
+            return keyed
+        }
+
         let identity = repository.identityKey(for: selection)
         if let exact = medicines.first(where: {
             repository.identityKey(name: $0.nome, principle: $0.principio_attivo) == identity
@@ -104,7 +110,12 @@ struct CoreDataCatalogSelectionResolver {
     }
 
     private func existingPackage(for medicine: Medicine, selection: CatalogSelection) -> Package? {
-        medicine.packages.first(where: { packageMatches($0, selection: selection) })
+        if let keyed = medicine.packages.first(where: {
+            ($0.catalog_package_key ?? "").caseInsensitiveCompare(selection.packageKey) == .orderedSame
+        }) {
+            return keyed
+        }
+        return medicine.packages.first(where: { packageMatches($0, selection: selection) })
     }
 
     private func existingEntry(for medicine: Medicine, package: Package) -> MedicinePackage? {
@@ -115,6 +126,10 @@ struct CoreDataCatalogSelectionResolver {
     }
 
     private func packageMatches(_ package: Package, selection: CatalogSelection) -> Bool {
+        if let packageKey = package.catalog_package_key,
+           packageKey.caseInsensitiveCompare(selection.packageKey) == .orderedSame {
+            return true
+        }
         let sameUnits = Int(package.numero) == max(1, selection.units)
         let sameType = repository.normalizeText(package.tipologia) == repository.normalizeText(selection.tipologia)
         let sameValue = package.valore == selection.valore
@@ -131,6 +146,10 @@ struct CoreDataCatalogSelectionResolver {
         medicine.nome = selection.name
         medicine.principio_attivo = selection.principle
         medicine.obbligo_ricetta = selection.requiresPrescription
+        medicine.catalog_country = selection.country.rawValue
+        medicine.catalog_source = selection.source
+        medicine.catalog_product_key = selection.productKey
+        medicine.catalog_family_key = selection.familyKey
         medicine.in_cabinet = true
         return medicine
     }
@@ -140,6 +159,10 @@ struct CoreDataCatalogSelectionResolver {
         package.id = UUID()
         package.source_id = package.id
         package.visibility = "local"
+        package.catalog_country = selection.country.rawValue
+        package.catalog_source = selection.source
+        package.catalog_package_key = selection.packageKey
+        package.catalog_code = selection.catalogCode
         package.tipologia = selection.tipologia.isEmpty ? "Confezione" : selection.tipologia
         package.numero = Int32(max(1, selection.units))
         package.unita = selection.unita.isEmpty ? "unita" : selection.unita

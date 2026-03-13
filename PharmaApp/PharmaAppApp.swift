@@ -169,7 +169,6 @@ struct PharmaAppApp: App {
 
     private func handleRestoreCompletion() {
         let context = persistenceController.container.viewContext
-        DataManager.shared.initializePharmaciesDataIfNeeded()
         DataManager.shared.initializeOptionsIfEmpty()
         UserIdentityProvider.shared.ensureProfile(in: context, authUser: authViewModel.user)
         AccountPersonService.shared.ensureAccountPerson(in: context)

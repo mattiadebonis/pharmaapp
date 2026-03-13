@@ -1,38 +1,6 @@
 import Foundation
 
 struct CatalogSelectionRepository {
-    private let bundle: Bundle
-
-    init(bundle: Bundle = .main) {
-        self.bundle = bundle
-    }
-
-    func loadSelections() -> [CatalogSelection] {
-        loadRecords()
-            .flatMap { record in
-                record.packages.map { package in
-                    CatalogSelection(
-                        id: package.id,
-                        name: record.name,
-                        principle: record.principle,
-                        requiresPrescription: package.requiresPrescription,
-                        packageLabel: package.label,
-                        units: max(1, package.units),
-                        tipologia: package.tipologia,
-                        valore: package.dosageValue,
-                        unita: package.dosageUnit,
-                        volume: package.volume
-                    )
-                }
-            }
-            .sorted { lhs, rhs in
-                if lhs.name == rhs.name {
-                    return lhs.packageLabel.localizedCaseInsensitiveCompare(rhs.packageLabel) == .orderedAscending
-                }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-            }
-    }
-
     func searchSelections(
         query: String,
         in selections: [CatalogSelection],
@@ -57,45 +25,39 @@ struct CatalogSelectionRepository {
             .map { $0 }
     }
 
-    func matchSelection(fromRecognizedText text: String) -> CatalogSelection? {
+    func matchSelection(
+        fromRecognizedText text: String,
+        candidates: [CatalogSelection]
+    ) -> CatalogSelection? {
         let normalizedText = normalizeScannerText(text)
         let textTokens = tokenSet(fromScannerText: normalizedText)
         let textNumbers = numberTokens(fromScannerText: normalizedText)
 
+        let groupedByMedicine = Dictionary(grouping: candidates, by: identityKey(for:))
         var best: (selection: CatalogSelection, score: Double, singlePackage: Bool)?
 
-        for record in loadRecords() {
+        for selection in candidates {
             let medicineScore = scoreMedicine(
-                record: record,
+                selection: selection,
                 normalizedText: normalizedText,
                 tokens: textTokens,
                 numbers: textNumbers
             )
             if medicineScore < 4 { continue }
 
-            for package in record.packages {
-                let packageScore = scorePackage(
-                    package: package,
-                    normalizedText: normalizedText,
-                    tokens: textTokens,
-                    numbers: textNumbers
+            let packageScore = scorePackage(
+                selection: selection,
+                normalizedText: normalizedText,
+                tokens: textTokens,
+                numbers: textNumbers
+            )
+            let total = medicineScore + packageScore
+            if best == nil || total > best!.score {
+                best = (
+                    selection,
+                    total,
+                    (groupedByMedicine[identityKey(for: selection)]?.count ?? 0) <= 1
                 )
-                let total = medicineScore + packageScore
-                if best == nil || total > best!.score {
-                    let selection = CatalogSelection(
-                        id: package.id,
-                        name: record.name,
-                        principle: record.principle,
-                        requiresPrescription: package.requiresPrescription,
-                        packageLabel: package.label,
-                        units: max(1, package.units),
-                        tipologia: package.tipologia,
-                        valore: package.dosageValue,
-                        unita: package.dosageUnit,
-                        volume: package.volume
-                    )
-                    best = (selection, total, record.packages.count == 1)
-                }
             }
         }
 
@@ -179,226 +141,6 @@ struct CatalogSelectionRepository {
             || package.contains(normalizedQuery)
     }
 
-    private func loadRecords() -> [CatalogRecord] {
-        guard let object = loadCatalogObject(),
-              let entries = catalogEntries(from: object) else {
-            return []
-        }
-
-        var records: [CatalogRecord] = []
-        records.reserveCapacity(min(entries.count, 1200))
-
-        for entry in entries.prefix(1200) {
-            let medicineInfo = entry["medicinale"] as? [String: Any]
-            let info = entry["informazioni"] as? [String: Any]
-            let principles = entry["principi"] as? [String: Any]
-
-            let rawName = (medicineInfo?["denominazioneMedicinale"] as? String)
-                ?? (entry["denominazioneMedicinale"] as? String)
-                ?? (entry["titolo"] as? String)
-                ?? catalogStringArray(from: entry["principiAttiviIt"]).first
-                ?? catalogStringArray(from: principles?["principiAttiviIt"]).first
-                ?? ""
-            let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else { continue }
-
-            let principleValues = deduplicatedCatalogValues(
-                catalogStringArray(from: entry["principiAttiviIt"])
-                + catalogStringArray(from: principles?["principiAttiviIt"])
-                + catalogStringArray(from: entry["descrizioneAtc"])
-            )
-            let principle = principleValues.isEmpty ? name : principleValues.joined(separator: ", ")
-
-            let medicineCodes: [String] = [
-                medicineInfo?["codiceMedicinale"] as? String,
-                (medicineInfo?["aic6"] as? Int).map(String.init),
-                entry["aic6"] as? String
-            ].compactMap { $0 }
-
-            let packages = entry["confezioni"] as? [[String: Any]] ?? []
-            guard !packages.isEmpty else { continue }
-
-            let dosageSource = (info?["descrizioneFormaDosaggio"] as? String)
-                ?? (entry["descrizioneFormaDosaggio"] as? String)
-            let dosage = parseDosage(from: dosageSource)
-
-            let catalogPackages = packages.map { package in
-                let rawPackageLabel = (package["denominazionePackage"] as? String) ?? "Confezione"
-                let packageLabel = rawPackageLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-                let packageId = (package["idPackage"] as? String)
-                    ?? (entry["id"] as? String)
-                    ?? UUID().uuidString
-                let packageCodes: [String] = [
-                    package["aic"] as? String,
-                    package["idPackage"] as? String
-                ].compactMap { $0 }
-
-                return CatalogPackageRecord(
-                    id: packageId,
-                    label: packageLabel.isEmpty ? "Confezione" : packageLabel,
-                    units: max(1, extractUnitCount(from: packageLabel)),
-                    tipologia: packageLabel.isEmpty ? "Confezione" : packageLabel,
-                    dosageValue: dosage.value,
-                    dosageUnit: dosage.unit,
-                    volume: extractVolume(from: packageLabel),
-                    requiresPrescription: catalogRequiresPrescription(package),
-                    codes: packageCodes
-                )
-            }
-
-            records.append(
-                CatalogRecord(
-                    name: name,
-                    principle: principle,
-                    codes: medicineCodes,
-                    packages: catalogPackages
-                )
-            )
-        }
-
-        return records
-    }
-
-    private func loadCatalogObject() -> Any? {
-        let data: Data? = {
-            if let fullURL = bundle.url(forResource: "medicinali", withExtension: "json"),
-               let fullData = try? Data(contentsOf: fullURL) {
-                return fullData
-            }
-            if let fallbackURL = bundle.url(forResource: "medicinale_example", withExtension: "json"),
-               let fallbackData = try? Data(contentsOf: fallbackURL) {
-                return fallbackData
-            }
-            return nil
-        }()
-
-        guard let data else { return nil }
-        return try? JSONSerialization.jsonObject(with: data)
-    }
-
-    private func catalogEntries(from object: Any) -> [[String: Any]]? {
-        if let array = object as? [[String: Any]] {
-            return array
-        }
-        if let dictionary = object as? [String: Any] {
-            return [dictionary]
-        }
-        return nil
-    }
-
-    private func catalogStringArray(from value: Any?) -> [String] {
-        guard let value else { return [] }
-        if let array = value as? [String] {
-            return array
-        }
-        if let string = value as? String {
-            return [string]
-        }
-        if let anyArray = value as? [Any] {
-            return anyArray.compactMap { $0 as? String }
-        }
-        return []
-    }
-
-    private func deduplicatedCatalogValues(_ values: [String]) -> [String] {
-        var seen: Set<String> = []
-        var result: [String] = []
-        for value in values {
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            let key = normalizeText(trimmed)
-            if seen.insert(key).inserted {
-                result.append(trimmed)
-            }
-        }
-        return result
-    }
-
-    private func catalogRequiresPrescription(_ package: [String: Any]) -> Bool {
-        if catalogBoolValue(package["flagPrescrizione"] ?? package["prescrizione"]) {
-            return true
-        }
-        if let classe = (package["classeFornitura"] as? String)?.uppercased(),
-           ["RR", "RRL", "OSP"].contains(classe) {
-            return true
-        }
-        let descriptions = catalogStringArray(from: package["descrizioneRf"])
-        if descriptions.contains(where: catalogRequiresPrescriptionDescription) {
-            return true
-        }
-        return false
-    }
-
-    private func catalogRequiresPrescriptionDescription(_ description: String) -> Bool {
-        let normalized = description
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalized.contains("non soggetto")
-            || normalized.contains("senza ricetta")
-            || normalized.contains("senza prescrizione")
-            || normalized.contains("non richiede") {
-            return false
-        }
-        return normalized.contains("prescrizione") || normalized.contains("ricetta")
-    }
-
-    private func catalogBoolValue(_ value: Any?) -> Bool {
-        guard let value, !(value is NSNull) else { return false }
-        if let bool = value as? Bool { return bool }
-        if let int = value as? Int { return int != 0 }
-        if let int = value as? Int32 { return int != 0 }
-        if let number = value as? NSNumber { return number.intValue != 0 }
-        if let string = value as? String {
-            let normalized = string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            return ["1", "true", "yes", "si", "y", "t"].contains(normalized)
-        }
-        return false
-    }
-
-    private func parseDosage(from description: String?) -> (value: Int32, unit: String) {
-        guard let text = description else { return (0, "") }
-        let tokens = text.split(separator: " ")
-        var value: Int32 = 0
-        var unit = ""
-
-        for (index, token) in tokens.enumerated() {
-            let digitString = token.filter(\.isNumber)
-            guard !digitString.isEmpty, let parsed = Int32(digitString) else { continue }
-            value = parsed
-            if index + 1 < tokens.count {
-                let possibleUnit = tokens[index + 1]
-                if possibleUnit.rangeOfCharacter(from: .letters) != nil || possibleUnit.contains("/") {
-                    unit = String(possibleUnit)
-                }
-            }
-            break
-        }
-
-        return (value, unit)
-    }
-
-    private func extractUnitCount(from text: String) -> Int {
-        guard let regex = try? NSRegularExpression(pattern: "\\d+") else { return 0 }
-        let matches = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
-        guard let last = matches.last,
-              let range = Range(last.range, in: text),
-              let value = Int(text[range]) else {
-            return 0
-        }
-        return value
-    }
-
-    private func extractVolume(from text: String) -> String {
-        let uppercase = text.uppercased()
-        guard let regex = try? NSRegularExpression(pattern: "\\d+\\s*(ML|L)") else { return "" }
-        let range = NSRange(location: 0, length: (uppercase as NSString).length)
-        guard let match = regex.firstMatch(in: uppercase, range: range),
-              let matchRange = Range(match.range, in: uppercase) else {
-            return ""
-        }
-        return uppercase[matchRange].lowercased()
-    }
-
     private func normalizeScannerText(_ text: String) -> String {
         let folded = text.folding(options: [.diacriticInsensitive, .widthInsensitive, .caseInsensitive], locale: .current)
         let upper = folded.uppercased()
@@ -430,12 +172,12 @@ struct CatalogSelectionRepository {
     }
 
     private func scoreMedicine(
-        record: CatalogRecord,
+        selection: CatalogSelection,
         normalizedText: String,
         tokens: Set<String>,
         numbers: Set<String>
     ) -> Double {
-        let nameNorm = normalizeScannerText(record.name)
+        let nameNorm = normalizeScannerText(selection.name)
         guard !nameNorm.isEmpty else { return 0 }
         let nameTokens = tokenSet(fromScannerText: nameNorm)
         let overlap = nameTokens.intersection(tokens).count
@@ -444,19 +186,19 @@ struct CatalogSelectionRepository {
         if normalizedText.contains(nameNorm) {
             score += 6.0
         }
-        for code in record.codes where numbers.contains(code) {
+        for code in selectionMatchCodes(for: selection) where numbers.contains(code) {
             score += 4.0
         }
         return score
     }
 
     private func scorePackage(
-        package: CatalogPackageRecord,
+        selection: CatalogSelection,
         normalizedText: String,
         tokens: Set<String>,
         numbers: Set<String>
     ) -> Double {
-        let labelNorm = normalizeScannerText(package.label)
+        let labelNorm = normalizeScannerText(selection.packageLabel)
         let labelTokens = tokenSet(fromScannerText: labelNorm)
         let overlap = labelTokens.intersection(tokens).count
         let labelNumbers = numberTokens(fromScannerText: labelNorm)
@@ -465,28 +207,17 @@ struct CatalogSelectionRepository {
         if !labelNorm.isEmpty && normalizedText.contains(labelNorm) {
             score += 4.0
         }
-        for code in package.codes where numbers.contains(code) {
+        for code in selectionMatchCodes(for: selection) where numbers.contains(code) {
             score += 5.0
         }
         return score
     }
-}
 
-private struct CatalogRecord {
-    let name: String
-    let principle: String
-    let codes: [String]
-    let packages: [CatalogPackageRecord]
-}
-
-private struct CatalogPackageRecord {
-    let id: String
-    let label: String
-    let units: Int
-    let tipologia: String
-    let dosageValue: Int32
-    let dosageUnit: String
-    let volume: String
-    let requiresPrescription: Bool
-    let codes: [String]
+    private func selectionMatchCodes(for selection: CatalogSelection) -> [String] {
+        [selection.catalogCode, selection.productKey, selection.packageKey]
+            .compactMap { $0 }
+            .flatMap { code in
+                code.split(whereSeparator: { !$0.isNumber }).map(String.init)
+            }
+    }
 }

@@ -37,7 +37,7 @@ struct MedicineDetailView: View {
     @State private var showThresholdAlert = false
     @State private var showLabelAlert = false
     @State private var thresholdInput: String = ""
-    @State private var labelInput: String = ""
+    @State private var labelsInput: String = ""
     @State private var didHandleInitialAction = false
     @State private var hasStartedObservation = false
 
@@ -192,25 +192,25 @@ struct MedicineDetailView: View {
         } message: {
             Text("Inserisci il numero di giorni sotto cui ricevere l'avviso di scorte basse.")
         }
-        .alert("Etichetta", isPresented: $showLabelAlert) {
-            TextField("Es. Salvavita, Bambini, Viaggio", text: $labelInput)
+        .alert("Etichette", isPresented: $showLabelAlert) {
+            TextField("Es. Salvavita, Bambini, Viaggio", text: $labelsInput)
             Button("Salva") {
-                try? appDataStore.provider.medicines.setLabel(
+                try? appDataStore.provider.medicines.setLabels(
                     medicine: medicine,
-                    label: labelInput
+                    labels: Medicine.labels(fromInput: labelsInput)
                 )
             }
-            if medicine.displayLabel != nil {
-                Button("Rimuovi", role: .destructive) {
-                    try? appDataStore.provider.medicines.setLabel(
+            if !medicine.displayLabels.isEmpty {
+                Button("Rimuovi tutte", role: .destructive) {
+                    try? appDataStore.provider.medicines.setLabels(
                         medicine: medicine,
-                        label: nil
+                        labels: []
                     )
                 }
             }
             Button("Annulla", role: .cancel) { }
         } message: {
-            Text("Aggiungi una breve etichetta personalizzata per riconoscere il farmaco più rapidamente.")
+            Text("Aggiungi una o più etichette personalizzate, separate da virgole, per riconoscere il farmaco più rapidamente.")
         }
 
     }
@@ -306,17 +306,8 @@ struct MedicineDetailView: View {
         return medicine.obbligo_ricetta ? .blue : .green
     }
 
-    private var packageSummary: String? {
-        formattedPackageLabel(package)
-    }
-
-    private var medicineLabel: String? {
-        medicine.displayLabel
-    }
-    
-    private var activeIngredient: String? {
-        let active = medicine.principio_attivo.trimmingCharacters(in: .whitespacesAndNewlines)
-        return active.isEmpty ? nil : active
+    private var medicineLabelsText: String? {
+        medicine.displayHashtagsText
     }
 
     private var coverageSummaryText: String {
@@ -751,23 +742,19 @@ extension MedicineDetailView {
     private var medicineInfoSection: some View {
         Section {
             Button {
-                labelInput = medicineLabel ?? ""
+                labelsInput = medicine.displayLabels.joined(separator: ", ")
                 showLabelAlert = true
             } label: {
-                HStack(spacing: 12) {
-                    Text("Etichetta")
+                HStack(alignment: .top, spacing: 12) {
+                    Text("Etichette")
                         .foregroundStyle(.primary)
-                    Spacer()
-                    if let medicineLabel {
-                        Text(medicineLabel)
+                    Spacer(minLength: 12)
+                    if let medicineLabelsText {
+                        Text(medicineLabelsText)
                             .font(.footnote.weight(.semibold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(Color.blue.opacity(0.12))
-                            )
                             .foregroundStyle(.blue)
+                            .multilineTextAlignment(.trailing)
+                            .fixedSize(horizontal: false, vertical: true)
                     } else {
                         Text("Aggiungi")
                             .foregroundStyle(.secondary)
@@ -775,20 +762,6 @@ extension MedicineDetailView {
                 }
             }
             .buttonStyle(.plain)
-
-            if let activeIngredient {
-                LabeledContent("Principio attivo") {
-                    Text(activeIngredient)
-                        .multilineTextAlignment(.trailing)
-                }
-            }
-
-            if let packageSummary {
-                LabeledContent("Confezione") {
-                    Text(packageSummary)
-                        .multilineTextAlignment(.trailing)
-                }
-            }
         } header: {
             Text("Info farmaco")
                 .font(.body.weight(.semibold))

@@ -231,10 +231,11 @@ struct MedicineRowView: View {
             VStack(alignment: .leading, spacing: 4) {
                 titleLine
                 subtitleBlock
+                labelLine
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 12)
         .padding(.trailing, 4)
         .contentShape(Rectangle())
         .overlay {
@@ -659,7 +660,6 @@ struct MedicineRowView: View {
         let base = trimmed.isEmpty ? "Medicinale" : trimmed
         let name = camelCase(base)
         let dosage = primaryPackageDosage
-        let label = medicine.displayLabel
         return HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(name)
                 .font(.system(size: 16, weight: .regular))
@@ -678,18 +678,18 @@ struct MedicineRowView: View {
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
-            if let label {
-                Text(label)
-                    .font(.system(size: 11, weight: .semibold))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color.blue.opacity(0.12))
-                    )
-                    .foregroundStyle(.blue)
-                    .lineLimit(1)
-            }
+        }
+    }
+
+    @ViewBuilder
+    private var labelLine: some View {
+        if let labels = medicine.displayHashtagsText {
+            Text(labels)
+                .font(subtitleFont)
+                .foregroundStyle(Color.teal)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

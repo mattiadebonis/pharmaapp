@@ -33,9 +33,11 @@ struct CatalogAddMedicineView: View {
     @State private var shouldAutoFocusSearch = false
     @State private var didHandleInitialAppearance = false
     @State private var catalogSelections: [CatalogSelection] = []
+    @State private var catalogCountry: CatalogCountry = .fallback()
     @State private var isLoading = false
     @State private var isScanPresented = false
     @State private var isProcessingScan = false
+    @State private var catalogErrorMessage: String?
     @State private var scanErrorMessage: String?
     @State private var showScanError = false
     @State private var feedback: Feedback?
@@ -58,6 +60,10 @@ struct CatalogAddMedicineView: View {
             in: catalogSelections,
             excludingIdentityKeys: inCabinetIdentityKeys
         )
+    }
+
+    private var catalogSearchToken: String {
+        "\(catalogCountry.rawValue)|\(trimmedSearchText)"
     }
 
     var body: some View {
@@ -105,7 +111,7 @@ struct CatalogAddMedicineView: View {
             }
         }
         .task {
-            loadCatalogIfNeeded()
+            await loadCatalogPreferencesIfNeeded()
             guard !hasStartedObservation else { return }
             hasStartedObservation = true
             reloadMedicines()
@@ -114,6 +120,9 @@ struct CatalogAddMedicineView: View {
             ) {
                 reloadMedicines()
             }
+        }
+        .task(id: catalogSearchToken) {
+            await refreshCatalogResults()
         }
         .onAppear {
             guard !didHandleInitialAppearance else { return }
@@ -229,12 +238,15 @@ struct CatalogAddMedicineView: View {
 
     private var emptyResultsContent: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Nessun risultato", systemImage: "magnifyingglass")
+            Label(catalogErrorMessage == nil ? "Nessun risultato" : "Catalogo non disponibile", systemImage: "magnifyingglass")
                 .font(.headline)
-            Text("Nessuna corrispondenza fuori dall'armadietto per \"\(trimmedSearchText)\".")
+            Text(
+                catalogErrorMessage
+                ?? "Nessuna corrispondenza fuori dall'armadietto per \"\(trimmedSearchText)\"."
+            )
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Text("Prova con meno parole o usa lo scanner.")
+            Text(catalogErrorMessage == nil ? "Prova con meno parole o usa lo scanner." : "Controlla la configurazione Supabase e riprova.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -356,21 +368,54 @@ struct CatalogAddMedicineView: View {
         return tipo.isEmpty ? "confezione" : tipo
     }
 
-    private func loadCatalogIfNeeded() {
-        guard catalogSelections.isEmpty else { return }
+    @MainActor
+    private func loadCatalogPreferencesIfNeeded() async {
+        guard let option = try? appDataStore.provider.medicines.fetchCurrentOption() else {
+            return
+        }
+        catalogCountry = option.resolvedCatalogCountry
+    }
+
+    @MainActor
+    private func refreshCatalogResults() async {
+        let query = trimmedSearchText
+        guard !query.isEmpty else {
+            catalogSelections = []
+            isLoading = false
+            catalogErrorMessage = nil
+            return
+        }
+
         isLoading = true
-        DispatchQueue.global(qos: .userInitiated).async {
-            let selections = repository.loadSelections()
-            DispatchQueue.main.async {
-                catalogSelections = selections
-                isLoading = false
-            }
+        catalogErrorMessage = nil
+
+        do {
+            try await Task.sleep(nanoseconds: 250_000_000)
+            let selections = try await appDataStore.provider.catalog.searchCatalog(
+                country: catalogCountry,
+                query: query,
+                limit: 40
+            )
+            guard !Task.isCancelled else { return }
+            catalogSelections = selections
+            isLoading = false
+        } catch is CancellationError {
+            isLoading = false
+        } catch {
+            guard !Task.isCancelled else { return }
+            catalogSelections = []
+            isLoading = false
+            catalogErrorMessage = error.localizedDescription
         }
     }
 
     private func reloadMedicines() {
         do {
-            medicines = try appDataStore.provider.search.fetchSnapshot().medicines
+            let snapshot = try appDataStore.provider.search.fetchSnapshot()
+            medicines = snapshot.medicines
+            if let option = snapshot.option {
+                catalogCountry = option.resolvedCatalogCountry
+            }
         } catch {
             medicines = []
         }
@@ -397,18 +442,42 @@ struct CatalogAddMedicineView: View {
                 return
             }
 
-            DispatchQueue.global(qos: .userInitiated).async {
-                let match = repository.matchSelection(fromRecognizedText: text)
-                DispatchQueue.main.async {
-                    isProcessingScan = false
-                    if let match {
-                        searchText = match.name
-                    } else {
-                        scanErrorMessage = "Nessuna corrispondenza trovata nel catalogo."
-                        showScanError = true
-                    }
-                }
+            Task { @MainActor in
+                await handleRecognizedCatalogText(text)
             }
+        }
+    }
+
+    @MainActor
+    private func handleRecognizedCatalogText(_ text: String) async {
+        do {
+            let selections = try await appDataStore.provider.catalog.searchCatalog(
+                country: catalogCountry,
+                query: text,
+                limit: 60
+            )
+            catalogSelections = selections
+            isProcessingScan = false
+
+            if let match = repository.matchSelection(
+                fromRecognizedText: text,
+                candidates: selections
+            ) {
+                searchText = match.name
+                return
+            }
+
+            if !selections.isEmpty {
+                searchText = text
+                return
+            }
+
+            scanErrorMessage = "Nessuna corrispondenza trovata nel catalogo."
+            showScanError = true
+        } catch {
+            isProcessingScan = false
+            scanErrorMessage = error.localizedDescription
+            showScanError = true
         }
     }
 

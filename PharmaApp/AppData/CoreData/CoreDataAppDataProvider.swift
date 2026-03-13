@@ -1,7 +1,31 @@
 import Foundation
 import CoreData
 
-private struct CoreDataCatalogGateway: CatalogGateway {}
+private final class CoreDataCatalogGateway: CatalogGateway {
+    private let gateway = SharedCatalogGateway()
+
+    func searchCatalog(
+        country: CatalogCountry,
+        query: String,
+        limit: Int
+    ) async throws -> [CatalogSelection] {
+        try await gateway.searchCatalog(country: country, query: query, limit: limit)
+    }
+
+    func fetchCatalogProduct(
+        country: CatalogCountry,
+        productId: String
+    ) async throws -> CatalogProduct {
+        try await gateway.fetchCatalogProduct(country: country, productId: productId)
+    }
+
+    func fetchCatalogPackage(
+        country: CatalogCountry,
+        packageId: String
+    ) async throws -> CatalogPackage {
+        try await gateway.fetchCatalogPackage(country: country, packageId: packageId)
+    }
+}
 private struct CoreDataPeopleGateway: PeopleGateway {}
 
 @MainActor
@@ -195,10 +219,9 @@ private final class CoreDataMedicinesGateway: MedicinesGateway {
         return RecurrenceManager(context: context).parseRecurrenceString(therapy.rrule ?? "")
     }
 
-    func setLabel(medicine: Medicine, label: String?) throws {
+    func setLabels(medicine: Medicine, labels: [String]) throws {
         let medicine = inContext(medicine)
-        let trimmed = label?.trimmingCharacters(in: .whitespacesAndNewlines)
-        medicine.etichetta = (trimmed?.isEmpty == false) ? trimmed : nil
+        medicine.displayLabels = labels
         try CoreDataWriteCommand.saveOrRollback(context)
     }
 
@@ -688,6 +711,12 @@ private final class CoreDataSearchGateway: SearchGateway {
         let request = Medicine.extractMedicines()
         guard let medicines = try? context.fetch(request) else { return nil }
 
+        if let keyed = medicines.first(where: {
+            ($0.catalog_product_key ?? "").caseInsensitiveCompare(selection.productKey) == .orderedSame
+        }) {
+            return keyed
+        }
+
         let identity = repository.identityKey(for: selection)
         if let exact = medicines.first(where: {
             repository.identityKey(name: $0.nome, principle: $0.principio_attivo) == identity
@@ -700,7 +729,12 @@ private final class CoreDataSearchGateway: SearchGateway {
     }
 
     private func existingPackage(for medicine: Medicine, selection: CatalogSelection) -> Package? {
-        medicine.packages.first(where: { packageMatches($0, selection: selection) })
+        if let keyed = medicine.packages.first(where: {
+            ($0.catalog_package_key ?? "").caseInsensitiveCompare(selection.packageKey) == .orderedSame
+        }) {
+            return keyed
+        }
+        return medicine.packages.first(where: { packageMatches($0, selection: selection) })
     }
 
     private func existingEntry(for medicine: Medicine, package: Package) -> MedicinePackage? {
@@ -711,6 +745,10 @@ private final class CoreDataSearchGateway: SearchGateway {
     }
 
     private func packageMatches(_ package: Package, selection: CatalogSelection) -> Bool {
+        if let packageKey = package.catalog_package_key,
+           packageKey.caseInsensitiveCompare(selection.packageKey) == .orderedSame {
+            return true
+        }
         let sameUnits = Int(package.numero) == max(1, selection.units)
         let sameType = repository.normalizeText(package.tipologia) == repository.normalizeText(selection.tipologia)
         let sameValue = package.valore == selection.valore
@@ -727,6 +765,10 @@ private final class CoreDataSearchGateway: SearchGateway {
         medicine.nome = selection.name
         medicine.principio_attivo = selection.principle
         medicine.obbligo_ricetta = selection.requiresPrescription
+        medicine.catalog_country = selection.country.rawValue
+        medicine.catalog_source = selection.source
+        medicine.catalog_product_key = selection.productKey
+        medicine.catalog_family_key = selection.familyKey
         medicine.in_cabinet = true
         return medicine
     }
@@ -736,6 +778,10 @@ private final class CoreDataSearchGateway: SearchGateway {
         package.id = UUID()
         package.source_id = package.id
         package.visibility = "local"
+        package.catalog_country = selection.country.rawValue
+        package.catalog_source = selection.source
+        package.catalog_package_key = selection.packageKey
+        package.catalog_code = selection.catalogCode
         package.tipologia = selection.tipologia.isEmpty ? "Confezione" : selection.tipologia
         package.numero = Int32(max(1, selection.units))
         package.unita = selection.unita.isEmpty ? "unita" : selection.unita
@@ -1091,6 +1137,8 @@ private final class CoreDataSettingsGateway: SettingsGateway {
         option.therapy_notification_level = TherapyNotificationPreferences.defaultLevel.rawValue
         option.therapy_snooze_minutes = Int32(TherapyNotificationPreferences.defaultSnoozeMinutes)
         option.prescription_message_template = PrescriptionMessageTemplateRenderer.defaultTemplate
+        option.catalog_country = CatalogCountry.fallback().rawValue
+        option.business_country = option.catalog_country
         return option
     }
 }

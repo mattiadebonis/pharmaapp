@@ -7,12 +7,8 @@ struct ContentView: View {
     @State private var globalCodiceFiscaleEntries: [PrescriptionCFEntry] = []
 
     var body: some View {
-        Group {
-            if #available(iOS 18.0, *) {
-                modernTabView
-            } else {
-                legacyTabView
-            }
+        NavigationStack {
+            CabinetView()
         }
         .fullScreenCover(isPresented: $isGlobalCodiceFiscalePresented) {
             CodiceFiscaleFullscreenView(entries: globalCodiceFiscaleEntries) {
@@ -45,68 +41,6 @@ struct ContentView: View {
             appRouter.markRouteHandled(route)
         case .scan, .addMedicine:
             break
-        }
-    }
-
-    @available(iOS 18.0, *)
-    private var modernTabView: some View {
-        TabView(selection: $appRouter.selectedTab) {
-            Tab("Armadietto", systemImage: "pills", value: AppTabRoute.medicine) {
-                NavigationStack {
-                    CabinetView()
-                }
-            }
-            Tab("Profilo", systemImage: "person.crop.circle", value: AppTabRoute.profilo) {
-                NavigationStack {
-                    ProfileView(showsDoneButton: false)
-                        .navigationTitle("Profilo")
-                        .navigationBarTitleDisplayMode(.inline)
-                }
-            }
-            Tab(
-                "Cerca",
-                systemImage: "magnifyingglass",
-                value: AppTabRoute.search,
-                role: .search
-            ) {
-                NavigationStack {
-                    GlobalSearchView()
-                        .navigationTitle("Cerca")
-                        .navigationBarTitleDisplayMode(.inline)
-                }
-            }
-        }
-    }
-
-    private var legacyTabView: some View {
-        TabView(selection: $appRouter.selectedTab) {
-            NavigationStack {
-                CabinetView()
-            }
-            .tabItem {
-                Label("Armadietto", systemImage: "pills")
-            }
-            .tag(AppTabRoute.medicine)
-
-            NavigationStack {
-                ProfileView(showsDoneButton: false)
-                    .navigationTitle("Profilo")
-                    .navigationBarTitleDisplayMode(.inline)
-            }
-            .tabItem {
-                Label("Profilo", systemImage: "person.crop.circle")
-            }
-            .tag(AppTabRoute.profilo)
-
-            NavigationStack {
-                GlobalSearchView()
-                    .navigationTitle("Cerca")
-                    .navigationBarTitleDisplayMode(.inline)
-            }
-            .tabItem {
-                Label("Cerca", systemImage: "magnifyingglass")
-            }
-            .tag(AppTabRoute.search)
         }
     }
 }

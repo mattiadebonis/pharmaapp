@@ -270,8 +270,8 @@ struct CabinetSummaryBuilderTests {
             now: makeDate(2026, 2, 28, 10, 0, calendar: calendar)
         )
 
-        #expect(payload.line1 == "Copertura scorte: 20 giorni")
-        #expect(payload.line2 == "Confezioni: 2 · Unità: 20")
+        #expect(payload.line1 == "20 giorni copertura scorte")
+        #expect(payload.line2 == "2 confezioni")
         #expect(payload.therapyLines.count == 1)
         #expect(payload.therapyLines.first?.description == "1 terapia attiva")
     }

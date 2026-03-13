@@ -263,7 +263,6 @@ class DataManager {
         if userDefaults.bool(forKey: bootstrapCompletedKey) {
             return
         }
-        initializePharmaciesDataIfNeeded()
         initializeOptionsIfEmpty()
         userDefaults.set(true, forKey: bootstrapCompletedKey)
     }
@@ -284,6 +283,8 @@ class DataManager {
                 newOption.therapy_notification_level = TherapyNotificationPreferences.defaultLevel.rawValue
                 newOption.therapy_snooze_minutes = Int32(TherapyNotificationPreferences.defaultSnoozeMinutes)
                 newOption.prescription_message_template = PrescriptionMessageTemplateRenderer.defaultTemplate
+                newOption.catalog_country = CatalogCountry.fallback().rawValue
+                newOption.business_country = newOption.catalog_country
             }else if options.count > 0 {
                 if let option = options.first {
                     if !option.manual_intake_registration {
@@ -309,6 +310,13 @@ class DataManager {
                     )
                     if option.prescription_message_template != normalizedTemplate {
                         option.prescription_message_template = normalizedTemplate
+                    }
+                    let defaultCountry = CatalogCountry.fallback().rawValue
+                    if option.catalog_country?.isEmpty != false {
+                        option.catalog_country = defaultCountry
+                    }
+                    if option.business_country?.isEmpty != false {
+                        option.business_country = option.catalog_country ?? defaultCountry
                     }
                 }
             }

@@ -13,6 +13,10 @@ public class Package: NSManagedObject {
     @NSManaged public var visibility: String?
     @NSManaged public var id: UUID
     @NSManaged public var id_package: String?
+    @NSManaged public var catalog_country: String?
+    @NSManaged public var catalog_source: String?
+    @NSManaged public var catalog_package_key: String?
+    @NSManaged public var catalog_code: String?
     @NSManaged public var denominazione_package: String?
     @NSManaged public var descrizione_fornitura: String?
     @NSManaged public var classe_fornitura: String?

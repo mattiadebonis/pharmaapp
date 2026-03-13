@@ -84,6 +84,11 @@
 		        <attribute name="source_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
 		        <attribute name="visibility" optional="YES" attributeType="String" defaultValueString="local"/>
 		        <attribute name="etichetta" optional="YES" attributeType="String"/>
+		        <attribute name="etichette_json" optional="YES" attributeType="String"/>
+		        <attribute name="catalog_country" optional="YES" attributeType="String"/>
+		        <attribute name="catalog_source" optional="YES" attributeType="String"/>
+		        <attribute name="catalog_product_key" optional="YES" attributeType="String"/>
+		        <attribute name="catalog_family_key" optional="YES" attributeType="String"/>
 		        <attribute name="custom_stock_threshold" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
 		        <attribute name="deadline_month" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
 		        <attribute name="deadline_year" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
@@ -178,6 +183,8 @@
         <attribute name="user_id" optional="YES" attributeType="String"/>
     </entity>
     <entity name="Option" representedClassName=".Option" syncable="YES">
+        <attribute name="business_country" optional="YES" attributeType="String"/>
+        <attribute name="catalog_country" optional="YES" attributeType="String"/>
         <attribute name="day_threeshold_stocks_alarm" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="manual_intake_registration" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
@@ -186,6 +193,10 @@
         <attribute name="therapy_snooze_minutes" optional="YES" attributeType="Integer 32" defaultValueString="10" usesScalarValueType="YES"/>
     </entity>
     <entity name="Package" representedClassName=".Package" syncable="YES">
+        <attribute name="catalog_code" optional="YES" attributeType="String"/>
+        <attribute name="catalog_country" optional="YES" attributeType="String"/>
+        <attribute name="catalog_package_key" optional="YES" attributeType="String"/>
+        <attribute name="catalog_source" optional="YES" attributeType="String"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="source_id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="visibility" optional="YES" attributeType="String" defaultValueString="local"/>

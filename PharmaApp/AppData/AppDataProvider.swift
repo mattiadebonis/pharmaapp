@@ -88,7 +88,7 @@ protocol MedicinesGateway {
         preferredEntry: MedicinePackage?
     ) -> (month: Int, year: Int)?
     func recurrenceRule(for therapy: Therapy) -> RecurrenceRule
-    func setLabel(medicine: Medicine, label: String?) throws
+    func setLabels(medicine: Medicine, labels: [String]) throws
     func setCustomStockThreshold(medicine: Medicine, threshold: Int32) throws
     func deleteCabinet(cabinetId: UUID, moveToCabinetId: UUID?) throws
     func deletePackage(medicine: Medicine, package: Package) throws
@@ -135,7 +135,24 @@ protocol MedicinesGateway {
     func updateTherapy(_ therapy: Therapy, input: TherapyWriteInput) throws
     func deleteTherapy(_ therapy: Therapy) throws
 }
-protocol CatalogGateway {}
+
+protocol CatalogGateway {
+    func searchCatalog(
+        country: CatalogCountry,
+        query: String,
+        limit: Int
+    ) async throws -> [CatalogSelection]
+
+    func fetchCatalogProduct(
+        country: CatalogCountry,
+        productId: String
+    ) async throws -> CatalogProduct
+
+    func fetchCatalogPackage(
+        country: CatalogCountry,
+        packageId: String
+    ) async throws -> CatalogPackage
+}
 struct SearchDataSnapshot {
     let medicines: [Medicine]
     let medicineEntries: [MedicinePackage]

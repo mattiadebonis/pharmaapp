@@ -68,6 +68,9 @@ struct TherapySummaryBuilder {
     /// Summary style matching the Therapy list in MedicineDetailView.
     func summary(for therapy: Therapy) -> String {
         var summary = descriptionText(for: therapy, includeTimes: true, includePerson: true)
+        if let doctorDetails = doctorDisplayName(for: therapy.prescribingDoctor) {
+            summary += " - Medico prescrittore: \(doctorDetails)"
+        }
         if let conditionDetails = conditionDetailsText(for: therapy) {
             summary += " - Condizioni: \(conditionDetails)"
         }

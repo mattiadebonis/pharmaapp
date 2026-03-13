@@ -105,8 +105,8 @@ func makeMedicineActiveTherapiesSubtitle(
         )
     }
 
-    let line1 = "Copertura scorte: \(estimatedCoverageText)"
-    let line2 = "Confezioni: \(packageCount) · Unità: \(stockUnits)"
+    let line1 = "\(estimatedCoverageText) copertura scorte"
+    let line2 = formatCount(packageCount, singular: "confezione", plural: "confezioni")
     let therapyLabel = therapyCount == 1 ? "terapia attiva" : "terapie attive"
     let line3 = "\(therapyCount) \(therapyLabel)"
 

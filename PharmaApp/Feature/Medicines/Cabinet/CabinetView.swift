@@ -35,10 +35,41 @@ struct CabinetView: View {
         static let emptyStateBottomTextHorizontalInset: CGFloat = 14
     }
 
+    private enum StockFilterIndicator: Equatable {
+        case ok
+        case protected
+        case warning
+        case critical
+
+        var systemImage: String {
+            switch self {
+            case .ok:
+                return "checkmark.circle.fill"
+            case .protected, .warning, .critical:
+                return "shield.fill"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .ok, .protected:
+                return .green
+            case .warning:
+                return .yellow
+            case .critical:
+                return .red
+            }
+        }
+    }
+
+    private struct FilterChipPresentation {
+        let count: Int
+        let indicator: StockFilterIndicator
+    }
+
     @EnvironmentObject private var appRouter: AppRouter
     @EnvironmentObject private var appDataStore: AppDataStore
     @EnvironmentObject private var favoritesStore: FavoritesStore
-    @Environment(\.openURL) private var openURL
     @StateObject private var viewModel = CabinetViewModel()
     @StateObject private var locationVM = LocationSearchViewModel()
 
@@ -46,6 +77,7 @@ struct CabinetView: View {
     @State private var options: [Option] = []
     @State private var cabinets: [Cabinet] = []
 
+    @State private var activeFilter: CabinetFilter?
     @State private var activeCabinetID: String?
     @State private var entryToMoveSelection: EntrySelection?
     @State private var isNewCabinetPresented = false
@@ -59,8 +91,9 @@ struct CabinetView: View {
         "0 su 0",
         "farmaci coperti"
     ]
-    @State private var cachedSummaryPriority: CabinetSummaryPriority = .allUnderControl
     @State private var cachedInlineAction: String = "Scorte 0/0"
+    @State private var cachedMedicineStockStatuses: [UUID: StockStatus] = [:]
+    @State private var cachedFilterChipPresentations: [String: FilterChipPresentation] = [:]
     @State private var cachedShelfState: ShelfViewState = .empty
     @State private var rowSnapshotsByEntryID: [String: CabinetViewModel.CabinetRowSnapshot] = [:]
     @State private var syncWorkItem: DispatchWorkItem?
@@ -78,6 +111,15 @@ struct CabinetView: View {
             .navigationTitle("Armadietto")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        isProfilePresented = true
+                    } label: {
+                        Image(systemName: "person.crop.circle")
+                            .font(.headline)
+                    }
+                    .accessibilityLabel("Profilo")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         shouldAutoStartCatalogScan = false
@@ -134,6 +176,7 @@ struct CabinetView: View {
 
     private func recomputeAllCachedState() {
         recomputeSummaryLines()
+        recomputeFilterChipPresentations()
         recomputeShelfState()
         syncSummaryToWidgetDebounced()
     }
@@ -154,7 +197,6 @@ struct CabinetView: View {
     private func recomputeSummaryLines() {
         let displayData = computeSummaryDisplayData()
         cachedSummaryLines = displayData.lines
-        cachedSummaryPriority = displayData.summary.priority
         cachedInlineAction = displayData.inlineAction
     }
 
@@ -247,11 +289,9 @@ struct CabinetView: View {
 
     private var cabinetListStyled: some View {
         cabinetListView
-            .listRowSeparator(.hidden)
             .listSectionSeparator(.hidden)
-            .listRowSeparator(.hidden, edges: .all)
             .listSectionSpacingIfAvailable(4)
-            .listRowSpacing(18)
+            .listRowSpacing(0)
             .listStyle(.plain)
             .scrollDisabled(isShelfEmpty(cachedShelfState))
             .scrollIndicators(.hidden)
@@ -296,8 +336,9 @@ struct CabinetView: View {
     }
 
     private var cabinetListView: some View {
-        let viewState = cachedShelfState
+        let viewState = activeFilter == nil ? cachedShelfState : filteredShelfState(cachedShelfState)
         return List {
+            filterChipsSection
             standardCabinetSections(viewState: viewState)
         }
     }
@@ -316,22 +357,6 @@ struct CabinetView: View {
 
     @ViewBuilder
     private func standardCabinetSections(viewState: ShelfViewState) -> some View {
-        if shouldShowPharmacySuggestion {
-            Section {
-                pharmacyRecommendationRow
-                    .listRowInsets(
-                        EdgeInsets(
-                            top: 12,
-                            leading: Layout.horizontalInset,
-                            bottom: 18,
-                            trailing: Layout.horizontalInset
-                        )
-                    )
-                    .listRowBackground(Color.clear)
-            }
-            .listSectionSeparator(.hidden)
-        }
-
         if isShelfEmpty(viewState) {
             Section {
                 emptyCabinetContent
@@ -349,7 +374,7 @@ struct CabinetView: View {
         }
 
         if !viewState.pinnedMedicineEntries.isEmpty || !viewState.otherMedicineEntries.isEmpty {
-            Section(header: sectionHeader("Medicinali", topPadding: 0)) {
+            Section {
                 ForEach(viewState.pinnedMedicineEntries, id: \.id) { entry in
                     shelfRow(for: entry, orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID)
                 }
@@ -490,7 +515,269 @@ struct CabinetView: View {
         .foregroundStyle(.white)
     }
 
+    // MARK: - Filters
+
+    private enum CabinetFilter: Hashable, Identifiable {
+        case stock
+        case therapies
+        case label(String)
+
+        var id: String {
+            switch self {
+            case .stock: return "stock"
+            case .therapies: return "therapies"
+            case .label(let l): return "label-\(l.lowercased())"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .stock: return "Scorte"
+            case .therapies: return "Terapie"
+            case .label(let l): return l
+            }
+        }
+    }
+
+    private var availableFilters: [CabinetFilter] {
+        var filters: [CabinetFilter] = []
+
+        let hasEntries = medicinePackages.contains { entry in
+            !entry.isDeleted
+        }
+        if hasEntries {
+            filters.append(.stock)
+        }
+
+        let hasTherapies = medicinePackages.contains { entry in
+            guard !entry.isDeleted else { return false }
+            guard let therapies = entry.medicine.therapies else { return false }
+            return !therapies.isEmpty
+        }
+        if hasTherapies {
+            filters.append(.therapies)
+        }
+
+        var labelsByKey: [String: String] = [:]
+        for entry in medicinePackages where !entry.isDeleted {
+            for label in entry.medicine.displayLabels {
+                let key = label.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if labelsByKey[key] == nil {
+                    labelsByKey[key] = label
+                }
+            }
+        }
+        for label in labelsByKey.values.sorted(by: { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }) {
+            filters.append(.label(label))
+        }
+
+        return filters
+    }
+
+    private func filteredShelfState(_ viewState: ShelfViewState) -> ShelfViewState {
+        guard let filter = activeFilter else { return viewState }
+
+        func matches(_ entry: MedicinePackage) -> Bool {
+            matchesFilter(filter, medicine: entry.medicine)
+        }
+
+        func filterEntries(_ entries: [CabinetViewModel.ShelfEntry]) -> [CabinetViewModel.ShelfEntry] {
+            entries.filter { shelfEntry in
+                if case .medicinePackage(let mp) = shelfEntry.kind {
+                    return matches(mp)
+                }
+                return false
+            }
+        }
+
+        return ShelfViewState(
+            pinnedMedicineEntries: filterEntries(viewState.pinnedMedicineEntries),
+            cabinetEntries: [],
+            otherMedicineEntries: filterEntries(viewState.otherMedicineEntries),
+            orderedEntriesByCabinetID: viewState.orderedEntriesByCabinetID
+        )
+    }
+
+    private func filterCount(_ filter: CabinetFilter) -> Int {
+        cachedFilterChipPresentations[filter.id]?.count ?? 0
+    }
+
+    @ViewBuilder
+    private var filterChipsSection: some View {
+        let filters = availableFilters
+        if !filters.isEmpty && !isShelfEmpty(cachedShelfState) {
+            Section {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(filters) { filter in
+                            let isActive = activeFilter == filter
+                            let count = filterCount(filter)
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    if activeFilter == filter {
+                                        activeFilter = nil
+                                    } else {
+                                        activeFilter = filter
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 5) {
+                                    if let indicator = filterIndicator(for: filter) {
+                                        Image(systemName: indicator.systemImage)
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(indicator.color)
+                                    }
+                                    Text(filter.title)
+                                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    if count > 0 {
+                                        Text("\(count)")
+                                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                            .foregroundStyle(isActive ? Color.white.opacity(0.7) : Color(.tertiaryLabel))
+                                    }
+                                }
+                                .foregroundStyle(isActive ? Color.white : Color(.secondaryLabel))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(isActive ? Color.accentColor : Color(.secondarySystemGroupedBackground))
+                                )
+                                .overlay(
+                                    Capsule(style: .continuous)
+                                        .strokeBorder(isActive ? Color.clear : Color(.separator), lineWidth: 0.5)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, Layout.horizontalInset)
+                    .padding(.vertical, 4)
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+            }
+            .listRowSeparator(.hidden)
+            .listSectionSeparator(.hidden)
+        }
+    }
+
     // MARK: - Helpers
+    private func recomputeFilterChipPresentations() {
+        let stockStatuses = Dictionary(uniqueKeysWithValues: uniqueMedicines.map { medicine in
+            (medicine.id, computeStockStatus(for: medicine))
+        })
+        cachedMedicineStockStatuses = stockStatuses
+
+        var presentations: [String: FilterChipPresentation] = [:]
+        for filter in availableFilters {
+            let medicines = matchingMedicines(for: filter, stockStatuses: stockStatuses)
+            let kpi = viewModel.computeSummaryDisplayData(
+                medicines: medicines,
+                option: options.first,
+                pharmacy: nil
+            ).kpi
+            presentations[filter.id] = FilterChipPresentation(
+                count: medicines.count,
+                indicator: stockFilterIndicator(for: kpi)
+            )
+        }
+        cachedFilterChipPresentations = presentations
+    }
+
+    private func stockFilterIndicator(
+        for kpi: CabinetViewModel.SummaryKPI
+    ) -> StockFilterIndicator {
+        let unknownCount = max(0, kpi.totalCount - kpi.coveredCount - kpi.refillCount)
+
+        if kpi.totalCount == 0 || kpi.coveredCount == kpi.totalCount {
+            return .ok
+        }
+        if kpi.stockStatusTone == .critical || (kpi.nextRefillInDays ?? Int.max) <= 0 {
+            return .critical
+        }
+        if unknownCount > 0 {
+            return .warning
+        }
+        if let nextRefillInDays = kpi.nextRefillInDays {
+            if nextRefillInDays == 1 {
+                return .warning
+            }
+            if nextRefillInDays > 1 {
+                return .protected
+            }
+        }
+        if kpi.refillCount > 0 {
+            return .protected
+        }
+        return .warning
+    }
+
+    private func filterIndicator(for filter: CabinetFilter) -> StockFilterIndicator? {
+        cachedFilterChipPresentations[filter.id]?.indicator
+    }
+
+    private func matchingMedicines(
+        for filter: CabinetFilter,
+        stockStatuses: [UUID: StockStatus]? = nil
+    ) -> [Medicine] {
+        uniqueMedicines.filter { matchesFilter(filter, medicine: $0, stockStatuses: stockStatuses) }
+    }
+
+    private func matchesFilter(
+        _ filter: CabinetFilter,
+        medicine: Medicine,
+        stockStatuses: [UUID: StockStatus]? = nil
+    ) -> Bool {
+        switch filter {
+        case .stock:
+            return stockFilterMedicineIDs(using: stockStatuses).contains(medicine.id)
+        case .therapies:
+            return !(medicine.therapies ?? []).isEmpty
+        case .label(let label):
+            let key = label.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return medicine.displayLabels.contains {
+                $0.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                    .trimmingCharacters(in: .whitespacesAndNewlines) == key
+            }
+        }
+    }
+
+    private func stockFilterMedicineIDs(using stockStatuses: [UUID: StockStatus]? = nil) -> Set<UUID> {
+        let resolvedStatuses = stockStatuses ?? cachedMedicineStockStatuses
+        let problematicIDs = Set(
+            uniqueMedicines.compactMap { medicine in
+                stockStatus(for: medicine, from: resolvedStatuses) == .ok ? nil : medicine.id
+            }
+        )
+
+        if !problematicIDs.isEmpty {
+            return problematicIDs
+        }
+
+        return Set(
+            uniqueMedicines.compactMap { medicine in
+                stockStatus(for: medicine, from: resolvedStatuses) == .ok ? medicine.id : nil
+            }
+        )
+    }
+
+    private func stockStatus(
+        for medicine: Medicine,
+        from stockStatuses: [UUID: StockStatus]
+    ) -> StockStatus {
+        stockStatuses[medicine.id] ?? computeStockStatus(for: medicine)
+    }
+
+    private func computeStockStatus(for medicine: Medicine) -> StockStatus {
+        guard let context = medicine.managedObjectContext else { return .unknown }
+        let builder = CoreDataSnapshotBuilder(context: context)
+        let snapshot = builder.makeMedicineSnapshot(medicine: medicine, logs: Array(medicine.logs ?? []))
+        let optionSnapshot = builder.makeOptionSnapshot(option: options.first)
+        return viewModel.sectionCalculator.stockStatus(for: snapshot, option: optionSnapshot)
+    }
+
     private var newCabinetSheet: some View {
         NavigationStack {
             Form {
@@ -578,7 +865,6 @@ struct CabinetView: View {
             snapshot: rowSnapshot?.presentation
         )
         .accessibilityIdentifier("MedicineRow_\(entry.id.uuidString)")
-        .listRowSeparator(.hidden, edges: .all)
         .listRowInsets(
             EdgeInsets(
                 top: 1,
@@ -663,76 +949,6 @@ struct CabinetView: View {
         }
     }
 
-    // MARK: - Pharmacy Suggestion
-    private var pharmacyRecommendationRow: some View {
-        Button(action: openPharmacyMap) {
-            HStack(spacing: 10) {
-                Text(pharmacyInlineText)
-                    .font(.callout)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-                    .layoutPriority(1)
-
-                Spacer(minLength: 6)
-
-                HStack(spacing: 4) {
-                    Text("Mappe")
-                    Image(systemName: "arrow.turn.up.right")
-                }
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-            }
-            .padding(.vertical, 2)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var pharmacyDisplayName: String {
-        let trimmedName = locationVM.pinItem?.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let trimmedName, !trimmedName.isEmpty {
-            return trimmedName
-        }
-        return "Farmacia più vicina"
-    }
-
-    private var pharmacyInlineText: String {
-        var parts: [String] = []
-
-        parts.append(pharmacyDisplayName)
-
-        if locationVM.isLikelyOpen == true {
-            parts.append("Aperta")
-        } else if locationVM.isLikelyOpen == false {
-            parts.append("Chiusa")
-        }
-
-        if let walking = routeMinutes(for: .walking) {
-            parts.append("\(walking) min")
-        } else if let distance = compactDistanceText {
-            parts.append(distance)
-        }
-
-        return parts.joined(separator: " · ")
-    }
-
-    private var compactDistanceText: String? {
-        let raw = locationVM.distanceString?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let raw, !raw.isEmpty else { return nil }
-        return raw.components(separatedBy: "·").first?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var shouldShowPharmacySuggestion: Bool {
-        switch cachedSummaryPriority {
-        case .refillBeforeNextDose, .refillWithinToday, .refillSoon:
-            return true
-        default:
-            return false
-        }
-    }
-
     private enum PharmacyRouteMode {
         case walking
         case driving
@@ -754,17 +970,6 @@ struct CabinetView: View {
         let parts = [walkingText, drivingText].compactMap { $0 }
         guard !parts.isEmpty else { return nil }
         return parts.joined(separator: " · ")
-    }
-
-    private func openPharmacyMap() {
-        if locationVM.pinItem != nil {
-            locationVM.openInMaps()
-            return
-        }
-        locationVM.ensureStarted()
-        if let url = URL(string: "maps://?q=farmacia") {
-            openURL(url)
-        }
     }
 
 }

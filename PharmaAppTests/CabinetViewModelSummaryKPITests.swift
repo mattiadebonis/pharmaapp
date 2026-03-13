@@ -176,8 +176,8 @@ final class CabinetViewModelSummaryKPITests: XCTestCase {
             viewModel.buildRowSnapshots(entries: [item.entry], option: nil).values.first?.presentation
         )
 
-        XCTAssertEqual(presentation.line1, "Copertura scorte: 2 giorni")
-        XCTAssertEqual(presentation.line2, "Confezioni: 1 · Unità: 2")
+        XCTAssertEqual(presentation.line1, "2 giorni copertura scorte")
+        XCTAssertEqual(presentation.line2, "1 confezione")
         XCTAssertEqual(presentation.line1Tone, .danger)
         XCTAssertEqual(presentation.line2Tone, .normal)
     }
@@ -195,8 +195,8 @@ final class CabinetViewModelSummaryKPITests: XCTestCase {
             viewModel.buildRowSnapshots(entries: [item.entry], option: nil).values.first?.presentation
         )
 
-        XCTAssertEqual(presentation.line1, "Copertura scorte: < 1 giorno")
-        XCTAssertEqual(presentation.line2, "Confezioni: 0 · Unità: 0")
+        XCTAssertEqual(presentation.line1, "< 1 giorno copertura scorte")
+        XCTAssertEqual(presentation.line2, "0 confezioni")
         XCTAssertEqual(presentation.line1Tone, .danger)
         XCTAssertEqual(presentation.line2Tone, .danger)
     }

@@ -13,6 +13,11 @@ public class Medicine: NSManagedObject, Identifiable {
     @NSManaged public var source_id: UUID?
     @NSManaged public var visibility: String?
     @NSManaged public var etichetta: String?
+    @NSManaged public var etichette_json: String?
+    @NSManaged public var catalog_country: String?
+    @NSManaged public var catalog_source: String?
+    @NSManaged public var catalog_product_key: String?
+    @NSManaged public var catalog_family_key: String?
     @NSManaged public var id: UUID
     @NSManaged public var nome: String
     @NSManaged public var principio_attivo: String
@@ -92,9 +97,93 @@ public class Medicine: NSManagedObject, Identifiable {
 }
 
 extension Medicine {
+    var displayLabels: [String] {
+        get {
+            if let decoded = Self.decodedLabels(from: etichette_json) {
+                return decoded
+            }
+            return Self.labels(fromInput: etichetta)
+        }
+        set {
+            let normalized = Self.normalizedLabels(newValue)
+            etichette_json = Self.encodedLabelsString(from: normalized)
+            etichetta = normalized.isEmpty ? nil : normalized.joined(separator: ", ")
+        }
+    }
+
     var displayLabel: String? {
-        let trimmed = (etichetta ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        displayLabels.first
+    }
+
+    var searchableLabelsText: String {
+        displayLabels.joined(separator: " ")
+    }
+
+    var displayHashtagsText: String? {
+        let labels = displayLabels
+        guard !labels.isEmpty else { return nil }
+        return labels.map { "#\($0)" }.joined(separator: " · ")
+    }
+
+    static func labels(fromInput input: String?) -> [String] {
+        guard let input else { return [] }
+        let separators = CharacterSet(charactersIn: ",;\n")
+        return normalizedLabels(input.components(separatedBy: separators))
+    }
+
+    private static func normalizedLabels(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        var normalized: [String] = []
+
+        for value in values {
+            guard let clean = normalizedLabel(value) else { continue }
+            let key = normalizedLabelKey(clean)
+            if seen.insert(key).inserted {
+                normalized.append(clean)
+            }
+        }
+
+        return normalized
+    }
+
+    private static func normalizedLabel(_ value: String) -> String? {
+        let stripped = value.replacingOccurrences(
+            of: #"^#+"#,
+            with: "",
+            options: .regularExpression
+        )
+        let collapsedWhitespace = stripped.replacingOccurrences(
+            of: #"\s+"#,
+            with: " ",
+            options: .regularExpression
+        )
+        let trimmed = collapsedWhitespace.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func normalizedLabelKey(_ value: String) -> String {
+        value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func encodedLabelsString(from labels: [String]) -> String? {
+        guard !labels.isEmpty else { return nil }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(labels) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func decodedLabels(from string: String?) -> [String]? {
+        guard let raw = string,
+              let data = raw.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+            return nil
+        }
+        return normalizedLabels(decoded)
     }
     
     static func extractMedicines() -> NSFetchRequest<Medicine> {
