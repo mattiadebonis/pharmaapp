@@ -114,21 +114,11 @@ final class SupabaseAuthGatewayAdapter: AuthGateway {
     }
 
     func googleClientID() -> String? {
-        if let clientID = Self.sanitizedValue(
+        Self.sanitizedValue(
             processInfo.environment["GOOGLE_CLIENT_ID"]
                 ?? bundle.object(forInfoDictionaryKey: "GOOGLE_CLIENT_ID") as? String
                 ?? bundle.object(forInfoDictionaryKey: "GIDClientID") as? String
-        ) {
-            return clientID
-        }
-
-        guard let path = bundle.path(forResource: "GoogleService-Info", ofType: "plist"),
-              let dict = NSDictionary(contentsOfFile: path),
-              let clientID = Self.sanitizedValue(dict["CLIENT_ID"] as? String) else {
-            return nil
-        }
-
-        return clientID
+        )
     }
 
     private func resolveClient() throws -> SupabaseClient {
@@ -211,8 +201,16 @@ final class SupabaseAuthGatewayAdapter: AuthGateway {
 
     private static func sanitizedValue(_ value: String?) -> String? {
         guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("\""), trimmed.hasSuffix("\""), trimmed.count >= 2 {
+            trimmed.removeFirst()
+            trimmed.removeLast()
+            trimmed = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         guard !trimmed.isEmpty else { return nil }
+        if trimmed.hasPrefix("$("), trimmed.hasSuffix(")") {
+            return nil
+        }
         if trimmed.uppercased().contains("REPLACE_WITH_") {
             return nil
         }

@@ -31,7 +31,7 @@ struct LoginView: View {
                         .font(.system(size: 32, weight: .bold))
                         .foregroundStyle(.primary)
 
-                    Text("Accedi o crea il tuo account per continuare con Apple o Google.")
+                    Text(loginSubtitle)
                         .font(.subheadline)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
@@ -46,29 +46,31 @@ struct LoginView: View {
                         .frame(height: 48)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
 
-                    #if canImport(GoogleSignInSwift)
-                    GoogleSignInButton(action: auth.signInWithGoogle)
-                        .frame(height: 48)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                    #else
-                    Button {
-                        auth.signInWithGoogle()
-                    } label: {
-                        HStack {
-                            Image(systemName: "g.circle.fill")
-                            Text("Accedi con Google")
-                                .fontWeight(.semibold)
+                    if auth.isGoogleSignInConfigured {
+                        #if canImport(GoogleSignInSwift)
+                        GoogleSignInButton(action: auth.signInWithGoogle)
+                            .frame(height: 48)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        #else
+                        Button {
+                            auth.signInWithGoogle()
+                        } label: {
+                            HStack {
+                                Image(systemName: "g.circle.fill")
+                                Text("Accedi con Google")
+                                    .fontWeight(.semibold)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                            .background(Color(.secondarySystemBackground))
+                            .foregroundStyle(.primary)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                            )
                         }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                        .background(Color(.secondarySystemBackground))
-                        .foregroundStyle(.primary)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
-                        )
+                        #endif
                     }
-                    #endif
 
                     if auth.isBusy {
                         ProgressView()
@@ -103,6 +105,12 @@ struct LoginView: View {
             return [Color(.systemBackground), Color(.secondarySystemBackground)]
         }
         return [Color(red: 0.93, green: 0.96, blue: 1.0), Color(.systemBackground)]
+    }
+
+    private var loginSubtitle: String {
+        auth.isGoogleSignInConfigured
+            ? "Accedi o crea il tuo account per continuare con Apple o Google."
+            : "Accedi o crea il tuo account per continuare con Apple."
     }
 }
 

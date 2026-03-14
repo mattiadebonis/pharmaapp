@@ -43,6 +43,10 @@ final class AuthViewModel: ObservableObject {
         authStateTask?.cancel()
     }
 
+    var isGoogleSignInConfigured: Bool {
+        authGateway.googleClientID() != nil
+    }
+
     func start() {
         guard !didStart else { return }
         didStart = true
@@ -93,7 +97,7 @@ final class AuthViewModel: ObservableObject {
 
     func signInWithGoogle() {
         guard let clientID = authGateway.googleClientID() else {
-            errorMessage = "Google Sign-In non configurato. Imposta GOOGLE_CLIENT_ID e GOOGLE_REVERSED_CLIENT_ID (OAuth iOS)."
+            errorMessage = "Google non configurato in Supabase iOS. Imposta GOOGLE_CLIENT_ID e GOOGLE_REVERSED_CLIENT_ID, oppure usa Apple."
             return
         }
 

@@ -39,7 +39,15 @@ private struct SupabaseConfiguration {
 
     private static func sanitizedValue(_ value: String?) -> String? {
         guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("\""), trimmed.hasSuffix("\""), trimmed.count >= 2 {
+            trimmed.removeFirst()
+            trimmed.removeLast()
+            trimmed = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if trimmed.hasPrefix("$("), trimmed.hasSuffix(")") {
+            return nil
+        }
         return trimmed.isEmpty ? nil : trimmed
     }
 }

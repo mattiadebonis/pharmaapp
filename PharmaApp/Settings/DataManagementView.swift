@@ -140,7 +140,7 @@ struct DataManagementView: View {
     .environmentObject(
         AppDataStore(
             provider: CoreDataAppDataProvider(
-                authGateway: FirebaseAuthGatewayAdapter(),
+                authGateway: SupabaseAuthGatewayAdapter(),
                 backupGateway: ICloudBackupGatewayAdapter(coordinator: BackupCoordinator())
             )
         )

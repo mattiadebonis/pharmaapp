@@ -49,31 +49,8 @@ struct CabinetView: View {
         static let emptyStateBottomTextHorizontalInset: CGFloat = 14
     }
 
-    private enum StockFilterIndicator: Equatable {
-        case ok
-        case protected
-        case warning
-        case critical
-
-        var systemImage: String {
-            "shield.fill"
-        }
-
-        var color: Color {
-            switch self {
-            case .ok:
-                return .green
-            case .protected, .warning:
-                return .orange
-            case .critical:
-                return .red
-            }
-        }
-    }
-
     private struct FilterChipPresentation {
         let count: Int
-        let indicator: StockFilterIndicator
     }
 
     private struct CustomFilterEditorSheet: View {
@@ -141,10 +118,6 @@ struct CabinetView: View {
                         Section("Anteprima") {
                             HStack(spacing: 8) {
                                 Text("\(preview.count) farmaci")
-                                Spacer()
-                                Image(systemName: preview.indicator.systemImage)
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(preview.indicator.color)
                             }
                         }
                     }
@@ -804,11 +777,6 @@ struct CabinetView: View {
                                     Text("\(count)")
                                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                                         .foregroundStyle(isActive ? Color.white.opacity(0.7) : Color(.tertiaryLabel))
-                                    if let indicator = filterIndicator(for: filter) {
-                                        Image(systemName: indicator.systemImage)
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(indicator.color)
-                                    }
                                 }
                                 .foregroundStyle(isActive ? Color.white : Color(.secondaryLabel))
                                 .padding(.horizontal, 12)
@@ -879,49 +847,9 @@ struct CabinetView: View {
         var presentations: [String: FilterChipPresentation] = [:]
         for filter in availableFilters {
             let medicines = matchingMedicines(for: filter, stockStatuses: stockStatuses)
-            let kpi = viewModel.computeSummaryDisplayData(
-                medicines: medicines,
-                option: options.first,
-                pharmacy: nil
-            ).kpi
-            presentations[filter.id] = FilterChipPresentation(
-                count: medicines.count,
-                indicator: stockFilterIndicator(for: kpi)
-            )
+            presentations[filter.id] = FilterChipPresentation(count: medicines.count)
         }
         cachedFilterChipPresentations = presentations
-    }
-
-    private func stockFilterIndicator(
-        for kpi: CabinetViewModel.SummaryKPI
-    ) -> StockFilterIndicator {
-        let unknownCount = max(0, kpi.totalCount - kpi.coveredCount - kpi.refillCount)
-
-        if kpi.totalCount == 0 || kpi.coveredCount == kpi.totalCount {
-            return .ok
-        }
-        if kpi.stockStatusTone == .critical || (kpi.nextRefillInDays ?? Int.max) <= 0 {
-            return .critical
-        }
-        if unknownCount > 0 {
-            return .warning
-        }
-        if let nextRefillInDays = kpi.nextRefillInDays {
-            if nextRefillInDays == 1 {
-                return .warning
-            }
-            if nextRefillInDays > 1 {
-                return .protected
-            }
-        }
-        if kpi.refillCount > 0 {
-            return .protected
-        }
-        return .warning
-    }
-
-    private func filterIndicator(for filter: CabinetFilter) -> StockFilterIndicator? {
-        cachedFilterChipPresentations[filter.id]?.indicator
     }
 
     private func matchingMedicines(
@@ -1056,12 +984,7 @@ struct CabinetView: View {
         let statuses = resolvedStockStatuses()
         let matchingIDs = customFilterMedicineIDs(temporaryFilter, stockStatuses: statuses)
         let medicines = uniqueMedicines.filter { matchingIDs.contains($0.id) }
-        let kpi = viewModel.computeSummaryDisplayData(
-            medicines: medicines,
-            option: options.first,
-            pharmacy: nil
-        ).kpi
-        return FilterChipPresentation(count: medicines.count, indicator: stockFilterIndicator(for: kpi))
+        return FilterChipPresentation(count: medicines.count)
     }
 
     private func resolvedStockStatuses() -> [UUID: StockStatus] {

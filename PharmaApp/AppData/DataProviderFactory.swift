@@ -10,7 +10,6 @@ enum DataProviderFactory {
     ) -> any AppDataProvider {
         switch config.backend {
         case .coredata:
-            FirebaseRuntimeConfigurator.configureIfNeeded()
             return CoreDataAppDataProvider(
                 authGateway: SupabaseAuthGatewayAdapter(),
                 backupGateway: ICloudBackupGatewayAdapter(coordinator: backupCoordinator)
