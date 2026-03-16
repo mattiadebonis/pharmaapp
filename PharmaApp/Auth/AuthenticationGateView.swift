@@ -5,6 +5,8 @@ struct AuthenticationGateView: View {
     // Temporary local bypass while Firebase/Apple auth configuration is being completed.
     private let bypassAuthentication = false
 
+    @StateObject private var migrationCoordinator = MigrationCoordinator()
+
     var body: some View {
         Group {
             if bypassAuthentication {
@@ -18,7 +20,12 @@ struct AuthenticationGateView: View {
                 case .unauthenticated:
                     LoginView()
                 case .authenticated:
-                    ContentView()
+                    if migrationCoordinator.isMigrationNeeded
+                        && migrationCoordinator.state != .completed {
+                        MigrationView()
+                    } else {
+                        ContentView()
+                    }
                 }
             }
         }

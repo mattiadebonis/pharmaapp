@@ -24,6 +24,7 @@ struct DataChangeEvent: Equatable {
 enum BackendType: String, CaseIterable {
     case coredata
     case supabase
+    case fastapi
 }
 
 struct BackendConfig {
