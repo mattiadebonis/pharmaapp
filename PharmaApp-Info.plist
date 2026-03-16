@@ -61,6 +61,8 @@
 	<string>Necessario per trascrivere la dettatura del nome del medicinale</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>FASTAPI_BASE_URL</key>
+	<string>$(FASTAPI_BASE_URL)</string>
 	<key>SUPABASE_PUBLISHABLE_KEY</key>
 	<string>$(SUPABASE_PUBLISHABLE_KEY)</string>
 	<key>SUPABASE_URL</key>
