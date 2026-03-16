@@ -129,7 +129,7 @@ final class MigrationCoordinator: ObservableObject {
     private func clearOperationalCoreData() {
         let context = persistenceController.container.viewContext
         let entityNames = [
-            "MonitoringMeasurement", "DoseEventRecord", "Log", "Stock",
+            "MonitoringMeasurement", "DoseEvent", "Log", "Stock",
             "Dose", "Therapy", "MedicinePackage", "Package", "Medicine",
             "Cabinet", "Doctor", "Person"
         ]

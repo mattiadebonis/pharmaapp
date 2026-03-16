@@ -595,11 +595,11 @@ struct FastAPICreateDoctorRequest: Codable {
     let phone: String?
     let address: String?
     let specialization: String?
-    let scheduleJson: String?
+    let scheduleJson: [String: AnyCodable]?
     let secretaryName: String?
     let secretaryEmail: String?
     let secretaryPhone: String?
-    let secretaryScheduleJson: String?
+    let secretaryScheduleJson: [String: AnyCodable]?
     let prescriptionMessageTemplate: String?
 
     enum CodingKeys: String, CodingKey {

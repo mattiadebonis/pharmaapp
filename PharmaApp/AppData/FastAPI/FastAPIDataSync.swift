@@ -253,7 +253,7 @@ final class FastAPIDataSync {
 
     private func clearOperationalData() {
         let entityNames = [
-            "MonitoringMeasurement", "DoseEventRecord", "Log", "Stock",
+            "MonitoringMeasurement", "DoseEvent", "Log", "Stock",
             "Dose", "Therapy", "MedicinePackage", "Package", "Medicine",
             "Cabinet", "Doctor", "Person"
         ]

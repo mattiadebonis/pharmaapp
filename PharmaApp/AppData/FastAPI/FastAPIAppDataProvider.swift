@@ -863,11 +863,11 @@ private final class FastAPISettingsGateway: SettingsGateway {
             phone: input.phone,
             address: nil,
             specialization: input.specialization,
-            scheduleJson: try? input.schedule.encodedJSONString(),
+            scheduleJson: Self.scheduleToAnyCodable(input.schedule),
             secretaryName: input.secretaryName,
             secretaryEmail: input.secretaryEmail,
             secretaryPhone: input.secretaryPhone,
-            secretaryScheduleJson: try? input.secretarySchedule.encodedJSONString(),
+            secretaryScheduleJson: Self.scheduleToAnyCodable(input.secretarySchedule),
             prescriptionMessageTemplate: nil
         )
         let endpoint = isNew ? "/v1/doctors" : "/v1/doctors/\(doctorId.uuidString)"
@@ -879,6 +879,13 @@ private final class FastAPISettingsGateway: SettingsGateway {
     func deleteDoctor(id: UUID) throws {
         try coreData.deleteDoctor(id: id)
         syncOrEnqueue(endpoint: "/v1/doctors/\(id.uuidString)", method: .delete, label: "deleteDoctor", id: id)
+    }
+
+    /// Converts a DoctorScheduleDTO into [String: AnyCodable]? suitable for FastAPI's schedule_json field.
+    private static func scheduleToAnyCodable(_ schedule: DoctorScheduleDTO) -> [String: AnyCodable]? {
+        guard let data = try? JSONEncoder().encode(schedule),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return obj.mapValues { AnyCodable($0) }
     }
 
     func savePrescriptionMessageTemplate(doctorId: UUID, template: String?) throws {
