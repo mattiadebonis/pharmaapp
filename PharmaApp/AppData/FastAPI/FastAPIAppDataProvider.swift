@@ -732,14 +732,62 @@ private final class FastAPISearchGateway: SearchGateway {
 
     func addCatalogSelectionToCabinet(_ selection: CatalogSelection) throws {
         try coreData.addCatalogSelectionToCabinet(selection)
-        // Catalog addition creates local CoreData objects; trigger bootstrap to reconcile with server
-        Task { [dataSync, networkMonitor] in
-            guard networkMonitor.isOnline else { return }
-            do {
-                try await dataSync.refreshFromBootstrap()
-            } catch {
-                print("[FastAPI] addCatalogSelectionToCabinet sync error: \(error)")
+
+        // Build request to POST the medicine to the server
+        let req = FastAPICreateMedicineFromCatalogRequest(
+            cabinetId: nil,
+            catalogCountry: selection.country.rawValue,
+            catalogSource: selection.source,
+            catalogProductId: selection.productKey,
+            catalogFamilyKey: selection.familyKey,
+            displayName: selection.name,
+            principle: selection.principle,
+            requiresPrescription: selection.requiresPrescription,
+            labels: [],
+            customStockThreshold: 0,
+            manualIntakeRegistration: false,
+            catalogSnapshot: [:],
+            catalogPackageId: selection.packageKey,
+            catalogCode: selection.catalogCode,
+            formType: selection.tipologia.isEmpty ? nil : selection.tipologia,
+            unitsPerPackage: selection.units,
+            dosageValue: Double(selection.valore),
+            dosageUnit: selection.unita.isEmpty ? nil : selection.unita,
+            volume: selection.volume.isEmpty ? nil : selection.volume,
+            packageSnapshot: [:]
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let bodyData = try? encoder.encode(req) else {
+            print("[FastAPI] addCatalogSelectionToCabinet: failed to encode request")
+            return
+        }
+
+        if networkMonitor.isOnline {
+            Task { [client, dataSync, syncCoordinator] in
+                do {
+                    let _: IgnoredDecodable = try await client.postRaw("/v1/medicines", bodyData: bodyData)
+                    try await dataSync.refreshFromBootstrap()
+                    print("[FastAPI] addCatalogSelectionToCabinet synced")
+                } catch {
+                    print("[FastAPI] addCatalogSelectionToCabinet sync failed, enqueuing: \(error)")
+                    syncCoordinator.enqueueRaw(
+                        endpoint: "/v1/medicines",
+                        method: .post,
+                        bodyJSON: bodyData,
+                        operationId: nil
+                    )
+                }
             }
+        } else {
+            syncCoordinator.enqueueRaw(
+                endpoint: "/v1/medicines",
+                method: .post,
+                bodyJSON: bodyData,
+                operationId: nil
+            )
+            print("[FastAPI] addCatalogSelectionToCabinet queued (offline)")
         }
     }
 

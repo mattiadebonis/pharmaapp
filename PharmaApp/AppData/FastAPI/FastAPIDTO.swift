@@ -731,6 +731,52 @@ struct FastAPIUpdateSettingsRequest: Codable {
     }
 }
 
+struct FastAPICreateMedicineFromCatalogRequest: Codable {
+    let cabinetId: UUID?
+    let catalogCountry: String
+    let catalogSource: String
+    let catalogProductId: String
+    let catalogFamilyKey: String?
+    let displayName: String
+    let principle: String?
+    let requiresPrescription: Bool
+    let labels: [String]
+    let customStockThreshold: Int
+    let manualIntakeRegistration: Bool
+    let catalogSnapshot: [String: AnyCodable]
+    let catalogPackageId: String
+    let catalogCode: String?
+    let formType: String?
+    let unitsPerPackage: Int
+    let dosageValue: Double?
+    let dosageUnit: String?
+    let volume: String?
+    let packageSnapshot: [String: AnyCodable]
+
+    enum CodingKeys: String, CodingKey {
+        case cabinetId = "cabinet_id"
+        case catalogCountry = "catalog_country"
+        case catalogSource = "catalog_source"
+        case catalogProductId = "catalog_product_id"
+        case catalogFamilyKey = "catalog_family_key"
+        case displayName = "display_name"
+        case principle
+        case requiresPrescription = "requires_prescription"
+        case labels
+        case customStockThreshold = "custom_stock_threshold"
+        case manualIntakeRegistration = "manual_intake_registration"
+        case catalogSnapshot = "catalog_snapshot"
+        case catalogPackageId = "catalog_package_id"
+        case catalogCode = "catalog_code"
+        case formType = "form_type"
+        case unitsPerPackage = "units_per_package"
+        case dosageValue = "dosage_value"
+        case dosageUnit = "dosage_unit"
+        case volume
+        case packageSnapshot = "package_snapshot"
+    }
+}
+
 struct FastAPIUndoOperationRequest: Codable {
     let operationId: UUID
     let reversalOfOperationId: UUID
