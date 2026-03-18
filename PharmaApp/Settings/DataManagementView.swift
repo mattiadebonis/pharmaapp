@@ -6,6 +6,7 @@ struct DataManagementView: View {
     @EnvironmentObject private var auth: AuthViewModel
 
     @State private var doctors: [SettingsDoctorRecord] = []
+    @State private var persons: [SettingsPersonRecord] = []
     @State private var account: SettingsPersonRecord?
     @State private var didStartObservation = false
     @State private var errorMessage: String?
@@ -42,6 +43,38 @@ struct DataManagementView: View {
                 } else {
                     Text("Account non disponibile.")
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            Section(header: HStack {
+                Label("Persone", systemImage: "person.2")
+                Spacer()
+                NavigationLink(destination: AddPersonView()) {
+                    Image(systemName: "plus")
+                }
+            }) {
+                if persons.isEmpty {
+                    Text("Nessuna persona aggiunta")
+                        .foregroundStyle(.secondary)
+                        .font(.footnote)
+                } else {
+                    ForEach(persons) { person in
+                        NavigationLink {
+                            NonAccountPersonDetailView(person: person)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(personDisplayName(for: person))
+                                    .foregroundStyle(.primary)
+                                if let condition = person.condition,
+                                   !condition.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Text(condition)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -114,10 +147,16 @@ struct DataManagementView: View {
         return full.isEmpty ? "Dottore" : full
     }
 
+    private func personDisplayName(for person: SettingsPersonRecord) -> String {
+        let full = (person.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return full.isEmpty ? "Persona" : full
+    }
+
     private func reloadFetchedState() {
         do {
-            let persons = try appDataStore.provider.settings.listPersons(includeAccount: true)
-            account = persons.first(where: { $0.isAccount }) ?? persons.first
+            let allPersons = try appDataStore.provider.settings.listPersons(includeAccount: true)
+            account = allPersons.first(where: { $0.isAccount }) ?? allPersons.first
+            persons = allPersons.filter { !$0.isAccount }
             doctors = try appDataStore.provider.settings.listDoctors()
             errorMessage = nil
         } catch {

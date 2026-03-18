@@ -136,8 +136,8 @@ struct TherapyFormView: View {
     @State private var isShowingMonitoringSheet = false
     @State private var showDeleteConfirmation = false
     private let showsStartEndSection = false
-    private let showsPersonSection = false
-    private let showsConditionsSection = false
+    private let showsPersonSection = true
+    private let showsConditionsSection = true
     
     // MARK: - Init
     init(
@@ -387,7 +387,7 @@ struct TherapyFormView: View {
                     if candidates.count == 1, let only = candidates.first {
                         populateFromTherapy(only)
                     } else {
-                        selectedPerson = persons.first
+                        selectedPerson = persons.first(where: { $0.is_account }) ?? persons.first
                     }
                 }
             }

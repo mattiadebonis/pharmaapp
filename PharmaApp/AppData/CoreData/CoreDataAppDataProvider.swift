@@ -134,10 +134,9 @@ private final class CoreDataMedicinesGateway: MedicinesGateway {
     }
 
     func fetchTherapyFormSnapshot() throws -> MedicinesTherapyFormSnapshot {
-        let accountRequest = Person.fetchAccountPerson()
-        let accountPerson = try context.fetch(accountRequest)
+        let allPersons = try context.fetch(Person.extractPersons(includeAccount: true))
         return MedicinesTherapyFormSnapshot(
-            persons: accountPerson,
+            persons: allPersons,
             doctors: try context.fetch(Doctor.extractDoctors())
         )
     }

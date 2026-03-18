@@ -523,9 +523,10 @@
 				DEVELOPMENT_ASSET_PATHS = "\"PharmaApp/Preview Content\"";
 				DEVELOPMENT_TEAM = P8V8X3MUBK;
 				ENABLE_PREVIEWS = YES;
+				FASTAPI_BASE_URL = "https://pharmapp-backend-production.up.railway.app";
 				GENERATE_INFOPLIST_FILE = NO;
-					GOOGLE_CLIENT_ID = "64986489607-ump6cg95b0ltfff8ifsu6mcd2q5hbpmg.apps.googleusercontent.com";
-					GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.64986489607-ump6cg95b0ltfff8ifsu6mcd2q5hbpmg";
+				GOOGLE_CLIENT_ID = "64986489607-ump6cg95b0ltfff8ifsu6mcd2q5hbpmg.apps.googleusercontent.com";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.64986489607-ump6cg95b0ltfff8ifsu6mcd2q5hbpmg";
 				INFOPLIST_FILE = "PharmaApp-Info.plist";
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = pharmaapp;
@@ -568,7 +569,6 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = auto;
-				FASTAPI_BASE_URL = "https://pharmapp-backend-production.up.railway.app";
 				SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrdGhhdG52emFjbmVocmpxeWptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzOTgxMTcsImV4cCI6MjA4ODk3NDExN30.-Md3H9V6INoj27nk8IaZ4etk76SDOfIWhWeNzVEMhAY";
 				SUPABASE_URL = "https://lkthatnvzacnehrjqyjm.supabase.co";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
@@ -591,9 +591,10 @@
 				DEVELOPMENT_ASSET_PATHS = "\"PharmaApp/Preview Content\"";
 				DEVELOPMENT_TEAM = P8V8X3MUBK;
 				ENABLE_PREVIEWS = YES;
+				FASTAPI_BASE_URL = "https://pharmapp-backend-production.up.railway.app";
 				GENERATE_INFOPLIST_FILE = NO;
-					GOOGLE_CLIENT_ID = "64986489607-ump6cg95b0ltfff8ifsu6mcd2q5hbpmg.apps.googleusercontent.com";
-					GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.64986489607-ump6cg95b0ltfff8ifsu6mcd2q5hbpmg";
+				GOOGLE_CLIENT_ID = "64986489607-ump6cg95b0ltfff8ifsu6mcd2q5hbpmg.apps.googleusercontent.com";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.64986489607-ump6cg95b0ltfff8ifsu6mcd2q5hbpmg";
 				INFOPLIST_FILE = "PharmaApp-Info.plist";
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = pharmaapp;
@@ -636,7 +637,6 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = auto;
-				FASTAPI_BASE_URL = "https://pharmapp-backend-production.up.railway.app";
 				SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrdGhhdG52emFjbmVocmpxeWptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzOTgxMTcsImV4cCI6MjA4ODk3NDExN30.-Md3H9V6INoj27nk8IaZ4etk76SDOfIWhWeNzVEMhAY";
 				SUPABASE_URL = "https://lkthatnvzacnehrjqyjm.supabase.co";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
